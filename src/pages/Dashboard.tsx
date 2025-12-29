@@ -127,13 +127,16 @@ const Dashboard = () => {
       {/* Charts Section */}
       <div className="grid gap-4 lg:grid-cols-2 mb-6">
         <SalesChart data={monthlySalesData} />
-        <ProductSalesChart data={productSalesData} />
+        {/* ProductSalesChart removed */}
       </div>
 
       {/* Products and Order Form */}
       <div className="grid gap-4 lg:grid-cols-3 mb-6">
-        {/* Removed ProductCard components */}
-        <div className="lg:col-span-2"></div> {/* Placeholder to maintain layout if needed, or remove if not */}
+        <div className="lg:col-span-2 grid gap-4 md:grid-cols-2">
+          {dummyProducts.map((product) => (
+            <ProductCard key={product.id} product={product} onAddToCart={(id) => console.log(`Added ${id} to cart`)} />
+          ))}
+        </div>
         <OrderForm products={dummyProducts} dealers={dummyDealers} />
       </div>
 
