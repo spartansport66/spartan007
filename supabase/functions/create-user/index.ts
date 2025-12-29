@@ -15,15 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email, password, first_name, last_name, user_type, admin_secret_key } = await req.json();
-
-    // Verify the admin secret key
-    if (admin_secret_key !== Deno.env.get('ADMIN_SECRET_KEY')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized: Invalid admin secret key' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    const { email, password, first_name, last_name, user_type } = await req.json();
 
     // Create a Supabase client with the service role key
     const supabaseAdmin = createClient(
