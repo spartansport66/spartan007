@@ -275,14 +275,14 @@ const AddDealer = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Assign to Sales Person (Optional)</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value || ''}>
+                        <Select onValueChange={(value) => field.onChange(value === "null" ? null : value)} value={field.value || "null"}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select a sales person" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="">Unassigned</SelectItem>
+                            <SelectItem value="null">Unassigned</SelectItem>
                             {salesPersons.map((sp) => (
                               <SelectItem key={sp.id} value={sp.id}>
                                 {sp.first_name} {sp.last_name}

@@ -418,14 +418,14 @@ const ManageDealers = () => {
                   <Label htmlFor="salesPersonId" className="text-right">
                     Assign to
                   </Label>
-                  <Select onValueChange={(value) => form.setValue('salesPersonId', value === '' ? null : value)} value={form.watch('salesPersonId') || ''}>
+                  <Select onValueChange={(value) => form.setValue('salesPersonId', value === "null" ? null : value)} value={form.watch('salesPersonId') || "null"}>
                     <FormControl>
                       <SelectTrigger className="col-span-3">
                         <SelectValue placeholder="Select a sales person" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">Unassigned</SelectItem>
+                      <SelectItem value="null">Unassigned</SelectItem>
                       {salesPersons.map((sp) => (
                         <SelectItem key={sp.id} value={sp.id}>
                           {sp.first_name} {sp.last_name}
