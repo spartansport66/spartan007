@@ -383,93 +383,97 @@ const ManageDealers = () => {
                 Make changes to the dealer here. Click save when you're done.
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={form.handleSubmit(handleUpdateDealer)} className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name" className="text-right">
-                  Name
-                </Label>
-                <Input id="name" {...form.register('name')} className="col-span-3" />
-                {form.formState.errors.name && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.name.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="contactPerson" className="text-right">
-                  Contact Person
-                </Label>
-                <Input id="contactPerson" {...form.register('contactPerson')} className="col-span-3" />
-                {form.formState.errors.contactPerson && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.contactPerson.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="email" className="text-right">
-                  Email
-                </Label>
-                <Input id="email" type="email" {...form.register('email')} className="col-span-3" />
-                {form.formState.errors.email && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.email.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="phone" className="text-right">
-                  Phone
-                </Label>
-                <Input id="phone" type="tel" {...form.register('phone')} className="col-span-3" />
-                {form.formState.errors.phone && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.phone.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="address" className="text-right">
-                  Address
-                </Label>
-                <Input id="address" {...form.register('address')} className="col-span-3" />
-                {form.formState.errors.address && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.address.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="city" className="text-right">
-                  City
-                </Label>
-                <Input id="city" {...form.register('city')} className="col-span-3" />
-                {form.formState.errors.city && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.city.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="state" className="text-right">
-                  State
-                </Label>
-                <Input id="state" {...form.register('state')} className="col-span-3" />
-                {form.formState.errors.state && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.state.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="country" className="text-right">
-                  Country
-                </Label>
-                <Input id="country" {...form.register('country')} className="col-span-3" />
-                {form.formState.errors.country && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.country.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="creditLimit" className="text-right">
-                  Credit Limit
-                </Label>
-                <Input id="creditLimit" type="number" placeholder="e.g., 5000.00" {...form.register('creditLimit')} className="col-span-3" />
-                {form.formState.errors.creditLimit && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.creditLimit.message}</p>}
-              </div>
-              <FormField
-                control={form.control}
-                name="assignedSalesPersonIds"
-                render={({ field }) => (
-                  <FormItem className="grid grid-cols-4 items-center gap-4">
-                    <FormLabel className="text-right">Assign to</FormLabel>
-                    <FormControl className="col-span-3">
-                      <MultiSelect
-                        options={salesPersonOptions}
-                        value={field.value} // Changed from 'selected' to 'value'
-                        onChange={field.onChange} // Changed from 'onSelect' to 'onChange'
-                        placeholder="Select sales person(s)"
-                        disabled={!isAdmin} // Only admin can change assignments
-                      />
-                    </FormControl>
-                    {form.formState.errors.assignedSalesPersonIds && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.assignedSalesPersonIds.message}</p>}
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="submit">Save changes</Button>
-              </DialogFooter>
-            </form>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleUpdateDealer)} className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="name" className="text-right">
+                    Name
+                  </Label>
+                  <Input id="name" {...form.register('name')} className="col-span-3" />
+                  {form.formState.errors.name && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.name.message}</p>}
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="contactPerson" className="text-right">
+                    Contact Person
+                  </Label>
+                  <Input id="contactPerson" {...form.register('contactPerson')} className="col-span-3" />
+                  {form.formState.errors.contactPerson && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.contactPerson.message}</p>}
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="email" className="text-right">
+                    Email
+                  </Label>
+                  <Input id="email" type="email" {...form.register('email')} className="col-span-3" />
+                  {form.formState.errors.email && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.email.message}</p>}
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="phone" className="text-right">
+                    Phone
+                  </Label>
+                  <Input id="phone" type="tel" {...form.register('phone')} className="col-span-3" />
+                  {form.formState.errors.phone && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.phone.message}</p>}
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="address" className="text-right">
+                    Address
+                  </Label>
+                  <Input id="address" {...form.register('address')} className="col-span-3" />
+                  {form.formState.errors.address && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.address.message}</p>}
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="city" className="text-right">
+                    City
+                  </Label>
+                  <Input id="city" {...form.register('city')} className="col-span-3" />
+                  {form.formState.errors.city && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.city.message}</p>}
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="state" className="text-right">
+                    State
+                  </Label>
+                  <Input id="state" {...form.register('state')} className="col-span-3" />
+                  {form.formState.errors.state && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.state.message}</p>}
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="country" className="text-right">
+                    Country
+                  </Label>
+                  <Input id="country" {...form.register('country')} className="col-span-3" />
+                  {form.formState.errors.country && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.country.message}</p>}
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="creditLimit" className="text-right">
+                    Credit Limit
+                  </Label>
+                  <Input id="creditLimit" type="number" placeholder="e.g., 5000.00" {...form.register('creditLimit')} className="col-span-3" />
+                  {form.formState.errors.creditLimit && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.creditLimit.message}</p>}
+                </div>
+                
+                <FormField
+                  control={form.control}
+                  name="assignedSalesPersonIds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-right">Assign to</FormLabel>
+                      <FormControl>
+                        <MultiSelect
+                          options={salesPersonOptions}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Select sales person(s)"
+                          disabled={!isAdmin}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <DialogFooter>
+                  <Button type="submit">Save changes</Button>
+                </DialogFooter>
+              </form>
+            </Form>
           </DialogContent>
         </Dialog>
       )}
