@@ -58,7 +58,7 @@ const Dashboard = () => {
     const { data: productsData, error: productsError } = await supabase
       .from('products')
       .select('id, name, price, stock, description');
-
+    
     if (productsError) {
       console.error('Error fetching products:', productsError);
       showError(`Failed to load products: ${productsError.message}`);
@@ -71,7 +71,7 @@ const Dashboard = () => {
       .from('dealer_sales_persons')
       .select('dealers(id, name)')
       .eq('sales_person_id', user.id);
-
+    
     if (assignedDealersError) {
       console.error('Error fetching assigned dealers:', assignedDealersError);
       showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
@@ -86,17 +86,12 @@ const Dashboard = () => {
     const { data: salesData, error: salesError } = await supabase
       .from('sales')
       .select(`
-        id,
-        product_id,
-        dealer_id,
-        quantity,
-        total_price,
-        sale_date,
+        id, product_id, dealer_id, quantity, total_price, sale_date,
         products (name),
         dealers (name)
       `)
       .order('sale_date', { ascending: false });
-
+    
     if (salesError) {
       console.error('Error fetching sales:', salesError);
       showError(`Failed to load sales data: ${salesError.message}`);
@@ -105,11 +100,11 @@ const Dashboard = () => {
       // Explicitly map to ensure type compatibility for nested objects
       const typedSalesData: Sale[] = (salesData || []).map(sale => ({
         ...sale,
-        products: (sale.products && Array.isArray(sale.products) && sale.products.length > 0)
-          ? (sale.products[0] as { name: string })
+        products: (sale.products && Array.isArray(sale.products) && sale.products.length > 0) 
+          ? (sale.products[0] as { name: string }) 
           : null,
-        dealers: (sale.dealers && Array.isArray(sale.dealers) && sale.dealers.length > 0)
-          ? (sale.dealers[0] as { name: string })
+        dealers: (sale.dealers && Array.isArray(sale.dealers) && sale.dealers.length > 0) 
+          ? (sale.dealers[0] as { name: string }) 
           : null,
       }));
       setSales(typedSalesData);
@@ -209,42 +204,8 @@ const Dashboard = () => {
         ))}
       </div>
 
-      {/* Products and Order Form */}
-      <div className="grid gap-4 lg:grid-cols-3 mb-6">
-        <div className="lg:col-span-2">
-          <Card className="bg-card text-card-foreground shadow-lg h-full">
-            <CardHeader>
-              <CardTitle className="text-xl font-semibold text-primary">Available Products</CardTitle>
-              <CardDescription className="text-muted-foreground">Products you can sell.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {products.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4">No products available.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted hover:bg-muted/90">
-                        <TableHead className="text-muted-foreground">Name</TableHead>
-                        <TableHead className="text-muted-foreground">Price</TableHead>
-                        <TableHead className="text-muted-foreground">Stock</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {products.map((product) => (
-                        <TableRow key={product.id} className="hover:bg-accent/50">
-                          <TableCell className="font-medium text-foreground">{product.name}</TableCell>
-                          <TableCell className="text-muted-foreground">₹{product.price.toFixed(2)}</TableCell>
-                          <TableCell className="text-muted-foreground">{product.stock}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+      {/* Order Form - Full Width */}
+      <div className="mb-6">
         <OrderForm products={products} dealers={dealers} onOrderPlaced={fetchDashboardData} />
       </div>
 
