@@ -303,7 +303,7 @@ const AdminDashboard = () => {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/admin-panel')} size="icon" className="bg-purple-600 text-white hover:bg-purple-700">
+              <Button onClick={() => navigate('/manage-users')} size="icon" className="bg-purple-600 text-white hover:bg-purple-700">
                 <UserCog className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
