@@ -7,17 +7,21 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { session, loading } = useSession();
+  const { session, loading, isAdmin } = useSession(); // Get isAdmin from session context
 
   useEffect(() => {
     if (!loading) {
       if (session) {
-        navigate('/dashboard');
+        if (isAdmin) {
+          navigate('/admin-panel'); // Redirect admin users to Admin Panel
+        } else {
+          navigate('/dashboard'); // Redirect other users to Dashboard
+        }
       } else {
         navigate('/login');
       }
     }
-  }, [session, loading, navigate]);
+  }, [session, loading, navigate, isAdmin]); // Add isAdmin to dependency array
 
   if (loading) {
     return (
