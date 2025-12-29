@@ -54,7 +54,8 @@ const Login = () => {
 
   useEffect(() => {
     if (!loading && session) {
-      navigate('/dashboard');
+      // This redirect will now go to the root, which then handles role-based redirection
+      navigate('/'); 
     }
   }, [session, loading, navigate]);
 
@@ -240,7 +241,7 @@ const Login = () => {
               },
             }}
             theme="light" // Use light theme, adjust if dark theme is preferred
-            redirectTo={window.location.origin + '/dashboard'}
+            redirectTo={window.location.origin + '/'} // Changed to redirect to root
           />
         )}
 
