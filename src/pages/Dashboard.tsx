@@ -108,16 +108,16 @@ const Dashboard = () => {
         {/* Logout button moved to Quick Actions */}
       </div>
       
-      {/* Sales Overview Cards - Reduced by 70% with adjusted fonts */}
+      {/* Sales Overview Cards - Reduced to 50% with adjusted fonts */}
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 p-3">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2"> {/* Reduced padding */}
               <CardTitle className="text-[0.5rem] font-medium text-muted-foreground">{item.title}</CardTitle>
               {item.icon}
             </CardHeader>
-            <CardContent className="p-3 pt-1">
-              <div className="text-base font-bold text-foreground">{item.value}</div>
+            <CardContent className="p-2 pt-0"> {/* Reduced padding */}
+              <div className="text-sm font-bold text-foreground">{item.value}</div> {/* Reduced font size */}
               <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
             </CardContent>
           </Card>
