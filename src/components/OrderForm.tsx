@@ -109,39 +109,39 @@ const OrderForm: React.FC<OrderFormProps> = ({ products: availableProducts, deal
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="dealer">Dealer</Label>
-            <Select value={selectedDealer} onValueChange={setSelectedDealer}>
+            <Select
+              value={selectedDealer}
+              onValueChange={setSelectedDealer}
+              disabled={availableDealers.length === 0}
+            >
               <SelectTrigger id="dealer" className="w-full">
-                <SelectValue placeholder="Select a dealer" />
+                <SelectValue placeholder={availableDealers.length === 0 ? "No dealers available" : "Select a dealer"} />
               </SelectTrigger>
               <SelectContent>
-                {availableDealers.length === 0 ? (
-                  <SelectItem value="" disabled>No dealers available</SelectItem>
-                ) : (
-                  availableDealers.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                    </SelectItem>
-                  ))
-                )}
+                {availableDealers.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div>
             <Label htmlFor="product">Product</Label>
-            <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+            <Select
+              value={selectedProduct}
+              onValueChange={setSelectedProduct}
+              disabled={availableProducts.length === 0}
+            >
               <SelectTrigger id="product" className="w-full">
-                <SelectValue placeholder="Select a product" />
+                <SelectValue placeholder={availableProducts.length === 0 ? "No products available" : "Select a product"} />
               </SelectTrigger>
               <SelectContent>
-                {availableProducts.length === 0 ? (
-                  <SelectItem value="" disabled>No products available</SelectItem>
-                ) : (
-                  availableProducts.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} (${p.price.toFixed(2)}) - Stock: {p.stock}
-                    </SelectItem>
-                  ))
-                )}
+                {availableProducts.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name} (${p.price.toFixed(2)}) - Stock: {p.stock}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
