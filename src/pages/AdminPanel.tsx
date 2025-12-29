@@ -19,8 +19,8 @@ import { useSession } from '@/contexts/SessionContext';
 // Format: https://<PROJECT_REF>.supabase.co/functions/v1/create-user
 const CREATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-user";
 
-// IMPORTANT: Replace with the secret key you set in Supabase Edge Functions secrets
-const ADMIN_SECRET_KEY = "YOUR_ADMIN_SECRET_KEY"; // <<< REMEMBER TO REPLACE THIS!
+// The secret key known only to the admin
+const ADMIN_SECRET_KEY = "Param@1313"; 
 
 const formSchema = z.object({
   firstName: z.string().min(1, { message: 'First name is required.' }),
