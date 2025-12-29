@@ -8,12 +8,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, UserPlus } from 'lucide-react'; // Added new icons
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, UserPlus } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import OrderForm from '@/components/OrderForm';
 import SalesChart from '@/components/SalesChart';
 import ProductSalesChart from '@/components/ProductSalesChart';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip components
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -87,20 +87,13 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">CRM Dashboard</h1>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Logout</TooltipContent>
-        </Tooltip>
+        {/* Logout button moved to Quick Actions */}
       </div>
 
-      {/* Sales Overview Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+      {/* Sales Overview Cards - now horizontally scrollable */}
+      <div className="flex overflow-x-auto gap-4 pb-4 mb-6 no-scrollbar"> {/* Added no-scrollbar for cleaner look */}
         {salesOverview.map((item, index) => (
-          <Card key={index} className="bg-card text-card-foreground shadow-lg">
+          <Card key={index} className="min-w-[200px] flex-shrink-0 bg-card text-card-foreground shadow-lg"> {/* Added min-w and flex-shrink */}
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{item.title}</CardTitle>
               {item.icon}
@@ -200,6 +193,15 @@ const Dashboard = () => {
               </Button>
             </TooltipTrigger>
             <TooltipContent>Add New Dealer</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Logout</TooltipContent>
           </Tooltip>
         </CardContent>
       </Card>
