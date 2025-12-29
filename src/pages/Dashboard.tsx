@@ -66,17 +66,20 @@ const Dashboard = () => {
       setProducts(productsData || []);
     }
 
-    // Fetch dealers (RLS handles what they can see)
-    const { data: dealersData, error: dealersError } = await supabase
-      .from('dealers')
-      .select('id, name');
+    // Fetch dealers assigned to the current user via the join table
+    const { data: assignedDealersData, error: assignedDealersError } = await supabase
+      .from('dealer_sales_persons')
+      .select('dealers(id, name)')
+      .eq('sales_person_id', user.id);
 
-    if (dealersError) {
-      console.error('Error fetching dealers:', dealersError);
-      showError(`Failed to load dealers: ${dealersError.message}`);
+    if (assignedDealersError) {
+      console.error('Error fetching assigned dealers:', assignedDealersError);
+      showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
+      setDealers([]);
     } else {
-      setDealers(dealersData || []);
-      setActiveDealersCount(dealersData?.length || 0);
+      const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
+      setDealers(formattedDealers);
+      setActiveDealersCount(formattedDealers.length || 0);
     }
 
     // Fetch sales (RLS handles what they can see)

@@ -15,6 +15,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
+import MultiSelect from '@/components/MultiSelect'; // Import the new MultiSelect component
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Dealer name must be at least 2 characters.' }),
@@ -29,7 +30,7 @@ const formSchema = z.object({
     (val) => Number(val),
     z.number().min(0, { message: 'Credit limit cannot be negative.' })
   ),
-  salesPersonId: z.string().uuid().optional().nullable(), // New field for assigning sales person
+  assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }), // Now mandatory and an array
 });
 
 interface SalesPerson {
@@ -56,7 +57,7 @@ const AddDealer = () => {
       state: '',
       country: '',
       creditLimit: 0,
-      salesPersonId: null, // Default to null
+      assignedSalesPersonIds: [], // Default to empty array
     },
   });
 
@@ -67,6 +68,7 @@ const AddDealer = () => {
         return;
       }
 
+      // Only admins can assign sales persons, so only fetch if admin
       if (isAdmin) {
         const { data, error } = await supabase
           .from('profiles')
@@ -79,6 +81,11 @@ const AddDealer = () => {
         } else {
           setSalesPersons(data || []);
         }
+      } else {
+        // For sales persons, automatically assign themselves
+        if (user) {
+          form.setValue('assignedSalesPersonIds', [user.id]);
+        }
       }
       setDataLoading(false);
     };
@@ -88,7 +95,7 @@ const AddDealer = () => {
     } else if (!sessionLoading && !user) {
       navigate('/login');
     }
-  }, [user, sessionLoading, isAdmin, navigate]);
+  }, [user, sessionLoading, isAdmin, navigate, form]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!user) {
@@ -108,23 +115,42 @@ const AddDealer = () => {
       state: values.state,
       country: values.country,
       credit_limit: values.creditLimit,
-      sales_person_id: isAdmin ? values.salesPersonId : user.id, // Assign to selected sales person or current user
+      // sales_person_id is removed from dealers table
     };
 
-    const { data, error } = await supabase
+    const { data: newDealer, error: dealerError } = await supabase
       .from('dealers')
       .insert([dealerData])
-      .select();
+      .select()
+      .single();
 
-    if (error) {
-      console.error('Error adding dealer:', error);
-      showError(`Failed to add dealer: ${error.message}`);
-    } else {
-      showSuccess('Dealer added successfully!');
-      form.reset();
-      console.log('New Dealer Data:', data);
-      navigate('/manage-dealers');
+    if (dealerError) {
+      console.error('Error adding dealer:', dealerError);
+      showError(`Failed to add dealer: ${dealerError.message}`);
+      return;
     }
+
+    // Insert into the new join table: dealer_sales_persons
+    const dealerSalesPersonsData = values.assignedSalesPersonIds.map(spId => ({
+      dealer_id: newDealer.id,
+      sales_person_id: spId,
+    }));
+
+    const { error: joinTableError } = await supabase
+      .from('dealer_sales_persons')
+      .insert(dealerSalesPersonsData);
+
+    if (joinTableError) {
+      console.error('Error assigning sales persons to dealer:', joinTableError);
+      showError(`Failed to assign sales persons: ${joinTableError.message}`);
+      // Optionally, you might want to delete the newly created dealer here if the assignment fails
+      return;
+    }
+
+    showSuccess('Dealer added successfully and sales persons assigned!');
+    form.reset();
+    console.log('New Dealer Data:', newDealer);
+    navigate('/manage-dealers');
   };
 
   if (sessionLoading || dataLoading) {
@@ -135,6 +161,11 @@ const AddDealer = () => {
       </div>
     );
   }
+
+  const salesPersonOptions = salesPersons.map(sp => ({
+    value: sp.id,
+    label: `${sp.first_name} ${sp.last_name}`,
+  }));
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -268,33 +299,25 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
-                {isAdmin && (
-                  <FormField
-                    control={form.control}
-                    name="salesPersonId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Assign to Sales Person (Optional)</FormLabel>
-                        <Select onValueChange={(value) => field.onChange(value === "null" ? null : value)} value={field.value || "null"}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a sales person" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="null">Unassigned</SelectItem>
-                            {salesPersons.map((sp) => (
-                              <SelectItem key={sp.id} value={sp.id}>
-                                {sp.first_name} {sp.last_name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
+                <FormField
+                  control={form.control}
+                  name="assignedSalesPersonIds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Assign Sales Person(s)</FormLabel>
+                      <FormControl>
+                        <MultiSelect
+                          options={salesPersonOptions}
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          placeholder="Select sales person(s)"
+                          disabled={!isAdmin && user?.id !== undefined} // Disable if not admin, but allow sales person to select themselves if they are the user
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
                   Add Dealer
                 </Button>

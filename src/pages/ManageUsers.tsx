@@ -36,6 +36,8 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import MultiSelect from '@/components/MultiSelect'; // Import MultiSelect
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table'; // Added Table imports
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const CREATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-user";
@@ -58,7 +60,9 @@ interface UserProfile {
 interface Dealer {
   id: string;
   name: string;
-  sales_person_id: string | null;
+  // sales_person_id is not needed here for the MultiSelect options,
+  // as we are only fetching id and name for display.
+  // The assignedDealerIds state manages the assignments.
 }
 
 const userFormSchema = z.object({
@@ -73,13 +77,13 @@ const ManageUsers = () => {
   const navigate = useNavigate();
   const { isAdmin, loading: sessionLoading } = useSession();
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [allDealers, setAllDealers] = useState<Dealer[]>([]); // All dealers for multi-select options
   const [loadingData, setLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-  const [assignedDealerIds, setAssignedDealerIds] = useState<string[]>([]);
+  const [assignedDealerIds, setAssignedDealerIds] = useState<string[]>([]); // State for multi-select in edit dialog
 
   const editForm = useForm<z.infer<typeof userFormSchema>>({
     resolver: zodResolver(userFormSchema),
@@ -127,16 +131,17 @@ const ManageUsers = () => {
       setUsers(formattedUsers);
     }
 
+    // Fetch all dealers to populate multi-select options
     const { data: dealersData, error: dealersError } = await supabase
       .from('dealers')
-      .select('id, name, sales_person_id');
+      .select('id, name'); // Only need id and name for selection
 
     if (dealersError) {
-      console.error('Error fetching dealers:', dealersError.message);
-      showError('Failed to load dealers.');
-      setDealers([]);
+      console.error('Error fetching all dealers:', dealersError.message);
+      showError('Failed to load dealers for assignment.');
+      setAllDealers([]);
     } else {
-      setDealers(dealersData || []);
+      setAllDealers(dealersData || []);
     }
 
     setLoadingData(false);
@@ -162,13 +167,25 @@ const ManageUsers = () => {
         password: '', // Password should always be empty for security
         userType: selectedUser.user_type,
       });
+      // Fetch currently assigned dealers for the selected sales person
       if (selectedUser.user_type === 'sales_person') {
-        setAssignedDealerIds(dealers.filter(d => d.sales_person_id === selectedUser.id).map(d => d.id));
+        supabase
+          .from('dealer_sales_persons')
+          .select('dealer_id')
+          .eq('sales_person_id', selectedUser.id)
+          .then(({ data, error }) => {
+            if (error) {
+              console.error('Error fetching assigned dealers for user:', error.message);
+              setAssignedDealerIds([]);
+            } else {
+              setAssignedDealerIds(data?.map(item => item.dealer_id) || []);
+            }
+          });
       } else {
         setAssignedDealerIds([]);
       }
     }
-  }, [selectedUser, editForm, dealers]);
+  }, [selectedUser, editForm]); // Removed 'dealers' from dependency array, now using 'allDealers'
 
   const handleCreateUser = async (values: z.infer<typeof userFormSchema>) => {
     setIsSubmitting(true);
@@ -223,9 +240,9 @@ const ManageUsers = () => {
       }
 
       if (values.userType === 'sales_person') {
-        payload.assignedDealerIds = assignedDealerIds;
+        payload.assignedDealerIds = assignedDealerIds; // Pass the array of assigned dealer IDs
       } else {
-        // If user type is not sales_person, ensure no dealers are assigned
+        // If user type is changed from sales_person, ensure no dealers are assigned
         payload.assignedDealerIds = [];
       }
 
@@ -287,29 +304,10 @@ const ManageUsers = () => {
     }
   };
 
-  const handleAddDealerToUser = (dealerId: string) => {
-    setAssignedDealerIds(prev => [...prev, dealerId]);
-  };
-
-  const handleRemoveDealerFromUser = (dealerId: string) => {
-    setAssignedDealerIds(prev => prev.filter(id => id !== dealerId));
-  };
-
-  if (sessionLoading || loadingData) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading user management panel...</p>
-      </div>
-    );
-  }
-
-  if (!isAdmin) {
-    return null; // Should be redirected by useEffect
-  }
-
-  const availableDealers = dealers.filter(d => !assignedDealerIds.includes(d.id) && d.sales_person_id !== selectedUser?.id);
-  const currentAssignedDealers = dealers.filter(d => assignedDealerIds.includes(d.id));
+  const dealerOptions = allDealers.map(dealer => ({
+    value: dealer.id,
+    label: dealer.name,
+  }));
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -578,38 +576,24 @@ const ManageUsers = () => {
                 {editForm.watch('userType') === 'sales_person' && (
                   <div className="grid gap-4 mt-4">
                     <h3 className="text-lg font-semibold">Manage Assigned Dealers</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card className="p-4">
-                        <CardTitle className="text-md mb-2">Assigned Dealers</CardTitle>
-                        <div className="space-y-2 max-h-40 overflow-y-auto">
-                          {currentAssignedDealers.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No dealers assigned.</p>
-                          ) : (
-                            currentAssignedDealers.map(dealer => (
-                              <div key={dealer.id} className="flex items-center justify-between p-2 border rounded-md">
-                                <span>{dealer.name}</span>
-                                <Button variant="destructive" size="sm" onClick={() => handleRemoveDealerFromUser(dealer.id)}>Remove</Button>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </Card>
-                      <Card className="p-4">
-                        <CardTitle className="text-md mb-2">Available Dealers</CardTitle>
-                        <div className="space-y-2 max-h-40 overflow-y-auto">
-                          {availableDealers.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No available dealers.</p>
-                          ) : (
-                            availableDealers.map(dealer => (
-                              <div key={dealer.id} className="flex items-center justify-between p-2 border rounded-md">
-                                <span>{dealer.name}</span>
-                                <Button variant="secondary" size="sm" onClick={() => handleAddDealerToUser(dealer.id)}>Add</Button>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </Card>
-                    </div>
+                    <FormField
+                      control={editForm.control}
+                      name="email" // Using email field for validation, but it's not directly related to this MultiSelect
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Assigned Dealers</FormLabel>
+                          <FormControl>
+                            <MultiSelect
+                              options={dealerOptions}
+                              selected={assignedDealerIds}
+                              onSelect={setAssignedDealerIds}
+                              placeholder="Select dealers to assign"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
                 )}
 

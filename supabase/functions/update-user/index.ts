@@ -1,6 +1,6 @@
-/// <reference lib="deno.ns" />
-
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -19,7 +19,9 @@ serve(async (req) => {
 
     // Create a Supabase client with the service role key
     const supabaseAdmin = createClient(
+      // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
+      // @ts-ignore
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
@@ -70,33 +72,49 @@ serve(async (req) => {
       });
     }
 
-    // 3. Update public.dealers table for sales_person assignments
+    // 3. Update public.dealer_sales_persons table for sales_person assignments
     if (user_type === 'sales_person' && Array.isArray(assignedDealerIds)) {
-      // Unassign dealers that are no longer in the assignedDealerIds list for this sales person
-      const { error: unassignError } = await supabaseAdmin
-        .from('dealers')
-        .update({ sales_person_id: null })
-        .eq('sales_person_id', userId)
-        .not('id', 'in', assignedDealerIds);
+      // Fetch current assignments for this sales person
+      const { data: currentAssignments, error: fetchError } = await supabaseAdmin
+        .from('dealer_sales_persons')
+        .select('dealer_id')
+        .eq('sales_person_id', userId);
 
-      if (unassignError) {
-        console.error('Error unassigning dealers:', unassignError.message);
-        return new Response(JSON.stringify({ error: unassignError.message }), {
+      if (fetchError) {
+        console.error('Error fetching current dealer assignments:', fetchError.message);
+        return new Response(JSON.stringify({ error: fetchError.message }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      // Assign dealers that are in the assignedDealerIds list to this sales person
-      if (assignedDealerIds.length > 0) {
-        const { error: assignError } = await supabaseAdmin
-          .from('dealers')
-          .update({ sales_person_id: userId })
-          .in('id', assignedDealerIds);
+      const currentDealerIds = currentAssignments?.map(a => a.dealer_id) || [];
 
-        if (assignError) {
-          console.error('Error assigning dealers:', assignError.message);
-          return new Response(JSON.stringify({ error: assignError.message }), {
+      const toAdd = assignedDealerIds.filter((id: string) => !currentDealerIds.includes(id));
+      const toRemove = currentDealerIds.filter((id: string) => !assignedDealerIds.includes(id));
+
+      if (toAdd.length > 0) {
+        const { error: addError } = await supabaseAdmin
+          .from('dealer_sales_persons')
+          .insert(toAdd.map((dealerId: string) => ({ dealer_id: dealerId, sales_person_id: userId })));
+        if (addError) {
+          console.error('Error assigning dealers:', addError.message);
+          return new Response(JSON.stringify({ error: addError.message }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      if (toRemove.length > 0) {
+        const { error: removeError } = await supabaseAdmin
+          .from('dealer_sales_persons')
+          .delete()
+          .eq('sales_person_id', userId)
+          .in('dealer_id', toRemove);
+        if (removeError) {
+          console.error('Error unassigning dealers:', removeError.message);
+          return new Response(JSON.stringify({ error: removeError.message }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -105,8 +123,8 @@ serve(async (req) => {
     } else if (user_type !== 'sales_person') {
       // If user type is changed from sales_person, unassign all dealers from them
       const { error: unassignAllError } = await supabaseAdmin
-        .from('dealers')
-        .update({ sales_person_id: null })
+        .from('dealer_sales_persons')
+        .delete()
         .eq('sales_person_id', userId);
 
       if (unassignAllError) {

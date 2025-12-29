@@ -2,6 +2,9 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -31,11 +34,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FormControl } from '@/components/ui/form'; // Added FormControl import
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'; // Added FormField, FormItem, FormLabel
+import MultiSelect from '@/components/MultiSelect'; // Import MultiSelect
 
 interface Dealer {
   id: string;
@@ -49,7 +49,7 @@ interface Dealer {
   country: string;
   credit_limit: number;
   user_id: string;
-  sales_person_id: string | null; // Added sales_person_id
+  assigned_sales_persons: { id: string; first_name: string; last_name: string }[]; // Updated to array
 }
 
 interface SalesPerson {
@@ -71,7 +71,7 @@ const formSchema = z.object({
     (val) => Number(val),
     z.number().min(0, { message: 'Credit limit cannot be negative.' })
   ),
-  salesPersonId: z.string().uuid().optional().nullable(),
+  assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }),
 });
 
 const ManageDealers = () => {
@@ -82,7 +82,7 @@ const ManageDealers = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
-  const [salesPersons, setSalesPersons] = useState<SalesPerson[]>([]);
+  const [allSalesPersons, setAllSalesPersons] = useState<SalesPerson[]>([]); // All sales persons for multi-select options
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -96,7 +96,7 @@ const ManageDealers = () => {
       state: '',
       country: '',
       creditLimit: 0,
-      salesPersonId: null,
+      assignedSalesPersonIds: [],
     },
   });
 
@@ -112,26 +112,24 @@ const ManageDealers = () => {
         state: selectedDealer.state,
         country: selectedDealer.country,
         creditLimit: selectedDealer.credit_limit,
-        salesPersonId: selectedDealer.sales_person_id,
+        assignedSalesPersonIds: selectedDealer.assigned_sales_persons.map(sp => sp.id),
       });
     }
   }, [selectedDealer, form]);
 
-  const fetchSalesPersons = useCallback(async () => {
-    if (isAdmin) {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name')
-        .eq('user_type', 'sales_person');
+  const fetchAllSalesPersons = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name')
+      .eq('user_type', 'sales_person');
 
-      if (error) {
-        console.error('Error fetching sales persons:', error);
-        showError(`Failed to load sales persons: ${error.message}`);
-      } else {
-        setSalesPersons(data || []);
-      }
+    if (error) {
+      console.error('Error fetching all sales persons:', error);
+      showError(`Failed to load sales persons: ${error.message}`);
+    } else {
+      setAllSalesPersons(data || []);
     }
-  }, [isAdmin]);
+  }, []);
 
   const fetchDealers = useCallback(async () => {
     if (!user) {
@@ -140,9 +138,14 @@ const ManageDealers = () => {
     }
     setLoading(true);
     setError(null);
+
+    // Fetch dealers and their assigned sales persons
     const { data, error } = await supabase
       .from('dealers')
-      .select('*');
+      .select(`
+        *,
+        dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name))
+      `);
 
     if (error) {
       console.error('Error fetching dealers:', error);
@@ -150,19 +153,27 @@ const ManageDealers = () => {
       showError(`Failed to load dealers: ${error.message}`);
       setDealers([]);
     } else {
-      setDealers(data || []);
+      const formattedDealers: Dealer[] = (data || []).map((d: any) => ({
+        ...d,
+        assigned_sales_persons: d.dealer_sales_persons.map((dsp: any) => ({
+          id: dsp.profiles.id,
+          first_name: dsp.profiles.first_name,
+          last_name: dsp.profiles.last_name,
+        })),
+      }));
+      setDealers(formattedDealers);
     }
     setLoading(false);
-  }, [user]);
+  }, [user]); // Removed isAdmin from dependency array as RLS handles filtering
 
   useEffect(() => {
     if (!sessionLoading && user) {
+      fetchAllSalesPersons();
       fetchDealers();
-      fetchSalesPersons();
     } else if (!sessionLoading && !user) {
       navigate('/login');
     }
-  }, [sessionLoading, user, fetchDealers, fetchSalesPersons, navigate]);
+  }, [sessionLoading, user, fetchDealers, fetchAllSalesPersons, navigate]);
 
   const handleEdit = (dealer: Dealer) => {
     setSelectedDealer(dealer);
@@ -172,7 +183,7 @@ const ManageDealers = () => {
   const handleUpdateDealer = async (values: z.infer<typeof formSchema>) => {
     if (!selectedDealer || !user) return;
 
-    const updateData: Partial<Dealer> = {
+    const updateData: Partial<Omit<Dealer, 'assigned_sales_persons'>> = {
       name: values.name,
       contact_person: values.contactPerson,
       email: values.email,
@@ -184,31 +195,51 @@ const ManageDealers = () => {
       credit_limit: values.creditLimit,
     };
 
-    if (isAdmin) {
-      updateData.sales_person_id = values.salesPersonId;
-    } else {
-      // Sales person can only update their own assigned_to_id if it's currently null or their own ID
-      if (selectedDealer.sales_person_id === null || selectedDealer.sales_person_id === user.id) {
-        updateData.sales_person_id = user.id;
-      } else {
-        showError("You cannot reassign a dealer that is not assigned to you.");
-        return;
-      }
-    }
-
-    const { error } = await supabase
+    const { error: dealerUpdateError } = await supabase
       .from('dealers')
       .update(updateData)
       .eq('id', selectedDealer.id);
 
-    if (error) {
-      console.error('Error updating dealer:', error);
-      showError(`Failed to update dealer: ${error.message}`);
-    } else {
-      showSuccess('Dealer updated successfully!');
-      setIsEditDialogOpen(false);
-      fetchDealers();
+    if (dealerUpdateError) {
+      console.error('Error updating dealer:', dealerUpdateError);
+      showError(`Failed to update dealer: ${dealerUpdateError.message}`);
+      return;
     }
+
+    // Update dealer_sales_persons join table
+    const currentAssignedIds = selectedDealer.assigned_sales_persons.map(sp => sp.id);
+    const newAssignedIds = values.assignedSalesPersonIds;
+
+    const toAdd = newAssignedIds.filter(id => !currentAssignedIds.includes(id));
+    const toRemove = currentAssignedIds.filter(id => !newAssignedIds.includes(id));
+
+    if (toAdd.length > 0) {
+      const { error: addError } = await supabase
+        .from('dealer_sales_persons')
+        .insert(toAdd.map(spId => ({ dealer_id: selectedDealer.id, sales_person_id: spId })));
+      if (addError) {
+        console.error('Error adding sales persons:', addError);
+        showError(`Failed to assign sales persons: ${addError.message}`);
+        return;
+      }
+    }
+
+    if (toRemove.length > 0) {
+      const { error: removeError } = await supabase
+        .from('dealer_sales_persons')
+        .delete()
+        .eq('dealer_id', selectedDealer.id)
+        .in('sales_person_id', toRemove);
+      if (removeError) {
+        console.error('Error removing sales persons:', removeError);
+        showError(`Failed to unassign sales persons: ${removeError.message}`);
+        return;
+      }
+    }
+
+    showSuccess('Dealer updated successfully!');
+    setIsEditDialogOpen(false);
+    fetchDealers(); // Refresh data
   };
 
   const handleDelete = async (dealerId: string) => {
@@ -246,6 +277,11 @@ const ManageDealers = () => {
     );
   }
 
+  const salesPersonOptions = allSalesPersons.map(sp => ({
+    value: sp.id,
+    label: `${sp.first_name} ${sp.last_name}`,
+  }));
+
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-full">
@@ -275,7 +311,7 @@ const ManageDealers = () => {
                       <TableHead className="text-muted-foreground">State</TableHead>
                       <TableHead className="text-muted-foreground">Country</TableHead>
                       <TableHead className="text-muted-foreground">Credit Limit</TableHead>
-                      {isAdmin && <TableHead className="text-muted-foreground">Assigned To</TableHead>}
+                      <TableHead className="text-muted-foreground">Assigned To</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -291,13 +327,11 @@ const ManageDealers = () => {
                         <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
                         <TableCell className="text-muted-foreground">{dealer.country}</TableCell>
                         <TableCell className="text-muted-foreground">₹{dealer.credit_limit.toFixed(2)}</TableCell>
-                        {isAdmin && (
-                          <TableCell className="text-muted-foreground">
-                            {dealer.sales_person_id
-                              ? salesPersons.find(sp => sp.id === dealer.sales_person_id)?.first_name + ' ' + salesPersons.find(sp => sp.id === dealer.sales_person_id)?.last_name
-                              : 'Unassigned'}
-                          </TableCell>
-                        )}
+                        <TableCell className="text-muted-foreground">
+                          {dealer.assigned_sales_persons.length > 0
+                            ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name}`).join(', ')
+                            : 'Unassigned'}
+                        </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
                             <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer)} title="Edit Dealer">
@@ -413,29 +447,25 @@ const ManageDealers = () => {
                 <Input id="creditLimit" type="number" placeholder="e.g., 5000.00" {...form.register('creditLimit')} className="col-span-3" />
                 {form.formState.errors.creditLimit && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.creditLimit.message}</p>}
               </div>
-              {isAdmin && (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="salesPersonId" className="text-right">
-                    Assign to
-                  </Label>
-                  <Select onValueChange={(value) => form.setValue('salesPersonId', value === "null" ? null : value)} value={form.watch('salesPersonId') || "null"}>
-                    <FormControl>
-                      <SelectTrigger className="col-span-3">
-                        <SelectValue placeholder="Select a sales person" />
-                      </SelectTrigger>
+              <FormField
+                control={form.control}
+                name="assignedSalesPersonIds"
+                render={({ field }) => (
+                  <FormItem className="grid grid-cols-4 items-center gap-4">
+                    <FormLabel className="text-right">Assign to</FormLabel>
+                    <FormControl className="col-span-3">
+                      <MultiSelect
+                        options={salesPersonOptions}
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        placeholder="Select sales person(s)"
+                        disabled={!isAdmin} // Only admin can change assignments
+                      />
                     </FormControl>
-                    <SelectContent>
-                      <SelectItem value="null">Unassigned</SelectItem>
-                      {salesPersons.map((sp) => (
-                        <SelectItem key={sp.id} value={sp.id}>
-                          {sp.first_name} {sp.last_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {form.formState.errors.salesPersonId && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.salesPersonId.message}</p>}
-                </div>
-              )}
+                    {form.formState.errors.assignedSalesPersonIds && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.assignedSalesPersonIds.message}</p>}
+                  </FormItem>
+                )}
+              />
               <DialogFooter>
                 <Button type="submit">Save changes</Button>
               </DialogFooter>
