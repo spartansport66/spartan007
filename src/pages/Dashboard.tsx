@@ -1,5 +1,5 @@
 "use client";
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -7,15 +7,65 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, UserPlus } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, UserPlus, PlusCircle } from 'lucide-react';
 import OrderForm from '@/components/OrderForm';
 import SalesChart from '@/components/SalesChart';
-import ProductSalesChart from '@/components/ProductSalesChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { showError, showSuccess } from '@/utils/toast';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  description: string;
+}
+
+interface Dealer {
+  id: string;
+  name: string;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading } = useSession();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [dealers, setDealers] = useState<Dealer[]>([]);
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      if (!user) return;
+
+      // Fetch products
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, name, price, stock, description');
+
+      if (productsError) {
+        console.error('Error fetching products:', productsError);
+        showError(`Failed to load products: ${productsError.message}`);
+      } else {
+        setProducts(productsData || []);
+      }
+
+      // Fetch dealers
+      const { data: dealersData, error: dealersError } = await supabase
+        .from('dealers')
+        .select('id, name');
+
+      if (dealersError) {
+        console.error('Error fetching dealers:', dealersError);
+        showError(`Failed to load dealers: ${dealersError.message}`);
+      } else {
+        setDealers(dealersData || []);
+      }
+    };
+
+    if (!loading && user) {
+      fetchInitialData();
+    }
+  }, [user, loading]);
+
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -73,13 +123,6 @@ const Dashboard = () => {
     { id: "4", type: "Order", description: "Order #1001 shipped to Dealer C", date: "2023-10-23", status: "Shipped" },
   ];
 
-  // Removed dummyProducts array as it's no longer needed for rendering product cards
-  const dummyDealers = [
-    { id: 'dlr1', name: 'Global Distributors Inc.' },
-    { id: 'dlr2', name: 'Local Supply Co.' },
-    { id: 'dlr3', name: 'Mega Mart Wholesale' },
-  ];
-
   const monthlySalesData = [
     { month: 'Jan', sales: 4000 },
     { month: 'Feb', sales: 3000 },
@@ -89,29 +132,22 @@ const Dashboard = () => {
     { month: 'Jun', sales: 5500 },
   ];
 
-  const productSalesData = [
-    { product: 'Alpha', sales: 12000 },
-    { product: 'Beta', sales: 8000 },
-    { product: 'Gamma', sales: 15000 },
-  ];
-
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">CRM Dashboard</h1>
-        {/* Logout button moved to Quick Actions */}
       </div>
       
       {/* Sales Overview Cards - Reduced to 50% with adjusted fonts */}
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2"> {/* Reduced padding */}
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2">
               <CardTitle className="text-[0.5rem] font-medium text-muted-foreground">{item.title}</CardTitle>
               {item.icon}
             </CardHeader>
-            <CardContent className="p-2 pt-0"> {/* Reduced padding */}
-              <div className="text-sm font-bold text-foreground">{item.value}</div> {/* Reduced font size */}
+            <CardContent className="p-2 pt-0">
+              <div className="text-sm font-bold text-foreground">{item.value}</div>
               <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
             </CardContent>
           </Card>
@@ -121,14 +157,12 @@ const Dashboard = () => {
       {/* Charts Section */}
       <div className="grid gap-4 lg:grid-cols-2 mb-6">
         <SalesChart data={monthlySalesData} />
-        {/* ProductSalesChart removed */}
       </div>
 
       {/* Products and Order Form */}
       <div className="grid gap-4 lg:grid-cols-3 mb-6">
-        {/* Removed ProductCard components and placeholder div */}
-        <div className="lg:col-span-2"></div> {/* This div is now empty and can be removed if not needed for layout */}
-        <OrderForm products={[]} dealers={dummyDealers} /> {/* Pass an empty array for products */}
+        <div className="lg:col-span-2"></div>
+        <OrderForm products={products} dealers={dealers} /> {/* Pass fetched products and dealers */}
       </div>
 
       {/* Recent Activities */}
@@ -170,11 +204,19 @@ const Dashboard = () => {
         <CardContent className="grid grid-cols-4 gap-2 sm:gap-4">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
+              <Button onClick={() => navigate('/manage-products')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
                 <Boxes className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>View Products</TooltipContent>
+            <TooltipContent>Manage Products</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={() => navigate('/add-product')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <PlusCircle className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Add Product</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -192,7 +234,6 @@ const Dashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Sales Reports</TooltipContent>
           </Tooltip>
-          {/* Removed Add New Dealer button */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">

@@ -1,31 +1,52 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useSession } from '@/contexts/SessionContext';
+import { Loader2 } from 'lucide-react';
 
-interface OrderFormProps {
-  products: { id: string; name: string; price: number; stock: number }[];
-  dealers: { id: string; name: string }[]; // Changed from wholesalers to dealers
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
 }
 
-const OrderForm: React.FC<OrderFormProps> = ({ products, dealers }) => { // Changed from wholesalers to dealers
-  const [selectedDealer, setSelectedDealer] = useState<string>(''); // Changed to selectedDealer
+interface Dealer {
+  id: string;
+  name: string;
+}
+
+interface OrderFormProps {
+  products: Product[];
+  dealers: Dealer[];
+}
+
+const OrderForm: React.FC<OrderFormProps> = ({ products: initialProducts, dealers: initialDealers }) => {
+  const { user } = useSession();
+  const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedDealer || !selectedProduct || quantity <= 0) { // Changed to selectedDealer
+    if (!user) {
+      showError('You must be logged in to place an order.');
+      return;
+    }
+    if (!selectedDealer || !selectedProduct || quantity <= 0) {
       showError('Please fill in all fields and ensure quantity is positive.');
       return;
     }
 
-    const product = products.find(p => p.id === selectedProduct);
+    const product = initialProducts.find(p => p.id === selectedProduct);
     if (!product) {
       showError('Selected product not found.');
       return;
@@ -35,17 +56,44 @@ const OrderForm: React.FC<OrderFormProps> = ({ products, dealers }) => { // Chan
       return;
     }
 
-    console.log({
-      dealerId: selectedDealer, // Changed to dealerId
-      productId: selectedProduct,
-      quantity,
-      totalPrice: quantity * product.price,
-    });
-    showSuccess('Order placed successfully!');
-    // Reset form
-    setSelectedDealer(''); // Changed to setSelectedDealer
-    setSelectedProduct('');
-    setQuantity(1);
+    setLoading(true);
+    try {
+      // Record the sale
+      const { error: saleError } = await supabase.from('sales').insert({
+        user_id: user.id,
+        product_id: selectedProduct,
+        dealer_id: selectedDealer,
+        quantity: quantity,
+        total_price: quantity * product.price,
+      });
+
+      if (saleError) {
+        throw saleError;
+      }
+
+      // Update product stock
+      const newStock = product.stock - quantity;
+      const { error: stockError } = await supabase
+        .from('products')
+        .update({ stock: newStock })
+        .eq('id', selectedProduct);
+
+      if (stockError) {
+        throw stockError;
+      }
+
+      showSuccess('Order placed successfully!');
+      // Reset form
+      setSelectedDealer('');
+      setSelectedProduct('');
+      setQuantity(1);
+      // Optionally, trigger a refresh of products/dealers in parent if needed
+    } catch (error: any) {
+      console.error('Error placing order:', error);
+      showError(`Failed to place order: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -57,13 +105,13 @@ const OrderForm: React.FC<OrderFormProps> = ({ products, dealers }) => { // Chan
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="dealer">Dealer</Label> {/* Changed to Dealer */}
-            <Select value={selectedDealer} onValueChange={setSelectedDealer}> {/* Changed to selectedDealer */}
-              <SelectTrigger id="dealer" className="w-full"> {/* Changed to dealer */}
-                <SelectValue placeholder="Select a dealer" /> {/* Changed to dealer */}
+            <Label htmlFor="dealer">Dealer</Label>
+            <Select value={selectedDealer} onValueChange={setSelectedDealer}>
+              <SelectTrigger id="dealer" className="w-full">
+                <SelectValue placeholder="Select a dealer" />
               </SelectTrigger>
               <SelectContent>
-                {dealers.map((d) => ( // Changed from wholesalers to dealers
+                {initialDealers.map((d) => (
                   <SelectItem key={d.id} value={d.id}>
                     {d.name}
                   </SelectItem>
@@ -78,9 +126,9 @@ const OrderForm: React.FC<OrderFormProps> = ({ products, dealers }) => { // Chan
                 <SelectValue placeholder="Select a product" />
               </SelectTrigger>
               <SelectContent>
-                {products.map((p) => (
+                {initialProducts.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {p.name} (${p.price.toFixed(2)})
+                    {p.name} (${p.price.toFixed(2)}) - Stock: {p.stock}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -97,8 +145,8 @@ const OrderForm: React.FC<OrderFormProps> = ({ products, dealers }) => { // Chan
               className="w-full"
             />
           </div>
-          <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-            Place Order
+          <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={loading}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}
           </Button>
         </form>
       </CardContent>
