@@ -48,7 +48,7 @@ const AddProduct = () => {
       navigate('/login');
     } else if (!sessionLoading && user && !isAdmin) {
       showError('Access Denied: Only administrators can add products.');
-      navigate('/dashboard');
+      navigate('/dashboard'); // Sales persons go to their dashboard
     }
   }, [sessionLoading, user, isAdmin, navigate]);
 
@@ -99,8 +99,8 @@ const AddProduct = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-md sm:max-w-lg">
-        <Button variant="outline" onClick={() => navigate('/dashboard')} className="mb-6 flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+        <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="mb-6 flex items-center gap-2">
+          <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
         </Button>
 
         <Card className="bg-card text-card-foreground shadow-lg">

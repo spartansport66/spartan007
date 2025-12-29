@@ -4,29 +4,31 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
+import { Loader2 } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { session, loading, isAdmin } = useSession(); // Get isAdmin from session context
+  const { session, loading, isAdmin } = useSession();
 
   useEffect(() => {
     if (!loading) {
       if (session) {
         if (isAdmin) {
-          navigate('/admin-panel'); // Redirect admin users to Admin Panel
+          navigate('/admin-dashboard'); // Redirect admin users to Admin Dashboard
         } else {
-          navigate('/dashboard'); // Redirect other users to Dashboard
+          navigate('/dashboard'); // Redirect other users to Sales Dashboard
         }
       } else {
         navigate('/login');
       }
     }
-  }, [session, loading, navigate, isAdmin]); // Add isAdmin to dependency array
+  }, [session, loading, navigate, isAdmin]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-        <p className="text-lg text-gray-700 dark:text-gray-300">Loading...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading...</p>
       </div>
     );
   }

@@ -7,8 +7,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2 } from 'lucide-react';
-import OrderForm from '@/components/OrderForm';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, PlusCircle, UserCog, Loader2 } from 'lucide-react';
+import SalesChart from '@/components/SalesChart';
+import ProductSalesChart from '@/components/ProductSalesChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 
@@ -36,7 +37,7 @@ interface Sale {
   dealers: { name: string } | null;
 }
 
-const Dashboard = () => {
+const AdminDashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
   const [products, setProducts] = useState<Product[]>([]);
@@ -45,16 +46,18 @@ const Dashboard = () => {
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
+  const [monthlySalesData, setMonthlySalesData] = useState<{ month: string; sales: number }[]>([]);
+  const [productSalesData, setProductSalesData] = useState<{ product: string; sales: number }[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
-  const fetchDashboardData = useCallback(async () => {
+  const fetchAdminDashboardData = useCallback(async () => {
     if (!user) {
       setLoadingData(false);
       return;
     }
     setLoadingData(true);
 
-    // Fetch products (all for everyone, RLS handles what they can manage)
+    // Fetch all products (admins can see all)
     const { data: productsData, error: productsError } = await supabase
       .from('products')
       .select('id, name, price, stock, description');
@@ -66,7 +69,7 @@ const Dashboard = () => {
       setProducts(productsData || []);
     }
 
-    // Fetch dealers (RLS handles what they can see)
+    // Fetch all dealers (admins can see all)
     const { data: dealersData, error: dealersError } = await supabase
       .from('dealers')
       .select('id, name');
@@ -79,7 +82,7 @@ const Dashboard = () => {
       setActiveDealersCount(dealersData?.length || 0);
     }
 
-    // Fetch sales (RLS handles what they can see)
+    // Fetch all sales (admins can see all)
     const { data: salesData, error: salesError } = await supabase
       .from('sales')
       .select(`
@@ -99,7 +102,6 @@ const Dashboard = () => {
       showError(`Failed to load sales data: ${salesError.message}`);
       setSales([]);
     } else {
-      // Explicitly map to ensure type compatibility for nested objects
       const typedSalesData: Sale[] = (salesData || []).map(sale => ({
         ...sale,
         products: (sale.products && Array.isArray(sale.products) && sale.products.length > 0)
@@ -111,11 +113,37 @@ const Dashboard = () => {
       }));
       setSales(typedSalesData);
 
-      // Calculate total sales value and total orders
       const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
       const totalOrdersCount = typedSalesData.length || 0;
       setTotalSalesValue(totalValue);
       setTotalOrders(totalOrdersCount);
+
+      // Calculate monthly sales data
+      const monthlySalesMap = new Map<string, number>();
+      typedSalesData.forEach(sale => {
+        const date = new Date(sale.sale_date);
+        const month = date.toLocaleString('default', { month: 'short' });
+        const year = date.getFullYear();
+        const monthYear = `${month} ${year}`;
+        monthlySalesMap.set(monthYear, (monthlySalesMap.get(monthYear) || 0) + sale.total_price);
+      });
+
+      const sortedMonths = Array.from(monthlySalesMap.keys()).sort((a, b) => {
+        const dateA = new Date(a);
+        const dateB = new Date(b);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      setMonthlySalesData(sortedMonths.map(month => ({ month: month.split(' ')[0], sales: monthlySalesMap.get(month) || 0 })));
+
+      // Calculate product sales data
+      const productSalesMap = new Map<string, number>();
+      typedSalesData.forEach(sale => {
+        const productName = sale.products?.name || 'Unknown Product';
+        productSalesMap.set(productName, (productSalesMap.get(productName) || 0) + sale.total_price);
+      });
+
+      setProductSalesData(Array.from(productSalesMap.entries()).map(([product, sales]) => ({ product, sales })));
     }
     setLoadingData(false);
   }, [user]);
@@ -124,14 +152,14 @@ const Dashboard = () => {
     if (!sessionLoading) {
       if (!user) {
         navigate('/login');
-      } else if (isAdmin) {
-        // Redirect admins to the new Admin Dashboard
-        navigate('/admin-dashboard');
+      } else if (!isAdmin) {
+        showError('Access Denied: You must be an administrator to view this page.');
+        navigate('/dashboard');
       } else {
-        fetchDashboardData();
+        fetchAdminDashboardData();
       }
     }
-  }, [user, sessionLoading, isAdmin, fetchDashboardData, navigate]);
+  }, [sessionLoading, user, isAdmin, fetchAdminDashboardData, navigate]);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -148,46 +176,46 @@ const Dashboard = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading dashboard...</p>
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading admin dashboard...</p>
       </div>
     );
   }
 
-  if (!user || isAdmin) {
+  if (!isAdmin) {
     return null; // Should be redirected by useEffect
   }
 
   const salesOverview = [
     {
-      title: "My Total Sales",
+      title: "Total Sales Value",
       value: `$${totalSalesValue.toFixed(2)}`,
-      change: "+20.1% from last month", // Placeholder, actual calculation would be more complex
+      change: "+20.1% from last month", // Placeholder
       icon: <DollarSign className="h-3 w-3 text-primary" />
     },
     {
-      title: "My Total Orders",
+      title: "Total Orders",
       value: totalOrders.toString(),
       change: "+180.1% from last month", // Placeholder
       icon: <Package className="h-3 w-3 text-accent" />
     },
     {
-      title: "My Active Dealers",
+      title: "Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month", // Placeholder
       icon: <Users className="h-3 w-3 text-secondary" />
     },
     {
-      title: "Pending Tasks",
-      value: "57", // Placeholder
-      change: "-5% from last month", // Placeholder
-      icon: <Activity className="h-3 w-3 text-destructive" />
+      title: "Total Products",
+      value: products.length.toString(),
+      change: "Overall",
+      icon: <Boxes className="h-3 w-3 text-destructive" />
     },
   ];
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-primary">Sales Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-primary">Admin Dashboard</h1>
       </div>
 
       {/* Sales Overview Cards */}
@@ -206,50 +234,17 @@ const Dashboard = () => {
         ))}
       </div>
 
-      {/* Products and Order Form */}
-      <div className="grid gap-4 lg:grid-cols-3 mb-6">
-        <div className="lg:col-span-2">
-          <Card className="bg-card text-card-foreground shadow-lg h-full">
-            <CardHeader>
-              <CardTitle className="text-xl font-semibold text-primary">Available Products</CardTitle>
-              <CardDescription className="text-muted-foreground">Products you can sell.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {products.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4">No products available.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted hover:bg-muted/90">
-                        <TableHead className="text-muted-foreground">Name</TableHead>
-                        <TableHead className="text-muted-foreground">Price</TableHead>
-                        <TableHead className="text-muted-foreground">Stock</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {products.map((product) => (
-                        <TableRow key={product.id} className="hover:bg-accent/50">
-                          <TableCell className="font-medium text-foreground">{product.name}</TableCell>
-                          <TableCell className="text-muted-foreground">₹{product.price.toFixed(2)}</TableCell>
-                          <TableCell className="text-muted-foreground">{product.stock}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-        <OrderForm products={products} dealers={dealers} onOrderPlaced={fetchDashboardData} />
+      {/* Charts Section */}
+      <div className="grid gap-4 lg:grid-cols-2 mb-6">
+        <SalesChart data={monthlySalesData} />
+        <ProductSalesChart data={productSalesData} />
       </div>
 
-      {/* Recent Activities (Sales) */}
+      {/* Recent Activities (All Sales) */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
         <CardHeader>
-          <CardTitle className="text-xl font-semibold text-primary">My Recent Sales</CardTitle>
-          <CardDescription className="text-muted-foreground">A list of your recent sales transactions.</CardDescription>
+          <CardTitle className="text-xl font-semibold text-primary">All Recent Sales</CardTitle>
+          <CardDescription className="text-muted-foreground">A list of all recent sales transactions across all sales persons.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -287,9 +282,25 @@ const Dashboard = () => {
       <Card className="bg-card text-card-foreground shadow-lg">
         <CardHeader>
           <CardTitle className="text-xl font-semibold text-primary">Quick Actions</CardTitle>
-          <CardDescription className="text-muted-foreground">Perform common tasks quickly.</CardDescription>
+          <CardDescription className="text-muted-foreground">Perform common administrative tasks quickly.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={() => navigate('/manage-products')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <Boxes className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Manage Products</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={() => navigate('/add-product')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <PlusCircle className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Add Product</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => navigate('/manage-dealers')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
@@ -308,6 +319,14 @@ const Dashboard = () => {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
+              <Button onClick={() => navigate('/admin-panel')} size="icon" className="bg-purple-600 text-white hover:bg-purple-700">
+                <UserCog className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Manage Users</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                 <LogOut className="h-4 w-4" />
               </Button>
@@ -321,4 +340,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default AdminDashboard;

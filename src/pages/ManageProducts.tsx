@@ -115,7 +115,7 @@ const ManageProducts = () => {
       navigate('/login');
     } else if (!sessionLoading && user && !isAdmin) {
       showError('Access Denied: Only administrators can manage products.');
-      navigate('/dashboard');
+      navigate('/dashboard'); // Sales persons go to their dashboard
     } else if (!sessionLoading && user && isAdmin) {
       fetchProducts();
     }
@@ -181,8 +181,8 @@ const ManageProducts = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
         <p className="text-lg text-red-600 dark:text-red-400 mb-4">{error}</p>
-        <Button onClick={() => navigate('/dashboard')} className="flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+        <Button onClick={() => navigate('/admin-dashboard')} className="flex items-center gap-2">
+          <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
         </Button>
       </div>
     );
@@ -191,8 +191,8 @@ const ManageProducts = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-full">
-        <Button variant="outline" onClick={() => navigate('/dashboard')} className="mb-6 flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+        <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="mb-6 flex items-center gap-2">
+          <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
         </Button>
 
         <Card className="bg-card text-card-foreground shadow-lg">
