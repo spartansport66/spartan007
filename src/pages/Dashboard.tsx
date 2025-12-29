@@ -8,7 +8,6 @@ import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, UserPlus } from 'lucide-react';
-import ProductCard from '@/components/ProductCard';
 import OrderForm from '@/components/OrderForm';
 import SalesChart from '@/components/SalesChart';
 import ProductSalesChart from '@/components/ProductSalesChart';
@@ -74,12 +73,7 @@ const Dashboard = () => {
     { id: "4", type: "Order", description: "Order #1001 shipped to Dealer C", date: "2023-10-23", status: "Shipped" },
   ];
 
-  const dummyProducts = [
-    { id: 'prod1', name: 'Product Alpha', description: 'High-quality product for general use.', price: 29.99, stock: 150 },
-    { id: 'prod2', name: 'Product Beta', description: 'Premium solution for advanced needs.', price: 49.99, stock: 80 },
-    { id: 'prod3', name: 'Product Gamma', description: 'Economical choice for bulk purchases.', price: 15.50, stock: 300 },
-  ];
-
+  // Removed dummyProducts array as it's no longer needed for rendering product cards
   const dummyDealers = [
     { id: 'dlr1', name: 'Global Distributors Inc.' },
     { id: 'dlr2', name: 'Local Supply Co.' },
@@ -132,12 +126,9 @@ const Dashboard = () => {
 
       {/* Products and Order Form */}
       <div className="grid gap-4 lg:grid-cols-3 mb-6">
-        <div className="lg:col-span-2 grid gap-4 md:grid-cols-2">
-          {dummyProducts.map((product) => (
-            <ProductCard key={product.id} product={product} onAddToCart={(id) => console.log(`Added ${id} to cart`)} />
-          ))}
-        </div>
-        <OrderForm products={dummyProducts} dealers={dummyDealers} />
+        {/* Removed ProductCard components and placeholder div */}
+        <div className="lg:col-span-2"></div> {/* This div is now empty and can be removed if not needed for layout */}
+        <OrderForm products={[]} dealers={dummyDealers} /> {/* Pass an empty array for products */}
       </div>
 
       {/* Recent Activities */}
