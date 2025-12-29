@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Session, User } from '@supabase/supabase-js';
+import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { showLoading, dismissToast, showError } from '@/utils/toast';
@@ -24,39 +24,41 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     let toastId: string | undefined;
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, currentSession) => {
-        if (event === 'SIGNED_IN') {
-          setSession(currentSession);
-          setUser(currentSession?.user || null);
-          if (toastId) dismissToast(toastId);
-          navigate('/dashboard');
-        } else if (event === 'SIGNED_OUT') {
-          setSession(null);
-          setUser(null);
-          if (toastId) dismissToast(toastId);
-          navigate('/login');
-        } else if (event === 'INITIAL_SESSION') {
-          setSession(currentSession);
-          setUser(currentSession?.user || null);
-          if (currentSession) {
+      async (event: AuthChangeEvent, currentSession: Session | null) => {
+        switch (event) {
+          case 'SIGNED_IN':
+            setSession(currentSession);
+            setUser(currentSession?.user || null);
+            if (toastId) dismissToast(toastId);
             navigate('/dashboard');
-          } else {
+            break;
+          case 'SIGNED_OUT':
+            setSession(null);
+            setUser(null);
+            if (toastId) dismissToast(toastId);
             navigate('/login');
-          }
-        } else if (event === 'USER_UPDATED') {
-          setUser(currentSession?.user || null);
-        } else if (event === 'PASSWORD_RECOVERY') {
-          showLoading('Password recovery initiated. Check your email.');
-        } else if (event === 'MFA_CHALLENGE_VERIFIED') {
-          // Handle MFA challenge verified
-        } else if (event === 'MFA_CHALLENGE_REJECTED') {
-          showError('MFA challenge rejected.');
-        } else if (event === 'MFA_VERIFY') {
-          // Handle MFA verification
-        } else if (event === 'MFA_CHALLENGE') {
-          // Handle MFA challenge
-        } else if (event === 'SUPABASE_AUTH_ERRORS') {
-          showError('Authentication error occurred.');
+            break;
+          case 'INITIAL_SESSION':
+            setSession(currentSession);
+            setUser(currentSession?.user || null);
+            if (currentSession) {
+              navigate('/dashboard');
+            } else {
+              navigate('/login');
+            }
+            break;
+          case 'USER_UPDATED':
+            setUser(currentSession?.user || null);
+            break;
+          case 'PASSWORD_RECOVERY':
+            showLoading('Password recovery initiated. Check your email.');
+            break;
+          case 'TOKEN_REFRESHED':
+            // Handle token refreshed event if needed, otherwise no action
+            break;
+          default:
+            // Fallback for any unhandled events or future events
+            console.warn('Unhandled auth event:', event);
         }
         setLoading(false);
       }
