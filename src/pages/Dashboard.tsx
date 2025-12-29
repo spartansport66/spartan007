@@ -192,14 +192,7 @@ const Dashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Sales Reports</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/add-dealer')} size="icon" variant="outline">
-                <UserPlus className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Add New Dealer</TooltipContent>
-          </Tooltip>
+          {/* Removed Add New Dealer button */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
