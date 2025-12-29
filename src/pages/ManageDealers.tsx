@@ -14,15 +14,20 @@ import { useSession } from '@/contexts/SessionContext';
 interface Dealer {
   id: string;
   name: string;
-  contact_person: string | null;
+  contact_person: string;
   email: string;
-  phone: string | null;
-  address: string | null;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  credit_limit: number;
+  user_id: string; // Added user_id to interface for RLS checks
 }
 
 const ManageDealers = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading } = useSession();
+  const { user, loading: sessionLoading, isAdmin } = useSession(); // Get isAdmin from session context
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,8 +41,7 @@ const ManageDealers = () => {
     setError(null);
     const { data, error } = await supabase
       .from('dealers')
-      .select('*')
-      .eq('user_id', user.id); // Only fetch dealers belonging to the current user
+      .select('*'); // RLS will handle visibility based on user.id or isAdmin
 
     if (error) {
       console.error('Error fetching dealers:', error);
@@ -54,19 +58,17 @@ const ManageDealers = () => {
     if (!sessionLoading && user) {
       fetchDealers();
     } else if (!sessionLoading && !user) {
-      navigate('/login'); // Redirect to login if not authenticated
+      navigate('/login');
     }
   }, [sessionLoading, user, fetchDealers, navigate]);
 
   const handleView = (dealerId: string) => {
     showSuccess(`Viewing dealer ${dealerId}`);
-    // In a real app, navigate to a dealer detail page
     console.log('View dealer:', dealerId);
   };
 
   const handleEdit = (dealerId: string) => {
     showSuccess(`Editing dealer ${dealerId}`);
-    // In a real app, navigate to an edit dealer page or open a modal
     console.log('Edit dealer:', dealerId);
   };
 
@@ -75,15 +77,14 @@ const ManageDealers = () => {
       const { error } = await supabase
         .from('dealers')
         .delete()
-        .eq('id', dealerId)
-        .eq('user_id', user?.id); // Ensure only the user's own dealer can be deleted
+        .eq('id', dealerId); // RLS will enforce user_id or admin check
 
       if (error) {
         console.error('Error deleting dealer:', error);
         showError(`Failed to delete dealer: ${error.message}`);
       } else {
         showSuccess('Dealer deleted successfully!');
-        fetchDealers(); // Refresh the list after deletion
+        fetchDealers();
       }
     }
   };
@@ -110,7 +111,7 @@ const ManageDealers = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
-      <div className="w-full max-w-4xl">
+      <div className="w-full max-w-6xl"> {/* Increased max-w for more columns */}
         <Button variant="outline" onClick={() => navigate('/dashboard')} className="mb-6 flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" /> Back to Dashboard
         </Button>
@@ -132,6 +133,11 @@ const ManageDealers = () => {
                       <TableHead className="text-muted-foreground">Contact Person</TableHead>
                       <TableHead className="text-muted-foreground">Email</TableHead>
                       <TableHead className="text-muted-foreground">Phone</TableHead>
+                      <TableHead className="text-muted-foreground">Address</TableHead>
+                      <TableHead className="text-muted-foreground">City</TableHead>
+                      <TableHead className="text-muted-foreground">State</TableHead>
+                      <TableHead className="text-muted-foreground">Country</TableHead>
+                      <TableHead className="text-muted-foreground">Credit Limit</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -139,20 +145,29 @@ const ManageDealers = () => {
                     {dealers.map((dealer) => (
                       <TableRow key={dealer.id} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.contact_person || 'N/A'}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.contact_person}</TableCell>
                         <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.phone}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.address}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.country}</TableCell>
+                        <TableCell className="text-muted-foreground">${dealer.credit_limit.toFixed(2)}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
                             <Button variant="ghost" size="icon" onClick={() => handleView(dealer.id)} title="View Dealer">
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer.id)} title="Edit Dealer">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(dealer.id)} title="Delete Dealer">
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
+                            {(isAdmin || user?.id === dealer.user_id) && ( // Only show edit/delete if admin or creator
+                              <>
+                                <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer.id)} title="Edit Dealer">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleDelete(dealer.id)} title="Delete Dealer">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

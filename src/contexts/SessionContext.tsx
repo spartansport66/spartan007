@@ -10,6 +10,7 @@ interface SessionContextType {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  isAdmin: boolean; // Added isAdmin to the context type
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -18,7 +19,23 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false); // Added isAdmin state
   const navigate = useNavigate();
+
+  const fetchUserProfile = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching user profile:', error.message);
+      setIsAdmin(false);
+    } else {
+      setIsAdmin(data?.is_admin || false);
+    }
+  };
 
   useEffect(() => {
     let toastId: string | undefined;
@@ -29,31 +46,37 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
           case 'SIGNED_IN':
             setSession(currentSession);
             setUser(currentSession?.user || null);
+            if (currentSession?.user) {
+              await fetchUserProfile(currentSession.user.id); // Fetch admin status on sign in
+            }
             if (toastId) dismissToast(toastId);
-            // No automatic redirect to dashboard here. Let the route decide.
             break;
           case 'SIGNED_OUT':
             setSession(null);
             setUser(null);
+            setIsAdmin(false); // Reset admin status on sign out
             if (toastId) dismissToast(toastId);
-            navigate('/login'); // Only redirect to login on sign out
+            navigate('/login');
             break;
           case 'INITIAL_SESSION':
             setSession(currentSession);
             setUser(currentSession?.user || null);
-            // No automatic redirect to dashboard here. Let the Index page handle initial routing.
+            if (currentSession?.user) {
+              await fetchUserProfile(currentSession.user.id); // Fetch admin status on initial session
+            }
             break;
           case 'USER_UPDATED':
             setUser(currentSession?.user || null);
+            if (currentSession?.user) {
+              await fetchUserProfile(currentSession.user.id); // Fetch admin status on user update
+            }
             break;
           case 'PASSWORD_RECOVERY':
             showLoading('Password recovery initiated. Check your email.');
             break;
           case 'TOKEN_REFRESHED':
-            // Handle token refreshed event if needed, otherwise no action
             break;
           default:
-            // Fallback for any unhandled events or future events
             console.warn('Unhandled auth event:', event);
         }
         setLoading(false);
@@ -61,11 +84,13 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     );
 
     // Initial session check
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       setSession(initialSession);
       setUser(initialSession?.user || null);
+      if (initialSession?.user) {
+        await fetchUserProfile(initialSession.user.id); // Fetch admin status on initial session
+      }
       setLoading(false);
-      // No automatic redirect to dashboard here. Let the Index page handle initial routing.
     });
 
     return () => {
@@ -75,7 +100,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   }, [navigate]);
 
   return (
-    <SessionContext.Provider value={{ session, user, loading }}>
+    <SessionContext.Provider value={{ session, user, loading, isAdmin }}>
       {children}
     </SessionContext.Provider>
   );

@@ -17,10 +17,17 @@ import { useSession } from '@/contexts/SessionContext';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Dealer name must be at least 2 characters.' }),
-  contactPerson: z.string().min(2, { message: 'Contact person name must be at least 2 characters.' }).optional().or(z.literal('')),
+  contactPerson: z.string().min(2, { message: 'Contact person name must be at least 2 characters.' }),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
-  phone: z.string().min(10, { message: 'Phone number must be at least 10 digits.' }).max(15, { message: 'Phone number cannot exceed 15 digits.' }).optional().or(z.literal('')),
-  address: z.string().min(5, { message: 'Address must be at least 5 characters.' }).optional().or(z.literal('')),
+  phone: z.string().min(10, { message: 'Phone number must be at least 10 digits.' }).max(15, { message: 'Phone number cannot exceed 15 digits.' }),
+  address: z.string().min(5, { message: 'Address must be at least 5 characters.' }),
+  city: z.string().min(2, { message: 'City must be at least 2 characters.' }),
+  state: z.string().min(2, { message: 'State must be at least 2 characters.' }),
+  country: z.string().min(2, { message: 'Country must be at least 2 characters.' }),
+  creditLimit: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Credit limit cannot be negative.' })
+  ),
 });
 
 const AddDealer = () => {
@@ -35,6 +42,10 @@ const AddDealer = () => {
       email: '',
       phone: '',
       address: '',
+      city: '',
+      state: '',
+      country: '',
+      creditLimit: 0,
     },
   });
 
@@ -51,10 +62,14 @@ const AddDealer = () => {
         {
           user_id: user.id,
           name: values.name,
-          contact_person: values.contactPerson || null,
+          contact_person: values.contactPerson,
           email: values.email,
-          phone: values.phone || null,
-          address: values.address || null,
+          phone: values.phone,
+          address: values.address,
+          city: values.city,
+          state: values.state,
+          country: values.country,
+          credit_limit: values.creditLimit,
         },
       ])
       .select();
@@ -66,7 +81,7 @@ const AddDealer = () => {
       showSuccess('Dealer added successfully!');
       form.reset();
       console.log('New Dealer Data:', data);
-      navigate('/manage-dealers'); // Navigate to manage dealers after successful addition
+      navigate('/manage-dealers');
     }
   };
 
@@ -103,7 +118,7 @@ const AddDealer = () => {
                   name="contactPerson"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Contact Person (Optional)</FormLabel>
+                      <FormLabel>Contact Person</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g., Jane Doe" {...field} />
                       </FormControl>
@@ -129,7 +144,7 @@ const AddDealer = () => {
                   name="phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Phone Number (Optional)</FormLabel>
+                      <FormLabel>Phone Number</FormLabel>
                       <FormControl>
                         <Input type="tel" placeholder="e.g., +1234567890" {...field} />
                       </FormControl>
@@ -142,9 +157,61 @@ const AddDealer = () => {
                   name="address"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Address (Optional)</FormLabel>
+                      <FormLabel>Address</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., 123 Main St, Anytown, USA" {...field} />
+                        <Input placeholder="e.g., 123 Main St" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>City</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Anytown" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="state"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>State</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., CA" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="country"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Country</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., USA" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="creditLimit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Credit Limit</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 5000.00" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
