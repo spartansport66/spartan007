@@ -1,52 +1,62 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Edit, Trash2, Eye } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Eye, Loader2 } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useSession } from '@/contexts/SessionContext';
 
 interface Dealer {
   id: string;
   name: string;
-  contactPerson: string;
+  contact_person: string | null;
   email: string;
-  phone: string;
-  address: string;
+  phone: string | null;
+  address: string | null;
 }
-
-const dummyDealers: Dealer[] = [
-  {
-    id: 'dlr1',
-    name: 'Global Distributors Inc.',
-    contactPerson: 'Alice Smith',
-    email: 'alice.s@globaldist.com',
-    phone: '+1-555-123-4567',
-    address: '101 Global Ave, Metropolis, USA',
-  },
-  {
-    id: 'dlr2',
-    name: 'Local Supply Co.',
-    contactPerson: 'Bob Johnson',
-    email: 'bob.j@localsupply.com',
-    phone: '+1-555-987-6543',
-    address: '202 Local St, Smallville, USA',
-  },
-  {
-    id: 'dlr3',
-    name: 'Mega Mart Wholesale',
-    contactPerson: 'Charlie Brown',
-    email: 'charlie.b@megamart.com',
-    phone: '+1-555-111-2222',
-    address: '303 Mega Blvd, Big City, USA',
-  },
-];
 
 const ManageDealers = () => {
   const navigate = useNavigate();
+  const { user, loading: sessionLoading } = useSession();
+  const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDealers = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const { data, error } = await supabase
+      .from('dealers')
+      .select('*')
+      .eq('user_id', user.id); // Only fetch dealers belonging to the current user
+
+    if (error) {
+      console.error('Error fetching dealers:', error);
+      setError(`Failed to load dealers: ${error.message}`);
+      showError(`Failed to load dealers: ${error.message}`);
+      setDealers([]);
+    } else {
+      setDealers(data || []);
+    }
+    setLoading(false);
+  }, [user]);
+
+  useEffect(() => {
+    if (!sessionLoading && user) {
+      fetchDealers();
+    } else if (!sessionLoading && !user) {
+      navigate('/login'); // Redirect to login if not authenticated
+    }
+  }, [sessionLoading, user, fetchDealers, navigate]);
 
   const handleView = (dealerId: string) => {
     showSuccess(`Viewing dealer ${dealerId}`);
@@ -60,13 +70,43 @@ const ManageDealers = () => {
     console.log('Edit dealer:', dealerId);
   };
 
-  const handleDelete = (dealerId: string) => {
-    if (window.confirm(`Are you sure you want to delete dealer ${dealerId}?`)) {
-      showSuccess(`Dealer ${dealerId} deleted.`);
-      // In a real app, send delete request to backend and update state
-      console.log('Delete dealer:', dealerId);
+  const handleDelete = async (dealerId: string) => {
+    if (window.confirm(`Are you sure you want to delete this dealer?`)) {
+      const { error } = await supabase
+        .from('dealers')
+        .delete()
+        .eq('id', dealerId)
+        .eq('user_id', user?.id); // Ensure only the user's own dealer can be deleted
+
+      if (error) {
+        console.error('Error deleting dealer:', error);
+        showError(`Failed to delete dealer: ${error.message}`);
+      } else {
+        showSuccess('Dealer deleted successfully!');
+        fetchDealers(); // Refresh the list after deletion
+      }
     }
   };
+
+  if (sessionLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading dealers...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
+        <p className="text-lg text-red-600 dark:text-red-400 mb-4">{error}</p>
+        <Button onClick={() => navigate('/dashboard')} className="flex items-center gap-2">
+          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -82,40 +122,44 @@ const ManageDealers = () => {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground">Name</TableHead>
-                    <TableHead className="text-muted-foreground">Contact Person</TableHead>
-                    <TableHead className="text-muted-foreground">Email</TableHead>
-                    <TableHead className="text-muted-foreground">Phone</TableHead>
-                    <TableHead className="text-muted-foreground">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dummyDealers.map((dealer) => (
-                    <TableRow key={dealer.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{dealer.contactPerson}</TableCell>
-                      <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
-                      <TableCell className="text-muted-foreground">{dealer.phone}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleView(dealer.id)} title="View Dealer">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer.id)} title="Edit Dealer">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(dealer.id)} title="Delete Dealer">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              {dealers.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No dealers found. Add a new dealer to get started!</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted hover:bg-muted/90">
+                      <TableHead className="text-muted-foreground">Name</TableHead>
+                      <TableHead className="text-muted-foreground">Contact Person</TableHead>
+                      <TableHead className="text-muted-foreground">Email</TableHead>
+                      <TableHead className="text-muted-foreground">Phone</TableHead>
+                      <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {dealers.map((dealer) => (
+                      <TableRow key={dealer.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.contact_person || 'N/A'}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleView(dealer.id)} title="View Dealer">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer.id)} title="Edit Dealer">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(dealer.id)} title="Delete Dealer">
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </div>
             <div className="mt-6 text-right">
               <Button onClick={() => navigate('/add-dealer')} className="bg-primary text-primary-foreground hover:bg-primary/90">
