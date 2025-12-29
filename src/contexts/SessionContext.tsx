@@ -30,22 +30,18 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             setSession(currentSession);
             setUser(currentSession?.user || null);
             if (toastId) dismissToast(toastId);
-            navigate('/dashboard');
+            // No automatic redirect to dashboard here. Let the route decide.
             break;
           case 'SIGNED_OUT':
             setSession(null);
             setUser(null);
             if (toastId) dismissToast(toastId);
-            navigate('/login');
+            navigate('/login'); // Only redirect to login on sign out
             break;
           case 'INITIAL_SESSION':
             setSession(currentSession);
             setUser(currentSession?.user || null);
-            if (currentSession) {
-              navigate('/dashboard');
-            } else {
-              navigate('/login');
-            }
+            // No automatic redirect to dashboard here. Let the Index page handle initial routing.
             break;
           case 'USER_UPDATED':
             setUser(currentSession?.user || null);
@@ -69,11 +65,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       setSession(initialSession);
       setUser(initialSession?.user || null);
       setLoading(false);
-      if (initialSession) {
-        navigate('/dashboard');
-      } else {
-        navigate('/login');
-      }
+      // No automatic redirect to dashboard here. Let the Index page handle initial routing.
     });
 
     return () => {
