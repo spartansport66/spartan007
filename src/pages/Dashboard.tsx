@@ -8,11 +8,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, UserPlus } from 'lucide-react'; // Added new icons
 import ProductCard from '@/components/ProductCard';
 import OrderForm from '@/components/OrderForm';
 import SalesChart from '@/components/SalesChart';
 import ProductSalesChart from '@/components/ProductSalesChart';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip components
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -85,10 +86,15 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-primary">CRM Dashboard</h1> {/* Adjusted h1 size */}
-        <Button onClick={handleLogout} variant="destructive" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-          Logout
-        </Button>
+        <h1 className="text-2xl sm:text-3xl font-bold text-primary">CRM Dashboard</h1>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Logout</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* Sales Overview Cards */}
@@ -159,11 +165,42 @@ const Dashboard = () => {
           <CardTitle className="text-xl font-semibold text-primary">Quick Actions</CardTitle>
           <CardDescription className="text-muted-foreground">Perform common tasks quickly.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Button className="w-full py-2 text-base bg-primary text-primary-foreground hover:bg-primary/90">View Products</Button> {/* Adjusted button size */}
-          <Button onClick={() => navigate('/manage-dealers')} className="w-full py-2 text-base bg-secondary text-secondary-foreground hover:bg-secondary/90">Manage Dealers</Button> {/* Adjusted button size */}
-          <Button className="w-full py-2 text-base bg-accent text-accent-foreground hover:bg-accent/90">Sales Reports</Button> {/* Adjusted button size */}
-          <Button onClick={() => navigate('/add-dealer')} className="w-full py-2 text-base" variant="outline">Add New Dealer</Button> {/* Adjusted button size */}
+        <CardContent className="grid grid-cols-4 gap-2 sm:gap-4"> {/* Adjusted to 4 columns on all screen sizes */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <Boxes className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View Products</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={() => navigate('/manage-dealers')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
+                <Building className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Manage Dealers</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="icon" className="bg-accent text-accent-foreground hover:bg-accent/90">
+                <BarChart className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Sales Reports</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={() => navigate('/add-dealer')} size="icon" variant="outline">
+                <UserPlus className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Add New Dealer</TooltipContent>
+          </Tooltip>
         </CardContent>
       </Card>
       <MadeWithDyad />
