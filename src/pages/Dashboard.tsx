@@ -44,7 +44,7 @@ const Dashboard = () => {
   const salesOverview = [
     { title: "Total Sales", value: "$45,231.89", change: "+20.1% from last month", icon: <DollarSign className="h-4 w-4 text-primary" /> },
     { title: "New Orders", value: "2350", change: "+180.1% from last month", icon: <Package className="h-4 w-4 text-accent" /> },
-    { title: "Active Dealers", value: "124", change: "+19% from last month", icon: <Users className="h-4 w-4 text-secondary" /> }, // Changed to Active Dealers
+    { title: "Active Dealers", value: "124", change: "+19% from last month", icon: <Users className="h-4 w-4 text-secondary" /> },
     { title: "Pending Tasks", value: "57", change: "-5% from last month", icon: <Activity className="h-4 w-4 text-destructive" /> },
   ];
 
@@ -61,7 +61,7 @@ const Dashboard = () => {
     { id: 'prod3', name: 'Product Gamma', description: 'Economical choice for bulk purchases.', price: 15.50, stock: 300 },
   ];
 
-  const dummyDealers = [ // Renamed from dummyWholesalers
+  const dummyDealers = [
     { id: 'dlr1', name: 'Global Distributors Inc.' },
     { id: 'dlr2', name: 'Local Supply Co.' },
     { id: 'dlr3', name: 'Mega Mart Wholesale' },
@@ -85,7 +85,7 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-3xl font-bold text-primary">CRM Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-primary">CRM Dashboard</h1> {/* Adjusted h1 size */}
         <Button onClick={handleLogout} variant="destructive" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
           Logout
         </Button>
@@ -120,7 +120,7 @@ const Dashboard = () => {
             <ProductCard key={product.id} product={product} onAddToCart={(id) => console.log(`Added ${id} to cart`)} />
           ))}
         </div>
-        <OrderForm products={dummyProducts} dealers={dummyDealers} /> {/* Passed dummyDealers */}
+        <OrderForm products={dummyProducts} dealers={dummyDealers} />
       </div>
 
       {/* Recent Activities */}
@@ -160,10 +160,10 @@ const Dashboard = () => {
           <CardDescription className="text-muted-foreground">Perform common tasks quickly.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Button className="w-full py-3 text-lg bg-primary text-primary-foreground hover:bg-primary/90">View Products</Button>
-          <Button onClick={() => navigate('/manage-dealers')} className="w-full py-3 text-lg bg-secondary text-secondary-foreground hover:bg-secondary/90">Manage Dealers</Button> {/* Updated button to navigate */}
-          <Button className="w-full py-3 text-lg bg-accent text-accent-foreground hover:bg-accent/90">Sales Reports</Button>
-          <Button onClick={() => navigate('/add-dealer')} className="w-full py-3 text-lg" variant="outline">Add New Dealer</Button>
+          <Button className="w-full py-2 text-base bg-primary text-primary-foreground hover:bg-primary/90">View Products</Button> {/* Adjusted button size */}
+          <Button onClick={() => navigate('/manage-dealers')} className="w-full py-2 text-base bg-secondary text-secondary-foreground hover:bg-secondary/90">Manage Dealers</Button> {/* Adjusted button size */}
+          <Button className="w-full py-2 text-base bg-accent text-accent-foreground hover:bg-accent/90">Sales Reports</Button> {/* Adjusted button size */}
+          <Button onClick={() => navigate('/add-dealer')} className="w-full py-2 text-base" variant="outline">Add New Dealer</Button> {/* Adjusted button size */}
         </CardContent>
       </Card>
       <MadeWithDyad />
