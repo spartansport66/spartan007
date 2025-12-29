@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, PlusCircle } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, PlusCircle, UserCog } from 'lucide-react';
 import OrderForm from '@/components/OrderForm';
 import SalesChart from '@/components/SalesChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -28,7 +28,7 @@ interface Dealer {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, loading } = useSession();
+  const { user, loading, isAdmin } = useSession(); // Get isAdmin from session context
   const [products, setProducts] = useState<Product[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
 
@@ -234,6 +234,16 @@ const Dashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Sales Reports</TooltipContent>
           </Tooltip>
+          {isAdmin && ( // Only show Admin Panel button if user is an admin
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={() => navigate('/admin-panel')} size="icon" className="bg-purple-600 text-white hover:bg-purple-700">
+                  <UserCog className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Admin Panel</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">

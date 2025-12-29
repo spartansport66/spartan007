@@ -10,7 +10,8 @@ interface SessionContextType {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  isAdmin: boolean; // Added isAdmin to the context type
+  isAdmin: boolean;
+  userType: string | null; // Added userType to the context type
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -19,21 +20,24 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false); // Added isAdmin state
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userType, setUserType] = useState<string | null>(null); // Added userType state
   const navigate = useNavigate();
 
   const fetchUserProfile = async (userId: string) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, user_type') // Fetch user_type as well
       .eq('id', userId)
       .single();
 
     if (error) {
       console.error('Error fetching user profile:', error.message);
       setIsAdmin(false);
+      setUserType(null);
     } else {
       setIsAdmin(data?.is_admin || false);
+      setUserType(data?.user_type || 'sales_person'); // Default to 'sales_person'
     }
   };
 
@@ -47,14 +51,15 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             setSession(currentSession);
             setUser(currentSession?.user || null);
             if (currentSession?.user) {
-              await fetchUserProfile(currentSession.user.id); // Fetch admin status on sign in
+              await fetchUserProfile(currentSession.user.id);
             }
             if (toastId) dismissToast(toastId);
             break;
           case 'SIGNED_OUT':
             setSession(null);
             setUser(null);
-            setIsAdmin(false); // Reset admin status on sign out
+            setIsAdmin(false);
+            setUserType(null); // Reset userType on sign out
             if (toastId) dismissToast(toastId);
             navigate('/login');
             break;
@@ -62,13 +67,13 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             setSession(currentSession);
             setUser(currentSession?.user || null);
             if (currentSession?.user) {
-              await fetchUserProfile(currentSession.user.id); // Fetch admin status on initial session
+              await fetchUserProfile(currentSession.user.id);
             }
             break;
           case 'USER_UPDATED':
             setUser(currentSession?.user || null);
             if (currentSession?.user) {
-              await fetchUserProfile(currentSession.user.id); // Fetch admin status on user update
+              await fetchUserProfile(currentSession.user.id);
             }
             break;
           case 'PASSWORD_RECOVERY':
@@ -88,7 +93,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       setSession(initialSession);
       setUser(initialSession?.user || null);
       if (initialSession?.user) {
-        await fetchUserProfile(initialSession.user.id); // Fetch admin status on initial session
+        await fetchUserProfile(initialSession.user.id);
       }
       setLoading(false);
     });
@@ -100,7 +105,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   }, [navigate]);
 
   return (
-    <SessionContext.Provider value={{ session, user, loading, isAdmin }}>
+    <SessionContext.Provider value={{ session, user, loading, isAdmin, userType }}>
       {children}
     </SessionContext.Provider>
   );
