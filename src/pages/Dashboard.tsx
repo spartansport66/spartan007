@@ -1,5 +1,4 @@
 "use client";
-
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
@@ -18,7 +17,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading } = useSession();
-
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -43,10 +41,30 @@ const Dashboard = () => {
 
   // Dummy data for the CRM dashboard
   const salesOverview = [
-    { title: "Total Sales", value: "$45,231.89", change: "+20.1% from last month", icon: <DollarSign className="h-4 w-4 text-primary" /> },
-    { title: "New Orders", value: "2350", change: "+180.1% from last month", icon: <Package className="h-4 w-4 text-accent" /> },
-    { title: "Active Dealers", value: "124", change: "+19% from last month", icon: <Users className="h-4 w-4 text-secondary" /> },
-    { title: "Pending Tasks", value: "57", change: "-5% from last month", icon: <Activity className="h-4 w-4 text-destructive" /> },
+    { 
+      title: "Total Sales", 
+      value: "$45,231.89", 
+      change: "+20.1% from last month", 
+      icon: <DollarSign className="h-3 w-3 text-primary" /> 
+    },
+    { 
+      title: "New Orders", 
+      value: "2350", 
+      change: "+180.1% from last month", 
+      icon: <Package className="h-3 w-3 text-accent" /> 
+    },
+    { 
+      title: "Active Dealers", 
+      value: "124", 
+      change: "+19% from last month", 
+      icon: <Users className="h-3 w-3 text-secondary" /> 
+    },
+    { 
+      title: "Pending Tasks", 
+      value: "57", 
+      change: "-5% from last month", 
+      icon: <Activity className="h-3 w-3 text-destructive" /> 
+    },
   ];
 
   const recentActivities = [
@@ -89,18 +107,18 @@ const Dashboard = () => {
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">CRM Dashboard</h1>
         {/* Logout button moved to Quick Actions */}
       </div>
-
-      {/* Sales Overview Cards - now responsive grid */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6"> {/* Changed to responsive grid */}
+      
+      {/* Sales Overview Cards - now 70% smaller with adjusted fonts */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xs font-medium text-muted-foreground">{item.title}</CardTitle> {/* Adjusted font size */}
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+              <CardTitle className="text-[0.6rem] font-medium text-muted-foreground">{item.title}</CardTitle>
               {item.icon}
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold text-foreground">{item.value}</div> {/* Adjusted font size */}
-              <p className="text-xs text-muted-foreground">{item.change}</p>
+              <div className="text-lg font-bold text-foreground">{item.value}</div>
+              <p className="text-[0.5rem] text-muted-foreground">{item.change}</p>
             </CardContent>
           </Card>
         ))}
@@ -167,7 +185,6 @@ const Dashboard = () => {
             </TooltipTrigger>
             <TooltipContent>View Products</TooltipContent>
           </Tooltip>
-
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => navigate('/manage-dealers')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
@@ -176,7 +193,6 @@ const Dashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Manage Dealers</TooltipContent>
           </Tooltip>
-
           <Tooltip>
             <TooltipTrigger asChild>
               <Button size="icon" className="bg-accent text-accent-foreground hover:bg-accent/90">
@@ -185,7 +201,6 @@ const Dashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Sales Reports</TooltipContent>
           </Tooltip>
-
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => navigate('/add-dealer')} size="icon" variant="outline">
@@ -194,7 +209,6 @@ const Dashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Add New Dealer</TooltipContent>
           </Tooltip>
-
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
