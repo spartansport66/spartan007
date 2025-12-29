@@ -36,7 +36,8 @@ const formSchema = z.object({
 interface SalesPerson {
   id: string;
   first_name: string;
-  last_name: string;
+  last_name:
+  string;
 }
 
 const AddDealer = () => {
@@ -68,24 +69,27 @@ const AddDealer = () => {
         return;
       }
 
-      // Only admins can assign sales persons, so only fetch if admin
-      if (isAdmin) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name')
-          .eq('user_type', 'sales_person');
+      // Always fetch all sales persons to populate the options
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('user_type', 'sales_person');
 
-        if (error) {
-          console.error('Error fetching sales persons:', error);
-          showError(`Failed to load sales persons: ${error.message}`);
-        } else {
-          setSalesPersons(data || []);
-        }
+      if (error) {
+        console.error('Error fetching sales persons:', error);
+        showError(`Failed to load sales persons: ${error.message}`);
+        setSalesPersons([]);
       } else {
-        // For sales persons, automatically assign themselves
-        if (user) {
-          form.setValue('assignedSalesPersonIds', [user.id]);
-        }
+        setSalesPersons(data || []);
+      }
+
+      // Set default assigned sales person(s) based on role
+      if (!isAdmin && user) {
+        // If current user is a sales person, automatically assign themselves
+        form.setValue('assignedSalesPersonIds', [user.id]);
+      } else if (isAdmin) {
+        // If admin, leave it empty for them to choose
+        form.setValue('assignedSalesPersonIds', []);
       }
       setDataLoading(false);
     };
@@ -311,7 +315,7 @@ const AddDealer = () => {
                           selected={field.value}
                           onSelect={field.onChange}
                           placeholder="Select sales person(s)"
-                          disabled={!isAdmin && user?.id !== undefined} // Disable if not admin, but allow sales person to select themselves if they are the user
+                          disabled={!isAdmin} // Disable if not admin, sales person automatically assigns themselves
                         />
                       </FormControl>
                       <FormMessage />
