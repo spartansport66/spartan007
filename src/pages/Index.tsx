@@ -8,21 +8,29 @@ import { Loader2 } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { session, loading, isAdmin } = useSession();
+  const { session, loading, isAdmin, userType } = useSession();
 
   useEffect(() => {
+    console.log('Index.tsx useEffect - loading:', loading, 'session:', !!session, 'isAdmin:', isAdmin, 'userType:', userType);
+
     if (!loading) {
       if (session) {
+        console.log('User is authenticated. Checking admin status...');
         if (isAdmin) {
+          console.log('User is admin. Redirecting to /admin-dashboard');
           navigate('/admin-dashboard'); // Redirect admin users to Admin Dashboard
         } else {
+          console.log('User is not admin. Redirecting to /dashboard');
           navigate('/dashboard'); // Redirect other users to Sales Dashboard
         }
       } else {
+        console.log('User is not authenticated. Redirecting to /login');
         navigate('/login');
       }
+    } else {
+      console.log('Session is still loading...');
     }
-  }, [session, loading, navigate, isAdmin]);
+  }, [session, loading, navigate, isAdmin, userType]);
 
   if (loading) {
     return (
