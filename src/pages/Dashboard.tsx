@@ -90,16 +90,16 @@ const Dashboard = () => {
         {/* Logout button moved to Quick Actions */}
       </div>
 
-      {/* Sales Overview Cards - now horizontally scrollable */}
-      <div className="flex overflow-x-auto gap-4 pb-4 mb-6 no-scrollbar"> {/* Added no-scrollbar for cleaner look */}
+      {/* Sales Overview Cards - now responsive grid */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6"> {/* Changed to responsive grid */}
         {salesOverview.map((item, index) => (
-          <Card key={index} className="min-w-[200px] flex-shrink-0 bg-card text-card-foreground shadow-lg"> {/* Added min-w and flex-shrink */}
+          <Card key={index} className="bg-card text-card-foreground shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{item.title}</CardTitle>
+              <CardTitle className="text-xs font-medium text-muted-foreground">{item.title}</CardTitle> {/* Adjusted font size */}
               {item.icon}
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">{item.value}</div>
+              <div className="text-xl font-bold text-foreground">{item.value}</div> {/* Adjusted font size */}
               <p className="text-xs text-muted-foreground">{item.change}</p>
             </CardContent>
           </Card>
@@ -158,7 +158,7 @@ const Dashboard = () => {
           <CardTitle className="text-xl font-semibold text-primary">Quick Actions</CardTitle>
           <CardDescription className="text-muted-foreground">Perform common tasks quickly.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-4 gap-2 sm:gap-4"> {/* Adjusted to 4 columns on all screen sizes */}
+        <CardContent className="grid grid-cols-4 gap-2 sm:gap-4">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
