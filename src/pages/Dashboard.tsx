@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2 } from 'lucide-react';
-import OrderForm from '@/components/OrderForm';
+import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 
@@ -39,8 +39,6 @@ interface Sale {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [dealers, setDealers] = useState<Dealer[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
   const [totalOrders, setTotalOrders] = useState<number>(0);
@@ -54,18 +52,6 @@ const Dashboard = () => {
     }
     setLoadingData(true);
 
-    // Fetch products (all for everyone, RLS handles what they can manage)
-    const { data: productsData, error: productsError } = await supabase
-      .from('products')
-      .select('id, name, price, stock, description');
-    
-    if (productsError) {
-      console.error('Error fetching products:', productsError);
-      showError(`Failed to load products: ${productsError.message}`);
-    } else {
-      setProducts(productsData || []);
-    }
-
     // Fetch dealers assigned to the current user via the join table
     const { data: assignedDealersData, error: assignedDealersError } = await supabase
       .from('dealer_sales_persons')
@@ -75,10 +61,8 @@ const Dashboard = () => {
     if (assignedDealersError) {
       console.error('Error fetching assigned dealers:', assignedDealersError);
       showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
-      setDealers([]);
     } else {
       const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
-      setDealers(formattedDealers);
       setActiveDealersCount(formattedDealers.length || 0);
     }
 
@@ -204,9 +188,9 @@ const Dashboard = () => {
         ))}
       </div>
 
-      {/* Order Form - Full Width */}
+      {/* Multi-Item Order Form - Full Width */}
       <div className="mb-6">
-        <OrderForm products={products} dealers={dealers} onOrderPlaced={fetchDashboardData} />
+        <MultiItemOrderForm />
       </div>
 
       {/* Recent Activities (Sales) */}
