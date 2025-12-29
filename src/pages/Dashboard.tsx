@@ -161,9 +161,9 @@ const Dashboard = () => {
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Button className="w-full py-3 text-lg bg-primary text-primary-foreground hover:bg-primary/90">View Products</Button>
-          <Button className="w-full py-3 text-lg bg-secondary text-secondary-foreground hover:bg-secondary/90">Manage Dealers</Button> {/* Renamed button */}
+          <Button onClick={() => navigate('/manage-dealers')} className="w-full py-3 text-lg bg-secondary text-secondary-foreground hover:bg-secondary/90">Manage Dealers</Button> {/* Updated button to navigate */}
           <Button className="w-full py-3 text-lg bg-accent text-accent-foreground hover:bg-accent/90">Sales Reports</Button>
-          <Button onClick={() => navigate('/add-dealer')} className="w-full py-3 text-lg" variant="outline">Add New Dealer</Button> {/* New button and link */}
+          <Button onClick={() => navigate('/add-dealer')} className="w-full py-3 text-lg" variant="outline">Add New Dealer</Button>
         </CardContent>
       </Card>
       <MadeWithDyad />

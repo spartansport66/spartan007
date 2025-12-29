@@ -7,7 +7,8 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import AddDealer from "./pages/AddDealer"; // Import the new AddDealer page
+import AddDealer from "./pages/AddDealer";
+import ManageDealers from "./pages/ManageDealers"; // Import the new ManageDealers page
 import { SessionContextProvider } from "./contexts/SessionContext";
 
 const queryClient = new QueryClient();
@@ -23,7 +24,8 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/add-dealer" element={<AddDealer />} /> {/* New route for AddDealer */}
+            <Route path="/add-dealer" element={<AddDealer />} />
+            <Route path="/manage-dealers" element={<ManageDealers />} /> {/* New route for ManageDealers */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
