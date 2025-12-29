@@ -312,8 +312,8 @@ const AddDealer = () => {
                       <FormControl>
                         <MultiSelect
                           options={salesPersonOptions}
-                          selected={field.value}
-                          onSelect={field.onChange}
+                          value={field.value} // Changed from 'selected' to 'value'
+                          onChange={field.onChange} // Changed from 'onSelect' to 'onChange'
                           placeholder="Select sales person(s)"
                           disabled={!isAdmin} // Disable if not admin, sales person automatically assigns themselves
                         />

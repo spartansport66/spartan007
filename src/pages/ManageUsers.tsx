@@ -36,8 +36,8 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import MultiSelect from '@/components/MultiSelect'; // Import MultiSelect
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table'; // Added Table imports
+import MultiSelect from '@/components/MultiSelect';
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const CREATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-user";
@@ -60,9 +60,6 @@ interface UserProfile {
 interface Dealer {
   id: string;
   name: string;
-  // sales_person_id is not needed here for the MultiSelect options,
-  // as we are only fetching id and name for display.
-  // The assignedDealerIds state manages the assignments.
 }
 
 const userFormSchema = z.object({
@@ -71,19 +68,20 @@ const userFormSchema = z.object({
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional().or(z.literal('')),
   userType: z.enum(['admin', 'sales_person'], { message: 'Please select a user type.' }),
+  assignedDealerIds: z.array(z.string().uuid()).optional(), // Added assignedDealerIds to schema
 });
 
 const ManageUsers = () => {
   const navigate = useNavigate();
   const { isAdmin, loading: sessionLoading } = useSession();
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [allDealers, setAllDealers] = useState<Dealer[]>([]); // All dealers for multi-select options
+  const [allDealers, setAllDealers] = useState<Dealer[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-  const [assignedDealerIds, setAssignedDealerIds] = useState<string[]>([]); // State for multi-select in edit dialog
+  // Removed assignedDealerIds local state, now managed by react-hook-form
 
   const editForm = useForm<z.infer<typeof userFormSchema>>({
     resolver: zodResolver(userFormSchema),
@@ -93,6 +91,7 @@ const ManageUsers = () => {
       email: '',
       password: '',
       userType: 'sales_person',
+      assignedDealerIds: [], // Default to empty array
     },
   });
 
@@ -104,6 +103,7 @@ const ManageUsers = () => {
       email: '',
       password: '',
       userType: 'sales_person',
+      assignedDealerIds: [], // Default to empty array
     },
   });
 
@@ -131,10 +131,9 @@ const ManageUsers = () => {
       setUsers(formattedUsers);
     }
 
-    // Fetch all dealers to populate multi-select options
     const { data: dealersData, error: dealersError } = await supabase
       .from('dealers')
-      .select('id, name'); // Only need id and name for selection
+      .select('id, name');
 
     if (dealersError) {
       console.error('Error fetching all dealers:', dealersError.message);
@@ -160,13 +159,6 @@ const ManageUsers = () => {
 
   useEffect(() => {
     if (selectedUser) {
-      editForm.reset({
-        firstName: selectedUser.first_name || '',
-        lastName: selectedUser.last_name || '',
-        email: selectedUser.email,
-        password: '', // Password should always be empty for security
-        userType: selectedUser.user_type,
-      });
       // Fetch currently assigned dealers for the selected sales person
       if (selectedUser.user_type === 'sales_person') {
         supabase
@@ -176,16 +168,37 @@ const ManageUsers = () => {
           .then(({ data, error }) => {
             if (error) {
               console.error('Error fetching assigned dealers for user:', error.message);
-              setAssignedDealerIds([]);
+              editForm.reset({
+                firstName: selectedUser.first_name || '',
+                lastName: selectedUser.last_name || '',
+                email: selectedUser.email,
+                password: '',
+                userType: selectedUser.user_type,
+                assignedDealerIds: [], // Default to empty if error
+              });
             } else {
-              setAssignedDealerIds(data?.map(item => item.dealer_id) || []);
+              editForm.reset({
+                firstName: selectedUser.first_name || '',
+                lastName: selectedUser.last_name || '',
+                email: selectedUser.email,
+                password: '',
+                userType: selectedUser.user_type,
+                assignedDealerIds: data?.map(item => item.dealer_id) || [],
+              });
             }
           });
       } else {
-        setAssignedDealerIds([]);
+        editForm.reset({
+          firstName: selectedUser.first_name || '',
+          lastName: selectedUser.last_name || '',
+          email: selectedUser.email,
+          password: '',
+          userType: selectedUser.user_type,
+          assignedDealerIds: [], // No dealers assigned for non-sales persons
+        });
       }
     }
-  }, [selectedUser, editForm]); // Removed 'dealers' from dependency array, now using 'allDealers'
+  }, [selectedUser, editForm]);
 
   const handleCreateUser = async (values: z.infer<typeof userFormSchema>) => {
     setIsSubmitting(true);
@@ -213,7 +226,7 @@ const ManageUsers = () => {
       showSuccess(`User ${values.email} created successfully as ${values.userType}!`);
       createForm.reset();
       setIsCreateDialogOpen(false);
-      fetchUsersAndDealers(); // Refresh user list
+      fetchUsersAndDealers();
     } catch (error: any) {
       console.error('Error creating user:', error);
       showError(`Failed to create user: ${error.message}`);
@@ -240,9 +253,8 @@ const ManageUsers = () => {
       }
 
       if (values.userType === 'sales_person') {
-        payload.assignedDealerIds = assignedDealerIds; // Pass the array of assigned dealer IDs
+        payload.assignedDealerIds = values.assignedDealerIds || []; // Get from form values
       } else {
-        // If user type is changed from sales_person, ensure no dealers are assigned
         payload.assignedDealerIds = [];
       }
 
@@ -262,7 +274,7 @@ const ManageUsers = () => {
 
       showSuccess(`User ${values.email} updated successfully!`);
       setIsEditDialogOpen(false);
-      fetchUsersAndDealers(); // Refresh user list
+      fetchUsersAndDealers();
     } catch (error: any) {
       console.error('Error updating user:', error);
       showError(`Failed to update user: ${error.message}`);
@@ -273,7 +285,7 @@ const ManageUsers = () => {
 
   const handleToggleUserStatus = async (userToToggle: UserProfile) => {
     setIsSubmitting(true);
-    const newStatus = userToToggle.banned_until ? false : true; // true to ban, false to unban
+    const newStatus = userToToggle.banned_until ? false : true;
     try {
       const payload = {
         userId: userToToggle.id,
@@ -295,7 +307,7 @@ const ManageUsers = () => {
       }
 
       showSuccess(`User ${userToToggle.email} has been ${newStatus ? 'deactivated' : 'activated'}.`);
-      fetchUsersAndDealers(); // Refresh user list
+      fetchUsersAndDealers();
     } catch (error: any) {
       console.error('Error toggling user status:', error);
       showError(`Failed to toggle user status: ${error.message}`);
@@ -578,15 +590,15 @@ const ManageUsers = () => {
                     <h3 className="text-lg font-semibold">Manage Assigned Dealers</h3>
                     <FormField
                       control={editForm.control}
-                      name="email" // Using email field for validation, but it's not directly related to this MultiSelect
+                      name="assignedDealerIds" // Corrected name
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Assigned Dealers</FormLabel>
                           <FormControl>
                             <MultiSelect
                               options={dealerOptions}
-                              selected={assignedDealerIds}
-                              onSelect={setAssignedDealerIds}
+                              value={field.value || []} // Pass field.value
+                              onChange={field.onChange} // Pass field.onChange
                               placeholder="Select dealers to assign"
                             />
                           </FormControl>

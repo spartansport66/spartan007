@@ -21,8 +21,8 @@ import { Badge } from "@/components/ui/badge";
 
 interface MultiSelectProps {
   options: { value: string; label: string }[];
-  selected: string[];
-  onSelect: (value: string[]) => void;
+  value: string[]; // Renamed from 'selected'
+  onChange: (value: string[]) => void; // Renamed from 'onSelect'
   placeholder?: string;
   className?: string;
   disabled?: boolean;
@@ -30,8 +30,8 @@ interface MultiSelectProps {
 
 const MultiSelect: React.FC<MultiSelectProps> = ({
   options,
-  selected,
-  onSelect,
+  value, // Using 'value'
+  onChange, // Using 'onChange'
   placeholder = "Select items...",
   className,
   disabled = false,
@@ -39,10 +39,10 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
   const [open, setOpen] = React.useState(false);
 
   const handleSelect = (currentValue: string) => {
-    const newSelected = selected.includes(currentValue)
-      ? selected.filter((item) => item !== currentValue)
-      : [...selected, currentValue];
-    onSelect(newSelected);
+    const newSelected = value.includes(currentValue)
+      ? value.filter((item) => item !== currentValue)
+      : [...value, currentValue];
+    onChange(newSelected); // Call onChange
   };
 
   return (
@@ -56,19 +56,19 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
           disabled={disabled}
         >
           <div className="flex flex-wrap gap-1">
-            {selected.length === 0 ? (
+            {value.length === 0 ? (
               <span className="text-muted-foreground">{placeholder}</span>
             ) : (
-              selected.map((value) => {
-                const option = options.find((opt) => opt.value === value);
+              value.map((itemValue) => { // Use itemValue to avoid conflict with prop 'value'
+                const option = options.find((opt) => opt.value === itemValue);
                 return (
-                  <Badge key={value} variant="secondary" className="flex items-center gap-1">
+                  <Badge key={itemValue} variant="secondary" className="flex items-center gap-1">
                     {option?.label}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleSelect(value);
+                        handleSelect(itemValue);
                       }}
                       className="ml-1 text-muted-foreground hover:text-foreground"
                       disabled={disabled}
@@ -98,7 +98,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                 <Check
                   className={cn(
                     "mr-2 h-4 w-4",
-                    selected.includes(option.value) ? "opacity-100" : "opacity-0"
+                    value.includes(option.value) ? "opacity-100" : "opacity-0"
                   )}
                 />
                 {option.label}
