@@ -10,17 +10,17 @@ import { showSuccess, showError } from '@/utils/toast';
 
 interface OrderFormProps {
   products: { id: string; name: string; price: number; stock: number }[];
-  wholesalers: { id: string; name: string }[];
+  dealers: { id: string; name: string }[]; // Changed from wholesalers to dealers
 }
 
-const OrderForm: React.FC<OrderFormProps> = ({ products, wholesalers }) => {
-  const [selectedWholesaler, setSelectedWholesaler] = useState<string>('');
+const OrderForm: React.FC<OrderFormProps> = ({ products, dealers }) => { // Changed from wholesalers to dealers
+  const [selectedDealer, setSelectedDealer] = useState<string>(''); // Changed to selectedDealer
   const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedWholesaler || !selectedProduct || quantity <= 0) {
+    if (!selectedDealer || !selectedProduct || quantity <= 0) { // Changed to selectedDealer
       showError('Please fill in all fields and ensure quantity is positive.');
       return;
     }
@@ -36,14 +36,14 @@ const OrderForm: React.FC<OrderFormProps> = ({ products, wholesalers }) => {
     }
 
     console.log({
-      wholesalerId: selectedWholesaler,
+      dealerId: selectedDealer, // Changed to dealerId
       productId: selectedProduct,
       quantity,
       totalPrice: quantity * product.price,
     });
     showSuccess('Order placed successfully!');
     // Reset form
-    setSelectedWholesaler('');
+    setSelectedDealer(''); // Changed to setSelectedDealer
     setSelectedProduct('');
     setQuantity(1);
   };
@@ -52,20 +52,20 @@ const OrderForm: React.FC<OrderFormProps> = ({ products, wholesalers }) => {
     <Card className="bg-card text-card-foreground shadow-lg">
       <CardHeader>
         <CardTitle className="text-xl font-semibold text-primary">Place New Order</CardTitle>
-        <CardDescription className="text-muted-foreground">Create an order for a registered wholesaler.</CardDescription>
+        <CardDescription className="text-muted-foreground">Create an order for a registered dealer.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="wholesaler">Wholesaler</Label>
-            <Select value={selectedWholesaler} onValueChange={setSelectedWholesaler}>
-              <SelectTrigger id="wholesaler" className="w-full">
-                <SelectValue placeholder="Select a wholesaler" />
+            <Label htmlFor="dealer">Dealer</Label> {/* Changed to Dealer */}
+            <Select value={selectedDealer} onValueChange={setSelectedDealer}> {/* Changed to selectedDealer */}
+              <SelectTrigger id="dealer" className="w-full"> {/* Changed to dealer */}
+                <SelectValue placeholder="Select a dealer" /> {/* Changed to dealer */}
               </SelectTrigger>
               <SelectContent>
-                {wholesalers.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>
-                    {w.name}
+                {dealers.map((d) => ( // Changed from wholesalers to dealers
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
                   </SelectItem>
                 ))}
               </SelectContent>

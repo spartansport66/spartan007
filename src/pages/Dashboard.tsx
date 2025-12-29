@@ -44,15 +44,15 @@ const Dashboard = () => {
   const salesOverview = [
     { title: "Total Sales", value: "$45,231.89", change: "+20.1% from last month", icon: <DollarSign className="h-4 w-4 text-primary" /> },
     { title: "New Orders", value: "2350", change: "+180.1% from last month", icon: <Package className="h-4 w-4 text-accent" /> },
-    { title: "Active Wholesalers", value: "124", change: "+19% from last month", icon: <Users className="h-4 w-4 text-secondary" /> },
+    { title: "Active Dealers", value: "124", change: "+19% from last month", icon: <Users className="h-4 w-4 text-secondary" /> }, // Changed to Active Dealers
     { title: "Pending Tasks", value: "57", change: "-5% from last month", icon: <Activity className="h-4 w-4 text-destructive" /> },
   ];
 
   const recentActivities = [
-    { id: "1", type: "Order", description: "New order from Wholesaler A", date: "2023-10-26", status: "Pending" },
-    { id: "2", type: "Contact", description: "Follow-up with Wholesaler B", date: "2023-10-25", status: "Completed" },
+    { id: "1", type: "Order", description: "New order from Dealer A", date: "2023-10-26", status: "Pending" },
+    { id: "2", type: "Contact", description: "Follow-up with Dealer B", date: "2023-10-25", status: "Completed" },
     { id: "3", type: "Product", description: "Updated pricing for Product X", date: "2023-10-24", status: "Info" },
-    { id: "4", type: "Order", description: "Order #1001 shipped to Wholesaler C", date: "2023-10-23", status: "Shipped" },
+    { id: "4", type: "Order", description: "Order #1001 shipped to Dealer C", date: "2023-10-23", status: "Shipped" },
   ];
 
   const dummyProducts = [
@@ -61,10 +61,10 @@ const Dashboard = () => {
     { id: 'prod3', name: 'Product Gamma', description: 'Economical choice for bulk purchases.', price: 15.50, stock: 300 },
   ];
 
-  const dummyWholesalers = [
-    { id: 'ws1', name: 'Global Distributors Inc.' },
-    { id: 'ws2', name: 'Local Supply Co.' },
-    { id: 'ws3', name: 'Mega Mart Wholesale' },
+  const dummyDealers = [ // Renamed from dummyWholesalers
+    { id: 'dlr1', name: 'Global Distributors Inc.' },
+    { id: 'dlr2', name: 'Local Supply Co.' },
+    { id: 'dlr3', name: 'Mega Mart Wholesale' },
   ];
 
   const monthlySalesData = [
@@ -120,7 +120,7 @@ const Dashboard = () => {
             <ProductCard key={product.id} product={product} onAddToCart={(id) => console.log(`Added ${id} to cart`)} />
           ))}
         </div>
-        <OrderForm products={dummyProducts} wholesalers={dummyWholesalers} />
+        <OrderForm products={dummyProducts} dealers={dummyDealers} /> {/* Passed dummyDealers */}
       </div>
 
       {/* Recent Activities */}
@@ -161,9 +161,9 @@ const Dashboard = () => {
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Button className="w-full py-3 text-lg bg-primary text-primary-foreground hover:bg-primary/90">View Products</Button>
-          <Button className="w-full py-3 text-lg bg-secondary text-secondary-foreground hover:bg-secondary/90">Manage Wholesalers</Button>
+          <Button className="w-full py-3 text-lg bg-secondary text-secondary-foreground hover:bg-secondary/90">Manage Dealers</Button> {/* Renamed button */}
           <Button className="w-full py-3 text-lg bg-accent text-accent-foreground hover:bg-accent/90">Sales Reports</Button>
-          <Button className="w-full py-3 text-lg" variant="outline">Add New Order</Button>
+          <Button onClick={() => navigate('/add-dealer')} className="w-full py-3 text-lg" variant="outline">Add New Dealer</Button> {/* New button and link */}
         </CardContent>
       </Card>
       <MadeWithDyad />
