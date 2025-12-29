@@ -10,6 +10,32 @@ import { ArrowLeft, Edit, Trash2, Eye, Loader2 } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { FormControl } from '@/components/ui/form'; // Added FormControl import
 
 interface Dealer {
   id: string;
@@ -22,15 +48,90 @@ interface Dealer {
   state: string;
   country: string;
   credit_limit: number;
-  user_id: string; // Added user_id to interface for RLS checks
+  user_id: string;
+  sales_person_id: string | null; // Added sales_person_id
 }
+
+interface SalesPerson {
+  id: string;
+  first_name: string;
+  last_name: string;
+}
+
+const formSchema = z.object({
+  name: z.string().min(2, { message: 'Dealer name must be at least 2 characters.' }),
+  contactPerson: z.string().min(2, { message: 'Contact person name must be at least 2 characters.' }),
+  email: z.string().email({ message: 'Please enter a valid email address.' }),
+  phone: z.string().min(10, { message: 'Phone number must be at least 10 digits.' }).max(15, { message: 'Phone number cannot exceed 15 digits.' }),
+  address: z.string().min(5, { message: 'Address must be at least 5 characters.' }),
+  city: z.string().min(2, { message: 'City must be at least 2 characters.' }),
+  state: z.string().min(2, { message: 'State must be at least 2 characters.' }),
+  country: z.string().min(2, { message: 'Country must be at least 2 characters.' }),
+  creditLimit: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Credit limit cannot be negative.' })
+  ),
+  salesPersonId: z.string().uuid().optional().nullable(),
+});
 
 const ManageDealers = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, isAdmin } = useSession(); // Get isAdmin from session context
+  const { user, loading: sessionLoading, isAdmin } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
+  const [salesPersons, setSalesPersons] = useState<SalesPerson[]>([]);
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: '',
+      contactPerson: '',
+      email: '',
+      phone: '',
+      address: '',
+      city: '',
+      state: '',
+      country: '',
+      creditLimit: 0,
+      salesPersonId: null,
+    },
+  });
+
+  useEffect(() => {
+    if (selectedDealer) {
+      form.reset({
+        name: selectedDealer.name,
+        contactPerson: selectedDealer.contact_person,
+        email: selectedDealer.email,
+        phone: selectedDealer.phone,
+        address: selectedDealer.address,
+        city: selectedDealer.city,
+        state: selectedDealer.state,
+        country: selectedDealer.country,
+        creditLimit: selectedDealer.credit_limit,
+        salesPersonId: selectedDealer.sales_person_id,
+      });
+    }
+  }, [selectedDealer, form]);
+
+  const fetchSalesPersons = useCallback(async () => {
+    if (isAdmin) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('user_type', 'sales_person');
+
+      if (error) {
+        console.error('Error fetching sales persons:', error);
+        showError(`Failed to load sales persons: ${error.message}`);
+      } else {
+        setSalesPersons(data || []);
+      }
+    }
+  }, [isAdmin]);
 
   const fetchDealers = useCallback(async () => {
     if (!user) {
@@ -41,7 +142,7 @@ const ManageDealers = () => {
     setError(null);
     const { data, error } = await supabase
       .from('dealers')
-      .select('*'); // RLS will handle visibility based on user.id or isAdmin
+      .select('*');
 
     if (error) {
       console.error('Error fetching dealers:', error);
@@ -57,35 +158,71 @@ const ManageDealers = () => {
   useEffect(() => {
     if (!sessionLoading && user) {
       fetchDealers();
+      fetchSalesPersons();
     } else if (!sessionLoading && !user) {
       navigate('/login');
     }
-  }, [sessionLoading, user, fetchDealers, navigate]);
+  }, [sessionLoading, user, fetchDealers, fetchSalesPersons, navigate]);
 
-  const handleView = (dealerId: string) => {
-    showSuccess(`Viewing dealer ${dealerId}`);
-    console.log('View dealer:', dealerId);
+  const handleEdit = (dealer: Dealer) => {
+    setSelectedDealer(dealer);
+    setIsEditDialogOpen(true);
   };
 
-  const handleEdit = (dealerId: string) => {
-    showSuccess(`Editing dealer ${dealerId}`);
-    console.log('Edit dealer:', dealerId);
+  const handleUpdateDealer = async (values: z.infer<typeof formSchema>) => {
+    if (!selectedDealer || !user) return;
+
+    const updateData: Partial<Dealer> = {
+      name: values.name,
+      contact_person: values.contactPerson,
+      email: values.email,
+      phone: values.phone,
+      address: values.address,
+      city: values.city,
+      state: values.state,
+      country: values.country,
+      credit_limit: values.creditLimit,
+    };
+
+    if (isAdmin) {
+      updateData.sales_person_id = values.salesPersonId;
+    } else {
+      // Sales person can only update their own assigned_to_id if it's currently null or their own ID
+      if (selectedDealer.sales_person_id === null || selectedDealer.sales_person_id === user.id) {
+        updateData.sales_person_id = user.id;
+      } else {
+        showError("You cannot reassign a dealer that is not assigned to you.");
+        return;
+      }
+    }
+
+    const { error } = await supabase
+      .from('dealers')
+      .update(updateData)
+      .eq('id', selectedDealer.id);
+
+    if (error) {
+      console.error('Error updating dealer:', error);
+      showError(`Failed to update dealer: ${error.message}`);
+    } else {
+      showSuccess('Dealer updated successfully!');
+      setIsEditDialogOpen(false);
+      fetchDealers();
+    }
   };
 
   const handleDelete = async (dealerId: string) => {
-    if (window.confirm(`Are you sure you want to delete this dealer?`)) {
-      const { error } = await supabase
-        .from('dealers')
-        .delete()
-        .eq('id', dealerId); // RLS will enforce user_id or admin check
+    const { error } = await supabase
+      .from('dealers')
+      .delete()
+      .eq('id', dealerId);
 
-      if (error) {
-        console.error('Error deleting dealer:', error);
-        showError(`Failed to delete dealer: ${error.message}`);
-      } else {
-        showSuccess('Dealer deleted successfully!');
-        fetchDealers();
-      }
+    if (error) {
+      console.error('Error deleting dealer:', error);
+      showError(`Failed to delete dealer: ${error.message}`);
+    } else {
+      showSuccess('Dealer deleted successfully!');
+      fetchDealers();
     }
   };
 
@@ -111,7 +248,7 @@ const ManageDealers = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
-      <div className="w-full max-w-full"> {/* Adjusted max-w for mobile */}
+      <div className="w-full max-w-full">
         <Button variant="outline" onClick={() => navigate('/dashboard')} className="mb-6 flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" /> Back to Dashboard
         </Button>
@@ -138,6 +275,7 @@ const ManageDealers = () => {
                       <TableHead className="text-muted-foreground">State</TableHead>
                       <TableHead className="text-muted-foreground">Country</TableHead>
                       <TableHead className="text-muted-foreground">Credit Limit</TableHead>
+                      {isAdmin && <TableHead className="text-muted-foreground">Assigned To</TableHead>}
                       <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -153,21 +291,37 @@ const ManageDealers = () => {
                         <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
                         <TableCell className="text-muted-foreground">{dealer.country}</TableCell>
                         <TableCell className="text-muted-foreground">₹{dealer.credit_limit.toFixed(2)}</TableCell>
+                        {isAdmin && (
+                          <TableCell className="text-muted-foreground">
+                            {dealer.sales_person_id
+                              ? salesPersons.find(sp => sp.id === dealer.sales_person_id)?.first_name + ' ' + salesPersons.find(sp => sp.id === dealer.sales_person_id)?.last_name
+                              : 'Unassigned'}
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => handleView(dealer.id)} title="View Dealer">
-                              <Eye className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer)} title="Edit Dealer">
+                              <Edit className="h-4 w-4" />
                             </Button>
-                            {(isAdmin || user?.id === dealer.user_id) && ( // Only show edit/delete if admin or creator
-                              <>
-                                <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer.id)} title="Edit Dealer">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={() => handleDelete(dealer.id)} title="Delete Dealer">
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" title="Delete Dealer">
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
-                              </>
-                            )}
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete the dealer.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDelete(dealer.id)}>Continue</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -185,6 +339,110 @@ const ManageDealers = () => {
         </Card>
       </div>
       <MadeWithDyad />
+
+      {selectedDealer && (
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Dealer</DialogTitle>
+              <DialogDescription>
+                Make changes to the dealer here. Click save when you're done.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={form.handleSubmit(handleUpdateDealer)} className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="name" className="text-right">
+                  Name
+                </Label>
+                <Input id="name" {...form.register('name')} className="col-span-3" />
+                {form.formState.errors.name && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.name.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="contactPerson" className="text-right">
+                  Contact Person
+                </Label>
+                <Input id="contactPerson" {...form.register('contactPerson')} className="col-span-3" />
+                {form.formState.errors.contactPerson && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.contactPerson.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="email" className="text-right">
+                  Email
+                </Label>
+                <Input id="email" type="email" {...form.register('email')} className="col-span-3" />
+                {form.formState.errors.email && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.email.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="phone" className="text-right">
+                  Phone
+                </Label>
+                <Input id="phone" type="tel" {...form.register('phone')} className="col-span-3" />
+                {form.formState.errors.phone && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.phone.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="address" className="text-right">
+                  Address
+                </Label>
+                <Input id="address" {...form.register('address')} className="col-span-3" />
+                {form.formState.errors.address && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.address.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="city" className="text-right">
+                  City
+                </Label>
+                <Input id="city" {...form.register('city')} className="col-span-3" />
+                {form.formState.errors.city && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.city.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="state" className="text-right">
+                  State
+                </Label>
+                <Input id="state" {...form.register('state')} className="col-span-3" />
+                {form.formState.errors.state && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.state.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="country" className="text-right">
+                  Country
+                </Label>
+                <Input id="country" {...form.register('country')} className="col-span-3" />
+                {form.formState.errors.country && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.country.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="creditLimit" className="text-right">
+                  Credit Limit
+                </Label>
+                <Input id="creditLimit" type="number" placeholder="e.g., 5000.00" {...form.register('creditLimit')} className="col-span-3" />
+                {form.formState.errors.creditLimit && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.creditLimit.message}</p>}
+              </div>
+              {isAdmin && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="salesPersonId" className="text-right">
+                    Assign to
+                  </Label>
+                  <Select onValueChange={(value) => form.setValue('salesPersonId', value === '' ? null : value)} value={form.watch('salesPersonId') || ''}>
+                    <FormControl>
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Select a sales person" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="">Unassigned</SelectItem>
+                      {salesPersons.map((sp) => (
+                        <SelectItem key={sp.id} value={sp.id}>
+                          {sp.first_name} {sp.last_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {form.formState.errors.salesPersonId && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.salesPersonId.message}</p>}
+                </div>
+              )}
+              <DialogFooter>
+                <Button type="submit">Save changes</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };

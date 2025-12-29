@@ -111,12 +111,15 @@ const ManageProducts = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!sessionLoading && user) {
-      fetchProducts();
-    } else if (!sessionLoading && !user) {
+    if (!sessionLoading && !user) {
       navigate('/login');
+    } else if (!sessionLoading && user && !isAdmin) {
+      showError('Access Denied: Only administrators can manage products.');
+      navigate('/dashboard');
+    } else if (!sessionLoading && user && isAdmin) {
+      fetchProducts();
     }
-  }, [sessionLoading, user, fetchProducts, navigate]);
+  }, [sessionLoading, user, isAdmin, fetchProducts, navigate]);
 
   const handleEdit = (product: Product) => {
     setSelectedProduct(product);
@@ -170,6 +173,10 @@ const ManageProducts = () => {
     );
   }
 
+  if (!isAdmin) {
+    return null; // Render nothing if not admin, as they are redirected
+  }
+
   if (error) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
@@ -217,33 +224,29 @@ const ManageProducts = () => {
                         <TableCell className="text-muted-foreground">{product.stock}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            {(isAdmin || user?.id === product.user_id) && (
-                              <>
-                                <Button variant="ghost" size="icon" onClick={() => handleEdit(product)} title="Edit Product">
-                                  <Edit className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(product)} title="Edit Product">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" title="Delete Product">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" title="Delete Product">
-                                      <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        This action cannot be undone. This will permanently delete the product.
-                                        Note: Products with associated sales cannot be deleted.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleDelete(product.id)}>Continue</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </>
-                            )}
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete the product.
+                                    Note: Products with associated sales cannot be deleted.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDelete(product.id)}>Continue</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>

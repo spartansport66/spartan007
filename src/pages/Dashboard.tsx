@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -26,51 +26,128 @@ interface Dealer {
   name: string;
 }
 
+interface Sale {
+  id: string;
+  product_id: string;
+  dealer_id: string;
+  quantity: number;
+  total_price: number;
+  sale_date: string;
+  products: { name: string } | null;
+  dealers: { name: string } | null;
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, loading, isAdmin } = useSession(); // Get isAdmin from session context
+  const { user, loading, isAdmin } = useSession();
   const [products, setProducts] = useState<Product[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
+  const [totalOrders, setTotalOrders] = useState<number>(0);
+  const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
+  const [monthlySalesData, setMonthlySalesData] = useState<{ month: string; sales: number }[]>([]);
+
+  const fetchDashboardData = useCallback(async () => {
+    if (!user) return;
+
+    // Fetch products (all for everyone, RLS handles what they can manage)
+    const { data: productsData, error: productsError } = await supabase
+      .from('products')
+      .select('id, name, price, stock, description');
+
+    if (productsError) {
+      console.error('Error fetching products:', productsError);
+      showError(`Failed to load products: ${productsError.message}`);
+    } else {
+      setProducts(productsData || []);
+    }
+
+    // Fetch dealers (RLS handles what they can see)
+    const { data: dealersData, error: dealersError } = await supabase
+      .from('dealers')
+      .select('id, name');
+
+    if (dealersError) {
+      console.error('Error fetching dealers:', dealersError);
+      showError(`Failed to load dealers: ${dealersError.message}`);
+    } else {
+      setDealers(dealersData || []);
+      setActiveDealersCount(dealersData?.length || 0);
+    }
+
+    // Fetch sales (RLS handles what they can see)
+    const { data: salesData, error: salesError } = await supabase
+      .from('sales')
+      .select(`
+        id,
+        product_id,
+        dealer_id,
+        quantity,
+        total_price,
+        sale_date,
+        products (name),
+        dealers (name)
+      `)
+      .order('sale_date', { ascending: false });
+
+    if (salesError) {
+      console.error('Error fetching sales:', salesError);
+      showError(`Failed to load sales data: ${salesError.message}`);
+      setSales([]);
+    } else {
+      // Explicitly map to ensure type compatibility for nested objects
+      const typedSalesData: Sale[] = (salesData || []).map(sale => ({
+        ...sale,
+        // Safely access the first element if products/dealers are returned as arrays, otherwise null
+        products: (sale.products && Array.isArray(sale.products) && sale.products.length > 0)
+          ? (sale.products[0] as { name: string })
+          : null,
+        dealers: (sale.dealers && Array.isArray(sale.dealers) && sale.dealers.length > 0)
+          ? (sale.dealers[0] as { name: string })
+          : null,
+      }));
+      setSales(typedSalesData);
+
+      // Calculate total sales value and total orders
+      const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
+      const totalOrdersCount = typedSalesData.length || 0;
+      setTotalSalesValue(totalValue);
+      setTotalOrders(totalOrdersCount);
+
+      // Calculate monthly sales data
+      const monthlySalesMap = new Map<string, number>();
+      typedSalesData.forEach(sale => {
+        const date = new Date(sale.sale_date);
+        const month = date.toLocaleString('default', { month: 'short' });
+        const year = date.getFullYear();
+        const monthYear = `${month} ${year}`;
+        monthlySalesMap.set(monthYear, (monthlySalesMap.get(monthYear) || 0) + sale.total_price);
+      });
+
+      const sortedMonths = Array.from(monthlySalesMap.keys()).sort((a, b) => {
+        const dateA = new Date(a);
+        const dateB = new Date(b);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      setMonthlySalesData(sortedMonths.map(month => ({ month: month.split(' ')[0], sales: monthlySalesMap.get(month) || 0 })));
+    }
+  }, [user]);
 
   useEffect(() => {
-    const fetchInitialData = async () => {
-      if (!user) return;
-
-      // Fetch products
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
-        .select('id, name, price, stock, description');
-
-      if (productsError) {
-        console.error('Error fetching products:', productsError);
-        showError(`Failed to load products: ${productsError.message}`);
-      } else {
-        setProducts(productsData || []);
-      }
-
-      // Fetch dealers
-      const { data: dealersData, error: dealersError } = await supabase
-        .from('dealers')
-        .select('id, name');
-
-      if (dealersError) {
-        console.error('Error fetching dealers:', dealersError);
-        showError(`Failed to load dealers: ${dealersError.message}`);
-      } else {
-        setDealers(dealersData || []);
-      }
-    };
-
     if (!loading && user) {
-      fetchInitialData();
+      fetchDashboardData();
     }
-  }, [user, loading]);
+  }, [user, loading, fetchDashboardData]);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Error logging out:', error.message);
+      showError(`Failed to log out: ${error.message}`);
     } else {
+      showSuccess('Logged out successfully!');
       navigate('/login');
     }
   };
@@ -88,48 +165,31 @@ const Dashboard = () => {
     return null;
   }
 
-  // Dummy data for the CRM dashboard
   const salesOverview = [
-    { 
-      title: "Total Sales", 
-      value: "$45,231.89", 
-      change: "+20.1% from last month", 
-      icon: <DollarSign className="h-3 w-3 text-primary" /> 
+    {
+      title: "Total Sales",
+      value: `$${totalSalesValue.toFixed(2)}`,
+      change: "+20.1% from last month", // Placeholder, actual calculation would be more complex
+      icon: <DollarSign className="h-3 w-3 text-primary" />
     },
-    { 
-      title: "New Orders", 
-      value: "2350", 
-      change: "+180.1% from last month", 
-      icon: <Package className="h-3 w-3 text-accent" /> 
+    {
+      title: "Total Orders",
+      value: totalOrders.toString(),
+      change: "+180.1% from last month", // Placeholder
+      icon: <Package className="h-3 w-3 text-accent" />
     },
-    { 
-      title: "Active Dealers", 
-      value: "124", 
-      change: "+19% from last month", 
-      icon: <Users className="h-3 w-3 text-secondary" /> 
+    {
+      title: "Active Dealers",
+      value: activeDealersCount.toString(),
+      change: "+19% from last month", // Placeholder
+      icon: <Users className="h-3 w-3 text-secondary" />
     },
-    { 
-      title: "Pending Tasks", 
-      value: "57", 
-      change: "-5% from last month", 
-      icon: <Activity className="h-3 w-3 text-destructive" /> 
+    {
+      title: "Pending Tasks",
+      value: "57", // Placeholder
+      change: "-5% from last month", // Placeholder
+      icon: <Activity className="h-3 w-3 text-destructive" />
     },
-  ];
-
-  const recentActivities = [
-    { id: "1", type: "Order", description: "New order from Dealer A", date: "2023-10-26", status: "Pending" },
-    { id: "2", type: "Contact", description: "Follow-up with Dealer B", date: "2023-10-25", status: "Completed" },
-    { id: "3", type: "Product", description: "Updated pricing for Product X", date: "2023-10-24", status: "Info" },
-    { id: "4", type: "Order", description: "Order #1001 shipped to Dealer C", date: "2023-10-23", status: "Shipped" },
-  ];
-
-  const monthlySalesData = [
-    { month: 'Jan', sales: 4000 },
-    { month: 'Feb', sales: 3000 },
-    { month: 'Mar', sales: 5000 },
-    { month: 'Apr', sales: 4500 },
-    { month: 'May', sales: 6000 },
-    { month: 'Jun', sales: 5500 },
   ];
 
   return (
@@ -137,8 +197,8 @@ const Dashboard = () => {
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">CRM Dashboard</h1>
       </div>
-      
-      {/* Sales Overview Cards - Reduced to 50% with adjusted fonts */}
+
+      {/* Sales Overview Cards */}
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md">
@@ -161,37 +221,78 @@ const Dashboard = () => {
 
       {/* Products and Order Form */}
       <div className="grid gap-4 lg:grid-cols-3 mb-6">
-        <div className="lg:col-span-2"></div>
-        <OrderForm products={products} dealers={dealers} /> {/* Pass fetched products and dealers */}
+        <div className="lg:col-span-2">
+          <Card className="bg-card text-card-foreground shadow-lg h-full">
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold text-primary">Available Products</CardTitle>
+              <CardDescription className="text-muted-foreground">Products you can sell.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {products.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4">No products available.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted hover:bg-muted/90">
+                        <TableHead className="text-muted-foreground">Name</TableHead>
+                        <TableHead className="text-muted-foreground">Price</TableHead>
+                        <TableHead className="text-muted-foreground">Stock</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {products.map((product) => (
+                        <TableRow key={product.id} className="hover:bg-accent/50">
+                          <TableCell className="font-medium text-foreground">{product.name}</TableCell>
+                          <TableCell className="text-muted-foreground">₹{product.price.toFixed(2)}</TableCell>
+                          <TableCell className="text-muted-foreground">{product.stock}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+        <OrderForm products={products} dealers={dealers} onOrderPlaced={fetchDashboardData} />
       </div>
 
-      {/* Recent Activities */}
+      {/* Recent Activities (Sales) */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
         <CardHeader>
-          <CardTitle className="text-xl font-semibold text-primary">Recent Activities</CardTitle>
-          <CardDescription className="text-muted-foreground">A list of recent interactions and updates.</CardDescription>
+          <CardTitle className="text-xl font-semibold text-primary">Recent Sales</CardTitle>
+          <CardDescription className="text-muted-foreground">A list of recent sales transactions.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted hover:bg-muted/90">
-                <TableHead className="text-muted-foreground">Type</TableHead>
-                <TableHead className="text-muted-foreground">Description</TableHead>
-                <TableHead className="text-muted-foreground">Date</TableHead>
-                <TableHead className="text-muted-foreground">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recentActivities.map((activity) => (
-                <TableRow key={activity.id} className="hover:bg-accent/50">
-                  <TableCell className="font-medium text-foreground">{activity.type}</TableCell>
-                  <TableCell className="text-muted-foreground">{activity.description}</TableCell>
-                  <TableCell className="text-muted-foreground">{activity.date}</TableCell>
-                  <TableCell className="text-muted-foreground">{activity.status}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            {sales.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No sales recorded yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="text-muted-foreground">Product</TableHead>
+                    <TableHead className="text-muted-foreground">Dealer</TableHead>
+                    <TableHead className="text-muted-foreground">Quantity</TableHead>
+                    <TableHead className="text-muted-foreground">Total Price</TableHead>
+                    <TableHead className="text-muted-foreground">Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sales.map((sale) => (
+                    <TableRow key={sale.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{sale.products?.name || 'N/A'}</TableCell>
+                      <TableCell className="text-muted-foreground">{sale.dealers?.name || 'N/A'}</TableCell>
+                      <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
+                      <TableCell className="text-muted-foreground">₹{sale.total_price.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -201,23 +302,27 @@ const Dashboard = () => {
           <CardTitle className="text-xl font-semibold text-primary">Quick Actions</CardTitle>
           <CardDescription className="text-muted-foreground">Perform common tasks quickly.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-4 gap-2 sm:gap-4">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/manage-products')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <Boxes className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Manage Products</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/add-product')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <PlusCircle className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Add Product</TooltipContent>
-          </Tooltip>
+        <CardContent className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
+          {isAdmin && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={() => navigate('/manage-products')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
+                    <Boxes className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Manage Products</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={() => navigate('/add-product')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
+                    <PlusCircle className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Add Product</TooltipContent>
+              </Tooltip>
+            </>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => navigate('/manage-dealers')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
@@ -228,13 +333,21 @@ const Dashboard = () => {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
+              <Button onClick={() => navigate('/add-dealer')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
+                <PlusCircle className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Add Dealer</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Button size="icon" className="bg-accent text-accent-foreground hover:bg-accent/90">
                 <BarChart className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Sales Reports</TooltipContent>
           </Tooltip>
-          {isAdmin && ( // Only show Admin Panel button if user is an admin
+          {isAdmin && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button onClick={() => navigate('/admin-panel')} size="icon" className="bg-purple-600 text-white hover:bg-purple-700">

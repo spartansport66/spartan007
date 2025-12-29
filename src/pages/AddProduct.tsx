@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { showSuccess, showError } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 
@@ -31,7 +31,7 @@ const formSchema = z.object({
 
 const AddProduct = () => {
   const navigate = useNavigate();
-  const { user } = useSession();
+  const { user, loading: sessionLoading, isAdmin } = useSession();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -42,6 +42,15 @@ const AddProduct = () => {
       stock: 0,
     },
   });
+
+  useEffect(() => {
+    if (!sessionLoading && !user) {
+      navigate('/login');
+    } else if (!sessionLoading && user && !isAdmin) {
+      showError('Access Denied: Only administrators can add products.');
+      navigate('/dashboard');
+    }
+  }, [sessionLoading, user, isAdmin, navigate]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!user) {
@@ -54,7 +63,7 @@ const AddProduct = () => {
       .from('products')
       .insert([
         {
-          user_id: user.id,
+          user_id: user.id, // Creator of the product (admin)
           name: values.name,
           description: values.description,
           price: values.price,
@@ -73,6 +82,19 @@ const AddProduct = () => {
       navigate('/manage-products');
     }
   };
+
+  if (sessionLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return null; // Render nothing if not admin, as they are redirected
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">

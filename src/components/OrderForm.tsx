@@ -26,9 +26,10 @@ interface Dealer {
 interface OrderFormProps {
   products: Product[];
   dealers: Dealer[];
+  onOrderPlaced?: () => void; // Callback to refresh dashboard data
 }
 
-const OrderForm: React.FC<OrderFormProps> = ({ products: initialProducts, dealers: initialDealers }) => {
+const OrderForm: React.FC<OrderFormProps> = ({ products: availableProducts, dealers: availableDealers, onOrderPlaced }) => {
   const { user } = useSession();
   const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [selectedProduct, setSelectedProduct] = useState<string>('');
@@ -46,7 +47,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ products: initialProducts, dealer
       return;
     }
 
-    const product = initialProducts.find(p => p.id === selectedProduct);
+    const product = availableProducts.find(p => p.id === selectedProduct);
     if (!product) {
       showError('Selected product not found.');
       return;
@@ -87,7 +88,9 @@ const OrderForm: React.FC<OrderFormProps> = ({ products: initialProducts, dealer
       setSelectedDealer('');
       setSelectedProduct('');
       setQuantity(1);
-      // Optionally, trigger a refresh of products/dealers in parent if needed
+      if (onOrderPlaced) {
+        onOrderPlaced(); // Notify parent to refresh data
+      }
     } catch (error: any) {
       console.error('Error placing order:', error);
       showError(`Failed to place order: ${error.message}`);
@@ -111,11 +114,15 @@ const OrderForm: React.FC<OrderFormProps> = ({ products: initialProducts, dealer
                 <SelectValue placeholder="Select a dealer" />
               </SelectTrigger>
               <SelectContent>
-                {initialDealers.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.name}
-                  </SelectItem>
-                ))}
+                {availableDealers.length === 0 ? (
+                  <SelectItem value="" disabled>No dealers available</SelectItem>
+                ) : (
+                  availableDealers.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -126,11 +133,15 @@ const OrderForm: React.FC<OrderFormProps> = ({ products: initialProducts, dealer
                 <SelectValue placeholder="Select a product" />
               </SelectTrigger>
               <SelectContent>
-                {initialProducts.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} (${p.price.toFixed(2)}) - Stock: {p.stock}
-                  </SelectItem>
-                ))}
+                {availableProducts.length === 0 ? (
+                  <SelectItem value="" disabled>No products available</SelectItem>
+                ) : (
+                  availableProducts.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} (${p.price.toFixed(2)}) - Stock: {p.stock}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
