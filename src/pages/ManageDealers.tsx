@@ -152,7 +152,7 @@ const ManageDealers = () => {
                         <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
                         <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
                         <TableCell className="text-muted-foreground">{dealer.country}</TableCell>
-                        <TableCell className="text-muted-foreground">${dealer.credit_limit.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground">₹{dealer.credit_limit.toFixed(2)}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
                             <Button variant="ghost" size="icon" onClick={() => handleView(dealer.id)} title="View Dealer">
