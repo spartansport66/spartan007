@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, UserPlus, PlusCircle } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, PlusCircle } from 'lucide-react';
 import OrderForm from '@/components/OrderForm';
 import SalesChart from '@/components/SalesChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
