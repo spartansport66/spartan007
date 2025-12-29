@@ -295,27 +295,11 @@ const AdminDashboard = () => {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/add-product')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <PlusCircle className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Add Product</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
               <Button onClick={() => navigate('/manage-dealers')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
                 <Building className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Manage Dealers</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/add-dealer')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
-                <PlusCircle className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Add Dealer</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
