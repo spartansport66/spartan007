@@ -435,7 +435,6 @@ const ManageUsers = () => {
                   <TableHeader>
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead className="text-muted-foreground">Name</TableHead>
-                      <TableHead className="text-muted-foreground">Email</TableHead>
                       <TableHead className="text-muted-foreground">Status</TableHead>
                       <TableHead className="text-muted-foreground">Monthly Target</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
@@ -447,7 +446,6 @@ const ManageUsers = () => {
                         <TableCell className="font-medium text-foreground">
                           {userItem.first_name} {userItem.last_name}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{userItem.email}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {userItem.banned_until ? (
                             <span className="text-red-500">Inactive</span>
@@ -502,7 +500,7 @@ const ManageUsers = () => {
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    This action will {userItem.banned_until ? 'activate' : 'deactivate'} user {userItem.email}.
+                                    This action will {userItem.banned_until ? 'activate' : 'deactivate'} user {userItem.first_name} {userItem.last_name}.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -612,7 +610,7 @@ const ManageUsers = () => {
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
-              <DialogTitle>Edit User: {selectedUser.email}</DialogTitle>
+              <DialogTitle>Edit User: {selectedUser.first_name} {selectedUser.last_name}</DialogTitle>
               <DialogDescription>
                 Make changes to the user's details and assignments.
               </DialogDescription>
