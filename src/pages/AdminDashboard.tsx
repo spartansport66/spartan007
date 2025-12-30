@@ -12,6 +12,7 @@ import SalesChart from '@/components/SalesChart';
 import SalesPersonPerformanceChart from '@/components/SalesPersonPerformanceChart'; // Import the new component
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Import Select components
 
 interface Product {
   id: string;
@@ -64,7 +65,26 @@ const AdminDashboard = () => {
   const [currentMonthAchieved, setCurrentMonthAchieved] = useState<number | null>(null);
   const [currentMonthPending, setCurrentMonthPending] = useState<number | null>(null);
 
+  // New states for month/year selection for SalesPersonPerformanceChart
+  const today = new Date();
+  const [selectedChartMonth, setSelectedChartMonth] = useState<string>((today.getMonth() + 1).toString());
+  const [selectedChartYear, setSelectedChartYear] = useState<string>(today.getFullYear().toString());
+
   const [loadingData, setLoadingData] = useState(true);
+
+  const getMonthName = (monthNum: string) => {
+    const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
+    return date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
+  };
+
+  const generateYears = () => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let i = currentYear - 5; i <= currentYear + 5; i++) {
+      years.push(i.toString());
+    }
+    return years;
+  };
 
   const fetchAdminDashboardData = useCallback(async () => {
     if (!user) {
@@ -73,11 +93,12 @@ const AdminDashboard = () => {
     }
     setLoadingData(true);
 
-    // Get current month range for filtering sales and targets
-    const today = new Date();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
-    const currentMonthTargetDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]; // YYYY-MM-DD
+    // Get selected month range for filtering sales and targets
+    const chartYearNum = parseInt(selectedChartYear);
+    const chartMonthNum = parseInt(selectedChartMonth);
+    const startOfMonth = new Date(chartYearNum, chartMonthNum - 1, 1).toISOString();
+    const endOfMonth = new Date(chartYearNum, chartMonthNum, 0, 23, 59, 59, 999).toISOString();
+    const currentMonthTargetDate = new Date(chartYearNum, chartMonthNum - 1, 1).toISOString().split('T')[0]; // YYYY-MM-DD
 
     // Fetch all sales persons for the dropdown and sales grouping
     const { data: profilesData, error: profilesError } = await supabase
@@ -159,7 +180,6 @@ const AdminDashboard = () => {
       const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
       const totalOrdersCount = typedSalesData.length || 0;
       setTotalSalesValue(totalValue);
-      setTotalOrders(totalOrdersCount);
 
       // Calculate monthly sales data for the overall chart
       const monthlySalesMap = new Map<string, number>();
@@ -180,7 +200,7 @@ const AdminDashboard = () => {
       setMonthlySalesData(sortedMonths.map(month => ({ month: month.split(' ')[0], sales: monthlySalesMap.get(month) || 0 })));
 
       // --- Logic for Sales by Sales Person Chart and Target/Achievement ---
-      // Sales for the current month for ALL sales persons (for the bar chart)
+      // Sales for the selected month for ALL sales persons (for the bar chart)
       const currentMonthSalesForAllPersons = typedSalesData.filter(sale => 
         new Date(sale.sale_date) >= new Date(startOfMonth) && new Date(sale.sale_date) <= new Date(endOfMonth)
       );
@@ -209,7 +229,7 @@ const AdminDashboard = () => {
 
       // Calculate target and achievement for selected sales person
       if (selectedSalesPersonId) {
-        // Fetch target for current month for the SELECTED sales person
+        // Fetch target for selected month for the SELECTED sales person
         const { data: targetData, error: targetError } = await supabase
           .from('sales_targets')
           .select('target_amount')
@@ -224,7 +244,7 @@ const AdminDashboard = () => {
           setCurrentMonthTarget(targetData?.target_amount || 0); // Default to 0 if no target set
         }
 
-        // Calculate achieved for current month for the SELECTED sales person
+        // Calculate achieved for selected month for the SELECTED sales person
         const achieved = currentMonthSalesForAllPersons
             .filter(sale => sale.user_id === selectedSalesPersonId) 
             .reduce((sum, sale) => sum + sale.total_price, 0);
@@ -240,7 +260,7 @@ const AdminDashboard = () => {
       }
     }
     setLoadingData(false);
-  }, [user, selectedSalesPersonId]); // Re-run when selectedSalesPersonId changes
+  }, [user, selectedSalesPersonId, selectedChartMonth, selectedChartYear]); // Re-run when selectedSalesPersonId, month, or year changes
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -336,15 +356,45 @@ const AdminDashboard = () => {
       {/* Charts Section */}
       <div className="grid gap-4 lg:grid-cols-2 mb-6">
         <SalesChart data={monthlySalesData} />
-        <SalesPersonPerformanceChart
-          data={salesBySalesPersonData}
-          salesPersonsOptions={salesPersonOptions}
-          selectedSalesPersonId={selectedSalesPersonId}
-          onSelectSalesPerson={setSelectedSalesPersonId}
-          currentMonthTarget={currentMonthTarget}
-          currentMonthAchieved={currentMonthAchieved}
-          currentMonthPending={currentMonthPending}
-        />
+        <div>
+          <div className="flex gap-2 mb-4">
+            <Select value={selectedChartMonth} onValueChange={setSelectedChartMonth}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select Month" />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 12 }, (_, i) => (i + 1).toString()).map((monthNum) => (
+                  <SelectItem key={monthNum} value={monthNum}>
+                    {getMonthName(monthNum)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedChartYear} onValueChange={setSelectedChartYear}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Select Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {generateYears().map((year) => (
+                  <SelectItem key={year} value={year}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <SalesPersonPerformanceChart
+            data={salesBySalesPersonData}
+            salesPersonsOptions={salesPersonOptions}
+            selectedSalesPersonId={selectedSalesPersonId}
+            onSelectSalesPerson={setSelectedSalesPersonId}
+            currentMonthTarget={currentMonthTarget}
+            currentMonthAchieved={currentMonthAchieved}
+            currentMonthPending={currentMonthPending}
+            displayMonth={getMonthName(selectedChartMonth)}
+            displayYear={selectedChartYear}
+          />
+        </div>
       </div>
 
       {/* Recent Activities (All Sales) */}

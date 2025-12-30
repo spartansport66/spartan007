@@ -25,6 +25,8 @@ interface SalesPersonPerformanceChartProps {
   currentMonthTarget: number | null;
   currentMonthAchieved: number | null;
   currentMonthPending: number | null;
+  displayMonth: string; // New prop for displaying selected month
+  displayYear: string; // New prop for displaying selected year
 }
 
 const SalesPersonPerformanceChart: React.FC<SalesPersonPerformanceChartProps> = ({
@@ -35,8 +37,10 @@ const SalesPersonPerformanceChart: React.FC<SalesPersonPerformanceChartProps> = 
   currentMonthTarget,
   currentMonthAchieved,
   currentMonthPending,
+  displayMonth, // Use new prop
+  displayYear, // Use new prop
 }) => {
-  const currentMonthName = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+  const currentMonthName = `${displayMonth} ${displayYear}`; // Use passed props
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -45,7 +49,7 @@ const SalesPersonPerformanceChart: React.FC<SalesPersonPerformanceChartProps> = 
           <div>
             <CardTitle className="text-xl font-semibold text-primary">Sales by Sales Person</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Current Month: {currentMonthName}
+              Selected Month: {currentMonthName}
             </CardDescription>
           </div>
           <Select
@@ -81,7 +85,7 @@ const SalesPersonPerformanceChart: React.FC<SalesPersonPerformanceChartProps> = 
             <XAxis dataKey="salesPerson" className="text-sm text-muted-foreground" />
             <YAxis className="text-sm text-muted-foreground" />
             <Tooltip
-              contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '0.5rem' }}
+              contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1% solid hsl(var(--border))', borderRadius: '0.5rem' }}
               labelStyle={{ color: 'hsl(var(--foreground))' }}
               itemStyle={{ color: 'hsl(var(--foreground))' }}
               formatter={(value: number) => `₹${value.toFixed(2)}`}
