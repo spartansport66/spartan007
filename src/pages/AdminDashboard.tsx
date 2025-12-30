@@ -78,6 +78,7 @@ const AdminDashboard = () => {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
     const currentMonthTargetDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]; // YYYY-MM-DD
+    console.log("AdminDashboard: currentMonthTargetDate for query:", currentMonthTargetDate); // Added log
 
     // Fetch all sales persons for the dropdown and sales grouping
     const { data: profilesData, error: profilesError } = await supabase
@@ -186,8 +187,6 @@ const AdminDashboard = () => {
 
       if (selectedSalesPersonId) {
         console.log("AdminDashboard: Selected Sales Person ID for target/achieved:", selectedSalesPersonId);
-        console.log("AdminDashboard: Current Month Target Date for query:", currentMonthTargetDate);
-
         filteredSalesForChart = filteredSalesForChart.filter(sale => sale.user_id === selectedSalesPersonId); 
       }
 
