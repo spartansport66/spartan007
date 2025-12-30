@@ -11,16 +11,22 @@ const Index = () => {
   const { session, loading, isAdmin, userType } = useSession();
 
   useEffect(() => {
-    if (!loading) {
+    console.log('Index.tsx useEffect: session:', session, 'loading:', loading, 'isAdmin:', isAdmin, 'userType:', userType);
+    if (!loading) { // Only act once loading is false
       if (session) {
         if (isAdmin) {
+          console.log('Index.tsx: Redirecting to /admin-dashboard');
           navigate('/admin-dashboard'); // Redirect admin users to Admin Dashboard
         } else {
+          console.log('Index.tsx: Redirecting to /dashboard');
           navigate('/dashboard'); // Redirect other users to Sales Dashboard
         }
       } else {
+        console.log('Index.tsx: Redirecting to /login');
         navigate('/login');
       }
+    } else {
+      console.log('Index.tsx: Still loading, waiting for session context to resolve.');
     }
   }, [session, loading, navigate, isAdmin, userType]);
 
