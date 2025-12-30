@@ -9,7 +9,7 @@ import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, PlusCircle, UserCog, Loader2 } from 'lucide-react';
 import SalesChart from '@/components/SalesChart';
-import ProductSalesChart from '@/components/ProductSalesChart';
+import SalesPersonPerformanceChart from '@/components/SalesPersonPerformanceChart'; // Import the new component
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 
@@ -28,6 +28,7 @@ interface Dealer {
 
 interface Sale {
   id: string;
+  sales_person_id: string; // Added sales_person_id
   product_id: string;
   dealer_id: string;
   quantity: number;
@@ -35,6 +36,13 @@ interface Sale {
   sale_date: string;
   products: { name: string } | null;
   dealers: { name: string } | null;
+  profiles: { first_name: string; last_name: string } | null; // Added for sales person name
+}
+
+interface SalesPersonProfile {
+  id: string;
+  first_name: string;
+  last_name: string;
 }
 
 const AdminDashboard = () => {
@@ -47,20 +55,45 @@ const AdminDashboard = () => {
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [monthlySalesData, setMonthlySalesData] = useState<{ month: string; sales: number }[]>([]);
-  const [productSalesData, setProductSalesData] = useState<{ product: string; sales: number }[]>([]);
+  
+  // New states for SalesPersonPerformanceChart
+  const [allSalesPersons, setAllSalesPersons] = useState<SalesPersonProfile[]>([]);
+  const [selectedSalesPersonId, setSelectedSalesPersonId] = useState<string | null>(null);
+  const [salesBySalesPersonData, setSalesBySalesPersonData] = useState<{ salesPerson: string; totalSales: number; id: string }[]>([]);
+  const [currentMonthTarget, setCurrentMonthTarget] = useState<number | null>(null);
+  const [currentMonthAchieved, setCurrentMonthAchieved] = useState<number | null>(null);
+  const [currentMonthPending, setCurrentMonthPending] = useState<number | null>(null);
+
   const [loadingData, setLoadingData] = useState(true);
 
   const fetchAdminDashboardData = useCallback(async () => {
     if (!user) {
       setLoadingData(false);
-      console.log('AdminDashboard: User not available, stopping fetchAdminDashboardData.');
       return;
     }
     setLoadingData(true);
-    console.log('AdminDashboard: Starting fetchAdminDashboardData...');
+
+    // Get current month range for filtering sales and targets
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+    const currentMonthTargetDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // Fetch all sales persons for the dropdown and sales grouping
+    const { data: profilesData, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name')
+      .eq('user_type', 'sales_person');
+
+    if (profilesError) {
+      console.error('AdminDashboard: Error fetching sales persons:', profilesError);
+      showError(`Failed to load sales persons: ${profilesError.message}`);
+      setAllSalesPersons([]);
+    } else {
+      setAllSalesPersons(profilesData || []);
+    }
 
     // Fetch all products
-    console.log('AdminDashboard: Fetching products...');
     const { data: productsData, error: productsError } = await supabase
       .from('products')
       .select('id, name, price, stock, description');
@@ -71,11 +104,9 @@ const AdminDashboard = () => {
       setProducts([]);
     } else {
       setProducts(productsData || []);
-      console.log('AdminDashboard: Products fetched:', productsData?.length);
     }
 
     // Fetch all dealers
-    console.log('AdminDashboard: Fetching dealers...');
     const { data: dealersData, error: dealersError } = await supabase
       .from('dealers')
       .select('id, name');
@@ -87,22 +118,22 @@ const AdminDashboard = () => {
     } else {
       setDealers(dealersData || []);
       setActiveDealersCount(dealersData?.length || 0);
-      console.log('AdminDashboard: Dealers fetched:', dealersData?.length);
     }
 
-    // Fetch all sales
-    console.log('AdminDashboard: Fetching sales...');
+    // Fetch all sales with product, dealer, and sales person names
     const { data: salesData, error: salesError } = await supabase
       .from('sales')
       .select(`
         id,
+        sales_person_id,
         product_id,
         dealer_id,
         quantity,
         total_price,
         sale_date,
         products (name),
-        dealers (name)
+        dealers (name),
+        profiles (first_name, last_name)
       `)
       .order('sale_date', { ascending: false });
 
@@ -111,20 +142,17 @@ const AdminDashboard = () => {
       showError(`Failed to load sales data: ${salesError.message}`);
       setSales([]);
     } else {
-      console.log('AdminDashboard: Sales data raw:', salesData); // Log raw data
       const typedSalesData: Sale[] = (salesData || []).map((sale: any) => ({
         ...sale,
-        // Safely extract product and dealer names, handling potential array returns or null
-        products: (sale.products === null || sale.products === undefined)
-          ? null
-          : (Array.isArray(sale.products)
-            ? (sale.products.length > 0 ? (sale.products[0] as { name: string }) : null)
-            : (sale.products as { name: string })),
-        dealers: (sale.dealers === null || sale.dealers === undefined)
-          ? null
-          : (Array.isArray(sale.dealers)
-            ? (sale.dealers.length > 0 ? (sale.dealers[0] as { name: string }) : null)
-            : (sale.dealers as { name: string })),
+        products: (sale.products && Array.isArray(sale.products) && sale.products.length > 0) 
+          ? (sale.products[0] as { name: string }) 
+          : (sale.products || null), // Handle direct object or null
+        dealers: (sale.dealers && Array.isArray(sale.dealers) && sale.dealers.length > 0) 
+          ? (sale.dealers[0] as { name: string }) 
+          : (sale.dealers || null), // Handle direct object or null
+        profiles: (sale.profiles && Array.isArray(sale.profiles) && sale.profiles.length > 0)
+          ? (sale.profiles[0] as { first_name: string; last_name: string })
+          : (sale.profiles || null), // Handle direct object or null
       }));
       setSales(typedSalesData);
 
@@ -133,7 +161,7 @@ const AdminDashboard = () => {
       setTotalSalesValue(totalValue);
       setTotalOrders(totalOrdersCount);
 
-      // Calculate monthly sales data
+      // Calculate monthly sales data for the overall chart
       const monthlySalesMap = new Map<string, number>();
       typedSalesData.forEach(sale => {
         const date = new Date(sale.sale_date);
@@ -151,32 +179,79 @@ const AdminDashboard = () => {
 
       setMonthlySalesData(sortedMonths.map(month => ({ month: month.split(' ')[0], sales: monthlySalesMap.get(month) || 0 })));
 
-      // Calculate product sales data
-      const productSalesMap = new Map<string, number>();
-      typedSalesData.forEach(sale => {
-        const productName = sale.products?.name || 'Unknown Product';
-        productSalesMap.set(productName, (productSalesMap.get(productName) || 0) + sale.total_price);
+      // --- Logic for Sales by Sales Person Chart and Target/Achievement ---
+      let filteredSalesForChart = typedSalesData.filter(sale => 
+        new Date(sale.sale_date) >= new Date(startOfMonth) && new Date(sale.sale_date) <= new Date(endOfMonth)
+      );
+
+      if (selectedSalesPersonId) {
+        filteredSalesForChart = filteredSalesForChart.filter(sale => sale.sales_person_id === selectedSalesPersonId);
+      }
+
+      const salesByPersonMap = new Map<string, number>();
+      const salesPersonNamesMap = new Map<string, string>();
+
+      (profilesData || []).forEach(p => {
+        salesPersonNamesMap.set(p.id, `${p.first_name} ${p.last_name}`);
+        salesByPersonMap.set(p.id, 0); // Initialize all sales persons to 0 sales
       });
 
-      setProductSalesData(Array.from(productSalesMap.entries()).map(([product, sales]) => ({ product, sales })));
-      console.log('AdminDashboard: Sales data processed.');
+      filteredSalesForChart.forEach(sale => {
+        const personId = sale.sales_person_id;
+        if (personId) {
+          salesByPersonMap.set(personId, (salesByPersonMap.get(personId) || 0) + sale.total_price);
+        }
+      });
+
+      const formattedSalesByPerson = Array.from(salesByPersonMap.entries()).map(([id, totalSales]) => ({
+        salesPerson: salesPersonNamesMap.get(id) || 'Unknown',
+        totalSales: totalSales,
+        id: id,
+      }));
+      setSalesBySalesPersonData(formattedSalesByPerson);
+
+      // Calculate target and achievement for selected sales person
+      if (selectedSalesPersonId) {
+        // Fetch target for current month
+        const { data: targetData, error: targetError } = await supabase
+          .from('sales_targets')
+          .select('target_amount')
+          .eq('sales_person_id', selectedSalesPersonId)
+          .eq('target_month', currentMonthTargetDate)
+          .single();
+
+        if (targetError && targetError.code !== 'PGRST116') { // PGRST116 means no rows found
+          console.error('Error fetching target:', targetError);
+          setCurrentMonthTarget(null);
+        } else {
+          setCurrentMonthTarget(targetData?.target_amount || 0);
+        }
+
+        // Calculate achieved for current month for the selected person
+        const achieved = filteredSalesForChart
+            .filter(sale => sale.sales_person_id === selectedSalesPersonId)
+            .reduce((sum, sale) => sum + sale.total_price, 0);
+        setCurrentMonthAchieved(achieved);
+
+        const pending = (targetData?.target_amount || 0) - achieved;
+        setCurrentMonthPending(pending);
+      } else {
+        setCurrentMonthTarget(null);
+        setCurrentMonthAchieved(null);
+        setCurrentMonthPending(null);
+      }
     }
     setLoadingData(false);
-    console.log('AdminDashboard: Finished fetchAdminDashboardData.');
-  }, [user]);
+  }, [user, selectedSalesPersonId]); // Re-run when selectedSalesPersonId changes
 
   useEffect(() => {
-    console.log('AdminDashboard: useEffect triggered. sessionLoading:', sessionLoading, 'user:', user, 'isAdmin:', isAdmin);
     if (!sessionLoading) {
       if (!user) {
-        console.log('AdminDashboard: No user, navigating to login.');
         navigate('/login');
       } else if (!isAdmin) {
-        console.log('AdminDashboard: User is not admin, navigating to dashboard.');
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
-        console.log('AdminDashboard: User is admin, fetching dashboard data.');
         fetchAdminDashboardData();
       }
     }
@@ -233,6 +308,11 @@ const AdminDashboard = () => {
     },
   ];
 
+  const salesPersonOptions = allSalesPersons.map(sp => ({
+    value: sp.id,
+    label: `${sp.first_name} ${sp.last_name}`,
+  }));
+
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
@@ -258,7 +338,15 @@ const AdminDashboard = () => {
       {/* Charts Section */}
       <div className="grid gap-4 lg:grid-cols-2 mb-6">
         <SalesChart data={monthlySalesData} />
-        <ProductSalesChart data={productSalesData} />
+        <SalesPersonPerformanceChart
+          data={salesBySalesPersonData}
+          salesPersonsOptions={salesPersonOptions}
+          selectedSalesPersonId={selectedSalesPersonId}
+          onSelectSalesPerson={setSelectedSalesPersonId}
+          currentMonthTarget={currentMonthTarget}
+          currentMonthAchieved={currentMonthAchieved}
+          currentMonthPending={currentMonthPending}
+        />
       </div>
 
       {/* Recent Activities (All Sales) */}
@@ -275,6 +363,7 @@ const AdminDashboard = () => {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="text-muted-foreground">Sales Person</TableHead> {/* Added Sales Person column */}
                     <TableHead className="text-muted-foreground">Product</TableHead>
                     <TableHead className="text-muted-foreground">Dealer</TableHead>
                     <TableHead className="text-muted-foreground">Quantity</TableHead>
@@ -285,6 +374,7 @@ const AdminDashboard = () => {
                 <TableBody>
                   {sales.map((sale) => (
                     <TableRow key={sale.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{sale.profiles ? `${sale.profiles.first_name} ${sale.profiles.last_name}` : 'N/A'}</TableCell> {/* Display sales person name */}
                       <TableCell className="font-medium text-foreground">{sale.products?.name || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{sale.dealers?.name || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
