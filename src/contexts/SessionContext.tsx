@@ -23,7 +23,6 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [isAdmin, setIsAdmin] = useState(false);
   const [userType, setUserType] = useState<string | null>(null);
 
-  // Use refs to store previous user/session IDs to prevent unnecessary state updates
   const prevUserIdRef = useRef<string | undefined>(undefined);
   const prevSessionIdRef = useRef<string | undefined>(undefined);
 
@@ -31,9 +30,8 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     console.log('SessionContext: updateSessionAndProfileStates started.');
 
     const newUserId = currentSession?.user?.id;
-    const newSessionId = currentSession?.access_token; // Using access_token as a session identifier
+    const newSessionId = currentSession?.access_token;
 
-    // Only update session/user if their IDs have actually changed
     if (newSessionId !== prevSessionIdRef.current) {
       setSession(currentSession);
       prevSessionIdRef.current = newSessionId;
@@ -45,9 +43,8 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       prevUserIdRef.current = newUserId;
       console.log('SessionContext: User updated.');
 
-      // Reset profile states before fetching new ones
-      let newIsAdmin = false;
-      let newUserType: string | null = null;
+      let fetchedIsAdmin = false;
+      let fetchedUserType: string | null = null;
 
       if (currentSession?.user) {
         console.log('SessionContext: Attempting to fetch user profile for ID:', currentSession.user.id);
@@ -62,20 +59,14 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
           showError(`Failed to load user profile: ${error.message}`);
         } else {
           console.log('SessionContext: User profile fetched successfully:', data);
-          newIsAdmin = data?.is_admin || false;
-          newUserType = data?.user_type || 'sales_person';
+          fetchedIsAdmin = data?.is_admin || false;
+          fetchedUserType = data?.user_type || 'sales_person';
         }
       }
+      setIsAdmin(fetchedIsAdmin);
+      setUserType(fetchedUserType);
+      console.log('SessionContext: isAdmin set to', fetchedIsAdmin, 'userType set to', fetchedUserType);
 
-      // Only update state if values are actually different to prevent unnecessary re-renders
-      if (newIsAdmin !== isAdmin) {
-        setIsAdmin(newIsAdmin);
-        console.log('SessionContext: isAdmin updated to', newIsAdmin);
-      }
-      if (newUserType !== userType) {
-        setUserType(newUserType);
-        console.log('SessionContext: userType updated to', newUserType);
-      }
     } else {
       console.log('SessionContext: User ID and Session ID are unchanged. Skipping profile fetch and state updates.');
     }
@@ -94,33 +85,34 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             setUser(null);
             setIsAdmin(false);
             setUserType(null);
-            prevUserIdRef.current = undefined; // Clear refs on sign out
+            prevUserIdRef.current = undefined;
             prevSessionIdRef.current = undefined;
+            console.log('SessionContext: SIGNED_OUT event processed. Setting loading to false.');
             setLoading(false);
-            console.log('SessionContext: SIGNED_OUT event processed. Loading set to false.');
           } else {
             await updateSessionAndProfileStates(currentSession);
+            console.log('SessionContext: Auth event processed. Setting loading to false.');
             setLoading(false);
-            console.log('SessionContext: Auth event processed. Loading set to false.');
           }
         } catch (error: any) {
           console.error('SessionContext: Error in onAuthStateChange handler:', error);
           showError(`Authentication error: ${error.message}`);
+          console.log('SessionContext: Auth event error. Setting loading to false.');
           setLoading(false);
         }
       }
     );
 
-    console.log('SessionContext: Calling supabase.auth.getSession()...'); // Added log
+    console.log('SessionContext: Calling supabase.auth.getSession()...');
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      console.log('SessionContext: getSession promise resolved. Initial session:', initialSession); // Added log
+      console.log('SessionContext: getSession promise resolved. Initial session:', initialSession);
       await updateSessionAndProfileStates(initialSession);
-      setLoading(false);
-      console.log('SessionContext: Initial getSession completed. Loading set to false.');
     }).catch(error => {
-      console.error('SessionContext: Error during initial getSession promise:', error); // Modified log
+      console.error('SessionContext: Error during initial getSession promise:', error);
       showError(`Failed to load session: ${error.message}`);
+    }).finally(() => { // Added finally block
       setLoading(false);
+      console.log('SessionContext: Initial getSession completed. Loading set to false in finally block.');
     });
 
     return () => {
