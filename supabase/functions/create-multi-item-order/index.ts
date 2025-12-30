@@ -25,7 +25,7 @@ serve(async (req) => {
   }
 
   try {
-    const { dealerId, userId, orderItems } = await req.json();
+    const { dealerId, userId, orderItems, paymentStatus, paymentDueDate, paymentDetails } = await req.json();
 
     if (!dealerId || !userId || !orderItems || !Array.isArray(orderItems) || orderItems.length === 0) {
       return new Response(JSON.stringify({ error: 'Missing or invalid order data.' }), {
@@ -129,6 +129,8 @@ serve(async (req) => {
         user_id: userId,
         total_amount: totalOrderAmount,
         status: 'completed', // Assuming all orders created via this function are completed
+        payment_status: paymentStatus || 'pending', // New: payment status
+        payment_due_date: paymentDueDate, // New: payment due date
       })
       .select('id, order_number') // Select the new order_number
       .single();
@@ -153,7 +155,28 @@ serve(async (req) => {
       throw new Error(`Failed to insert sales items: ${salesInsertError.message}`);
     }
 
-    // 5. Update product stock
+    // 5. If payment was made at order time, insert into payments table
+    if (paymentDetails && paymentStatus === 'paid') {
+      const { error: paymentInsertError } = await supabaseAdmin
+        .from('payments')
+        .insert({
+          order_id: newOrder.id,
+          amount: paymentDetails.amount,
+          payment_method: paymentDetails.payment_method,
+          cheque_dd_no: paymentDetails.cheque_dd_no,
+          cheque_dd_date: paymentDetails.cheque_dd_date,
+          status: 'completed', // Payment made at order time is considered completed
+        });
+
+      if (paymentInsertError) {
+        console.error('Failed to insert payment details:', paymentInsertError.message);
+        // Decide if this should roll back the entire order or just log.
+        // For now, we'll throw an error to indicate a partial failure.
+        throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
+      }
+    }
+
+    // 6. Update product stock
     for (const update of stockUpdates) {
       const { error: stockUpdateError } = await supabaseAdmin
         .from('products')

@@ -55,6 +55,7 @@ interface Sale {
     dealers: { name: string } | null;
     user_id: string;
     profiles: { first_name: string; last_name: string } | null;
+    payment_status: string; // Added
   } | null;
 }
 
@@ -183,7 +184,7 @@ const AdminDashboard = () => {
       .select(`
         id, quantity, total_price, sale_date,
         products (name),
-        orders (dealers (name), user_id, profiles (first_name, last_name))
+        orders (dealers (name), user_id, profiles (first_name, last_name), payment_status)
       `)
       .order('sale_date', { ascending: false });
 
@@ -202,6 +203,7 @@ const AdminDashboard = () => {
           dealers: sale.orders.dealers || null,
           user_id: sale.orders.user_id,
           profiles: sale.orders.profiles ? { first_name: sale.orders.profiles.first_name, last_name: sale.orders.profiles.last_name } : null,
+          payment_status: sale.orders.payment_status, // Added
         } : null,
       }));
       setSales(typedSalesData);

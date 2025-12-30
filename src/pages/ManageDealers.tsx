@@ -48,6 +48,7 @@ interface Dealer {
   state: string;
   country: string;
   credit_limit: number;
+  allotted_credit_days: number; // Added
   user_id: string;
   assigned_sales_persons: { id: string; first_name: string; last_name: string }[]; // Updated to array
 }
@@ -70,6 +71,10 @@ const formSchema = z.object({
   creditLimit: z.preprocess(
     (val) => Number(val),
     z.number().min(0, { message: 'Credit limit cannot be negative.' })
+  ),
+  allottedCreditDays: z.preprocess( // Added
+    (val) => Number(val),
+    z.number().int().min(0, { message: 'Allotted credit days cannot be negative.' })
   ),
   assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }),
 });
@@ -96,6 +101,7 @@ const ManageDealers = () => {
       state: '',
       country: '',
       creditLimit: 0,
+      allottedCreditDays: 0, // Default value
       assignedSalesPersonIds: [],
     },
   });
@@ -112,6 +118,7 @@ const ManageDealers = () => {
         state: selectedDealer.state,
         country: selectedDealer.country,
         creditLimit: selectedDealer.credit_limit,
+        allottedCreditDays: selectedDealer.allotted_credit_days, // Set value
         assignedSalesPersonIds: selectedDealer.assigned_sales_persons.map(sp => sp.id),
       });
     }
@@ -193,6 +200,7 @@ const ManageDealers = () => {
       state: values.state,
       country: values.country,
       credit_limit: values.creditLimit,
+      allotted_credit_days: values.allottedCreditDays, // Include in update
     };
 
     const { error: dealerUpdateError } = await supabase
@@ -311,6 +319,7 @@ const ManageDealers = () => {
                       <TableHead className="text-muted-foreground">State</TableHead>
                       <TableHead className="text-muted-foreground">Country</TableHead>
                       <TableHead className="text-muted-foreground">Credit Limit</TableHead>
+                      <TableHead className="text-muted-foreground">Credit Days</TableHead> {/* Added */}
                       <TableHead className="text-muted-foreground">Assigned To</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
@@ -327,6 +336,7 @@ const ManageDealers = () => {
                         <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
                         <TableCell className="text-muted-foreground">{dealer.country}</TableCell>
                         <TableCell className="text-muted-foreground">₹{dealer.credit_limit.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell> {/* Displayed */}
                         <TableCell className="text-muted-foreground">
                           {dealer.assigned_sales_persons.length > 0
                             ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name}`).join(', ')
@@ -447,6 +457,13 @@ const ManageDealers = () => {
                   </Label>
                   <Input id="creditLimit" type="number" placeholder="e.g., 5000.00" {...form.register('creditLimit')} className="col-span-3" />
                   {form.formState.errors.creditLimit && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.creditLimit.message}</p>}
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4"> {/* Added */}
+                  <Label htmlFor="allottedCreditDays" className="text-right">
+                    Credit Days
+                  </Label>
+                  <Input id="allottedCreditDays" type="number" placeholder="e.g., 30" {...form.register('allottedCreditDays')} className="col-span-3" />
+                  {form.formState.errors.allottedCreditDays && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.allottedCreditDays.message}</p>}
                 </div>
                 
                 <FormField

@@ -30,6 +30,10 @@ const formSchema = z.object({
     (val) => Number(val),
     z.number().min(0, { message: 'Credit limit cannot be negative.' })
   ),
+  allottedCreditDays: z.preprocess( // Added
+    (val) => Number(val),
+    z.number().int().min(0, { message: 'Allotted credit days cannot be negative.' })
+  ),
   assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }), // Now mandatory and an array
 });
 
@@ -58,6 +62,7 @@ const AddDealer = () => {
       state: '',
       country: '',
       creditLimit: 0,
+      allottedCreditDays: 0, // Default to 0
       assignedSalesPersonIds: [], // Default to empty array
     },
   });
@@ -119,6 +124,7 @@ const AddDealer = () => {
       state: values.state,
       country: values.country,
       credit_limit: values.creditLimit,
+      allotted_credit_days: values.allottedCreditDays, // Include in insert
       // sales_person_id is removed from dealers table
     };
 
@@ -298,6 +304,19 @@ const AddDealer = () => {
                       <FormLabel>Credit Limit</FormLabel>
                       <FormControl>
                         <Input type="number" placeholder="e.g., 5000.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="allottedCreditDays"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Allotted Credit Days</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 30" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

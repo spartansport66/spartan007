@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 
 interface Product {
   id: string;
@@ -22,6 +23,7 @@ interface Dealer {
   id: string;
   name: string;
   credit_limit: number;
+  allotted_credit_days: number; // Added
 }
 
 interface OrderItem {
@@ -42,6 +44,17 @@ const MultiItemOrderForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [dealerBalance, setDealerBalance] = useState<number | null>(null);
   const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
+  const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0); // Added
+  const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null); // Added
+
+  // Payment at order time states
+  const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<string>('');
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [chequeDdNo, setChequeDdNo] = useState<string>('');
+  const [chequeDdDate, setChequeDdDate] = useState<string>('');
+
+  const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
 
   // Fetch dealers and products
   useEffect(() => {
@@ -51,7 +64,7 @@ const MultiItemOrderForm: React.FC = () => {
       // Fetch dealers assigned to the current user
       const { data: assignedDealersData, error: assignedDealersError } = await supabase
         .from('dealer_sales_persons')
-        .select('dealers(id, name, credit_limit)')
+        .select('dealers(id, name, credit_limit, allotted_credit_days)') // Select allotted_credit_days
         .eq('sales_person_id', user.id);
 
       if (assignedDealersError) {
@@ -79,17 +92,27 @@ const MultiItemOrderForm: React.FC = () => {
     fetchData();
   }, [user]);
 
-  // Calculate dealer balance when dealer is selected
+  // Calculate dealer balance and payment due date when dealer is selected or order items change
   useEffect(() => {
-    const calculateBalance = async () => {
+    const calculateBalanceAndDueDate = async () => {
       if (!selectedDealer) {
         setDealerBalance(null);
+        setDealerCreditLimit(0);
+        setAllottedCreditDays(0);
+        setPaymentDueDate(null);
+        setPaymentAmount(0); // Reset payment amount
         return;
       }
 
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
         setDealerCreditLimit(selectedDealerData.credit_limit);
+        setAllottedCreditDays(selectedDealerData.allotted_credit_days);
+
+        // Calculate payment due date
+        const today = new Date();
+        today.setDate(today.getDate() + selectedDealerData.allotted_credit_days);
+        setPaymentDueDate(today.toISOString().split('T')[0]); // YYYY-MM-DD format
       }
 
       // Fetch total spent by this dealer from the 'orders' table
@@ -106,10 +129,15 @@ const MultiItemOrderForm: React.FC = () => {
         const totalSpent = data.reduce((sum, order) => sum + order.total_amount, 0);
         setDealerBalance(totalSpent);
       }
+      
+      // Set payment amount to total order value if paid at order time
+      if (isPaidAtOrderTime) {
+        setPaymentAmount(calculateTotalOrderValue());
+      }
     };
 
-    calculateBalance();
-  }, [selectedDealer, dealers]);
+    calculateBalanceAndDueDate();
+  }, [selectedDealer, dealers, isPaidAtOrderTime, orderItems]); // Added orderItems to dependencies
 
   const addOrderItem = () => {
     setOrderItems([...orderItems, { id: Date.now().toString(), product_id: '', quantity: 1 }]);
@@ -126,6 +154,19 @@ const MultiItemOrderForm: React.FC = () => {
       item.id === id ? { ...item, [field]: value } : item
     ));
   };
+
+  const calculateItemTotal = (item: OrderItem) => {
+    const product = products.find(p => p.id === item.product_id);
+    return product ? item.quantity * product.price : 0;
+  };
+
+  const calculateTotalOrderValue = () => {
+    return orderItems.reduce((total, item) => total + calculateItemTotal(item), 0);
+  };
+
+  const availableCredit = dealerBalance !== null ? dealerCreditLimit - dealerBalance : null;
+  const totalOrderValue = calculateTotalOrderValue();
+  const remainingCredit = availableCredit !== null ? availableCredit - totalOrderValue : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,17 +186,48 @@ const MultiItemOrderForm: React.FC = () => {
       return;
     }
 
+    if (remainingCredit !== null && remainingCredit < 0) {
+      showError('Order exceeds dealer\'s available credit limit.');
+      return;
+    }
+
+    if (isPaidAtOrderTime) {
+      if (!paymentMethod) {
+        showError('Please select a payment method.');
+        return;
+      }
+      if (paymentAmount <= 0) {
+        showError('Payment amount must be positive.');
+        return;
+      }
+      if (paymentMethod === 'Cheque/DD' && (!chequeDdNo || !chequeDdDate)) {
+        showError('Please enter Cheque/DD number and date.');
+        return;
+      }
+    }
+
     setLoading(true);
     
     try {
-      const payload = {
+      const payload: any = {
         dealerId: selectedDealer,
         userId: user.id,
         orderItems: orderItems.map(item => ({
           product_id: item.product_id,
           quantity: item.quantity,
         })),
+        paymentStatus: isPaidAtOrderTime ? 'paid' : 'pending', // Set payment status
+        paymentDueDate: paymentDueDate, // Pass payment due date
       };
+
+      if (isPaidAtOrderTime) {
+        payload.paymentDetails = {
+          amount: paymentAmount,
+          payment_method: paymentMethod,
+          cheque_dd_no: paymentMethod === 'Cheque/DD' ? chequeDdNo : null,
+          cheque_dd_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : null,
+        };
+      }
 
       const response = await fetch(CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL, {
         method: 'POST',
@@ -179,6 +251,12 @@ const MultiItemOrderForm: React.FC = () => {
       setSelectedDealer('');
       setOrderItems([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
       setDealerBalance(null);
+      setIsPaidAtOrderTime(false);
+      setPaymentMethod('');
+      setPaymentAmount(0);
+      setChequeDdNo('');
+      setChequeDdDate('');
+      setPaymentDueDate(null);
     } catch (error: any) {
       console.error('Error placing order:', error);
       showError(`Failed to place order: ${error.message}`);
@@ -186,19 +264,6 @@ const MultiItemOrderForm: React.FC = () => {
       setLoading(false);
     }
   };
-
-  const calculateItemTotal = (item: OrderItem) => {
-    const product = products.find(p => p.id === item.product_id);
-    return product ? item.quantity * product.price : 0;
-  };
-
-  const calculateTotalOrderValue = () => {
-    return orderItems.reduce((total, item) => total + calculateItemTotal(item), 0);
-  };
-
-  const availableCredit = dealerBalance !== null ? dealerCreditLimit - dealerBalance : null;
-  const totalOrderValue = calculateTotalOrderValue();
-  const remainingCredit = availableCredit !== null ? availableCredit - totalOrderValue : null;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -241,6 +306,16 @@ const MultiItemOrderForm: React.FC = () => {
                     ₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}
                   </span>
                 </div>
+                <div className="flex justify-between text-sm">
+                  <span>Allotted Credit Days:</span>
+                  <span className="font-medium">{allottedCreditDays} days</span>
+                </div>
+                {paymentDueDate && (
+                  <div className="flex justify-between text-sm">
+                    <span>Payment Due Date:</span>
+                    <span className="font-medium">{new Date(paymentDueDate).toLocaleDateString()}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -329,6 +404,86 @@ const MultiItemOrderForm: React.FC = () => {
               )}
             </div>
           )}
+
+          {/* Payment at Order Time Section */}
+          <div className="space-y-4 p-4 border rounded-md">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="paidAtOrderTime"
+                checked={isPaidAtOrderTime}
+                onCheckedChange={(checked) => {
+                  setIsPaidAtOrderTime(!!checked);
+                  if (!!checked) {
+                    setPaymentAmount(totalOrderValue); // Default to total order value
+                  } else {
+                    setPaymentMethod('');
+                    setPaymentAmount(0);
+                    setChequeDdNo('');
+                    setChequeDdDate('');
+                  }
+                }}
+              />
+              <Label htmlFor="paidAtOrderTime" className="text-base font-medium">
+                Payment Received at Order Time
+              </Label>
+            </div>
+
+            {isPaidAtOrderTime && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="paymentMethod">Payment Method</Label>
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger id="paymentMethod" className="w-full">
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {paymentMethodsOptions.map((method) => (
+                        <SelectItem key={method} value={method}>
+                          {method}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="paymentAmount">Amount Paid</Label>
+                  <Input
+                    id="paymentAmount"
+                    type="number"
+                    step="0.01"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                    className="w-full"
+                  />
+                </div>
+
+                {paymentMethod === 'Cheque/DD' && (
+                  <>
+                    <div>
+                      <Label htmlFor="chequeDdNo">Cheque/DD Number</Label>
+                      <Input
+                        id="chequeDdNo"
+                        type="text"
+                        value={chequeDdNo}
+                        onChange={(e) => setChequeDdNo(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="chequeDdDate">Cheque/DD Date</Label>
+                      <Input
+                        id="chequeDdDate"
+                        type="date"
+                        value={chequeDdDate}
+                        onChange={(e) => setChequeDdDate(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
           <Button 
             type="submit" 

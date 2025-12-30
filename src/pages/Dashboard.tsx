@@ -35,6 +35,7 @@ interface Sale {
     dealers: { name: string } | null;
     user_id: string; // Sales person ID who created the order
     profiles: { first_name: string; last_name: string } | null; // Sales person name
+    payment_status: string; // Added
   } | null;
 }
 
@@ -75,7 +76,7 @@ const Dashboard = () => {
       .select(`
         id, quantity, total_price, sale_date,
         products (name),
-        orders (dealers (name), user_id, profiles (first_name, last_name))
+        orders (dealers (name), user_id, profiles (first_name, last_name), payment_status)
       `)
       .order('sale_date', { ascending: false });
     
@@ -95,6 +96,7 @@ const Dashboard = () => {
           dealers: sale.orders.dealers ? { name: sale.orders.dealers.name } : null,
           user_id: sale.orders.user_id,
           profiles: sale.orders.profiles ? { first_name: sale.orders.profiles.first_name, last_name: sale.orders.profiles.last_name } : null,
+          payment_status: sale.orders.payment_status, // Added
         } : null,
       }));
       setSales(typedSalesData);
@@ -217,6 +219,7 @@ const Dashboard = () => {
                     <TableHead className="text-muted-foreground">Dealer</TableHead>
                     <TableHead className="text-muted-foreground">Quantity</TableHead>
                     <TableHead className="text-muted-foreground">Total Price</TableHead>
+                    <TableHead className="text-muted-foreground">Payment Status</TableHead> {/* Added */}
                     <TableHead className="text-muted-foreground">Date</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -227,6 +230,7 @@ const Dashboard = () => {
                       <TableCell className="text-muted-foreground">{sale.orders?.dealers?.name || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
                       <TableCell className="text-muted-foreground">₹{sale.total_price.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground">{sale.orders?.payment_status || 'N/A'}</TableCell> {/* Displayed */}
                       <TableCell className="text-muted-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>
                     </TableRow>
                   ))}

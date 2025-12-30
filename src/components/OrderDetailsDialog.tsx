@@ -39,6 +39,12 @@ interface OrderDetail {
   dispatch_date: string | null; // New
   dispatch_number: number | null; // New
   dispatched: boolean; // New
+  payment_status: string; // New
+  payment_due_date: string | null; // New
+  payment_method: string | null; // New (from payments table if paid at order time)
+  payment_amount: number | null; // New (from payments table if paid at order time)
+  cheque_dd_no: string | null; // New
+  cheque_dd_date: string | null; // New
 }
 
 interface OrderDetailsDialogProps {
@@ -55,12 +61,15 @@ interface FetchedOrderData {
   order_date: string;
   total_amount: number;
   status: string;
+  payment_status: string; // New
+  payment_due_date: string | null; // New
   dealers: { id: string; name: string; credit_limit: number; address: string; phone: string; city: string; state: string; country: string } | null; // Added city, state, country
   user_id: string;
   bill_no: string | null; // New
   dispatch_date: string | null; // New
   dispatch_number: number | null; // New
   dispatched: boolean; // New
+  payments: { amount: number; payment_method: string; cheque_dd_no: string | null; cheque_dd_date: string | null }[] | null; // New
 }
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen, onOpenChange, shouldPrintOnLoad = false }) => {
@@ -79,12 +88,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           order_date,
           total_amount,
           status,
+          payment_status,
+          payment_due_date,
           user_id,
           bill_no,
           dispatch_date,
           dispatch_number,
           dispatched,
-          dealers (id, name, credit_limit, address, phone, city, state, country)
+          dealers (id, name, credit_limit, address, phone, city, state, country),
+          payments (amount, payment_method, cheque_dd_no, cheque_dd_date)
         `)
         .eq('id', id)
         .single() as { data: FetchedOrderData | null; error: any }; // Explicitly type data
@@ -143,6 +155,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         total_price: item.total_price,
       }));
 
+      const paymentInfo = orderData.payments && orderData.payments.length > 0 ? orderData.payments[0] : null;
+
       setOrderDetails({
         id: orderData.id,
         order_number: orderData.order_number, // Added
@@ -164,6 +178,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         dispatch_date: orderData.dispatch_date, // New
         dispatch_number: orderData.dispatch_number, // New
         dispatched: orderData.dispatched, // New
+        payment_status: orderData.payment_status, // New
+        payment_due_date: orderData.payment_due_date, // New
+        payment_method: paymentInfo?.payment_method || null, // New
+        payment_amount: paymentInfo?.amount || null, // New
+        cheque_dd_no: paymentInfo?.cheque_dd_no || null, // New
+        cheque_dd_date: paymentInfo?.cheque_dd_date || null, // New
       });
 
     } catch (error: any) {
@@ -213,7 +233,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
       <p><strong>Order Date:</strong> ${new Date(orderDetails.order_date).toLocaleDateString()}</p>
       <p><strong>Bill Number:</strong> ${orderDetails.bill_no || 'N/A'}</p>
       <p><strong>Sales Person:</strong> ${orderDetails.sales_person_name}</p>
-      <p><strong>Status:</strong> ${orderDetails.status}</p>
+      <p><strong>Order Status:</strong> ${orderDetails.status}</p>
+      <p><strong>Payment Status:</strong> ${orderDetails.payment_status}</p>
+      <p><strong>Payment Due Date:</strong> ${orderDetails.payment_due_date ? new Date(orderDetails.payment_due_date).toLocaleDateString() : 'N/A'}</p>
 
       <h2>Dealer Information</h2>
       <p><strong>Name:</strong> ${orderDetails.dealer_name}</p>
@@ -245,6 +267,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
       <div class="summary">
         <p><strong>Total Order Amount:</strong> <span class="text-right">₹${orderDetails.total_amount.toFixed(2)}</span></p>
       </div>
+
+      ${orderDetails.payment_status === 'paid' && orderDetails.payment_method ? `
+        <h2>Payment Details</h2>
+        <p><strong>Amount Paid:</strong> ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}</p>
+        <p><strong>Payment Method:</strong> ${orderDetails.payment_method}</p>
+        ${orderDetails.cheque_dd_no ? `<p><strong>Cheque/DD No:</strong> ${orderDetails.cheque_dd_no}</p>` : ''}
+        ${orderDetails.cheque_dd_date ? `<p><strong>Cheque/DD Date:</strong> ${new Date(orderDetails.cheque_dd_date).toLocaleDateString()}</p>` : ''}
+      ` : ''}
 
       <h2>Dealer Credit Information</h2>
       <p><strong>Credit Limit:</strong> <span class="text-right">₹${orderDetails.dealer_credit_limit.toFixed(2)}</span></p>
@@ -282,7 +312,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
               <div>
                 <p><span className="font-semibold">Order Number:</span> {orderDetails.order_number}</p>
                 <p><span className="font-semibold">Order Date:</span> {new Date(orderDetails.order_date).toLocaleDateString()}</p>
-                <p><span className="font-semibold">Status:</span> {orderDetails.status}</p>
+                <p><span className="font-semibold">Order Status:</span> {orderDetails.status}</p>
+                <p><span className="font-semibold">Payment Status:</span> {orderDetails.payment_status}</p>
+                <p><span className="font-semibold">Payment Due Date:</span> {orderDetails.payment_due_date ? new Date(orderDetails.payment_due_date).toLocaleDateString() : 'N/A'}</p>
                 <p><span className="font-semibold">Sales Person:</span> {orderDetails.sales_person_name}</p>
                 {orderDetails.dispatched && (
                   <>
@@ -306,6 +338,19 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 </p>
               </div>
             </div>
+
+            {orderDetails.payment_status === 'paid' && orderDetails.payment_method && (
+              <>
+                <Separator />
+                <h3 className="text-lg font-semibold">Payment Details</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <p><span className="font-semibold">Amount Paid:</span> ₹{orderDetails.payment_amount?.toFixed(2) || 'N/A'}</p>
+                  <p><span className="font-semibold">Payment Method:</span> {orderDetails.payment_method}</p>
+                  {orderDetails.cheque_dd_no && <p><span className="font-semibold">Cheque/DD No:</span> {orderDetails.cheque_dd_no}</p>}
+                  {orderDetails.cheque_dd_date && <p><span className="font-semibold">Cheque/DD Date:</span> {new Date(orderDetails.cheque_dd_date).toLocaleDateString()}</p>}
+                </div>
+              </>
+            )}
 
             <Separator />
 
