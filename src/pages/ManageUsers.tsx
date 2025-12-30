@@ -115,7 +115,7 @@ const ManageUsers = () => {
     
     try {
       // Fetch sales persons with their targets
-      const { data: usersData, error: usersError } = await supabase
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select(`
           id, 
@@ -123,17 +123,17 @@ const ManageUsers = () => {
           last_name, 
           user_type, 
           is_admin,
-          sales_targets(id, target_amount)
+          sales_targets!left(id, target_amount, target_month) // Use left join to get targets
         `)
         .eq('user_type', 'sales_person');
 
-      if (usersError) {
-        console.error('Error fetching users:', usersError.message);
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError.message);
         showError('Failed to load users.');
         setUsers([]);
       } else {
         // Fetch email information for each user
-        const userIds = usersData.map(user => user.id);
+        const userIds = profilesData.map(profile => profile.id);
         const { data: authUsersData, error: authUsersError } = await supabase
           .from('auth_users')
           .select('id, email, banned_until, raw_app_meta_data')
@@ -143,8 +143,18 @@ const ManageUsers = () => {
           console.error('Error fetching auth users:', authUsersError.message);
         }
 
-        const formattedUsers: UserProfile[] = usersData.map((profile: any) => {
+        const formattedUsers: UserProfile[] = profilesData.map((profile: any) => {
           const authUser: AuthUser = authUsersData?.find(au => au.id === profile.id) || { id: profile.id };
+          
+          // Find the target for the current month
+          const currentDate = new Date();
+          const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+          const currentMonthTarget = profile.sales_targets?.find((target: any) => {
+            const targetDate = new Date(target.target_month);
+            return targetDate.getFullYear() === currentMonthStart.getFullYear() &&
+                   targetDate.getMonth() === currentMonthStart.getMonth();
+          });
+
           return {
             id: profile.id,
             email: authUser.email || 'N/A',
@@ -154,8 +164,8 @@ const ManageUsers = () => {
             is_admin: profile.is_admin,
             banned_until: authUser.banned_until || null,
             raw_app_meta_data: authUser.raw_app_meta_data || {},
-            monthly_target: profile.sales_targets?.length > 0 ? profile.sales_targets[0].target_amount : null,
-            target_id: profile.sales_targets?.length > 0 ? profile.sales_targets[0].id : null,
+            monthly_target: currentMonthTarget ? currentMonthTarget.target_amount : null,
+            target_id: currentMonthTarget ? currentMonthTarget.id : null,
           };
         });
         setUsers(formattedUsers);
@@ -324,7 +334,7 @@ const ManageUsers = () => {
 
   const handleToggleUserStatus = async (userToToggle: UserProfile) => {
     setIsSubmitting(true);
-    const newStatus = userToToggle.banned_until ? false : true;
+    const newStatus = userToToggle.banned_until ? false : true; // true to ban, false to unban
     try {
       const payload = {
         userId: userToToggle.id,
@@ -344,7 +354,7 @@ const ManageUsers = () => {
         throw new Error(data.error || 'Failed to toggle user status');
       }
 
-      showSuccess(`User ${userToToggle.email} has been ${newStatus ? 'deactivated' : 'activated'}.`);
+      showSuccess(`User ${userToToggle.first_name} ${userToToggle.last_name} has been ${newStatus ? 'deactivated' : 'activated'}.`);
       fetchUsersAndDealers();
     } catch (error: any) {
       console.error('Error toggling user status:', error);
@@ -360,6 +370,7 @@ const ManageUsers = () => {
     try {
       const currentDate = new Date();
       const targetMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1); // First day of current month
+      const formattedTargetMonth = targetMonth.toISOString().split('T')[0]; // YYYY-MM-DD
 
       if (targetUser.target_id) {
         // Update existing target
@@ -367,7 +378,7 @@ const ManageUsers = () => {
           .from('sales_targets')
           .update({
             target_amount: values.targetAmount,
-            target_month: targetMonth,
+            target_month: formattedTargetMonth, // Use formatted date
             updated_at: new Date().toISOString()
           })
           .eq('id', targetUser.target_id);
@@ -380,7 +391,7 @@ const ManageUsers = () => {
           .insert({
             sales_person_id: targetUser.id,
             target_amount: values.targetAmount,
-            target_month: targetMonth,
+            target_month: formattedTargetMonth, // Use formatted date
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
@@ -435,6 +446,7 @@ const ManageUsers = () => {
                   <TableHeader>
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead className="text-muted-foreground">Name</TableHead>
+                      {/* Removed Email column */}
                       <TableHead className="text-muted-foreground">Status</TableHead>
                       <TableHead className="text-muted-foreground">Monthly Target</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
@@ -446,6 +458,7 @@ const ManageUsers = () => {
                         <TableCell className="font-medium text-foreground">
                           {userItem.first_name} {userItem.last_name}
                         </TableCell>
+                        {/* Removed Email cell */}
                         <TableCell className="text-muted-foreground">
                           {userItem.banned_until ? (
                             <span className="text-red-500">Inactive</span>
