@@ -96,9 +96,10 @@ const AdminDashboard = () => {
     // Get selected month range for filtering sales and targets
     const chartYearNum = parseInt(selectedChartYear);
     const chartMonthNum = parseInt(selectedChartMonth);
-    const startOfMonth = new Date(chartYearNum, chartMonthNum - 1, 1).toISOString();
-    const endOfMonth = new Date(chartYearNum, chartMonthNum, 0, 23, 59, 59, 999).toISOString();
-    const currentMonthTargetDate = new Date(chartYearNum, chartMonthNum - 1, 1).toISOString().split('T')[0]; // YYYY-MM-DD
+    // Use Date.UTC for consistency with how targets are stored
+    const startOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString();
+    const endOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum, 0, 23, 59, 59, 999)).toISOString();
+    const currentMonthTargetDate = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString().split('T')[0]; // YYYY-MM-DD
 
     // Fetch all sales persons for the dropdown and sales grouping
     const { data: profilesData, error: profilesError } = await supabase
