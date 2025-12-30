@@ -184,27 +184,29 @@ const ManageUsers = () => {
     }
   }, []); // Dependencies are empty, so it's stable and won't re-run unnecessarily
 
+  // This useEffect runs on initial load and when session/admin status changes
   useEffect(() => {
     if (!sessionLoading) {
       if (!isAdmin) {
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
-        fetchUsersAndDealers(); // This will update the 'users' state
+        fetchUsersAndDealers(); // Call the fetch function
       }
     }
-  }, [sessionLoading, isAdmin, navigate, fetchUsersAndDealers]);
+  }, [sessionLoading, isAdmin, navigate, fetchUsersAndDealers]); // Removed isTargetDialogOpen and targetUser
 
-  // New useEffect to synchronize targetUser with the latest 'users' state
+  // This useEffect synchronizes targetUser with the latest 'users' state
+  // It runs when 'users' changes (after fetchUsersAndDealers completes)
+  // or when 'isTargetDialogOpen' or 'targetUser?.id' changes.
   useEffect(() => {
     if (isTargetDialogOpen && targetUser) {
-      // Find the updated version of targetUser from the 'users' array
       const updatedTargetUser = users.find(u => u.id === targetUser.id);
       if (updatedTargetUser) {
         setTargetUser(updatedTargetUser);
       }
     }
-  }, [users, isTargetDialogOpen, targetUser?.id]); // Depend on users, isTargetDialogOpen, and targetUser's ID
+  }, [users, isTargetDialogOpen, targetUser?.id]); // This is correct and should remain.
 
   useEffect(() => {
     if (selectedUser) {
