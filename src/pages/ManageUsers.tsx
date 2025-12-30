@@ -116,6 +116,14 @@ const ManageUsers = () => {
     },
   });
 
+  const getCurrentMonthFormatted = () => {
+    const currentDate = new Date();
+    const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    return currentMonthStart.toISOString().split('T')[0]; // YYYY-MM-DD
+  };
+
+  const currentMonthFormatted = getCurrentMonthFormatted(); // Define once
+
   const fetchUsersAndDealers = useCallback(async () => {
     setLoadingData(true);
     try {
@@ -160,15 +168,10 @@ const ManageUsers = () => {
         const formattedUsers: UserProfile[] = profilesData.map((profile: any) => {
           const authUser: AuthUser = authUsersData?.find(au => au.id === profile.id) || { id: profile.id };
           
-          // Find the target for the current month
-          const currentDate = new Date();
-          const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-          
           const userTargets = targetsData?.filter((target: any) => target.sales_person_id === profile.id) || [];
           const currentMonthTarget = userTargets.find((target: any) => {
-            const targetDate = new Date(target.target_month);
-            return targetDate.getFullYear() === currentMonthStart.getFullYear() && 
-                   targetDate.getMonth() === currentMonthStart.getMonth();
+            // Compare YYYY-MM-DD strings directly
+            return target.target_month === currentMonthFormatted; // Use the pre-calculated string
           });
           
           return {
@@ -205,7 +208,7 @@ const ManageUsers = () => {
     } finally {
       setLoadingData(false);
     }
-  }, []);
+  }, [currentMonthFormatted]); // Add currentMonthFormatted to dependencies
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -385,9 +388,8 @@ const ManageUsers = () => {
     if (!targetUser) return;
     setIsSubmitting(true);
     try {
-      const currentDate = new Date();
-      const targetMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1); // First day of current month
-      const formattedTargetMonth = targetMonth.toISOString().split('T')[0]; // YYYY-MM-DD
+      // Reuse the same formatted date string for consistency
+      const formattedTargetMonth = currentMonthFormatted; 
       
       if (targetUser.target_id) {
         // Update existing target
@@ -395,7 +397,7 @@ const ManageUsers = () => {
           .from('sales_targets')
           .update({
             target_amount: values.targetAmount,
-            target_month: formattedTargetMonth, // Use formatted date
+            target_month: formattedTargetMonth,
             updated_at: new Date().toISOString()
           })
           .eq('id', targetUser.target_id);
@@ -408,7 +410,7 @@ const ManageUsers = () => {
           .insert({
             sales_person_id: targetUser.id,
             target_amount: values.targetAmount,
-            target_month: formattedTargetMonth, // Use formatted date
+            target_month: formattedTargetMonth,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
