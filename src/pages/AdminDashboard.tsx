@@ -344,31 +344,31 @@ const AdminDashboard = () => {
   const salesOverview = [
     {
       title: "Total Sales Value",
-      value: `₹${totalSalesValue.toFixed(2)}`, // Changed to Rupee symbol
+      value: `₹${totalSalesValue.toFixed(2)}`, // Rupee symbol
       change: "+20.1% from last month",
-      icon: <DollarSign className="h-3 w-3 text-blue-600 dark:text-blue-400" />,
+      icon: <DollarSign className="h-3 w-3 text-white" />, // White icon
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Orders",
       value: totalOrders.toString(),
       change: "+180.1% from last month",
-      icon: <Package className="h-3 w-3 text-blue-600 dark:text-blue-400" />, // Unified color
-      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
+      icon: <Package className="h-3 w-3 text-white" />, // White icon
+      valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month",
-      icon: <Users className="h-3 w-3 text-blue-600 dark:text-blue-400" />, // Unified color
-      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
+      icon: <Users className="h-3 w-3 text-white" />, // White icon
+      valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Products",
       value: products.length.toString(),
       change: "Overall",
-      icon: <Boxes className="h-3 w-3 text-blue-600 dark:text-blue-400" />, // Unified color
-      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
+      icon: <Boxes className="h-3 w-3 text-white" />, // White icon
+      valueColor: "text-blue-800 dark:text-blue-200"
     },
   ];
 
@@ -387,8 +387,8 @@ const AdminDashboard = () => {
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2">
-              <CardTitle className="text-[0.5rem] font-medium text-muted-foreground">{item.title}</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg">
+              <CardTitle className="text-[0.5rem] font-medium text-white">{item.title}</CardTitle>
               {item.icon}
             </CardHeader>
             <CardContent className="p-2 pt-0">
