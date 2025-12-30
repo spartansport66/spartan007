@@ -105,14 +105,6 @@ const ManageUsers = () => {
     },
   });
   
-  // Removed targetFormSchema and targetForm as they are now handled by UserTargetsManager
-  // const targetFormSchema = z.object({ ... });
-  // const targetForm = useForm<z.infer<typeof targetFormSchema>>({ ... });
-
-  // Removed getCurrentMonthFormatted and currentMonthFormatted as they are now handled by UserTargetsManager
-  // const getCurrentMonthFormatted = () => { ... };
-  // const currentMonthFormatted = getCurrentMonthFormatted();
-
   const fetchUsersAndDealers = useCallback(async () => {
     setLoadingData(true);
     try {
@@ -135,7 +127,7 @@ const ManageUsers = () => {
         const userIds = profilesData.map(profile => profile.id);
         const { data: authUsersData, error: authUsersError } = await supabase
           .from('users')
-          .select('id, email, banned_until'); // Removed .in('id', userIds) to fetch all auth users, then filter
+          .select('id, email, banned_until'); 
         
         if (authUsersError) {
           console.error('Error fetching auth users:', authUsersError.message);
@@ -145,7 +137,7 @@ const ManageUsers = () => {
         const { data: targetsData, error: targetsError } = await supabase
           .from('sales_targets')
           .select('id, sales_person_id, target_amount, target_month, created_at, updated_at')
-          .in('sales_person_id', userIds); // Fetch all targets for these users
+          .in('sales_person_id', userIds); 
         
         if (targetsError) {
           console.error('Error fetching sales targets:', targetsError.message);
@@ -164,11 +156,19 @@ const ManageUsers = () => {
             is_admin: profile.is_admin,
             banned_until: authUser.banned_until || null,
             raw_app_meta_data: authUser.raw_app_meta_data || {},
-            targets: userTargets, // Assign all targets
+            targets: userTargets, 
           };
         });
         
         setUsers(formattedUsers);
+
+        // If targetUser is currently open, update it with the latest data
+        if (targetUser) {
+          const updatedTargetUser = formattedUsers.find(u => u.id === targetUser.id);
+          if (updatedTargetUser) {
+            setTargetUser(updatedTargetUser);
+          }
+        }
       }
       
       const { data: dealersData, error: dealersError } = await supabase
@@ -188,7 +188,7 @@ const ManageUsers = () => {
     } finally {
       setLoadingData(false);
     }
-  }, []); // Removed currentMonthFormatted from dependencies
+  }, [targetUser]); // Added targetUser to dependencies to re-fetch and update it
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -243,15 +243,6 @@ const ManageUsers = () => {
       }
     }
   }, [selectedUser, editForm]);
-
-  // Removed useEffect for targetUser and targetForm.reset
-  // useEffect(() => {
-  //   if (targetUser) {
-  //     targetForm.reset({
-  //       targetAmount: targetUser.monthly_target || 0,
-  //     });
-  //   }
-  // }, [targetUser, targetForm]);
 
   const handleCreateUser = async (values: z.infer<typeof userFormSchema>) => {
     setIsSubmitting(true);
@@ -365,9 +356,6 @@ const ManageUsers = () => {
     }
   };
 
-  // Removed handleSetTarget as it's now handled by UserTargetsManager
-  // const handleSetTarget = async (values: z.infer<typeof targetFormSchema>) => { ... };
-
   const dealerOptions = allDealers.map(dealer => ({
     value: dealer.id,
     label: dealer.name,
@@ -406,9 +394,7 @@ const ManageUsers = () => {
                   <TableHeader>
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead className="text-muted-foreground">Name</TableHead>
-                      {/* Removed Email column */}
                       <TableHead className="text-muted-foreground">Status</TableHead>
-                      {/* Removed Monthly Target column */}
                       <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -418,7 +404,6 @@ const ManageUsers = () => {
                         <TableCell className="font-medium text-foreground">
                           {userItem.first_name} {userItem.last_name}
                         </TableCell>
-                        {/* Removed Email cell */}
                         <TableCell className="text-muted-foreground">
                           {userItem.banned_until ? (
                             <span className="text-red-500">Inactive</span>
@@ -426,7 +411,6 @@ const ManageUsers = () => {
                             <span className="text-green-500">Active</span>
                           )}
                         </TableCell>
-                        {/* Removed Monthly Target cell */}
                         <TableCell>
                           <div className="flex gap-2">
                             <Button 
@@ -447,7 +431,7 @@ const ManageUsers = () => {
                                 setTargetUser(userItem);
                                 setIsTargetDialogOpen(true);
                               }}
-                              title="Manage Monthly Targets" // Changed title
+                              title="Manage Monthly Targets" 
                             >
                               <span className="text-xs font-bold">₹</span>
                             </Button>
