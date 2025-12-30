@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -12,17 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, PlusCircle, Edit, Trash2 } from 'lucide-react';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 
 interface SalesTarget {
@@ -66,8 +56,6 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
 
-  console.log('UserTargetsManager: Current user.targets prop on render:', user.targets); // Log user targets on every render
-
   const addForm = useForm<z.infer<typeof addTargetFormSchema>>({
     resolver: zodResolver(addTargetFormSchema),
     defaultValues: {
@@ -102,30 +90,25 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   const selectedMonth = addForm.watch('month');
   const selectedYear = addForm.watch('year');
 
-  const existingTargetForSelectedMonth = React.useMemo(() => {
-    if (!selectedMonth || !selectedYear) return null;
-    const targetMonthDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
-    const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
-    console.log('UserTargetsManager: Checking for existing target. Formatted month:', formattedTargetMonth, 'User targets:', user.targets);
-    return user.targets.find(t => t.target_month === formattedTargetMonth);
-  }, [selectedMonth, selectedYear, user.targets]);
-
+  // Check if a target already exists for the selected month/year
+  const existingTargetForSelectedMonth = user.targets.find(target => {
+    const targetDate = new Date(target.target_month);
+    return (
+      targetDate.getMonth() + 1 === parseInt(selectedMonth) &&
+      targetDate.getFullYear() === parseInt(selectedYear)
+    );
+  });
 
   const handleAddTarget = async (values: z.infer<typeof addTargetFormSchema>) => {
     setIsSubmitting(true);
     try {
       const targetMonthDate = new Date(parseInt(values.year), parseInt(values.month) - 1, 1);
       const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
-      console.log('UserTargetsManager: Attempting to add/update target.');
-      console.log('  Form values:', values);
-      console.log('  Formatted target month for comparison:', formattedTargetMonth);
-      console.log('  Current user.targets prop at submission:', user.targets); // Log targets at submission
 
       // Check if a target for this month already exists
       const existingTarget = user.targets.find(
         (t) => t.target_month === formattedTargetMonth
       );
-      console.log('  Existing target found (result of find):', existingTarget);
 
       if (existingTarget) {
         // Update existing target
@@ -154,11 +137,13 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
         if (error) throw error;
         showSuccess(`Target for ${getMonthName(values.month)} ${values.year} added successfully!`);
       }
+
       addForm.reset({
         month: (new Date().getMonth() + 1).toString(),
         year: new Date().getFullYear().toString(),
         targetAmount: 0,
       });
+
       onTargetsUpdated(); // Refresh parent component's data
     } catch (error: any) {
       console.error('Error adding/updating target:', error);
@@ -169,9 +154,10 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   };
 
   const handleEditClick = (target: SalesTarget) => {
-    console.log('UserTargetsManager: Editing target:', target); // Log target being edited
     setEditingTargetId(target.id);
-    editForm.reset({ targetAmount: target.target_amount });
+    editForm.reset({
+      targetAmount: target.target_amount,
+    });
   };
 
   const handleUpdateTarget = async (values: z.infer<typeof editTargetFormSchema>) => {
@@ -291,7 +277,14 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
           />
           <div className="sm:col-span-1">
             <Button type="submit" disabled={isSubmitting} className="w-full">
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <><PlusCircle className="h-4 w-4 mr-2" /> {existingTargetForSelectedMonth ? 'Update Target' : 'Add New Target'}</>}
+              {isSubmitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <PlusCircle className="h-4 w-4 mr-2" />
+                  {existingTargetForSelectedMonth ? 'Update Target' : 'Add New Target'}
+                </>
+              )}
             </Button>
             {existingTargetForSelectedMonth && (
               <p className="text-sm text-muted-foreground mt-2">
@@ -321,6 +314,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
                 const targetDate = new Date(target.target_month);
                 const month = targetDate.toLocaleString('default', { month: 'long' });
                 const year = targetDate.getFullYear();
+
                 return (
                   <TableRow key={target.id}>
                     <TableCell>{month}</TableCell>
