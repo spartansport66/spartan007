@@ -43,6 +43,13 @@ interface Dealer {
   name: string;
 }
 
+interface AuthUser {
+  id: string;
+  email?: string;
+  banned_until?: string | null;
+  raw_app_meta_data?: { provider?: string; providers?: string[]; } | null;
+}
+
 const userFormSchema = z.object({
   firstName: z.string().min(1, { message: 'First name is required.' }),
   lastName: z.string().min(1, { message: 'Last name is required.' }),
@@ -106,53 +113,71 @@ const ManageUsers = () => {
   const fetchUsersAndDealers = useCallback(async () => {
     setLoadingData(true);
     
-    // Fetch sales persons with their targets
-    const { data: usersData, error: usersError } = await supabase
-      .from('profiles')
-      .select(`
-        id, 
-        first_name, 
-        last_name, 
-        user_type, 
-        is_admin, 
-        auth_users(email, banned_until, raw_app_meta_data),
-        sales_targets(id, target_amount)
-      `)
-      .eq('user_type', 'sales_person');
+    try {
+      // Fetch sales persons with their targets
+      const { data: usersData, error: usersError } = await supabase
+        .from('profiles')
+        .select(`
+          id, 
+          first_name, 
+          last_name, 
+          user_type, 
+          is_admin,
+          sales_targets(id, target_amount)
+        `)
+        .eq('user_type', 'sales_person');
 
-    if (usersError) {
-      console.error('Error fetching users:', usersError.message);
-      showError('Failed to load users.');
-      setUsers([]);
-    } else {
-      const formattedUsers: UserProfile[] = usersData.map((profile: any) => ({
-        id: profile.id,
-        email: profile.auth_users?.email || 'N/A',
-        first_name: profile.first_name,
-        last_name: profile.last_name,
-        user_type: profile.user_type,
-        is_admin: profile.is_admin,
-        banned_until: profile.auth_users?.banned_until,
-        raw_app_meta_data: profile.auth_users?.raw_app_meta_data || {},
-        monthly_target: profile.sales_targets?.length > 0 ? profile.sales_targets[0].target_amount : null,
-        target_id: profile.sales_targets?.length > 0 ? profile.sales_targets[0].id : null,
-      }));
-      setUsers(formattedUsers);
+      if (usersError) {
+        console.error('Error fetching users:', usersError.message);
+        showError('Failed to load users.');
+        setUsers([]);
+      } else {
+        // Fetch email information for each user
+        const userIds = usersData.map(user => user.id);
+        const { data: authUsersData, error: authUsersError } = await supabase
+          .from('auth_users')
+          .select('id, email, banned_until, raw_app_meta_data')
+          .in('id', userIds);
+
+        if (authUsersError) {
+          console.error('Error fetching auth users:', authUsersError.message);
+        }
+
+        const formattedUsers: UserProfile[] = usersData.map((profile: any) => {
+          const authUser: AuthUser = authUsersData?.find(au => au.id === profile.id) || { id: profile.id };
+          return {
+            id: profile.id,
+            email: authUser.email || 'N/A',
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            user_type: profile.user_type,
+            is_admin: profile.is_admin,
+            banned_until: authUser.banned_until || null,
+            raw_app_meta_data: authUser.raw_app_meta_data || {},
+            monthly_target: profile.sales_targets?.length > 0 ? profile.sales_targets[0].target_amount : null,
+            target_id: profile.sales_targets?.length > 0 ? profile.sales_targets[0].id : null,
+          };
+        });
+        setUsers(formattedUsers);
+      }
+
+      const { data: dealersData, error: dealersError } = await supabase
+        .from('dealers')
+        .select('id, name');
+
+      if (dealersError) {
+        console.error('Error fetching all dealers:', dealersError.message);
+        showError('Failed to load dealers for assignment.');
+        setAllDealers([]);
+      } else {
+        setAllDealers(dealersData || []);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      showError('Failed to load data.');
+    } finally {
+      setLoadingData(false);
     }
-
-    const { data: dealersData, error: dealersError } = await supabase
-      .from('dealers')
-      .select('id, name');
-
-    if (dealersError) {
-      console.error('Error fetching all dealers:', dealersError.message);
-      showError('Failed to load dealers for assignment.');
-      setAllDealers([]);
-    } else {
-      setAllDealers(dealersData || []);
-    }
-
-    setLoadingData(false);
   }, []);
 
   useEffect(() => {
@@ -378,6 +403,15 @@ const ManageUsers = () => {
     value: dealer.id,
     label: dealer.name,
   }));
+
+  if (sessionLoading || loadingData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading users...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
