@@ -495,15 +495,7 @@ const ManageUsers = () => {
                 </Table>
               )}
             </div>
-            <div className="mt-6 text-right">
-              <Button 
-                onClick={() => setIsCreateDialogOpen(true)} 
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                <PlusCircle className="h-4 w-4 mr-2" />
-                Create New Sales Person
-              </Button>
-            </div>
+            {/* Removed the "Create New Sales Person" button */}
           </CardContent>
         </Card>
       </div>
