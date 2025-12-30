@@ -20,10 +20,20 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import MultiSelect from '@/components/MultiSelect';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
+import UserTargetsManager from '@/components/UserTargetsManager'; // Import the new component
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const CREATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-user";
 const UPDATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/update-user";
+
+interface SalesTarget {
+  id: string;
+  sales_person_id: string;
+  target_amount: number;
+  target_month: string; // YYYY-MM-DD format for the first day of the month
+  created_at: string;
+  updated_at: string;
+}
 
 interface UserProfile {
   id: string;
@@ -34,8 +44,7 @@ interface UserProfile {
   is_admin: boolean;
   raw_app_meta_data: { provider?: string; providers?: string[]; };
   banned_until: string | null;
-  monthly_target?: number | null;
-  target_id?: string | null;
+  targets: SalesTarget[]; // Changed to an array of targets
 }
 
 interface Dealer {
@@ -50,12 +59,6 @@ interface AuthUser {
   raw_app_meta_data?: { provider?: string; providers?: string[]; } | null;
 }
 
-interface SalesTarget {
-  id: string;
-  target_amount: number;
-  target_month: string;
-}
-
 const userFormSchema = z.object({
   firstName: z.string().min(1, { message: 'First name is required.' }),
   lastName: z.string().min(1, { message: 'Last name is required.' }),
@@ -63,13 +66,6 @@ const userFormSchema = z.object({
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional().or(z.literal('')),
   userType: z.enum(['admin', 'sales_person'], { message: 'Please select a user type.' }),
   assignedDealerIds: z.array(z.string().uuid()).optional(),
-});
-
-const targetFormSchema = z.object({
-  targetAmount: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'Target amount cannot be negative.' })
-  ),
 });
 
 const ManageUsers = () => {
@@ -109,25 +105,17 @@ const ManageUsers = () => {
     },
   });
   
-  const targetForm = useForm<z.infer<typeof targetFormSchema>>({
-    resolver: zodResolver(targetFormSchema),
-    defaultValues: {
-      targetAmount: 0,
-    },
-  });
+  // Removed targetFormSchema and targetForm as they are now handled by UserTargetsManager
+  // const targetFormSchema = z.object({ ... });
+  // const targetForm = useForm<z.infer<typeof targetFormSchema>>({ ... });
 
-  const getCurrentMonthFormatted = () => {
-    const currentDate = new Date();
-    const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    return currentMonthStart.toISOString().split('T')[0]; // YYYY-MM-DD
-  };
-
-  const currentMonthFormatted = getCurrentMonthFormatted(); // Define once
+  // Removed getCurrentMonthFormatted and currentMonthFormatted as they are now handled by UserTargetsManager
+  // const getCurrentMonthFormatted = () => { ... };
+  // const currentMonthFormatted = getCurrentMonthFormatted();
 
   const fetchUsersAndDealers = useCallback(async () => {
     setLoadingData(true);
     try {
-      // Fetch sales persons with their targets
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select(`
@@ -144,22 +132,20 @@ const ManageUsers = () => {
         showError('Failed to load users.');
         setUsers([]);
       } else {
-        // Fetch email information for each user
         const userIds = profilesData.map(profile => profile.id);
         const { data: authUsersData, error: authUsersError } = await supabase
-          .from('users') // Changed from 'auth_users' to 'users'
-          .select('id, email, banned_until')
-          .in('id', userIds);
+          .from('users')
+          .select('id, email, banned_until'); // Removed .in('id', userIds) to fetch all auth users, then filter
         
         if (authUsersError) {
           console.error('Error fetching auth users:', authUsersError.message);
         }
         
-        // Fetch sales targets for all users
+        // Fetch ALL sales targets for all sales persons
         const { data: targetsData, error: targetsError } = await supabase
           .from('sales_targets')
-          .select('id, sales_person_id, target_amount, target_month')
-          .in('sales_person_id', userIds);
+          .select('id, sales_person_id, target_amount, target_month, created_at, updated_at')
+          .in('sales_person_id', userIds); // Fetch all targets for these users
         
         if (targetsError) {
           console.error('Error fetching sales targets:', targetsError.message);
@@ -167,13 +153,8 @@ const ManageUsers = () => {
         
         const formattedUsers: UserProfile[] = profilesData.map((profile: any) => {
           const authUser: AuthUser = authUsersData?.find(au => au.id === profile.id) || { id: profile.id };
-          
-          const userTargets = targetsData?.filter((target: any) => target.sales_person_id === profile.id) || [];
-          const currentMonthTarget = userTargets.find((target: any) => {
-            // Compare YYYY-MM-DD strings directly
-            return target.target_month === currentMonthFormatted; // Use the pre-calculated string
-          });
-          
+          const userTargets: SalesTarget[] = (targetsData || []).filter((target: any) => target.sales_person_id === profile.id);
+
           return {
             id: profile.id,
             email: authUser.email || 'N/A',
@@ -183,8 +164,7 @@ const ManageUsers = () => {
             is_admin: profile.is_admin,
             banned_until: authUser.banned_until || null,
             raw_app_meta_data: authUser.raw_app_meta_data || {},
-            monthly_target: currentMonthTarget ? currentMonthTarget.target_amount : null,
-            target_id: currentMonthTarget ? currentMonthTarget.id : null,
+            targets: userTargets, // Assign all targets
           };
         });
         
@@ -208,7 +188,7 @@ const ManageUsers = () => {
     } finally {
       setLoadingData(false);
     }
-  }, [currentMonthFormatted]); // Add currentMonthFormatted to dependencies
+  }, []); // Removed currentMonthFormatted from dependencies
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -264,13 +244,14 @@ const ManageUsers = () => {
     }
   }, [selectedUser, editForm]);
 
-  useEffect(() => {
-    if (targetUser) {
-      targetForm.reset({
-        targetAmount: targetUser.monthly_target || 0,
-      });
-    }
-  }, [targetUser, targetForm]);
+  // Removed useEffect for targetUser and targetForm.reset
+  // useEffect(() => {
+  //   if (targetUser) {
+  //     targetForm.reset({
+  //       targetAmount: targetUser.monthly_target || 0,
+  //     });
+  //   }
+  // }, [targetUser, targetForm]);
 
   const handleCreateUser = async (values: z.infer<typeof userFormSchema>) => {
     setIsSubmitting(true);
@@ -384,50 +365,8 @@ const ManageUsers = () => {
     }
   };
 
-  const handleSetTarget = async (values: z.infer<typeof targetFormSchema>) => {
-    if (!targetUser) return;
-    setIsSubmitting(true);
-    try {
-      // Reuse the same formatted date string for consistency
-      const formattedTargetMonth = currentMonthFormatted; 
-      
-      if (targetUser.target_id) {
-        // Update existing target
-        const { error } = await supabase
-          .from('sales_targets')
-          .update({
-            target_amount: values.targetAmount,
-            target_month: formattedTargetMonth,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', targetUser.target_id);
-        
-        if (error) throw error;
-      } else {
-        // Create new target
-        const { error } = await supabase
-          .from('sales_targets')
-          .insert({
-            sales_person_id: targetUser.id,
-            target_amount: values.targetAmount,
-            target_month: formattedTargetMonth,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        
-        if (error) throw error;
-      }
-      
-      showSuccess(`Monthly target set for ${targetUser.first_name} ${targetUser.last_name}!`);
-      setIsTargetDialogOpen(false);
-      fetchUsersAndDealers();
-    } catch (error: any) {
-      console.error('Error setting target:', error);
-      showError(`Failed to set target: ${error.message}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  // Removed handleSetTarget as it's now handled by UserTargetsManager
+  // const handleSetTarget = async (values: z.infer<typeof targetFormSchema>) => { ... };
 
   const dealerOptions = allDealers.map(dealer => ({
     value: dealer.id,
@@ -469,7 +408,7 @@ const ManageUsers = () => {
                       <TableHead className="text-muted-foreground">Name</TableHead>
                       {/* Removed Email column */}
                       <TableHead className="text-muted-foreground">Status</TableHead>
-                      <TableHead className="text-muted-foreground">Monthly Target</TableHead>
+                      {/* Removed Monthly Target column */}
                       <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -487,11 +426,7 @@ const ManageUsers = () => {
                             <span className="text-green-500">Active</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {userItem.monthly_target !== null && userItem.monthly_target !== undefined 
-                            ? `₹${userItem.monthly_target.toFixed(2)}` 
-                            : 'Not Set'}
-                        </TableCell>
+                        {/* Removed Monthly Target cell */}
                         <TableCell>
                           <div className="flex gap-2">
                             <Button 
@@ -512,7 +447,7 @@ const ManageUsers = () => {
                                 setTargetUser(userItem);
                                 setIsTargetDialogOpen(true);
                               }}
-                              title="Set Monthly Target"
+                              title="Manage Monthly Targets" // Changed title
                             >
                               <span className="text-xs font-bold">₹</span>
                             </Button>
@@ -743,35 +678,14 @@ const ManageUsers = () => {
       {/* Set Target Dialog */}
       {targetUser && (
         <Dialog open={isTargetDialogOpen} onOpenChange={setIsTargetDialogOpen}>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[700px]"> {/* Increased max-width */}
             <DialogHeader>
-              <DialogTitle>Set Monthly Target</DialogTitle>
+              <DialogTitle>Manage Targets for {targetUser.first_name} {targetUser.last_name}</DialogTitle>
               <DialogDescription>
-                Set monthly sales target for {targetUser.first_name} {targetUser.last_name}
+                Add, edit, or delete monthly sales targets for this sales person.
               </DialogDescription>
             </DialogHeader>
-            <Form {...targetForm}>
-              <form onSubmit={targetForm.handleSubmit(handleSetTarget)} className="grid gap-4 py-4">
-                <FormField
-                  control={targetForm.control}
-                  name="targetAmount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Monthly Target Amount (₹)</FormLabel>
-                      <FormControl>
-                        <Input type="number" step="0.01" placeholder="e.g., 50000.00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <DialogFooter>
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Set Target'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
+            <UserTargetsManager user={targetUser} onTargetsUpdated={fetchUsersAndDealers} />
           </DialogContent>
         </Dialog>
       )}
