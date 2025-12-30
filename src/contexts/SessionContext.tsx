@@ -23,9 +23,11 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userType, setUserType] = useState<string | null>(null);
-  const navigate = useNavigate();
+  // useNavigate is kept here but not used for initial redirects to avoid loops.
 
   const loadSessionAndProfile = async (currentSession: Session | null) => {
+    console.log('SessionContext: loadSessionAndProfile started.');
+    setLoading(true); // Explicitly set loading true at the start of this async operation
     setSession(currentSession);
     setUser(currentSession?.user || null);
     setIsAdmin(false); // Reset before fetching
@@ -48,13 +50,14 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         setUserType(data?.user_type || 'sales_person');
       }
     }
-    setLoading(false); // Set loading to false only after session and profile are processed
+    setLoading(false); // Set loading to false ONLY after session and profile are processed
     console.log('SessionContext: loadSessionAndProfile completed. Loading set to false.');
   };
 
   useEffect(() => {
     let toastId: string | undefined;
     console.log('SessionContextProvider: useEffect for auth state change listener mounted.');
+    setLoading(true); // Ensure loading is true when the effect starts
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, currentSession: Session | null) => {
@@ -65,20 +68,14 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             setUser(null);
             setIsAdmin(false);
             setUserType(null);
-            setLoading(false); // Ensure loading is false on sign out
+            setLoading(false); // Explicitly set false on sign out
             if (toastId) dismissToast(toastId);
             console.log('SessionContext: SIGNED_OUT event processed. Loading set to false.');
-          } else if (currentSession) {
+          } else {
+            // For SIGNED_IN, INITIAL_SESSION, USER_UPDATED, etc.
+            // loadSessionAndProfile will handle setting loading to false after its operations.
             await loadSessionAndProfile(currentSession);
             if (toastId) dismissToast(toastId);
-          } else {
-            // For events like INITIAL_SESSION where currentSession might be null (no user)
-            setSession(null);
-            setUser(null);
-            setIsAdmin(false);
-            setUserType(null);
-            setLoading(false);
-            console.log('SessionContext: Auth event with no session. Loading set to false.');
           }
         } catch (error: any) {
           console.error('SessionContext: Error in onAuthStateChange handler:', error);
@@ -92,7 +89,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     console.log('SessionContext: Performing initial getSession check.');
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       console.log('SessionContext: Initial getSession result:', initialSession);
-      await loadSessionAndProfile(initialSession);
+      await loadSessionAndProfile(initialSession); // This will handle its own setLoading(false)
     }).catch(error => {
       console.error('SessionContext: Error during initial getSession promise:', error);
       showError(`Failed to load session: ${error.message}`);
@@ -104,7 +101,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       authListener.subscription.unsubscribe();
       if (toastId) dismissToast(toastId);
     };
-  }, []);
+  }, []); // Empty dependency array ensures this effect runs only once on mount.
 
   return (
     <SessionContext.Provider value={{ session, user, loading, isAdmin, userType }}>
