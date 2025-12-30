@@ -12,7 +12,7 @@ import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTabl
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
-import PaymentCard from '@/components/PaymentCard'; // Import the new PaymentCard
+import PaymentCard from '@/components/PaymentCard'; // Import the updated PaymentCard
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -473,7 +473,7 @@ const AdminDashboard = () => {
 
       {/* Payment Transactions and Sales Person Performance in a single row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <PaymentCard />
+        <PaymentCard /> {/* Updated PaymentCard */}
         <SalesPersonPerformanceTable
           data={salesBySalesPersonData}
           salesPersonsOptions={salesPersonOptions}
