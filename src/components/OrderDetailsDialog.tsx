@@ -24,9 +24,12 @@ interface OrderDetail {
   total_amount: number;
   status: string;
   dealer_name: string;
+  dealer_address: string; // Added
+  dealer_phone: string; // Added
   dealer_credit_limit: number;
   dealer_consumed_credit: number;
   dealer_pending_credit: number;
+  sales_person_name: string; // Added
   items: OrderItemDetail[];
 }
 
@@ -42,7 +45,8 @@ interface FetchedOrderData {
   order_date: string;
   total_amount: number;
   status: string;
-  dealers: { id: string; name: string; credit_limit: number } | null;
+  dealers: { id: string; name: string; credit_limit: number; address: string; phone: string } | null; // Added address, phone
+  user_id: string; // Added to fetch sales person
 }
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen, onOpenChange }) => {
@@ -52,7 +56,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
   const fetchOrderDetails = useCallback(async (id: string) => {
     setLoading(true);
     try {
-      // Fetch order details and dealer info, explicitly typing the result
+      // Fetch order details, dealer info, and user_id for sales person
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .select(`
@@ -60,10 +64,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           order_date,
           total_amount,
           status,
-          dealers (id, name, credit_limit)
+          user_id,
+          dealers (id, name, credit_limit, address, phone)
         `)
         .eq('id', id)
-        .single() as { data: FetchedOrderData | null; error: any }; // Cast to our defined interface
+        .single() as { data: FetchedOrderData | null; error: any };
 
       if (orderError) throw orderError;
       if (!orderData) {
@@ -72,7 +77,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         return;
       }
 
-      // Now orderData.dealers is correctly typed as { id: string; name: string; credit_limit: number } | null
       const dealerId = orderData.dealers?.id;
       let dealerConsumedCredit = 0;
       if (dealerId) {
@@ -83,6 +87,22 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
 
         if (totalSpentError) throw totalSpentError;
         dealerConsumedCredit = totalSpentData.reduce((sum, order) => sum + order.total_amount, 0);
+      }
+
+      // Fetch sales person name
+      let salesPersonName = 'N/A';
+      if (orderData.user_id) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', orderData.user_id)
+          .single();
+
+        if (profileError) {
+          console.error('Error fetching sales person profile:', profileError.message);
+        } else if (profileData) {
+          salesPersonName = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
+        }
       }
 
       // Fetch order items
@@ -110,9 +130,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         total_amount: orderData.total_amount,
         status: orderData.status,
         dealer_name: orderData.dealers?.name || 'N/A',
+        dealer_address: orderData.dealers?.address || 'N/A', // Added
+        dealer_phone: orderData.dealers?.phone || 'N/A', // Added
         dealer_credit_limit: orderData.dealers?.credit_limit || 0,
         dealer_consumed_credit: dealerConsumedCredit,
         dealer_pending_credit: (orderData.dealers?.credit_limit || 0) - dealerConsumedCredit,
+        sales_person_name: salesPersonName, // Added
         items: items,
       });
 
@@ -148,9 +171,20 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
     yPos += 7;
     doc.text(`Order Date: ${new Date(orderDetails.order_date).toLocaleDateString()}`, 10, yPos);
     yPos += 7;
-    doc.text(`Dealer: ${orderDetails.dealer_name}`, 10, yPos);
+    doc.text(`Sales Person: ${orderDetails.sales_person_name}`, 10, yPos); // Added
     yPos += 7;
     doc.text(`Status: ${orderDetails.status}`, 10, yPos);
+    yPos += 10;
+
+    doc.setFontSize(14);
+    doc.text('Dealer Information:', 10, yPos); // Changed title
+    yPos += 7;
+    doc.setFontSize(12);
+    doc.text(`Name: ${orderDetails.dealer_name}`, 10, yPos);
+    yPos += 7;
+    doc.text(`Address: ${orderDetails.dealer_address}`, 10, yPos); // Added
+    yPos += 7;
+    doc.text(`Phone: ${orderDetails.dealer_phone}`, 10, yPos); // Added
     yPos += 10;
 
     doc.setFontSize(14);
@@ -216,8 +250,13 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
       <h1>Order Details</h1>
       <p><strong>Order ID:</strong> ${orderDetails.id}</p>
       <p><strong>Order Date:</strong> ${new Date(orderDetails.order_date).toLocaleDateString()}</p>
-      <p><strong>Dealer:</strong> ${orderDetails.dealer_name}</p>
+      <p><strong>Sales Person:</strong> ${orderDetails.sales_person_name}</p>
       <p><strong>Status:</strong> ${orderDetails.status}</p>
+
+      <h2>Dealer Information</h2>
+      <p><strong>Name:</strong> ${orderDetails.dealer_name}</p>
+      <p><strong>Address:</strong> ${orderDetails.dealer_address}</p>
+      <p><strong>Phone:</strong> ${orderDetails.dealer_phone}</p>
 
       <h2>Order Items</h2>
       <table>
@@ -282,9 +321,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 <p><span className="font-semibold">Order ID:</span> {orderDetails.id}</p>
                 <p><span className="font-semibold">Order Date:</span> {new Date(orderDetails.order_date).toLocaleDateString()}</p>
                 <p><span className="font-semibold">Status:</span> {orderDetails.status}</p>
+                <p><span className="font-semibold">Sales Person:</span> {orderDetails.sales_person_name}</p>
               </div>
               <div>
                 <p><span className="font-semibold">Dealer Name:</span> {orderDetails.dealer_name}</p>
+                <p><span className="font-semibold">Address:</span> {orderDetails.dealer_address}</p>
+                <p><span className="font-semibold">Phone:</span> {orderDetails.dealer_phone}</p>
                 <p><span className="font-semibold">Credit Limit:</span> ₹{orderDetails.dealer_credit_limit.toFixed(2)}</p>
                 <p><span className="font-semibold">Consumed Credit:</span> ₹{orderDetails.dealer_consumed_credit.toFixed(2)}</p>
                 <p><span className="font-semibold">Pending Credit:</span> ₹{orderDetails.dealer_pending_credit.toFixed(2)}</p>
