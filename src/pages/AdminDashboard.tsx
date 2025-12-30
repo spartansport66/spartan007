@@ -28,7 +28,7 @@ interface Dealer {
 
 interface Sale {
   id: string;
-  sales_person_id: string; // Added sales_person_id
+  user_id: string; // Changed from sales_person_id to user_id
   product_id: string;
   dealer_id: string;
   quantity: number;
@@ -125,7 +125,7 @@ const AdminDashboard = () => {
       .from('sales')
       .select(`
         id,
-        sales_person_id,
+        user_id, // Changed from sales_person_id to user_id
         product_id,
         dealer_id,
         quantity,
@@ -185,7 +185,7 @@ const AdminDashboard = () => {
       );
 
       if (selectedSalesPersonId) {
-        filteredSalesForChart = filteredSalesForChart.filter(sale => sale.sales_person_id === selectedSalesPersonId);
+        filteredSalesForChart = filteredSalesForChart.filter(sale => sale.user_id === selectedSalesPersonId); // Changed to user_id
       }
 
       const salesByPersonMap = new Map<string, number>();
@@ -197,7 +197,7 @@ const AdminDashboard = () => {
       });
 
       filteredSalesForChart.forEach(sale => {
-        const personId = sale.sales_person_id;
+        const personId = sale.user_id; // Changed to user_id
         if (personId) {
           salesByPersonMap.set(personId, (salesByPersonMap.get(personId) || 0) + sale.total_price);
         }
@@ -229,7 +229,7 @@ const AdminDashboard = () => {
 
         // Calculate achieved for current month for the selected person
         const achieved = filteredSalesForChart
-            .filter(sale => sale.sales_person_id === selectedSalesPersonId)
+            .filter(sale => sale.user_id === selectedSalesPersonId) // Changed to user_id
             .reduce((sum, sale) => sum + sale.total_price, 0);
         setCurrentMonthAchieved(achieved);
 
