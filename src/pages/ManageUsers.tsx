@@ -123,54 +123,47 @@ const ManageUsers = () => {
         console.error('Error fetching profiles:', profilesError.message);
         showError('Failed to load users.');
         setUsers([]);
-      } else {
-        const userIds = profilesData.map(profile => profile.id);
-        const { data: authUsersData, error: authUsersError } = await supabase
-          .from('users')
-          .select('id, email, banned_until'); 
-        
-        if (authUsersError) {
-          console.error('Error fetching auth users:', authUsersError.message);
-        }
-        
-        // Fetch ALL sales targets for all sales persons
-        const { data: targetsData, error: targetsError } = await supabase
-          .from('sales_targets')
-          .select('id, sales_person_id, target_amount, target_month, created_at, updated_at')
-          .in('sales_person_id', userIds); 
-        
-        if (targetsError) {
-          console.error('Error fetching sales targets:', targetsError.message);
-        }
-        
-        const formattedUsers: UserProfile[] = profilesData.map((profile: any) => {
-          const authUser: AuthUser = authUsersData?.find(au => au.id === profile.id) || { id: profile.id };
-          const userTargets: SalesTarget[] = (targetsData || []).filter((target: any) => target.sales_person_id === profile.id);
-
-          return {
-            id: profile.id,
-            email: authUser.email || 'N/A',
-            first_name: profile.first_name,
-            last_name: profile.last_name,
-            user_type: profile.user_type,
-            is_admin: profile.is_admin,
-            banned_until: authUser.banned_until || null,
-            raw_app_meta_data: authUser.raw_app_meta_data || {},
-            targets: userTargets, 
-          };
-        });
-        
-        setUsers(formattedUsers);
-
-        // If targetUser is currently open, update it with the latest data
-        if (targetUser) {
-          const updatedTargetUser = formattedUsers.find(u => u.id === targetUser.id);
-          if (updatedTargetUser) {
-            setTargetUser(updatedTargetUser);
-          }
-        }
+        return []; // Return empty array on error
+      } 
+      
+      const userIds = profilesData.map(profile => profile.id);
+      const { data: authUsersData, error: authUsersError } = await supabase
+        .from('users')
+        .select('id, email, banned_until'); 
+      
+      if (authUsersError) {
+        console.error('Error fetching auth users:', authUsersError.message);
       }
       
+      // Fetch ALL sales targets for all sales persons
+      const { data: targetsData, error: targetsError } = await supabase
+        .from('sales_targets')
+        .select('id, sales_person_id, target_amount, target_month, created_at, updated_at')
+        .in('sales_person_id', userIds); 
+      
+      if (targetsError) {
+        console.error('Error fetching sales targets:', targetsError.message);
+      }
+      
+      const formattedUsers: UserProfile[] = profilesData.map((profile: any) => {
+        const authUser: AuthUser = authUsersData?.find(au => au.id === profile.id) || { id: profile.id };
+        const userTargets: SalesTarget[] = (targetsData || []).filter((target: any) => target.sales_person_id === profile.id);
+
+        return {
+          id: profile.id,
+          email: authUser.email || 'N/A',
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          user_type: profile.user_type,
+          is_admin: profile.is_admin,
+          banned_until: authUser.banned_until || null,
+          raw_app_meta_data: authUser.raw_app_meta_data || {},
+          targets: userTargets, 
+        };
+      });
+      
+      setUsers(formattedUsers);
+
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name');
@@ -182,13 +175,17 @@ const ManageUsers = () => {
       } else {
         setAllDealers(dealersData || []);
       }
+      return formattedUsers; // Return the fetched users
     } catch (error) {
       console.error('Error fetching data:', error);
       showError('Failed to load data.');
+      setUsers([]);
+      setAllDealers([]);
+      return []; // Return empty array on error
     } finally {
       setLoadingData(false);
     }
-  }, [targetUser]); // Removed targetUser from dependencies to prevent re-fetch on dialog open
+  }, []); // Removed targetUser from dependencies
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -196,10 +193,20 @@ const ManageUsers = () => {
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
-        fetchUsersAndDealers();
+        const loadData = async () => {
+          const fetchedUsers = await fetchUsersAndDealers();
+          // After fetching, if the target dialog is open, update targetUser
+          if (isTargetDialogOpen && targetUser) {
+            const updatedTargetUser = fetchedUsers.find(u => u.id === targetUser.id);
+            if (updatedTargetUser) {
+              setTargetUser(updatedTargetUser);
+            }
+          }
+        };
+        loadData();
       }
     }
-  }, [sessionLoading, isAdmin, navigate, fetchUsersAndDealers]);
+  }, [sessionLoading, isAdmin, navigate, fetchUsersAndDealers, isTargetDialogOpen, targetUser]); // Added isTargetDialogOpen and targetUser
 
   useEffect(() => {
     if (selectedUser) {
