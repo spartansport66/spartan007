@@ -78,9 +78,9 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   }, [user.targets]);
 
   const getMonthName = (monthNum: string) => {
-    const date = new Date();
-    date.setMonth(parseInt(monthNum) - 1);
-    return date.toLocaleString('default', { month: 'long' });
+    // Create a date object for the first day of the month in UTC to avoid timezone issues
+    const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
+    return date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
   };
 
   const generateYears = () => {
@@ -105,7 +105,8 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   const handleAddTarget = async (values: z.infer<typeof addTargetFormSchema>) => {
     setIsSubmitting(true);
     try {
-      const targetMonthDate = new Date(parseInt(values.year), parseInt(values.month) - 1, 1);
+      // Create date in UTC to ensure consistency
+      const targetMonthDate = new Date(Date.UTC(parseInt(values.year), parseInt(values.month) - 1, 1));
       const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
 
       const { data, error } = await supabase
@@ -220,9 +221,8 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   };
 
   const sortedTargets = [...localTargets].sort((a, b) => {
-    const dateA = new Date(a.target_month);
-    const dateB = new Date(b.target_month);
-    return dateB.getTime() - dateA.getTime(); // Newest first
+    // Compare YYYY-MM-DD strings directly for consistent sorting
+    return b.target_month.localeCompare(a.target_month); // Newest first
   });
 
   const isFutureMonth = (targetMonth: string) => {
@@ -230,9 +230,10 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
     const currentYear = today.getFullYear();
     const currentMonth = today.getMonth(); // 0-indexed
 
-    const targetDate = new Date(targetMonth);
-    const targetYear = targetDate.getFullYear();
-    const targetMonthIndex = targetDate.getMonth(); // 0-indexed
+    // Parse targetMonth string directly to avoid timezone issues
+    const [targetYearStr, targetMonthStr] = targetMonth.split('-');
+    const targetYear = parseInt(targetYearStr);
+    const targetMonthIndex = parseInt(targetMonthStr) - 1; // 0-indexed
 
     // A target is editable if its month/year is strictly after the current month/year
     if (targetYear > currentYear) return true;
@@ -330,9 +331,9 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
       {sortedTargets.length === 0 ? (
         <p className="text-muted-foreground">No targets set for this user.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-96 overflow-y-auto rounded-md border"> {/* Added max-h-96 and overflow-y-auto */}
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 bg-background z-10"> {/* Make header sticky */}
               <TableRow>
                 <TableHead>Month</TableHead>
                 <TableHead>Year</TableHead>
@@ -342,9 +343,10 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
             </TableHeader>
             <TableBody>
               {sortedTargets.map((target) => {
-                const targetDate = new Date(target.target_month);
-                const month = targetDate.toLocaleString('default', { month: 'long' });
-                const year = targetDate.getFullYear();
+                // Parse targetMonth string directly to avoid timezone issues
+                const [targetYearStr, targetMonthStr] = target.target_month.split('-');
+                const month = getMonthName(targetMonthStr);
+                const year = parseInt(targetYearStr);
                 const canEdit = isFutureMonth(target.target_month);
 
                 return (
