@@ -27,6 +27,12 @@ interface SalesPersonPerformanceTableProps {
   currentMonthPending: number | null;
   displayMonth: string;
   displayYear: string;
+  selectedChartMonth: string;
+  setSelectedChartMonth: (month: string) => void;
+  selectedChartYear: string;
+  setSelectedChartYear: (year: string) => void;
+  getMonthName: (monthNum: string) => string;
+  generateYears: () => string[];
 }
 
 const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = ({
@@ -39,40 +45,70 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
   currentMonthPending,
   displayMonth,
   displayYear,
+  selectedChartMonth,
+  setSelectedChartMonth,
+  selectedChartYear,
+  setSelectedChartYear,
+  getMonthName,
+  generateYears,
 }) => {
   const currentMonthName = `${displayMonth} ${displayYear}`;
 
   // Sort data by totalSales in ascending order (least sales at the top)
   const sortedData = [...data].sort((a, b) => a.totalSales - b.totalSales);
-  // Display only the first 5 items, the rest will be in the scrollable area
-  const displayedData = sortedData.slice(0, 5);
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
       <CardHeader>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <div>
             <CardTitle className="text-xl font-semibold text-primary">Sales Person Performance</CardTitle>
             <CardDescription className="text-muted-foreground">
               Selected Month: {currentMonthName}
             </CardDescription>
           </div>
-          <Select
-            value={selectedSalesPersonId || "all"}
-            onValueChange={(value) => onSelectSalesPerson(value === "all" ? null : value)}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select Sales Person" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sales Persons</SelectItem>
-              {salesPersonsOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap gap-2">
+            <Select value={selectedChartMonth} onValueChange={setSelectedChartMonth}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 12 }, (_, i) => (i + 1).toString()).map((monthNum) => (
+                  <SelectItem key={monthNum} value={monthNum}>
+                    {getMonthName(monthNum)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedChartYear} onValueChange={setSelectedChartYear}>
+              <SelectTrigger className="w-[100px]">
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {generateYears().map((year) => (
+                  <SelectItem key={year} value={year}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={selectedSalesPersonId || "all"}
+              onValueChange={(value) => onSelectSalesPerson(value === "all" ? null : value)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All Sales Persons" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sales Persons</SelectItem>
+                {salesPersonsOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </CardHeader>
       <CardContent>

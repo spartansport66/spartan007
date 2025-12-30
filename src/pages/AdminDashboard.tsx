@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, PlusCircle, UserCog, Loader2 } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, PlusCircle, UserCog, Loader2 } from 'lucide-react';
 import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTable'; // Import the new table component
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
@@ -337,45 +337,23 @@ const AdminDashboard = () => {
 
       {/* Sales Person Performance Table Section */}
       <div className="grid gap-4 lg:grid-cols-1 mb-6"> {/* Changed to single column */}
-        <div>
-          <div className="flex gap-2 mb-4">
-            <Select value={selectedChartMonth} onValueChange={setSelectedChartMonth}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select Month" />
-              </SelectTrigger>
-              <SelectContent>
-                {Array.from({ length: 12 }, (_, i) => (i + 1).toString()).map((monthNum) => (
-                  <SelectItem key={monthNum} value={monthNum}>
-                    {getMonthName(monthNum)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={selectedChartYear} onValueChange={setSelectedChartYear}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Select Year" />
-              </SelectTrigger>
-              <SelectContent>
-                {generateYears().map((year) => (
-                  <SelectItem key={year} value={year}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <SalesPersonPerformanceTable
-            data={salesBySalesPersonData}
-            salesPersonsOptions={salesPersonOptions}
-            selectedSalesPersonId={selectedSalesPersonId}
-            onSelectSalesPerson={setSelectedSalesPersonId}
-            currentMonthTarget={currentMonthTarget}
-            currentMonthAchieved={currentMonthAchieved}
-            currentMonthPending={currentMonthPending}
-            displayMonth={getMonthName(selectedChartMonth)}
-            displayYear={selectedChartYear}
-          />
-        </div>
+        <SalesPersonPerformanceTable
+          data={salesBySalesPersonData}
+          salesPersonsOptions={salesPersonOptions}
+          selectedSalesPersonId={selectedSalesPersonId}
+          onSelectSalesPerson={setSelectedSalesPersonId}
+          currentMonthTarget={currentMonthTarget}
+          currentMonthAchieved={currentMonthAchieved}
+          currentMonthPending={currentMonthPending}
+          displayMonth={getMonthName(selectedChartMonth)}
+          displayYear={selectedChartYear}
+          selectedChartMonth={selectedChartMonth}
+          setSelectedChartMonth={setSelectedChartMonth}
+          selectedChartYear={selectedChartYear}
+          setSelectedChartYear={setSelectedChartYear}
+          getMonthName={getMonthName}
+          generateYears={generateYears}
+        />
       </div>
 
       {/* Recent Activities (All Sales) */}
