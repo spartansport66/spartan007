@@ -185,6 +185,9 @@ const AdminDashboard = () => {
       );
 
       if (selectedSalesPersonId) {
+        console.log("AdminDashboard: Selected Sales Person ID for target/achieved:", selectedSalesPersonId);
+        console.log("AdminDashboard: Current Month Target Date for query:", currentMonthTargetDate);
+
         filteredSalesForChart = filteredSalesForChart.filter(sale => sale.user_id === selectedSalesPersonId); 
       }
 
@@ -220,6 +223,9 @@ const AdminDashboard = () => {
           .eq('target_month', currentMonthTargetDate)
           .single();
 
+        console.log("AdminDashboard: Fetched Target Data:", targetData);
+        console.log("AdminDashboard: Target Error (if any):", targetError);
+
         if (targetError && targetError.code !== 'PGRST116') { // PGRST116 means no rows found
           console.error('Error fetching target:', targetError);
           setCurrentMonthTarget(null);
@@ -232,9 +238,11 @@ const AdminDashboard = () => {
             .filter(sale => sale.user_id === selectedSalesPersonId) 
             .reduce((sum, sale) => sum + sale.total_price, 0);
         setCurrentMonthAchieved(achieved);
+        console.log("AdminDashboard: Achieved Sales for current month:", achieved);
 
         const pending = (targetData?.target_amount || 0) - achieved;
         setCurrentMonthPending(pending);
+        console.log("AdminDashboard: Pending Sales:", pending);
       } else {
         setCurrentMonthTarget(null);
         setCurrentMonthAchieved(null);
