@@ -53,36 +53,45 @@ const AdminDashboard = () => {
   const fetchAdminDashboardData = useCallback(async () => {
     if (!user) {
       setLoadingData(false);
+      console.log('AdminDashboard: User not available, stopping fetchAdminDashboardData.');
       return;
     }
     setLoadingData(true);
+    console.log('AdminDashboard: Starting fetchAdminDashboardData...');
 
-    // Fetch all products (admins can see all)
+    // Fetch all products
+    console.log('AdminDashboard: Fetching products...');
     const { data: productsData, error: productsError } = await supabase
       .from('products')
       .select('id, name, price, stock, description');
 
     if (productsError) {
-      console.error('Error fetching products:', productsError);
+      console.error('AdminDashboard: Error fetching products:', productsError);
       showError(`Failed to load products: ${productsError.message}`);
+      setProducts([]);
     } else {
       setProducts(productsData || []);
+      console.log('AdminDashboard: Products fetched:', productsData?.length);
     }
 
-    // Fetch all dealers (admins can see all)
+    // Fetch all dealers
+    console.log('AdminDashboard: Fetching dealers...');
     const { data: dealersData, error: dealersError } = await supabase
       .from('dealers')
       .select('id, name');
 
     if (dealersError) {
-      console.error('Error fetching dealers:', dealersError);
+      console.error('AdminDashboard: Error fetching dealers:', dealersError);
       showError(`Failed to load dealers: ${dealersError.message}`);
+      setDealers([]);
     } else {
       setDealers(dealersData || []);
       setActiveDealersCount(dealersData?.length || 0);
+      console.log('AdminDashboard: Dealers fetched:', dealersData?.length);
     }
 
-    // Fetch all sales (admins can see all)
+    // Fetch all sales
+    console.log('AdminDashboard: Fetching sales...');
     const { data: salesData, error: salesError } = await supabase
       .from('sales')
       .select(`
@@ -98,18 +107,24 @@ const AdminDashboard = () => {
       .order('sale_date', { ascending: false });
 
     if (salesError) {
-      console.error('Error fetching sales:', salesError);
+      console.error('AdminDashboard: Error fetching sales:', salesError);
       showError(`Failed to load sales data: ${salesError.message}`);
       setSales([]);
     } else {
-      const typedSalesData: Sale[] = (salesData || []).map(sale => ({
+      console.log('AdminDashboard: Sales data raw:', salesData); // Log raw data
+      const typedSalesData: Sale[] = (salesData || []).map((sale: any) => ({
         ...sale,
-        products: (sale.products && Array.isArray(sale.products) && sale.products.length > 0)
-          ? (sale.products[0] as { name: string })
-          : null,
-        dealers: (sale.dealers && Array.isArray(sale.dealers) && sale.dealers.length > 0)
-          ? (sale.dealers[0] as { name: string })
-          : null,
+        // Safely extract product and dealer names, handling potential array returns or null
+        products: (sale.products === null || sale.products === undefined)
+          ? null
+          : (Array.isArray(sale.products)
+            ? (sale.products.length > 0 ? (sale.products[0] as { name: string }) : null)
+            : (sale.products as { name: string })),
+        dealers: (sale.dealers === null || sale.dealers === undefined)
+          ? null
+          : (Array.isArray(sale.dealers)
+            ? (sale.dealers.length > 0 ? (sale.dealers[0] as { name: string }) : null)
+            : (sale.dealers as { name: string })),
       }));
       setSales(typedSalesData);
 
@@ -144,18 +159,24 @@ const AdminDashboard = () => {
       });
 
       setProductSalesData(Array.from(productSalesMap.entries()).map(([product, sales]) => ({ product, sales })));
+      console.log('AdminDashboard: Sales data processed.');
     }
     setLoadingData(false);
+    console.log('AdminDashboard: Finished fetchAdminDashboardData.');
   }, [user]);
 
   useEffect(() => {
+    console.log('AdminDashboard: useEffect triggered. sessionLoading:', sessionLoading, 'user:', user, 'isAdmin:', isAdmin);
     if (!sessionLoading) {
       if (!user) {
+        console.log('AdminDashboard: No user, navigating to login.');
         navigate('/login');
       } else if (!isAdmin) {
+        console.log('AdminDashboard: User is not admin, navigating to dashboard.');
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
+        console.log('AdminDashboard: User is admin, fetching dashboard data.');
         fetchAdminDashboardData();
       }
     }
