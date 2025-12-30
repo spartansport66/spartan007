@@ -3,8 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
-import { showLoading, dismissToast, showError } from '@/utils/toast';
+import { showError } from '@/utils/toast'; // Removed showLoading and dismissToast as they are not directly used here
 
 interface SessionContextType {
   session: Session | null;
@@ -20,18 +19,19 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   console.log('SessionContextProvider: Component rendering.');
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Start as true
   const [isAdmin, setIsAdmin] = useState(false);
   const [userType, setUserType] = useState<string | null>(null);
-  // useNavigate is kept here but not used for initial redirects to avoid loops.
 
-  const loadSessionAndProfile = async (currentSession: Session | null) => {
-    console.log('SessionContext: loadSessionAndProfile started.');
-    setLoading(true); // Explicitly set loading true at the start of this async operation
+  // This function now only updates session/user/profile data, not the overall loading state
+  const updateSessionAndProfileStates = async (currentSession: Session | null) => {
+    console.log('SessionContext: updateSessionAndProfileStates started.');
     setSession(currentSession);
     setUser(currentSession?.user || null);
-    setIsAdmin(false); // Reset before fetching
-    setUserType(null); // Reset before fetching
+
+    // Reset profile states before fetching new ones
+    let newIsAdmin = false;
+    let newUserType: string | null = null;
 
     if (currentSession?.user) {
       console.log('SessionContext: Attempting to fetch user profile for ID:', currentSession.user.id);
@@ -46,18 +46,24 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         showError(`Failed to load user profile: ${error.message}`);
       } else {
         console.log('SessionContext: User profile fetched successfully:', data);
-        setIsAdmin(data?.is_admin || false);
-        setUserType(data?.user_type || 'sales_person');
+        newIsAdmin = data?.is_admin || false;
+        newUserType = data?.user_type || 'sales_person';
       }
     }
-    setLoading(false); // Set loading to false ONLY after session and profile are processed
-    console.log('SessionContext: loadSessionAndProfile completed. Loading set to false.');
+
+    // Only update state if values are actually different to prevent unnecessary re-renders
+    if (newIsAdmin !== isAdmin) {
+      setIsAdmin(newIsAdmin);
+    }
+    if (newUserType !== userType) {
+      setUserType(newUserType);
+    }
+    console.log('SessionContext: updateSessionAndProfileStates completed.');
   };
 
   useEffect(() => {
-    let toastId: string | undefined;
     console.log('SessionContextProvider: useEffect for auth state change listener mounted.');
-    setLoading(true); // Ensure loading is true when the effect starts
+    // No need to setLoading(true) here, it's already true initially.
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, currentSession: Session | null) => {
@@ -69,13 +75,11 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             setIsAdmin(false);
             setUserType(null);
             setLoading(false); // Explicitly set false on sign out
-            if (toastId) dismissToast(toastId);
             console.log('SessionContext: SIGNED_OUT event processed. Loading set to false.');
           } else {
-            // For SIGNED_IN, INITIAL_SESSION, USER_UPDATED, etc.
-            // loadSessionAndProfile will handle setting loading to false after its operations.
-            await loadSessionAndProfile(currentSession);
-            if (toastId) dismissToast(toastId);
+            await updateSessionAndProfileStates(currentSession);
+            setLoading(false); // Set loading to false after processing session and profile
+            console.log('SessionContext: Auth event processed. Loading set to false.');
           }
         } catch (error: any) {
           console.error('SessionContext: Error in onAuthStateChange handler:', error);
@@ -89,7 +93,9 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     console.log('SessionContext: Performing initial getSession check.');
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       console.log('SessionContext: Initial getSession result:', initialSession);
-      await loadSessionAndProfile(initialSession); // This will handle its own setLoading(false)
+      await updateSessionAndProfileStates(initialSession);
+      setLoading(false); // Set loading to false after initial session and profile are processed
+      console.log('SessionContext: Initial getSession completed. Loading set to false.');
     }).catch(error => {
       console.error('SessionContext: Error during initial getSession promise:', error);
       showError(`Failed to load session: ${error.message}`);
@@ -99,7 +105,6 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     return () => {
       console.log('SessionContext: Cleaning up auth state change listener.');
       authListener.subscription.unsubscribe();
-      if (toastId) dismissToast(toastId);
     };
   }, []); // Empty dependency array ensures this effect runs only once on mount.
 
