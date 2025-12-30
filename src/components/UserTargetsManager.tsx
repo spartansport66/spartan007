@@ -115,12 +115,16 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
     try {
       const targetMonthDate = new Date(parseInt(values.year), parseInt(values.month) - 1, 1);
       const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
-      console.log('UserTargetsManager: Adding/Updating target with values:', values, 'formattedTargetMonth:', formattedTargetMonth); // Log values
+      console.log('UserTargetsManager: Attempting to add/update target.');
+      console.log('  Form values:', values);
+      console.log('  Formatted target month for comparison:', formattedTargetMonth);
+      console.log('  Current user.targets prop:', user.targets);
 
       // Check if a target for this month already exists
       const existingTarget = user.targets.find(
         (t) => t.target_month === formattedTargetMonth
       );
+      console.log('  Existing target found:', existingTarget);
 
       if (existingTarget) {
         // Update existing target

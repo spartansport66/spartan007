@@ -147,7 +147,12 @@ const ManageUsers = () => {
         
         const formattedUsers: UserProfile[] = profilesData.map((profile: any) => {
           const authUser: AuthUser = authUsersData?.find(au => au.id === profile.id) || { id: profile.id };
-          const userTargets: SalesTarget[] = (targetsData || []).filter((target: any) => target.sales_person_id === profile.id);
+          const userTargets: SalesTarget[] = (targetsData || [])
+            .filter((target: any) => target.sales_person_id === profile.id)
+            .map((target: any) => ({
+              ...target,
+              target_month: new Date(target.target_month).toISOString().split('T')[0], // Ensure YYYY-MM-DD format
+            }));
 
           return {
             id: profile.id,
