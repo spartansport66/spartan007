@@ -78,7 +78,7 @@ const ManageUsers = () => {
   const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [targetUser, setTargetUser] = useState<UserProfile | null>(null);
-
+  
   const editForm = useForm<z.infer<typeof userFormSchema>>({
     resolver: zodResolver(userFormSchema),
     defaultValues: {
@@ -90,7 +90,7 @@ const ManageUsers = () => {
       assignedDealerIds: [],
     },
   });
-
+  
   const createForm = useForm<z.infer<typeof userFormSchema>>({
     resolver: zodResolver(userFormSchema),
     defaultValues: {
@@ -102,7 +102,7 @@ const ManageUsers = () => {
       assignedDealerIds: [],
     },
   });
-
+  
   const targetForm = useForm<z.infer<typeof targetFormSchema>>({
     resolver: zodResolver(targetFormSchema),
     defaultValues: {
@@ -112,21 +112,20 @@ const ManageUsers = () => {
 
   const fetchUsersAndDealers = useCallback(async () => {
     setLoadingData(true);
-    
     try {
       // Fetch sales persons with their targets
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select(`
-          id, 
-          first_name, 
-          last_name, 
-          user_type, 
+          id,
+          first_name,
+          last_name,
+          user_type,
           is_admin,
-          sales_targets!left(id, target_amount, target_month) // Use left join to get targets
+          sales_targets!left(id, target_amount, target_month)
         `)
         .eq('user_type', 'sales_person');
-
+      
       if (profilesError) {
         console.error('Error fetching profiles:', profilesError.message);
         showError('Failed to load users.');
@@ -135,26 +134,27 @@ const ManageUsers = () => {
         // Fetch email information for each user
         const userIds = profilesData.map(profile => profile.id);
         const { data: authUsersData, error: authUsersError } = await supabase
-          .from('auth_users')
+          .from('users') // Changed from 'auth_users' to 'users'
           .select('id, email, banned_until, raw_app_meta_data')
           .in('id', userIds);
-
+        
         if (authUsersError) {
           console.error('Error fetching auth users:', authUsersError.message);
         }
-
+        
         const formattedUsers: UserProfile[] = profilesData.map((profile: any) => {
           const authUser: AuthUser = authUsersData?.find(au => au.id === profile.id) || { id: profile.id };
           
           // Find the target for the current month
           const currentDate = new Date();
           const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+          
           const currentMonthTarget = profile.sales_targets?.find((target: any) => {
             const targetDate = new Date(target.target_month);
-            return targetDate.getFullYear() === currentMonthStart.getFullYear() &&
+            return targetDate.getFullYear() === currentMonthStart.getFullYear() && 
                    targetDate.getMonth() === currentMonthStart.getMonth();
           });
-
+          
           return {
             id: profile.id,
             email: authUser.email || 'N/A',
@@ -168,13 +168,14 @@ const ManageUsers = () => {
             target_id: currentMonthTarget ? currentMonthTarget.id : null,
           };
         });
+        
         setUsers(formattedUsers);
       }
-
+      
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name');
-
+      
       if (dealersError) {
         console.error('Error fetching all dealers:', dealersError.message);
         showError('Failed to load dealers for assignment.');
@@ -268,12 +269,12 @@ const ManageUsers = () => {
           user_type: values.userType,
         }),
       });
-
+      
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create user');
       }
-
+      
       showSuccess(`User ${values.email} created successfully as ${values.userType}!`);
       createForm.reset();
       setIsCreateDialogOpen(false);
@@ -297,17 +298,17 @@ const ManageUsers = () => {
         last_name: values.lastName,
         user_type: values.userType,
       };
-
+      
       if (values.password) {
         payload.password = values.password;
       }
-
+      
       if (values.userType === 'sales_person') {
         payload.assignedDealerIds = values.assignedDealerIds || [];
       } else {
         payload.assignedDealerIds = [];
       }
-
+      
       const response = await fetch(UPDATE_USER_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
@@ -315,12 +316,12 @@ const ManageUsers = () => {
         },
         body: JSON.stringify(payload),
       });
-
+      
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to update user');
       }
-
+      
       showSuccess(`User ${values.email} updated successfully!`);
       setIsEditDialogOpen(false);
       fetchUsersAndDealers();
@@ -340,7 +341,7 @@ const ManageUsers = () => {
         userId: userToToggle.id,
         ban_and_unverify: newStatus,
       };
-
+      
       const response = await fetch(UPDATE_USER_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
@@ -348,12 +349,12 @@ const ManageUsers = () => {
         },
         body: JSON.stringify(payload),
       });
-
+      
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to toggle user status');
       }
-
+      
       showSuccess(`User ${userToToggle.first_name} ${userToToggle.last_name} has been ${newStatus ? 'deactivated' : 'activated'}.`);
       fetchUsersAndDealers();
     } catch (error: any) {
@@ -371,18 +372,18 @@ const ManageUsers = () => {
       const currentDate = new Date();
       const targetMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1); // First day of current month
       const formattedTargetMonth = targetMonth.toISOString().split('T')[0]; // YYYY-MM-DD
-
+      
       if (targetUser.target_id) {
         // Update existing target
         const { error } = await supabase
           .from('sales_targets')
           .update({
             target_amount: values.targetAmount,
-            target_month: formattedTargetMonth, // Use formatted date
+            target_month: formattedTargetMonth,
             updated_at: new Date().toISOString()
           })
           .eq('id', targetUser.target_id);
-
+        
         if (error) throw error;
       } else {
         // Create new target
@@ -391,14 +392,14 @@ const ManageUsers = () => {
           .insert({
             sales_person_id: targetUser.id,
             target_amount: values.targetAmount,
-            target_month: formattedTargetMonth, // Use formatted date
+            target_month: formattedTargetMonth,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
-
+        
         if (error) throw error;
       }
-
+      
       showSuccess(`Monthly target set for ${targetUser.first_name} ${targetUser.last_name}!`);
       setIsTargetDialogOpen(false);
       fetchUsersAndDealers();
@@ -428,8 +429,10 @@ const ManageUsers = () => {
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-full">
         <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="mb-6 flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
+          <ArrowLeft className="h-4 w-4" />
+          Back to Admin Dashboard
         </Button>
+        
         <Card className="bg-card text-card-foreground shadow-lg">
           <CardHeader>
             <CardTitle className="text-2xl font-semibold text-primary">Manage Sales Persons</CardTitle>
@@ -446,7 +449,6 @@ const ManageUsers = () => {
                   <TableHeader>
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead className="text-muted-foreground">Name</TableHead>
-                      {/* Removed Email column */}
                       <TableHead className="text-muted-foreground">Status</TableHead>
                       <TableHead className="text-muted-foreground">Monthly Target</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
@@ -458,7 +460,6 @@ const ManageUsers = () => {
                         <TableCell className="font-medium text-foreground">
                           {userItem.first_name} {userItem.last_name}
                         </TableCell>
-                        {/* Removed Email cell */}
                         <TableCell className="text-muted-foreground">
                           {userItem.banned_until ? (
                             <span className="text-red-500">Inactive</span>
@@ -467,9 +468,9 @@ const ManageUsers = () => {
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {userItem.monthly_target !== null && userItem.monthly_target !== undefined 
-                            ? `₹${userItem.monthly_target.toFixed(2)}` 
-                            : 'Not Set'}
+                          {userItem.monthly_target !== null && userItem.monthly_target !== undefined ? 
+                            `₹${userItem.monthly_target.toFixed(2)}` : 
+                            'Not Set'}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -479,28 +480,30 @@ const ManageUsers = () => {
                               onClick={() => {
                                 setSelectedUser(userItem);
                                 setIsEditDialogOpen(true);
-                              }} 
+                              }}
                               title="Edit User"
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
+                            
                             <Button 
                               variant="ghost" 
                               size="icon" 
                               onClick={() => {
                                 setTargetUser(userItem);
                                 setIsTargetDialogOpen(true);
-                              }} 
+                              }}
                               title="Set Monthly Target"
                             >
                               <span className="text-xs font-bold">₹</span>
                             </Button>
+                            
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button 
                                   variant="ghost" 
                                   size="icon" 
-                                  title={userItem.banned_until ? "Activate User" : "Deactivate User"} 
+                                  title={userItem.banned_until ? "Activate User" : "Deactivate User"}
                                   disabled={isSubmitting}
                                 >
                                   {userItem.banned_until ? 
@@ -535,16 +538,22 @@ const ManageUsers = () => {
                 </Table>
               )}
             </div>
+            
             <div className="mt-6 text-right">
-              <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <PlusCircle className="h-4 w-4 mr-2" /> Create New Sales Person
+              <Button 
+                onClick={() => setIsCreateDialogOpen(true)} 
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <PlusCircle className="h-4 w-4 mr-2" />
+                Create New Sales Person
               </Button>
             </div>
           </CardContent>
         </Card>
       </div>
+      
       <MadeWithDyad />
-
+      
       {/* Create User Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
@@ -569,6 +578,7 @@ const ManageUsers = () => {
                   </FormItem>
                 )}
               />
+              
               <FormField
                 control={createForm.control}
                 name="lastName"
@@ -582,6 +592,7 @@ const ManageUsers = () => {
                   </FormItem>
                 )}
               />
+              
               <FormField
                 control={createForm.control}
                 name="email"
@@ -595,6 +606,7 @@ const ManageUsers = () => {
                   </FormItem>
                 )}
               />
+              
               <FormField
                 control={createForm.control}
                 name="password"
@@ -608,6 +620,7 @@ const ManageUsers = () => {
                   </FormItem>
                 )}
               />
+              
               <DialogFooter>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create User'}
@@ -617,7 +630,7 @@ const ManageUsers = () => {
           </Form>
         </DialogContent>
       </Dialog>
-
+      
       {/* Edit User Dialog */}
       {selectedUser && (
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -643,6 +656,7 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={editForm.control}
                   name="lastName"
@@ -656,6 +670,7 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={editForm.control}
                   name="email"
@@ -669,6 +684,7 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={editForm.control}
                   name="password"
@@ -682,6 +698,7 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
+                
                 <div className="grid gap-4 mt-4">
                   <h3 className="text-lg font-semibold">Manage Assigned Dealers</h3>
                   <FormField
@@ -703,6 +720,7 @@ const ManageUsers = () => {
                     )}
                   />
                 </div>
+                
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}
@@ -713,7 +731,7 @@ const ManageUsers = () => {
           </DialogContent>
         </Dialog>
       )}
-
+      
       {/* Set Target Dialog */}
       {targetUser && (
         <Dialog open={isTargetDialogOpen} onOpenChange={setIsTargetDialogOpen}>
@@ -733,17 +751,13 @@ const ManageUsers = () => {
                     <FormItem>
                       <FormLabel>Monthly Target Amount (₹)</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          step="0.01" 
-                          placeholder="e.g., 50000.00" 
-                          {...field} 
-                        />
+                        <Input type="number" step="0.01" placeholder="e.g., 50000.00" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+                
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Set Target'}
