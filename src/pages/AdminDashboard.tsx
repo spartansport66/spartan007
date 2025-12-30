@@ -108,6 +108,9 @@ const AdminDashboard = () => {
   const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
 
 
+  console.log('AdminDashboard: Component rendered. sessionLoading:', sessionLoading, 'loadingData:', loadingData, 'isAdmin:', isAdmin);
+
+
   const getMonthName = (monthNum: string) => {
     const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
     return date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
@@ -123,164 +126,181 @@ const AdminDashboard = () => {
   };
 
   const fetchAdminDashboardData = useCallback(async () => {
+    console.log('AdminDashboard: fetchAdminDashboardData called.');
     if (!user) {
+      console.log('AdminDashboard: No user, returning from fetchAdminDashboardData.');
       setLoadingData(false);
       return;
     }
     setLoadingData(true);
+    console.log('AdminDashboard: setLoadingData(true)');
 
-    // Get selected month range for filtering sales and targets
-    const chartYearNum = parseInt(selectedChartYear);
-    const chartMonthNum = parseInt(selectedChartMonth);
-    const startOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString();
-    const endOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum, 0, 23, 59, 59, 999)).toISOString();
-    const currentMonthTargetDate = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString().split('T')[0];
+    try {
+      // Get selected month range for filtering sales and targets
+      const chartYearNum = parseInt(selectedChartYear);
+      const chartMonthNum = parseInt(selectedChartMonth);
+      const startOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString();
+      const endOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum, 0, 23, 59, 59, 999)).toISOString();
+      const currentMonthTargetDate = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString().split('T')[0];
 
-    // Fetch all sales persons
-    const { data: profilesData, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name')
-      .eq('user_type', 'sales_person');
+      // Fetch all sales persons
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('user_type', 'sales_person');
 
-    if (profilesError) {
-      console.error('AdminDashboard: Error fetching sales persons:', profilesError);
-      showError(`Failed to load sales persons: ${profilesError.message}`);
-      setAllSalesPersons([]);
-    } else {
-      setAllSalesPersons(profilesData || []);
-    }
-
-    // Fetch all products
-    const { data: productsData, error: productsError } = await supabase
-      .from('products')
-      .select('id, name, price, stock, description');
-
-    if (productsError) {
-      console.error('AdminDashboard: Error fetching products:', productsError);
-      showError(`Failed to load products: ${productsError.message}`);
-      setProducts([]);
-    } else {
-      setProducts(productsData || []);
-    }
-
-    // Fetch all dealers
-    const { data: dealersData, error: dealersError } = await supabase
-      .from('dealers')
-      .select('id, name');
-
-    if (dealersError) {
-      console.error('AdminDashboard: Error fetching dealers:', dealersError);
-      showError(`Failed to load dealers: ${dealersError.message}`);
-      setDealers([]);
-      setActiveDealersCount(0);
-    } else {
-      setDealers(dealersData || []);
-      setActiveDealersCount(dealersData?.length || 0);
-    }
-
-    // Fetch all sales with product, dealer, and sales person names
-    const { data: salesData, error: salesError } = await supabase
-      .from('sales')
-      .select(`
-        id, quantity, total_price, sale_date,
-        products (name),
-        orders (dealers (name), user_id, profiles (first_name, last_name), payment_status)
-      `)
-      .order('sale_date', { ascending: false });
-
-    if (salesError) {
-      console.error('AdminDashboard: Error fetching sales:', salesError);
-      showError(`Failed to load sales data: ${salesError.message}`);
-      setSales([]);
-    } else {
-      const typedSalesData: Sale[] = (salesData || []).map((sale: any) => ({
-        id: sale.id,
-        quantity: sale.quantity,
-        total_price: sale.total_price,
-        sale_date: sale.sale_date,
-        products: sale.products || null,
-        orders: sale.orders ? {
-          dealers: sale.orders.dealers || null,
-          user_id: sale.orders.user_id,
-          profiles: sale.orders.profiles ? { first_name: sale.orders.profiles.first_name, last_name: sale.orders.profiles.last_name } : null,
-          payment_status: sale.orders.payment_status, // Added
-        } : null,
-      }));
-      setSales(typedSalesData);
-
-      const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
-      setTotalSalesValue(totalValue);
-      setTotalOrders(typedSalesData.length || 0);
-
-      // --- Logic for Sales by Sales Person Table and Target/Achieved ---
-      const currentMonthSalesForAllPersons = typedSalesData.filter(sale => 
-        new Date(sale.sale_date) >= new Date(startOfMonth) && new Date(sale.sale_date) <= new Date(endOfMonth)
-      );
-
-      const salesByPersonMap = new Map<string, number>();
-      const salesPersonNamesMap = new Map<string, string>();
-
-      (profilesData || []).forEach(p => {
-        salesPersonNamesMap.set(p.id, `${p.first_name} ${p.last_name}`);
-        salesByPersonMap.set(p.id, 0);
-      });
-
-      currentMonthSalesForAllPersons.forEach(sale => {
-        const personId = sale.orders?.user_id;
-        if (personId) {
-          salesByPersonMap.set(personId, (salesByPersonMap.get(personId) || 0) + sale.total_price);
-        }
-      });
-
-      const formattedSalesByPerson = Array.from(salesByPersonMap.entries()).map(([id, totalSales]) => ({
-        salesPerson: salesPersonNamesMap.get(id) || 'Unknown',
-        totalSales: totalSales,
-        id: id,
-      }));
-      setSalesBySalesPersonData(formattedSalesByPerson);
-
-      if (selectedSalesPersonId) {
-        const { data: targetData, error: targetError } = await supabase
-          .from('sales_targets')
-          .select('target_amount')
-          .eq('sales_person_id', selectedSalesPersonId)
-          .eq('target_month', currentMonthTargetDate)
-          .single();
-
-        if (targetError && targetError.code !== 'PGRST116') {
-          console.error('AdminDashboard: Supabase Error fetching target:', targetError);
-          setCurrentMonthTarget(null);
-        } else {
-          setCurrentMonthTarget(targetData?.target_amount || 0);
-        }
-
-        const achieved = currentMonthSalesForAllPersons
-            .filter(sale => sale.orders?.user_id === selectedSalesPersonId)
-            .reduce((sum, sale) => sum + sale.total_price, 0);
-        setCurrentMonthAchieved(achieved);
-
-        const pending = (targetData?.target_amount || 0) - achieved;
-        setCurrentMonthPending(pending);
+      if (profilesError) {
+        console.error('AdminDashboard: Error fetching sales persons:', profilesError);
+        showError(`Failed to load sales persons: ${profilesError.message}`);
+        setAllSalesPersons([]);
       } else {
-        setCurrentMonthTarget(null);
-        setCurrentMonthAchieved(null);
-        setCurrentMonthPending(null);
+        setAllSalesPersons(profilesData || []);
       }
-    }
 
-    setLoadingData(false);
+      // Fetch all products
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, name, price, stock, description');
+
+      if (productsError) {
+        console.error('AdminDashboard: Error fetching products:', productsError);
+        showError(`Failed to load products: ${productsError.message}`);
+        setProducts([]);
+      } else {
+        setProducts(productsData || []);
+      }
+
+      // Fetch all dealers
+      const { data: dealersData, error: dealersError } = await supabase
+        .from('dealers')
+        .select('id, name');
+
+      if (dealersError) {
+        console.error('AdminDashboard: Error fetching dealers:', dealersError);
+        showError(`Failed to load dealers: ${dealersError.message}`);
+        setDealers([]);
+        setActiveDealersCount(0);
+      } else {
+        setDealers(dealersData || []);
+        setActiveDealersCount(dealersData?.length || 0);
+      }
+
+      // Fetch all sales with product, dealer, and sales person names
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select(`
+          id, quantity, total_price, sale_date,
+          products (name),
+          orders (dealers (name), user_id, profiles (first_name, last_name), payment_status)
+        `)
+        .order('sale_date', { ascending: false });
+
+      if (salesError) {
+        console.error('AdminDashboard: Error fetching sales:', salesError);
+        showError(`Failed to load sales data: ${salesError.message}`);
+        setSales([]);
+      } else {
+        const typedSalesData: Sale[] = (salesData || []).map((sale: any) => ({
+          id: sale.id,
+          quantity: sale.quantity,
+          total_price: sale.total_price,
+          sale_date: sale.sale_date,
+          products: sale.products || null,
+          orders: sale.orders ? {
+            dealers: sale.orders.dealers || null,
+            user_id: sale.orders.user_id,
+            profiles: sale.orders.profiles ? { first_name: sale.orders.profiles.first_name, last_name: sale.orders.profiles.last_name } : null,
+            payment_status: sale.orders.payment_status, // Added
+          } : null,
+        }));
+        setSales(typedSalesData);
+
+        const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
+        setTotalSalesValue(totalValue);
+        setTotalOrders(typedSalesData.length || 0);
+
+        // --- Logic for Sales by Sales Person Table and Target/Achieved ---
+        const currentMonthSalesForAllPersons = typedSalesData.filter(sale => 
+          new Date(sale.sale_date) >= new Date(startOfMonth) && new Date(sale.sale_date) <= new Date(endOfMonth)
+        );
+
+        const salesByPersonMap = new Map<string, number>();
+        const salesPersonNamesMap = new Map<string, string>();
+
+        (profilesData || []).forEach(p => {
+          salesPersonNamesMap.set(p.id, `${p.first_name} ${p.last_name}`);
+          salesByPersonMap.set(p.id, 0);
+        });
+
+        currentMonthSalesForAllPersons.forEach(sale => {
+          const personId = sale.orders?.user_id;
+          if (personId) {
+            salesByPersonMap.set(personId, (salesByPersonMap.get(personId) || 0) + sale.total_price);
+          }
+        });
+
+        const formattedSalesByPerson = Array.from(salesByPersonMap.entries()).map(([id, totalSales]) => ({
+          salesPerson: salesPersonNamesMap.get(id) || 'Unknown',
+          totalSales: totalSales,
+          id: id,
+        }));
+        setSalesBySalesPersonData(formattedSalesByPerson);
+
+        if (selectedSalesPersonId) {
+          const { data: targetData, error: targetError } = await supabase
+            .from('sales_targets')
+            .select('target_amount')
+            .eq('sales_person_id', selectedSalesPersonId)
+            .eq('target_month', currentMonthTargetDate)
+            .single();
+
+          if (targetError && targetError.code !== 'PGRST116') {
+            console.error('AdminDashboard: Supabase Error fetching target:', targetError);
+            setCurrentMonthTarget(null);
+          } else {
+            setCurrentMonthTarget(targetData?.target_amount || 0);
+          }
+
+          const achieved = currentMonthSalesForAllPersons
+              .filter(sale => sale.orders?.user_id === selectedSalesPersonId)
+              .reduce((sum, sale) => sum + sale.total_price, 0);
+          setCurrentMonthAchieved(achieved);
+
+          const pending = (targetData?.target_amount || 0) - achieved;
+          setCurrentMonthPending(pending);
+        } else {
+          setCurrentMonthTarget(null);
+          setCurrentMonthAchieved(null);
+          setCurrentMonthPending(null);
+        }
+      }
+
+      console.log('AdminDashboard: All data fetched successfully.');
+    } catch (error: any) {
+      console.error('AdminDashboard: Error in fetchAdminDashboardData:', error);
+      showError(`Failed to load dashboard data: ${error.message}`);
+    } finally {
+      setLoadingData(false);
+      console.log('AdminDashboard: setLoadingData(false)');
+    }
   }, [user, selectedSalesPersonId, selectedChartMonth, selectedChartYear]);
 
   useEffect(() => {
+    console.log('AdminDashboard: useEffect triggered. sessionLoading:', sessionLoading, 'user:', user, 'isAdmin:', isAdmin);
     if (!sessionLoading) {
       if (!user) {
+        console.log('AdminDashboard: useEffect: No user, navigating to /login.');
         navigate('/login');
       } else if (!isAdmin) {
+        console.log('AdminDashboard: useEffect: Not admin, navigating to /dashboard.');
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
+        console.log('AdminDashboard: useEffect: User is admin, calling fetchAdminDashboardData.');
         fetchAdminDashboardData();
       }
+    } else {
+      console.log('AdminDashboard: useEffect: Session still loading.');
     }
   }, [sessionLoading, user, isAdmin, fetchAdminDashboardData, navigate]);
 
