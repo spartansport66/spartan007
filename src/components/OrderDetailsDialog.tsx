@@ -237,6 +237,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
     yPos += 7;
     doc.text(`Consumed Credit: ₹${orderDetails.dealer_consumed_credit.toFixed(2)}`, 10, yPos);
     yPos += 7;
+    // For PDF, direct text color change is more complex, keeping it default for simplicity
     doc.text(`Pending Credit: ₹${orderDetails.dealer_pending_credit.toFixed(2)}`, 10, yPos);
 
     doc.save(`Order_${orderDetails.order_number}.pdf`); // Changed filename
@@ -256,6 +257,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         th { background-color: #f2f2f2; }
         .text-right { text-align: right; }
         .summary { margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; }
+        .text-red-600 { color: #dc2626; } /* Tailwind red-600 */
       </style>
       <h1>Order Details</h1>
       <p><strong>Order Number:</strong> ${orderDetails.order_number}</p> <!-- Changed to order_number -->
@@ -297,7 +299,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
       <h2>Dealer Credit Information</h2>
       <p><strong>Credit Limit:</strong> <span class="text-right">₹${orderDetails.dealer_credit_limit.toFixed(2)}</span></p>
       <p><strong>Consumed Credit:</strong> <span class="text-right">₹${orderDetails.dealer_consumed_credit.toFixed(2)}</span></p>
-      <p><strong>Pending Credit:</strong> <span class="text-right">₹${orderDetails.dealer_pending_credit.toFixed(2)}</span></p>
+      <p><strong>Pending Credit:</strong> <span class="${orderDetails.dealer_pending_credit > 0 ? 'text-red-600' : ''}">₹${orderDetails.dealer_pending_credit.toFixed(2)}</span></p>
     `;
 
     const printWindow = window.open('', '_blank');
@@ -339,7 +341,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 <p><span className="font-semibold">Phone:</span> {orderDetails.dealer_phone}</p>
                 <p><span className="font-semibold">Credit Limit:</span> ₹{orderDetails.dealer_credit_limit.toFixed(2)}</p>
                 <p><span className="font-semibold">Consumed Credit:</span> ₹{orderDetails.dealer_consumed_credit.toFixed(2)}</p>
-                <p><span className="font-semibold">Pending Credit:</span> ₹{orderDetails.dealer_pending_credit.toFixed(2)}</p>
+                <p>
+                  <span className="font-semibold">Pending Credit:</span>{' '}
+                  <span className={orderDetails.dealer_pending_credit > 0 ? 'text-destructive' : ''}>
+                    ₹{orderDetails.dealer_pending_credit.toFixed(2)}
+                  </span>
+                </p>
               </div>
             </div>
 
