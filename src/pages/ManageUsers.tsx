@@ -188,7 +188,7 @@ const ManageUsers = () => {
     } finally {
       setLoadingData(false);
     }
-  }, [targetUser]); // Added targetUser to dependencies to re-fetch and update it
+  }, [targetUser]); // Removed targetUser from dependencies to prevent re-fetch on dialog open
 
   useEffect(() => {
     if (!sessionLoading) {
