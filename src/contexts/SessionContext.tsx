@@ -48,26 +48,28 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
 
       if (currentSession?.user) {
         console.log('SessionContext: Attempting to fetch user profile for ID:', currentSession.user.id);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('is_admin, user_type')
-          .eq('id', currentSession.user.id)
-          .single();
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('is_admin, user_type')
+            .eq('id', currentSession.user.id); // Removed .single()
 
-        // --- NEW LOGGING ADDED HERE ---
-        console.log('SessionContext: Profile fetch result - data:', data, 'error:', error);
-        // --- END NEW LOGGING ---
+          console.log('SessionContext: Profile fetch result - data:', data, 'error:', error);
 
-        if (error) {
-          console.error('SessionContext: Error fetching user profile:', error.message);
-          showError(`Failed to load user profile: ${error.message}`);
-        } else if (data) { // data will be null if no row found by single()
-          console.log('SessionContext: User profile fetched successfully:', data);
-          fetchedIsAdmin = data.is_admin || false;
-          fetchedUserType = data.user_type || 'sales_person';
-        } else {
-          console.warn('SessionContext: No user profile found for ID:', currentSession.user.id, 'Data was null.');
-          showError('No user profile found. Please ensure your account has a profile.');
+          if (error) {
+            console.error('SessionContext: Error fetching user profile:', error.message);
+            showError(`Failed to load user profile: ${error.message}`);
+          } else if (data && data.length > 0) { // Check if data exists and is not empty
+            console.log('SessionContext: User profile fetched successfully:', data[0]);
+            fetchedIsAdmin = data[0].is_admin || false;
+            fetchedUserType = data[0].user_type || 'sales_person';
+          } else {
+            console.warn('SessionContext: No user profile found for ID:', currentSession.user.id, 'Data was empty or null.');
+            showError('No user profile found. Please ensure your account has a profile.');
+          }
+        } catch (profileFetchError: any) {
+          console.error('SessionContext: Caught error during profile fetch:', profileFetchError.message);
+          showError(`An unexpected error occurred while fetching your profile: ${profileFetchError.message}`);
         }
       }
       setIsAdmin(fetchedIsAdmin);
