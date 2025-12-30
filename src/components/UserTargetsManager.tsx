@@ -78,6 +78,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   }, [user.targets]);
 
   const getMonthName = (monthNum: string) => {
+    if (monthNum === "all") return "All Months";
     // Create a date object for the first day of the month in UTC to avoid timezone issues
     const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
     return date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
@@ -105,42 +106,62 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   const handleAddTarget = async (values: z.infer<typeof addTargetFormSchema>) => {
     setIsSubmitting(true);
     try {
-      // Create date in UTC to ensure consistency
-      const targetMonthDate = new Date(Date.UTC(parseInt(values.year), parseInt(values.month) - 1, 1));
-      const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
+      let upsertedTargets: SalesTarget[] = [];
 
-      const { data, error } = await supabase
-        .from('sales_targets')
-        .upsert(
-          {
+      if (values.month === "all") {
+        const targetsToUpsert = [];
+        for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
+          const targetMonthDate = new Date(Date.UTC(parseInt(values.year), monthIndex, 1));
+          const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
+          targetsToUpsert.push({
             sales_person_id: user.id,
             target_amount: values.targetAmount,
             target_month: formattedTargetMonth,
             updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'sales_person_id, target_month' } // Use unique constraint for upsert
-        )
-        .select();
+          });
+        }
 
-      if (error) {
-        throw error;
+        const { data, error } = await supabase
+          .from('sales_targets')
+          .upsert(targetsToUpsert, { onConflict: 'sales_person_id, target_month' })
+          .select();
+
+        if (error) throw error;
+        upsertedTargets = data || [];
+        showSuccess(`Targets for all months of ${values.year} set successfully!`);
+
+      } else {
+        // Create date in UTC to ensure consistency
+        const targetMonthDate = new Date(Date.UTC(parseInt(values.year), parseInt(values.month) - 1, 1));
+        const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
+
+        const { data, error } = await supabase
+          .from('sales_targets')
+          .upsert(
+            {
+              sales_person_id: user.id,
+              target_amount: values.targetAmount,
+              target_month: formattedTargetMonth,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'sales_person_id, target_month' } // Use unique constraint for upsert
+          )
+          .select();
+
+        if (error) throw error;
+        upsertedTargets = data || [];
+        showSuccess(`Target for ${getMonthName(values.month)} ${values.year} set successfully!`);
       }
       
-      if (data && data.length > 0) {
-        const upsertedTarget = data[0];
-        setLocalTargets(prev => {
-          const existingIndex = prev.findIndex(t => t.id === upsertedTarget.id);
-          if (existingIndex > -1) {
-            // Update existing target in local state
-            return prev.map((t, idx) => idx === existingIndex ? upsertedTarget : t);
-          } else {
-            // Add new target to local state
-            return [...prev, upsertedTarget];
-          }
+      // Update local state with upserted targets
+      setLocalTargets(prev => {
+        const newTargetsMap = new Map(prev.map(t => [`${t.sales_person_id}-${t.target_month}`, t]));
+        upsertedTargets.forEach(ut => {
+          newTargetsMap.set(`${ut.sales_person_id}-${ut.target_month}`, ut);
         });
-      }
+        return Array.from(newTargetsMap.values());
+      });
 
-      showSuccess(`Target for ${getMonthName(values.month)} ${values.year} set successfully!`);
       addForm.reset({
         month: (new Date().getMonth() + 1).toString(),
         year: new Date().getFullYear().toString(),
@@ -259,6 +280,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
+                    <SelectItem value="all">All Months</SelectItem> {/* Added 'All Months' option */}
                     {Array.from({ length: 12 }, (_, i) => (i + 1).toString()).map((monthNum) => (
                       <SelectItem key={monthNum} value={monthNum}>
                         {getMonthName(monthNum)}
@@ -314,11 +336,11 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
               ) : (
                 <>
                   <PlusCircle className="h-4 w-4 mr-2" />
-                  {existingTargetForSelectedMonth ? 'Update Target' : 'Add New Target'}
+                  {selectedMonth === "all" ? 'Set All Monthly Targets' : (existingTargetForSelectedMonth ? 'Update Target' : 'Add New Target')}
                 </>
               )}
             </Button>
-            {existingTargetForSelectedMonth && (
+            {selectedMonth !== "all" && existingTargetForSelectedMonth && (
               <p className="text-sm text-muted-foreground mt-2">
                 A target for {getMonthName(selectedMonth)} {selectedYear} already exists. Submitting will update it.
               </p>
