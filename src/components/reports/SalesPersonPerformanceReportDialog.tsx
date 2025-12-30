@@ -14,12 +14,13 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 interface SalesPersonPerformance {
-  id: string;
+  id: string; // Sales person ID
   salesPersonName: string;
-  totalSales: number;
-  monthlyTarget: number; // This will be yearly target if 'all months' is selected
-  achievedSales: number; // This will be yearly achieved if 'all months' is selected
-  pendingSales: number; // This will be yearly pending if 'all months' is selected
+  month: string; // e.g., "January", "February", or "Yearly Total" if aggregated
+  year: string;
+  targetAmount: number;
+  achievedSales: number;
+  pendingSales: number;
 }
 
 interface SalesPersonOption {
@@ -33,7 +34,7 @@ interface SalesPersonPerformanceReportDialogProps {
 }
 
 const getMonthName = (monthNum: string) => {
-  if (monthNum === "all") return "All Months";
+  if (monthNum === "all") return "Yearly Total"; // This will be used for the aggregated row if we ever go back to it, but for now, each month will have its name.
   const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
   return date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
 };
@@ -80,110 +81,173 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       const salesPersonMap = new Map(profilesData.map(p => [p.id, `${p.first_name} ${p.last_name}`]));
       const salesPersonIds = profilesData.map(p => p.id);
 
-      // Determine date range based on filterMonth and filterYear
-      let startPeriod: string;
-      let endPeriod: string;
-      let targetMonthFilter: string | null = null;
-
       const yearNum = parseInt(filterYear);
-
-      if (filterMonth === "all") {
-        startPeriod = new Date(Date.UTC(yearNum, 0, 1)).toISOString(); // January 1st of the selected year
-        endPeriod = new Date(Date.UTC(yearNum + 1, 0, 0, 23, 59, 59, 999)).toISOString(); // Last day of December of the selected year
-      } else {
-        const monthNum = parseInt(filterMonth);
-        startPeriod = new Date(Date.UTC(yearNum, monthNum - 1, 1)).toISOString();
-        endPeriod = new Date(Date.UTC(yearNum, monthNum, 0, 23, 59, 59, 999)).toISOString();
-        targetMonthFilter = new Date(Date.UTC(yearNum, monthNum - 1, 1)).toISOString().split('T')[0];
-      }
-
-      // Fetch all sales for the selected period
-      let salesQuery = supabase
-        .from('sales')
-        .select(`
-          total_price,
-          orders (user_id)
-        `)
-        .gte('sale_date', startPeriod)
-        .lte('sale_date', endPeriod);
-
-      if (filterSalesPersonId) {
-        salesQuery = salesQuery.eq('orders.user_id', filterSalesPersonId);
-      }
-
-      const { data: salesData, error: salesError } = await salesQuery;
-
-      if (salesError) {
-        console.error('Error fetching sales data:', salesError.message);
-        showError('Failed to load sales data for report.');
-        setPerformanceData([]);
-        setLoading(false);
-        return;
-      }
-
-      // Aggregate sales by sales person
-      const salesByPerson: { [key: string]: number } = {};
-      (salesData || []).forEach((sale: any) => {
-        const userId = sale.orders?.user_id;
-        if (userId) {
-          salesByPerson[userId] = (salesByPerson[userId] || 0) + sale.total_price;
-        }
-      });
-
-      // Fetch targets for the selected period
-      let targetsQuery = supabase
-        .from('sales_targets')
-        .select('sales_person_id, target_amount');
-
-      if (filterMonth === "all") {
-        // For "All Months", fetch all targets within the year and sum them up
-        targetsQuery = targetsQuery
-          .gte('target_month', new Date(Date.UTC(yearNum, 0, 1)).toISOString().split('T')[0])
-          .lte('target_month', new Date(Date.UTC(yearNum, 11, 1)).toISOString().split('T')[0]); // Last month of the year
-      } else if (targetMonthFilter) {
-        targetsQuery = targetsQuery.eq('target_month', targetMonthFilter);
-      }
-
-      if (filterSalesPersonId) {
-        targetsQuery = targetsQuery.eq('sales_person_id', filterSalesPersonId);
-      } else {
-        targetsQuery = targetsQuery.in('sales_person_id', salesPersonIds);
-      }
-
-      const { data: targetsData, error: targetsError } = await targetsQuery;
-
-      if (targetsError) {
-        console.error('Error fetching targets data:', targetsError.message);
-        showError('Failed to load targets data for report.');
-        setPerformanceData([]);
-        setLoading(false);
-        return;
-      }
-
-      const targetsByPerson: { [key: string]: number } = {};
-      (targetsData || []).forEach(t => {
-        targetsByPerson[t.sales_person_id] = (targetsByPerson[t.sales_person_id] || 0) + t.target_amount;
-      });
-
       const reportData: SalesPersonPerformance[] = [];
       const personsToReport = filterSalesPersonId ? profilesData.filter(p => p.id === filterSalesPersonId) : profilesData;
 
-      personsToReport.forEach(person => {
-        const achievedSales = salesByPerson[person.id] || 0;
-        const monthlyTarget = targetsByPerson[person.id] || 0; // This will be yearly if 'all months'
-        const pendingSales = monthlyTarget - achievedSales;
+      if (filterMonth === "all") {
+        // --- Logic for "All Months" (monthly breakdown for the year) ---
+        const startOfYear = new Date(Date.UTC(yearNum, 0, 1)).toISOString();
+        const endOfYear = new Date(Date.UTC(yearNum + 1, 0, 0, 23, 59, 59, 999)).toISOString();
 
-        reportData.push({
-          id: person.id,
-          salesPersonName: salesPersonMap.get(person.id) || 'Unknown',
-          totalSales: achievedSales, // This is the achieved sales for the month/year
-          monthlyTarget: monthlyTarget,
-          achievedSales: achievedSales,
-          pendingSales: pendingSales,
+        // Fetch all sales for the entire year
+        const { data: yearlySalesData, error: yearlySalesError } = await supabase
+          .from('sales')
+          .select(`
+            total_price,
+            sale_date,
+            orders (user_id)
+          `)
+          .gte('sale_date', startOfYear)
+          .lte('sale_date', endOfYear);
+
+        if (yearlySalesError) {
+          throw new Error(`Failed to fetch yearly sales data: ${yearlySalesError.message}`);
+        }
+
+        // Fetch all targets for the entire year
+        const { data: yearlyTargetsData, error: yearlyTargetsError } = await supabase
+          .from('sales_targets')
+          .select('sales_person_id, target_amount, target_month')
+          .gte('target_month', new Date(Date.UTC(yearNum, 0, 1)).toISOString().split('T')[0])
+          .lte('target_month', new Date(Date.UTC(yearNum, 11, 1)).toISOString().split('T')[0]);
+
+        if (yearlyTargetsError) {
+          throw new Error(`Failed to fetch yearly targets data: ${yearlyTargetsError.message}`);
+        }
+
+        // Process data into maps for easy lookup
+        const monthlySalesByPersonAndMonth = new Map<string, number>(); // Key: `userId-YYYY-MM-DD`
+        (yearlySalesData || []).forEach((sale: any) => {
+          const userId = sale.orders?.user_id;
+          if (userId) {
+            const saleDate = new Date(sale.sale_date);
+            const monthKey = new Date(Date.UTC(saleDate.getFullYear(), saleDate.getMonth(), 1)).toISOString().split('T')[0];
+            const key = `${userId}-${monthKey}`;
+            monthlySalesByPersonAndMonth.set(key, (monthlySalesByPersonAndMonth.get(key) || 0) + sale.total_price);
+          }
         });
+
+        const monthlyTargetsByPersonAndMonth = new Map<string, number>(); // Key: `userId-YYYY-MM-DD`
+        (yearlyTargetsData || []).forEach(target => {
+          const key = `${target.sales_person_id}-${target.target_month}`;
+          monthlyTargetsByPersonAndMonth.set(key, (monthlyTargetsByPersonAndMonth.get(key) || 0) + target.target_amount);
+        });
+
+        // Generate report data for each sales person, for each month
+        personsToReport.forEach(person => {
+          for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
+            const monthDate = new Date(Date.UTC(yearNum, monthIndex, 1));
+            const monthKey = monthDate.toISOString().split('T')[0]; // YYYY-MM-DD for 1st of month
+            const displayMonthName = getMonthName((monthIndex + 1).toString());
+            const key = `${person.id}-${monthKey}`;
+
+            const achievedSales = monthlySalesByPersonAndMonth.get(key) || 0;
+            const targetAmount = monthlyTargetsByPersonAndMonth.get(key) || 0;
+            const pendingSales = targetAmount - achievedSales;
+
+            reportData.push({
+              id: person.id,
+              salesPersonName: salesPersonMap.get(person.id) || 'Unknown',
+              month: displayMonthName,
+              year: filterYear,
+              targetAmount: targetAmount,
+              achievedSales: achievedSales,
+              pendingSales: pendingSales,
+            });
+          }
+        });
+
+      } else {
+        // --- Logic for a specific month ---
+        const monthNum = parseInt(filterMonth);
+        const startOfMonth = new Date(Date.UTC(yearNum, monthNum - 1, 1)).toISOString();
+        const endOfMonth = new Date(Date.UTC(yearNum, monthNum, 0, 23, 59, 59, 999)).toISOString();
+        const targetMonthFilterDate = new Date(Date.UTC(yearNum, monthNum - 1, 1)).toISOString().split('T')[0];
+
+        let salesQuery = supabase
+          .from('sales')
+          .select(`
+            total_price,
+            orders (user_id)
+          `)
+          .gte('sale_date', startOfMonth)
+          .lte('sale_date', endOfMonth);
+
+        if (filterSalesPersonId) {
+          salesQuery = salesQuery.eq('orders.user_id', filterSalesPersonId);
+        }
+
+        const { data: salesData, error: salesError } = await salesQuery;
+
+        if (salesError) {
+          throw new Error(`Failed to fetch sales data: ${salesError.message}`);
+        }
+
+        const salesByPerson: { [key: string]: number } = {};
+        (salesData || []).forEach((sale: any) => {
+          const userId = sale.orders?.user_id;
+          if (userId) {
+            salesByPerson[userId] = (salesByPerson[userId] || 0) + sale.total_price;
+          }
+        });
+
+        let targetsQuery = supabase
+          .from('sales_targets')
+          .select('sales_person_id, target_amount')
+          .eq('target_month', targetMonthFilterDate);
+
+        if (filterSalesPersonId) {
+          targetsQuery = targetsQuery.eq('sales_person_id', filterSalesPersonId);
+        } else {
+          targetsQuery = targetsQuery.in('sales_person_id', salesPersonIds);
+        }
+
+        const { data: targetsData, error: targetsError } = await targetsQuery;
+
+        if (targetsError) {
+          throw new Error(`Failed to fetch targets data: ${targetsError.message}`);
+        }
+
+        const targetsByPerson: { [key: string]: number } = {};
+        (targetsData || []).forEach(t => {
+          targetsByPerson[t.sales_person_id] = (targetsByPerson[t.sales_person_id] || 0) + t.target_amount;
+        });
+
+        personsToReport.forEach(person => {
+          const achievedSales = salesByPerson[person.id] || 0;
+          const targetAmount = targetsByPerson[person.id] || 0;
+          const pendingSales = targetAmount - achievedSales;
+
+          reportData.push({
+            id: person.id,
+            salesPersonName: salesPersonMap.get(person.id) || 'Unknown',
+            month: getMonthName(filterMonth),
+            year: filterYear,
+            targetAmount: targetAmount,
+            achievedSales: achievedSales,
+            pendingSales: pendingSales,
+          });
+        });
+      }
+
+      // Sort data: first by sales person name, then by month (if "All Months" is selected)
+      reportData.sort((a, b) => {
+        const nameCompare = a.salesPersonName.localeCompare(b.salesPersonName);
+        if (nameCompare !== 0) return nameCompare;
+
+        if (filterMonth === "all") {
+          // Sort by month index if "All Months" is selected
+          const monthOrder = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+          ];
+          return monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
+        }
+        return 0;
       });
 
-      setPerformanceData(reportData.sort((a, b) => b.totalSales - a.totalSales)); // Sort by total sales descending
+      setPerformanceData(reportData);
     } catch (error: any) {
       console.error('Error in fetchPerformanceData:', error.message);
       showError('An unexpected error occurred while fetching performance data.');
@@ -205,17 +269,19 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
   };
 
   const handlePrint = () => {
-    const doc = new jsPDF();
-    const reportPeriod = filterMonth === "all" ? `Year ${filterYear}` : `${getMonthName(filterMonth)} ${filterYear}`;
+    const doc = new jsPDF({ orientation: 'landscape' }); // Use landscape for more columns
+    const reportPeriod = filterMonth === "all" ? `Year ${filterYear} - Monthly Breakdown` : `${getMonthName(filterMonth)} ${filterYear}`;
     doc.setFontSize(18);
     doc.text(`Sales Person Performance Report - ${reportPeriod}`, 14, 22);
     doc.setFontSize(11);
     doc.setTextColor(100);
 
-    const tableColumn = ["Sales Person", "Target Amount", "Achieved Sales", "Pending Sales"];
+    const tableColumn = ["Sales Person", "Month", "Year", "Target Amount", "Achieved Sales", "Pending Sales"];
     const tableRows = performanceData.map(item => [
       item.salesPersonName,
-      `₹${item.monthlyTarget.toFixed(2)}`,
+      item.month,
+      item.year,
+      `₹${item.targetAmount.toFixed(2)}`,
       `₹${item.achievedSales.toFixed(2)}`,
       `₹${item.pendingSales.toFixed(2)}`,
     ]);
@@ -226,7 +292,15 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       startY: 30,
       styles: { fontSize: 8 },
       headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
-      margin: { top: 25 },
+      margin: { top: 25, left: 10, right: 10 },
+      columnStyles: {
+        0: { cellWidth: 40 }, // Sales Person
+        1: { cellWidth: 30 }, // Month
+        2: { cellWidth: 20 }, // Year
+        3: { cellWidth: 35, halign: 'right' }, // Target Amount
+        4: { cellWidth: 35, halign: 'right' }, // Achieved Sales
+        5: { cellWidth: 35, halign: 'right' }, // Pending Sales
+      }
     });
 
     doc.save(`sales_person_performance_report_${filterMonth}_${filterYear}.pdf`);
@@ -234,7 +308,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto"> {/* Increased max-width */}
         <DialogHeader>
           <DialogTitle>Sales Person Performance Report</DialogTitle>
           <DialogDescription>
@@ -312,16 +386,20 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground">Sales Person</TableHead>
+                    <TableHead className="text-muted-foreground">Month</TableHead>
+                    <TableHead className="text-muted-foreground">Year</TableHead>
                     <TableHead className="text-muted-foreground text-right">Target Amount</TableHead>
                     <TableHead className="text-muted-foreground text-right">Achieved Sales</TableHead>
                     <TableHead className="text-muted-foreground text-right">Pending Sales</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {performanceData.map((item) => (
-                    <TableRow key={item.id} className="hover:bg-accent/50">
+                  {performanceData.map((item, index) => (
+                    <TableRow key={`${item.id}-${item.month}-${index}`} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{item.salesPersonName}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{item.monthlyTarget.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground">{item.month}</TableCell>
+                      <TableCell className="text-muted-foreground">{item.year}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">₹{item.targetAmount.toFixed(2)}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{item.achievedSales.toFixed(2)}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{item.pendingSales.toFixed(2)}</TableCell>
                     </TableRow>
