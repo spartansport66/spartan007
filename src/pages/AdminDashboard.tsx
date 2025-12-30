@@ -395,17 +395,15 @@ const AdminDashboard = () => {
         ))}
       </div>
 
-      {/* Orders Awaiting Dispatch Card */}
-      <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
+      {/* Orders Awaiting Dispatch and Dispatched Orders in a single row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
+        <DispatchedOrdersCard />
+      </div>
 
-      {/* Dispatched Orders Card */}
-      <DispatchedOrdersCard />
-
-      {/* Payment Card */}
-      <PaymentCard />
-
-      {/* Sales Person Performance Table Section */}
-      <div className="grid gap-4 lg:grid-cols-1 mb-6">
+      {/* Payment Transactions and Sales Person Performance in a single row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <PaymentCard />
         <SalesPersonPerformanceTable
           data={salesBySalesPersonData}
           salesPersonsOptions={salesPersonOptions}
