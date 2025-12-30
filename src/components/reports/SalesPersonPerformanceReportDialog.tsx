@@ -17,9 +17,9 @@ interface SalesPersonPerformance {
   id: string;
   salesPersonName: string;
   totalSales: number;
-  monthlyTarget: number;
-  achievedSales: number;
-  pendingSales: number;
+  monthlyTarget: number; // This will be yearly target if 'all months' is selected
+  achievedSales: number; // This will be yearly achieved if 'all months' is selected
+  pendingSales: number; // This will be yearly pending if 'all months' is selected
 }
 
 interface SalesPersonOption {
@@ -33,6 +33,7 @@ interface SalesPersonPerformanceReportDialogProps {
 }
 
 const getMonthName = (monthNum: string) => {
+  if (monthNum === "all") return "All Months";
   const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
   return date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
 };
@@ -79,22 +80,32 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       const salesPersonMap = new Map(profilesData.map(p => [p.id, `${p.first_name} ${p.last_name}`]));
       const salesPersonIds = profilesData.map(p => p.id);
 
-      // Get month range for filtering sales and targets
-      const yearNum = parseInt(filterYear);
-      const monthNum = parseInt(filterMonth);
-      const startOfMonth = new Date(Date.UTC(yearNum, monthNum - 1, 1)).toISOString();
-      const endOfMonth = new Date(Date.UTC(yearNum, monthNum, 0, 23, 59, 59, 999)).toISOString();
-      const targetMonthDate = new Date(Date.UTC(yearNum, monthNum - 1, 1)).toISOString().split('T')[0];
+      // Determine date range based on filterMonth and filterYear
+      let startPeriod: string;
+      let endPeriod: string;
+      let targetMonthFilter: string | null = null;
 
-      // Fetch all sales for the selected month
+      const yearNum = parseInt(filterYear);
+
+      if (filterMonth === "all") {
+        startPeriod = new Date(Date.UTC(yearNum, 0, 1)).toISOString(); // January 1st of the selected year
+        endPeriod = new Date(Date.UTC(yearNum + 1, 0, 0, 23, 59, 59, 999)).toISOString(); // Last day of December of the selected year
+      } else {
+        const monthNum = parseInt(filterMonth);
+        startPeriod = new Date(Date.UTC(yearNum, monthNum - 1, 1)).toISOString();
+        endPeriod = new Date(Date.UTC(yearNum, monthNum, 0, 23, 59, 59, 999)).toISOString();
+        targetMonthFilter = new Date(Date.UTC(yearNum, monthNum - 1, 1)).toISOString().split('T')[0];
+      }
+
+      // Fetch all sales for the selected period
       let salesQuery = supabase
         .from('sales')
         .select(`
           total_price,
           orders (user_id)
         `)
-        .gte('sale_date', startOfMonth)
-        .lte('sale_date', endOfMonth);
+        .gte('sale_date', startPeriod)
+        .lte('sale_date', endPeriod);
 
       if (filterSalesPersonId) {
         salesQuery = salesQuery.eq('orders.user_id', filterSalesPersonId);
@@ -119,11 +130,19 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         }
       });
 
-      // Fetch targets for the selected month
+      // Fetch targets for the selected period
       let targetsQuery = supabase
         .from('sales_targets')
-        .select('sales_person_id, target_amount')
-        .eq('target_month', targetMonthDate);
+        .select('sales_person_id, target_amount');
+
+      if (filterMonth === "all") {
+        // For "All Months", fetch all targets within the year and sum them up
+        targetsQuery = targetsQuery
+          .gte('target_month', new Date(Date.UTC(yearNum, 0, 1)).toISOString().split('T')[0])
+          .lte('target_month', new Date(Date.UTC(yearNum, 11, 1)).toISOString().split('T')[0]); // Last month of the year
+      } else if (targetMonthFilter) {
+        targetsQuery = targetsQuery.eq('target_month', targetMonthFilter);
+      }
 
       if (filterSalesPersonId) {
         targetsQuery = targetsQuery.eq('sales_person_id', filterSalesPersonId);
@@ -141,22 +160,23 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         return;
       }
 
-      const targetsByPerson = new Map(
-        (targetsData || []).map(t => [t.sales_person_id, t.target_amount])
-      );
+      const targetsByPerson: { [key: string]: number } = {};
+      (targetsData || []).forEach(t => {
+        targetsByPerson[t.sales_person_id] = (targetsByPerson[t.sales_person_id] || 0) + t.target_amount;
+      });
 
       const reportData: SalesPersonPerformance[] = [];
       const personsToReport = filterSalesPersonId ? profilesData.filter(p => p.id === filterSalesPersonId) : profilesData;
 
       personsToReport.forEach(person => {
         const achievedSales = salesByPerson[person.id] || 0;
-        const monthlyTarget = targetsByPerson.get(person.id) || 0;
+        const monthlyTarget = targetsByPerson[person.id] || 0; // This will be yearly if 'all months'
         const pendingSales = monthlyTarget - achievedSales;
 
         reportData.push({
           id: person.id,
           salesPersonName: salesPersonMap.get(person.id) || 'Unknown',
-          totalSales: achievedSales, // This is the achieved sales for the month
+          totalSales: achievedSales, // This is the achieved sales for the month/year
           monthlyTarget: monthlyTarget,
           achievedSales: achievedSales,
           pendingSales: pendingSales,
@@ -186,12 +206,13 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
 
   const handlePrint = () => {
     const doc = new jsPDF();
+    const reportPeriod = filterMonth === "all" ? `Year ${filterYear}` : `${getMonthName(filterMonth)} ${filterYear}`;
     doc.setFontSize(18);
-    doc.text(`Sales Person Performance Report - ${getMonthName(filterMonth)} ${filterYear}`, 14, 22);
+    doc.text(`Sales Person Performance Report - ${reportPeriod}`, 14, 22);
     doc.setFontSize(11);
     doc.setTextColor(100);
 
-    const tableColumn = ["Sales Person", "Monthly Target", "Achieved Sales", "Pending Sales"];
+    const tableColumn = ["Sales Person", "Target Amount", "Achieved Sales", "Pending Sales"];
     const tableRows = performanceData.map(item => [
       item.salesPersonName,
       `₹${item.monthlyTarget.toFixed(2)}`,
@@ -217,7 +238,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         <DialogHeader>
           <DialogTitle>Sales Person Performance Report</DialogTitle>
           <DialogDescription>
-            Generate a report on sales person performance, targets, and achievements for a selected month.
+            Generate a report on sales person performance, targets, and achievements for a selected month or year.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-end gap-4 mb-6">
@@ -228,6 +249,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
                 <SelectValue placeholder="Select month" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Months</SelectItem> {/* Added 'All Months' option */}
                 {Array.from({ length: 12 }, (_, i) => (i + 1).toString()).map((monthNum) => (
                   <SelectItem key={monthNum} value={monthNum}>
                     {getMonthName(monthNum)}
@@ -290,7 +312,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground">Sales Person</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Monthly Target</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Target Amount</TableHead>
                     <TableHead className="text-muted-foreground text-right">Achieved Sales</TableHead>
                     <TableHead className="text-muted-foreground text-right">Pending Sales</TableHead>
                   </TableRow>
