@@ -17,6 +17,7 @@ interface SessionContextType {
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
 export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  console.log('SessionContextProvider: Component rendering.'); // Added this log
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,18 +101,24 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
 
     // Initial session check
     console.log('SessionContext: Performing initial getSession check.');
-    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      console.log('SessionContext: Initial getSession result:', initialSession);
-      setSession(initialSession);
-      setUser(initialSession?.user || null);
-      if (initialSession?.user) {
-        await fetchUserProfile(initialSession.user.id);
-      }
-      setLoading(false); // Crucial: Ensure loading is set to false after initial session check completes
-    }).catch(error => {
-      console.error('SessionContext: Error during initial getSession:', error);
-      setLoading(false); // Ensure loading is set to false even if getSession fails
-    });
+    try { // Added try-catch block here
+      supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+        console.log('SessionContext: Initial getSession result:', initialSession);
+        setSession(initialSession);
+        setUser(initialSession?.user || null);
+        if (initialSession?.user) {
+          await fetchUserProfile(initialSession.user.id);
+        }
+        setLoading(false); // Crucial: Ensure loading is set to false after initial session check completes
+      }).catch(error => {
+        console.error('SessionContext: Error during initial getSession promise:', error);
+        setLoading(false); // Ensure loading is set to false even if getSession fails
+      });
+    } catch (syncError) {
+      console.error('SessionContext: Synchronous error calling getSession:', syncError);
+      setLoading(false); // Ensure loading is set to false for synchronous errors
+    }
+
 
     return () => {
       console.log('SessionContext: Cleaning up auth state change listener.');
