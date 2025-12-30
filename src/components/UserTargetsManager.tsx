@@ -99,6 +99,17 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
     return years;
   };
 
+  const selectedMonth = addForm.watch('month');
+  const selectedYear = addForm.watch('year');
+
+  const existingTargetForSelectedMonth = React.useMemo(() => {
+    if (!selectedMonth || !selectedYear) return null;
+    const targetMonthDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
+    const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
+    return user.targets.find(t => t.target_month === formattedTargetMonth);
+  }, [selectedMonth, selectedYear, user.targets]);
+
+
   const handleAddTarget = async (values: z.infer<typeof addTargetFormSchema>) => {
     setIsSubmitting(true);
     try {
@@ -273,9 +284,16 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
               </FormItem>
             )}
           />
-          <Button type="submit" disabled={isSubmitting} className="sm:col-span-1">
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <><PlusCircle className="h-4 w-4 mr-2" /> Add/Update Target</>}
-          </Button>
+          <div className="sm:col-span-1">
+            <Button type="submit" disabled={isSubmitting} className="w-full">
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <><PlusCircle className="h-4 w-4 mr-2" /> {existingTargetForSelectedMonth ? 'Update Target' : 'Add New Target'}</>}
+            </Button>
+            {existingTargetForSelectedMonth && (
+              <p className="text-sm text-muted-foreground mt-2">
+                A target for {getMonthName(selectedMonth)} {selectedYear} already exists. Submitting will update it.
+              </p>
+            )}
+          </div>
         </form>
       </Form>
 
