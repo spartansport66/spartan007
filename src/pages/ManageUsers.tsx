@@ -169,6 +169,7 @@ const ManageUsers = () => {
         
         console.log('ManageUsers: Formatted users with targets:', formattedUsers); // Log formatted users
         setUsers(formattedUsers);
+        console.log('ManageUsers: Users state updated:', formattedUsers); // Log after setUsers
       }
       
       const { data: dealersData, error: dealersError } = await supabase
@@ -211,7 +212,11 @@ const ManageUsers = () => {
     if (isTargetDialogOpen && targetUser) {
       const updatedTargetUser = users.find(u => u.id === targetUser.id);
       if (updatedTargetUser) {
+        console.log('ManageUsers: Syncing targetUser. updatedTargetUser:', updatedTargetUser); // Log updatedTargetUser
         setTargetUser(updatedTargetUser);
+        console.log('ManageUsers: targetUser state set to:', updatedTargetUser); // Log after setTargetUser
+      } else {
+        console.log('ManageUsers: Could not find updatedTargetUser in current users state.');
       }
     }
   }, [users, isTargetDialogOpen, targetUser?.id]); // This is correct and should remain.

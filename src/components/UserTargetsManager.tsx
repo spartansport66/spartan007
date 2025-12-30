@@ -66,7 +66,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
 
-  console.log('UserTargetsManager: Received user prop with targets:', user.targets); // Log user targets
+  console.log('UserTargetsManager: Current user.targets prop on render:', user.targets); // Log user targets on every render
 
   const addForm = useForm<z.infer<typeof addTargetFormSchema>>({
     resolver: zodResolver(addTargetFormSchema),
@@ -106,6 +106,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
     if (!selectedMonth || !selectedYear) return null;
     const targetMonthDate = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
     const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
+    console.log('UserTargetsManager: Checking for existing target. Formatted month:', formattedTargetMonth, 'User targets:', user.targets);
     return user.targets.find(t => t.target_month === formattedTargetMonth);
   }, [selectedMonth, selectedYear, user.targets]);
 
@@ -118,13 +119,13 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
       console.log('UserTargetsManager: Attempting to add/update target.');
       console.log('  Form values:', values);
       console.log('  Formatted target month for comparison:', formattedTargetMonth);
-      console.log('  Current user.targets prop:', user.targets);
+      console.log('  Current user.targets prop at submission:', user.targets); // Log targets at submission
 
       // Check if a target for this month already exists
       const existingTarget = user.targets.find(
         (t) => t.target_month === formattedTargetMonth
       );
-      console.log('  Existing target found:', existingTarget);
+      console.log('  Existing target found (result of find):', existingTarget);
 
       if (existingTarget) {
         // Update existing target
