@@ -347,32 +347,32 @@ const AdminDashboard = () => {
       value: `$${totalSalesValue.toFixed(2)}`,
       change: "+20.1% from last month",
       icon: <DollarSign className="h-3 w-3 text-blue-600 dark:text-blue-400" />,
-      bgColor: "bg-blue-100 dark:bg-blue-900",
-      textColor: "text-blue-800 dark:text-blue-200"
+      titleColor: "text-blue-600 dark:text-blue-400",
+      valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Orders",
       value: totalOrders.toString(),
       change: "+180.1% from last month",
       icon: <Package className="h-3 w-3 text-green-600 dark:text-green-400" />,
-      bgColor: "bg-green-100 dark:bg-green-900",
-      textColor: "text-green-800 dark:text-green-200"
+      titleColor: "text-green-600 dark:text-green-400",
+      valueColor: "text-green-800 dark:text-green-200"
     },
     {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month",
       icon: <Users className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />,
-      bgColor: "bg-yellow-100 dark:bg-yellow-900",
-      textColor: "text-yellow-800 dark:text-yellow-200"
+      titleColor: "text-yellow-600 dark:text-yellow-400",
+      valueColor: "text-yellow-800 dark:text-yellow-200"
     },
     {
       title: "Total Products",
       value: products.length.toString(),
       change: "Overall",
       icon: <Boxes className="h-3 w-3 text-purple-600 dark:text-purple-400" />,
-      bgColor: "bg-purple-100 dark:bg-purple-900",
-      textColor: "text-purple-800 dark:text-purple-200"
+      titleColor: "text-purple-600 dark:text-purple-400",
+      valueColor: "text-purple-800 dark:text-purple-200"
     },
   ];
 
@@ -390,13 +390,13 @@ const AdminDashboard = () => {
       {/* Sales Overview Cards */}
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
-          <Card key={index} className={`shadow-md ${item.bgColor} ${item.textColor}`}>
+          <Card key={index} className="bg-card text-card-foreground shadow-md">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2">
-              <CardTitle className="text-[0.5rem] font-medium text-muted-foreground">{item.title}</CardTitle>
+              <CardTitle className={`text-[0.5rem] font-medium ${item.titleColor}`}>{item.title}</CardTitle>
               {item.icon}
             </CardHeader>
             <CardContent className="p-2 pt-0">
-              <div className="text-sm font-bold">{item.value}</div>
+              <div className={`text-sm font-bold ${item.valueColor}`}>{item.value}</div>
               <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
             </CardContent>
           </Card>
@@ -405,42 +405,34 @@ const AdminDashboard = () => {
 
       {/* Orders Awaiting Dispatch and Dispatched Orders in a single row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <Card className="bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 shadow-lg">
-          <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
-        </Card>
-        <Card className="bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200 shadow-lg">
-          <DispatchedOrdersCard />
-        </Card>
+        <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
+        <DispatchedOrdersCard />
       </div>
 
       {/* Payment Transactions and Sales Person Performance in a single row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <Card className="bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 shadow-lg">
-          <PaymentCard />
-        </Card>
-        <Card className="bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 shadow-lg">
-          <SalesPersonPerformanceTable
-            data={salesBySalesPersonData}
-            salesPersonsOptions={salesPersonOptions}
-            selectedSalesPersonId={selectedSalesPersonId}
-            onSelectSalesPerson={setSelectedSalesPersonId}
-            currentMonthTarget={currentMonthTarget}
-            currentMonthAchieved={currentMonthAchieved}
-            currentMonthPending={currentMonthPending}
-            displayMonth={getMonthName(selectedChartMonth)}
-            displayYear={selectedChartYear}
-            selectedChartMonth={selectedChartMonth}
-            setSelectedChartMonth={setSelectedChartMonth}
-            selectedChartYear={selectedChartYear}
-            setSelectedChartYear={setSelectedChartYear}
-            getMonthName={getMonthName}
-            generateYears={generateYears}
-          />
-        </Card>
+        <PaymentCard />
+        <SalesPersonPerformanceTable
+          data={salesBySalesPersonData}
+          salesPersonsOptions={salesPersonOptions}
+          selectedSalesPersonId={selectedSalesPersonId}
+          onSelectSalesPerson={setSelectedSalesPersonId}
+          currentMonthTarget={currentMonthTarget}
+          currentMonthAchieved={currentMonthAchieved}
+          currentMonthPending={currentMonthPending}
+          displayMonth={getMonthName(selectedChartMonth)}
+          displayYear={selectedChartYear}
+          selectedChartMonth={selectedChartMonth}
+          setSelectedChartMonth={setSelectedChartMonth}
+          selectedChartYear={selectedChartYear}
+          setSelectedChartYear={setSelectedChartYear}
+          getMonthName={getMonthName}
+          generateYears={generateYears}
+        />
       </div>
 
       {/* Quick Actions */}
-      <Card className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 shadow-lg">
+      <Card className="bg-card text-card-foreground shadow-lg">
         <CardHeader>
           <CardTitle className="text-xl font-semibold text-primary">Quick Actions</CardTitle>
           <CardDescription className="text-muted-foreground">Perform common administrative tasks quickly.</CardDescription>

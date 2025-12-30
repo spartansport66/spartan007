@@ -59,11 +59,11 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
-      <CardHeader>
+      <CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <div>
-            <CardTitle className="text-xl font-semibold text-primary">Sales Person Performance</CardTitle>
-            <CardDescription className="text-muted-foreground">
+            <CardTitle className="text-xl font-semibold">Sales Person Performance</CardTitle>
+            <CardDescription className="text-pink-100 dark:text-pink-200">
               Selected Month: {currentMonthName}
             </CardDescription>
           </div>
@@ -111,7 +111,7 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4">
         <div className="overflow-x-auto">
           {data.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No sales data available for this month.</p>

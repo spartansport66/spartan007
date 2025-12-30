@@ -137,13 +137,13 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg mb-6">
-      <CardHeader>
-        <CardTitle className="text-xl font-semibold text-primary">Orders Awaiting Dispatch</CardTitle>
-        <CardDescription className="text-muted-foreground">
+      <CardHeader className="bg-orange-500 dark:bg-orange-700 text-white rounded-t-lg p-4">
+        <CardTitle className="text-xl font-semibold">Orders Awaiting Dispatch</CardTitle>
+        <CardDescription className="text-orange-100 dark:text-orange-200">
           Manage orders that are ready to be dispatched.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4">
         <div className="flex flex-wrap items-end gap-4 mb-6">
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterOrderNumber">Order Number</Label>

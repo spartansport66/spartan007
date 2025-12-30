@@ -141,13 +141,13 @@ const DispatchedOrdersCard: React.FC = () => {
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg mb-6">
-      <CardHeader>
-        <CardTitle className="text-xl font-semibold text-primary">Dispatched Orders</CardTitle>
-        <CardDescription className="text-muted-foreground">
+      <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
+        <CardTitle className="text-xl font-semibold">Dispatched Orders</CardTitle>
+        <CardDescription className="text-teal-100 dark:text-teal-200">
           View and filter orders that have been successfully dispatched.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4">
         <div className="flex flex-wrap items-end gap-4 mb-6">
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterOrderNumber">Order Number</Label>

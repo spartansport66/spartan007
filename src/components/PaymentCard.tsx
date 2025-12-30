@@ -140,13 +140,13 @@ const PaymentCard: React.FC = () => {
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg mb-6">
-      <CardHeader>
-        <CardTitle className="text-xl font-semibold text-primary">Payment Transactions</CardTitle>
-        <CardDescription className="text-muted-foreground">
+      <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
+        <CardTitle className="text-xl font-semibold">Payment Transactions</CardTitle>
+        <CardDescription className="text-indigo-100 dark:text-indigo-200">
           View and filter all payment records.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
           <div>
             <Label htmlFor="filterOrderNumber">Order Number</Label>
