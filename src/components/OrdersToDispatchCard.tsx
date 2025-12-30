@@ -200,37 +200,39 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
           ) : orders.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No orders awaiting dispatch found.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted hover:bg-muted/90">
-                  <TableHead className="text-muted-foreground">Order No.</TableHead>
-                  <TableHead className="text-muted-foreground">Dealer Name</TableHead>
-                  <TableHead className="text-muted-foreground">Order Date</TableHead>
-                  <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
-                  <TableHead className="text-muted-foreground text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map((order) => (
-                  <TableRow key={order.id} className="hover:bg-accent/50">
-                    <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
-                    <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex justify-center gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Order Details">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDispatchOrder(order.id)} title="Dispatch Order">
-                          <Truck className="h-4 w-4 text-green-600" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            <div className="max-h-[250px] overflow-y-auto border rounded-md"> {/* Added max-h and overflow */}
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10"> {/* Made header sticky */}
+                  <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="text-muted-foreground">Order No.</TableHead>
+                    <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                    <TableHead className="text-muted-foreground">Order Date</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
+                    <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {orders.map((order) => (
+                    <TableRow key={order.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
+                      <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                      <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex justify-center gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Order Details">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDispatchOrder(order.id)} title="Dispatch Order">
+                            <Truck className="h-4 w-4 text-green-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </div>
       </CardContent>
