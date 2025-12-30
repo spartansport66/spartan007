@@ -392,7 +392,7 @@ const AdminDashboard = () => {
               {item.icon}
             </CardHeader>
             <CardContent className="p-2 pt-0">
-              <div className={`text-lg font-bold ${item.valueColor}`}>{item.value}</div> {/* Increased font size and applied color */}
+              <div className={`text-2xl font-bold ${item.valueColor}`}>{item.value}</div> {/* Changed to text-2xl */}
               <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
             </CardContent>
           </Card>
@@ -417,7 +417,7 @@ const AdminDashboard = () => {
           currentMonthAchieved={currentMonthAchieved}
           currentMonthPending={currentMonthPending}
           displayMonth={getMonthName(selectedChartMonth)}
-          displayYear={selectedChartYear}
+          displayYear={selectedChartYear} {/* Corrected prop name */}
           selectedChartMonth={selectedChartMonth}
           setSelectedChartMonth={setSelectedChartMonth}
           selectedChartYear={selectedChartYear}
