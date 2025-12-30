@@ -78,7 +78,6 @@ const AdminDashboard = () => {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
     const currentMonthTargetDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]; // YYYY-MM-DD
-    console.log("AdminDashboard: currentMonthTargetDate for query:", currentMonthTargetDate); // Added log
 
     // Fetch all sales persons for the dropdown and sales grouping
     const { data: profilesData, error: profilesError } = await supabase
@@ -181,14 +180,10 @@ const AdminDashboard = () => {
       setMonthlySalesData(sortedMonths.map(month => ({ month: month.split(' ')[0], sales: monthlySalesMap.get(month) || 0 })));
 
       // --- Logic for Sales by Sales Person Chart and Target/Achievement ---
-      let filteredSalesForChart = typedSalesData.filter(sale => 
+      // Sales for the current month for ALL sales persons (for the bar chart)
+      const currentMonthSalesForAllPersons = typedSalesData.filter(sale => 
         new Date(sale.sale_date) >= new Date(startOfMonth) && new Date(sale.sale_date) <= new Date(endOfMonth)
       );
-
-      if (selectedSalesPersonId) {
-        console.log("AdminDashboard: Selected Sales Person ID for target/achieved:", selectedSalesPersonId);
-        filteredSalesForChart = filteredSalesForChart.filter(sale => sale.user_id === selectedSalesPersonId); 
-      }
 
       const salesByPersonMap = new Map<string, number>();
       const salesPersonNamesMap = new Map<string, string>();
@@ -198,7 +193,7 @@ const AdminDashboard = () => {
         salesByPersonMap.set(p.id, 0); // Initialize all sales persons to 0 sales
       });
 
-      filteredSalesForChart.forEach(sale => {
+      currentMonthSalesForAllPersons.forEach(sale => {
         const personId = sale.user_id; 
         if (personId) {
           salesByPersonMap.set(personId, (salesByPersonMap.get(personId) || 0) + sale.total_price);
@@ -214,35 +209,31 @@ const AdminDashboard = () => {
 
       // Calculate target and achievement for selected sales person
       if (selectedSalesPersonId) {
-        // Fetch target for current month
+        // Fetch target for current month for the SELECTED sales person
         const { data: targetData, error: targetError } = await supabase
           .from('sales_targets')
           .select('target_amount')
           .eq('sales_person_id', selectedSalesPersonId)
-          .eq('target_month', currentMonthTargetDate)
+          .eq('target_month', currentMonthTargetDate) // Use YYYY-MM-DD format
           .single();
-
-        console.log("AdminDashboard: Fetched Target Data:", targetData);
-        console.log("AdminDashboard: Target Error (if any):", targetError);
 
         if (targetError && targetError.code !== 'PGRST116') { // PGRST116 means no rows found
           console.error('Error fetching target:', targetError);
           setCurrentMonthTarget(null);
         } else {
-          setCurrentMonthTarget(targetData?.target_amount || 0);
+          setCurrentMonthTarget(targetData?.target_amount || 0); // Default to 0 if no target set
         }
 
-        // Calculate achieved for current month for the selected person
-        const achieved = filteredSalesForChart
+        // Calculate achieved for current month for the SELECTED sales person
+        const achieved = currentMonthSalesForAllPersons
             .filter(sale => sale.user_id === selectedSalesPersonId) 
             .reduce((sum, sale) => sum + sale.total_price, 0);
         setCurrentMonthAchieved(achieved);
-        console.log("AdminDashboard: Achieved Sales for current month:", achieved);
 
         const pending = (targetData?.target_amount || 0) - achieved;
         setCurrentMonthPending(pending);
-        console.log("AdminDashboard: Pending Sales:", pending);
       } else {
+        // Reset target/achieved/pending if no sales person is selected
         setCurrentMonthTarget(null);
         setCurrentMonthAchieved(null);
         setCurrentMonthPending(null);
