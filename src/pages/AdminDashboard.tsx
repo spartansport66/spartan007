@@ -354,21 +354,21 @@ const AdminDashboard = () => {
       value: totalOrders.toString(),
       change: "+180.1% from last month",
       icon: <Package className="h-3 w-3 text-white" />, // White icon
-      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
+      valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month",
       icon: <Users className="h-3 w-3 text-white" />, // White icon
-      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
+      valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Products",
       value: products.length.toString(),
       change: "Overall",
       icon: <Boxes className="h-3 w-3 text-white" />, // White icon
-      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
+      valueColor: "text-blue-800 dark:text-blue-200"
     },
   ];
 
@@ -381,59 +381,8 @@ const AdminDashboard = () => {
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">Admin Dashboard</h1>
-      </div>
-
-      {/* Sales Overview Cards */}
-      <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
-        {salesOverview.map((item, index) => (
-          <Card key={index} className="bg-card text-card-foreground shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg">
-              <CardTitle className="text-[0.5rem] font-medium text-white">{item.title}</CardTitle>
-              {item.icon}
-            </CardHeader>
-            <CardContent className="p-2 pt-0">
-              <div className={`text-2xl font-bold ${item.valueColor}`}>{item.value}</div>
-              <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Orders Awaiting Dispatch and Dispatched Orders in a single row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
-        <DispatchedOrdersCard />
-      </div>
-
-      {/* Payment Transactions and Sales Person Performance in a single row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <PaymentCard />
-        <SalesPersonPerformanceTable
-          data={salesBySalesPersonData}
-          salesPersonsOptions={salesPersonOptions}
-          selectedSalesPersonId={selectedSalesPersonId}
-          onSelectSalesPerson={setSelectedSalesPersonId}
-          currentMonthTarget={currentMonthTarget}
-          currentMonthAchieved={currentMonthAchieved}
-          currentMonthPending={currentMonthPending}
-          displayMonth={getMonthName(selectedChartMonth)}
-          displayYear={selectedChartYear}
-          selectedChartMonth={selectedChartMonth}
-          setSelectedChartMonth={setSelectedChartMonth}
-          selectedChartYear={selectedChartYear}
-          setSelectedChartYear={setSelectedChartYear}
-          getMonthName={getMonthName}
-          generateYears={generateYears}
-        />
-      </div>
-
-      {/* Quick Actions */}
-      <Card className="bg-card text-card-foreground shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold text-primary">Quick Actions</CardTitle>
-          <CardDescription className="text-muted-foreground">Perform common administrative tasks quickly.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
+        {/* Quick Actions Buttons */}
+        <div className="flex gap-2 sm:gap-4">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => navigate('/manage-products')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
@@ -497,8 +446,53 @@ const AdminDashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Logout</TooltipContent>
           </Tooltip>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {/* Sales Overview Cards */}
+      <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
+        {salesOverview.map((item, index) => (
+          <Card key={index} className="bg-card text-card-foreground shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg">
+              <CardTitle className="text-[0.5rem] font-medium text-white">{item.title}</CardTitle>
+              {item.icon}
+            </CardHeader>
+            <CardContent className="p-2 pt-0">
+              <div className={`text-2xl font-bold ${item.valueColor}`}>{item.value}</div>
+              <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Orders Awaiting Dispatch and Dispatched Orders in a single row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
+        <DispatchedOrdersCard />
+      </div>
+
+      {/* Payment Transactions and Sales Person Performance in a single row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <PaymentCard />
+        <SalesPersonPerformanceTable
+          data={salesBySalesPersonData}
+          salesPersonsOptions={salesPersonOptions}
+          selectedSalesPersonId={selectedSalesPersonId}
+          onSelectSalesPerson={setSelectedSalesPersonId}
+          currentMonthTarget={currentMonthTarget}
+          currentMonthAchieved={currentMonthAchieved}
+          currentMonthPending={currentMonthPending}
+          displayMonth={getMonthName(selectedChartMonth)}
+          displayYear={selectedChartYear}
+          selectedChartMonth={selectedChartMonth}
+          setSelectedChartMonth={setSelectedChartMonth}
+          selectedChartYear={selectedChartYear}
+          setSelectedChartYear={setSelectedChartYear}
+          getMonthName={getMonthName}
+          generateYears={generateYears}
+        />
+      </div>
+
       <MadeWithDyad />
 
       {/* Order Details Dialog */}
