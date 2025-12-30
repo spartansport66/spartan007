@@ -95,6 +95,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
           console.error('SessionContext: Error in onAuthStateChange handler:', error);
           showError(`Authentication error: ${error.message}`);
         } finally {
+          console.log('SessionContext: onAuthStateChange handler finished. Setting loading to false.');
           setLoading(false); // Ensure loading is always set to false after any auth event
         }
       }
@@ -113,6 +114,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       console.error('SessionContext: Error during initial getSession promise:', error);
       showError(`Failed to load session: ${error.message}`);
     }).finally(() => {
+      console.log('SessionContext: Initial getSession promise finished. Setting loading to false.');
       setLoading(false); // Ensure loading is set to false after initial session check completes, regardless of success or failure
     });
 
