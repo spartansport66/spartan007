@@ -95,14 +95,12 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   const selectedMonth = addForm.watch('month');
   const selectedYear = addForm.watch('year');
 
-  // Check if a target already exists for the selected month/year
-  const existingTargetForSelectedMonth = localTargets.find(target => {
-    const targetDate = new Date(target.target_month);
-    return (
-      targetDate.getMonth() + 1 === parseInt(selectedMonth) &&
-      targetDate.getFullYear() === parseInt(selectedYear)
-    );
-  });
+  // Check if a target already exists for the selected month/year for display purposes
+  const targetMonthDateForCheck = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
+  const formattedTargetMonthForCheck = targetMonthDateForCheck.toISOString().split('T')[0];
+  const existingTargetForSelectedMonth = localTargets.find(
+    (t) => t.target_month === formattedTargetMonthForCheck
+  );
 
   const handleAddTarget = async (values: z.infer<typeof addTargetFormSchema>) => {
     setIsSubmitting(true);
@@ -110,62 +108,45 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
       const targetMonthDate = new Date(parseInt(values.year), parseInt(values.month) - 1, 1);
       const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
 
-      // Check if a target for this month already exists
-      const existingTarget = localTargets.find(
-        (t) => t.target_month === formattedTargetMonth
-      );
-
-      if (existingTarget) {
-        // Update existing target
-        const { data, error } = await supabase
-          .from('sales_targets')
-          .update({
-            target_amount: values.targetAmount,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingTarget.id)
-          .select();
-
-        if (error) throw error;
-        
-        // Update local state
-        setLocalTargets(prev => prev.map(t => 
-          t.id === existingTarget.id 
-            ? { ...t, target_amount: values.targetAmount, updated_at: new Date().toISOString() } 
-            : t
-        ));
-        
-        showSuccess(`Target for ${getMonthName(values.month)} ${values.year} updated successfully!`);
-      } else {
-        // Create new target
-        const { data, error } = await supabase
-          .from('sales_targets')
-          .insert({
+      const { data, error } = await supabase
+        .from('sales_targets')
+        .upsert(
+          {
             sales_person_id: user.id,
             target_amount: values.targetAmount,
             target_month: formattedTargetMonth,
-            created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          })
-          .select();
+          },
+          { onConflict: 'sales_person_id, target_month' } // Use unique constraint for upsert
+        )
+        .select();
 
-        if (error) throw error;
-        
-        // Add new target to local state
-        if (data && data.length > 0) {
-          setLocalTargets(prev => [...prev, data[0]]);
-        }
-        
-        showSuccess(`Target for ${getMonthName(values.month)} ${values.year} added successfully!`);
+      if (error) {
+        throw error;
+      }
+      
+      if (data && data.length > 0) {
+        const upsertedTarget = data[0];
+        setLocalTargets(prev => {
+          const existingIndex = prev.findIndex(t => t.id === upsertedTarget.id);
+          if (existingIndex > -1) {
+            // Update existing target in local state
+            return prev.map((t, idx) => idx === existingIndex ? upsertedTarget : t);
+          } else {
+            // Add new target to local state
+            return [...prev, upsertedTarget];
+          }
+        });
       }
 
+      showSuccess(`Target for ${getMonthName(values.month)} ${values.year} set successfully!`);
       addForm.reset({
         month: (new Date().getMonth() + 1).toString(),
         year: new Date().getFullYear().toString(),
         targetAmount: 0,
       });
     } catch (error: any) {
-      console.error('Error adding/updating target:', error);
+      console.error('Error setting target:', error);
       showError(`Failed to set target: ${error.message}`);
     } finally {
       setIsSubmitting(false);
