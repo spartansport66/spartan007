@@ -69,8 +69,8 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
           </div>
           <div className="flex flex-wrap gap-2">
             <Select value={selectedChartMonth} onValueChange={setSelectedChartMonth}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Month" />
+              <SelectTrigger className="w-[120px] text-foreground"> {/* Added text-foreground */}
+                <SelectValue placeholder="Month" className="text-foreground" /> {/* Added text-foreground */}
               </SelectTrigger>
               <SelectContent>
                 {Array.from({ length: 12 }, (_, i) => (i + 1).toString()).map((monthNum) => (
@@ -81,8 +81,8 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
               </SelectContent>
             </Select>
             <Select value={selectedChartYear} onValueChange={setSelectedChartYear}>
-              <SelectTrigger className="w-[100px]">
-                <SelectValue placeholder="Year" />
+              <SelectTrigger className="w-[100px] text-foreground"> {/* Added text-foreground */}
+                <SelectValue placeholder="Year" className="text-foreground" /> {/* Added text-foreground */}
               </SelectTrigger>
               <SelectContent>
                 {generateYears().map((year) => (
@@ -96,8 +96,8 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
               value={selectedSalesPersonId || "all"}
               onValueChange={(value) => onSelectSalesPerson(value === "all" ? null : value)}
             >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="All Sales Persons" />
+              <SelectTrigger className="w-[180px] text-foreground"> {/* Added text-foreground */}
+                <SelectValue placeholder="All Sales Persons" className="text-foreground" /> {/* Added text-foreground */}
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Sales Persons</SelectItem>
