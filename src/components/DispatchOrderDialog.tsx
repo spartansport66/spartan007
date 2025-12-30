@@ -17,7 +17,7 @@ interface DispatchOrderDialogProps {
   orderId: string | null;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onDispatchSuccess: () => void;
+  onDispatchSuccess: (dispatchedOrderId: string) => void; // Modified to pass orderId
 }
 
 // Define the expected structure of the data returned by the Supabase query
@@ -94,7 +94,7 @@ const DispatchOrderDialog: React.FC<DispatchOrderDialogProps> = ({ orderId, isOp
       }
 
       showSuccess(`Order ${orderNumber} dispatched successfully!`);
-      onDispatchSuccess();
+      onDispatchSuccess(orderId); // Pass the dispatched orderId back
       onOpenChange(false);
     } catch (error: any) {
       console.error('Error dispatching order:', error.message);

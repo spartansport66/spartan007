@@ -35,12 +35,17 @@ interface OrderDetail {
   dealer_pending_credit: number;
   sales_person_name: string;
   items: OrderItemDetail[];
+  bill_no: string | null; // New
+  dispatch_date: string | null; // New
+  dispatch_number: number | null; // New
+  dispatched: boolean; // New
 }
 
 interface OrderDetailsDialogProps {
   orderId: string | null;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  shouldPrintOnLoad?: boolean; // New prop
 }
 
 // Define the expected structure of the data returned by the Supabase query
@@ -52,9 +57,13 @@ interface FetchedOrderData {
   status: string;
   dealers: { id: string; name: string; credit_limit: number; address: string; phone: string; city: string; state: string; country: string } | null; // Added city, state, country
   user_id: string;
+  bill_no: string | null; // New
+  dispatch_date: string | null; // New
+  dispatch_number: number | null; // New
+  dispatched: boolean; // New
 }
 
-const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen, onOpenChange }) => {
+const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen, onOpenChange, shouldPrintOnLoad = false }) => {
   const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -71,10 +80,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           total_amount,
           status,
           user_id,
+          bill_no,
+          dispatch_date,
+          dispatch_number,
+          dispatched,
           dealers (id, name, credit_limit, address, phone, city, state, country)
         `)
         .eq('id', id)
-        .single() as { data: FetchedOrderData | null; error: any };
+        .single() as { data: FetchedOrderData | null; error: any }; // Explicitly type data
 
       if (orderError) throw orderError;
       if (!orderData) {
@@ -147,6 +160,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         dealer_pending_credit: (orderData.dealers?.credit_limit || 0) - dealerConsumedCredit,
         sales_person_name: salesPersonName,
         items: items,
+        bill_no: orderData.bill_no, // New
+        dispatch_date: orderData.dispatch_date, // New
+        dispatch_number: orderData.dispatch_number, // New
+        dispatched: orderData.dispatched, // New
       });
 
     } catch (error: any) {
@@ -166,7 +183,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
     }
   }, [isOpen, orderId, fetchOrderDetails]);
 
-  // Removed handleDownloadPdf function
+  useEffect(() => {
+    if (isOpen && orderDetails && shouldPrintOnLoad) {
+      handlePrint();
+      onOpenChange(false); // Close dialog after printing
+    }
+  }, [isOpen, orderDetails, shouldPrintOnLoad, onOpenChange]);
 
   const handlePrint = () => {
     if (!orderDetails) return;
@@ -184,9 +206,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         .summary { margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; }
         .text-red-600 { color: #dc2626; } /* Tailwind red-600 */
       </style>
-      <h1>Order Details</h1>
+      <h1>Dispatch Receipt</h1>
+      <p><strong>Dispatch Number:</strong> ${orderDetails.dispatch_number || 'N/A'}</p>
+      <p><strong>Dispatch Date:</strong> ${orderDetails.dispatch_date ? new Date(orderDetails.dispatch_date).toLocaleDateString() : 'N/A'}</p>
       <p><strong>Order Number:</strong> ${orderDetails.order_number}</p>
       <p><strong>Order Date:</strong> ${new Date(orderDetails.order_date).toLocaleDateString()}</p>
+      <p><strong>Bill Number:</strong> ${orderDetails.bill_no || 'N/A'}</p>
       <p><strong>Sales Person:</strong> ${orderDetails.sales_person_name}</p>
       <p><strong>Status:</strong> ${orderDetails.status}</p>
 
@@ -259,6 +284,13 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 <p><span className="font-semibold">Order Date:</span> {new Date(orderDetails.order_date).toLocaleDateString()}</p>
                 <p><span className="font-semibold">Status:</span> {orderDetails.status}</p>
                 <p><span className="font-semibold">Sales Person:</span> {orderDetails.sales_person_name}</p>
+                {orderDetails.dispatched && (
+                  <>
+                    <p><span className="font-semibold">Dispatch Number:</span> {orderDetails.dispatch_number || 'N/A'}</p>
+                    <p><span className="font-semibold">Dispatch Date:</span> {orderDetails.dispatch_date ? new Date(orderDetails.dispatch_date).toLocaleDateString() : 'N/A'}</p>
+                    <p><span className="font-semibold">Bill Number:</span> {orderDetails.bill_no || 'N/A'}</p>
+                  </>
+                )}
               </div>
               <div>
                 <p><span className="font-semibold">Dealer Name:</span> {orderDetails.dealer_name}</p>
@@ -313,9 +345,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           <p className="text-center text-muted-foreground py-8">No order selected or details could not be loaded.</p>
         )}
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
-          {/* Removed Download PDF button */}
           <Button variant="outline" onClick={handlePrint} disabled={!orderDetails || loading}>
-            <Printer className="mr-2 h-4 w-4" /> Print Order
+            <Printer className="mr-2 h-4 w-4" /> Print Receipt
           </Button>
           <Button onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>

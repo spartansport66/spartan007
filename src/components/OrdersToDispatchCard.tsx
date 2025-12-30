@@ -27,7 +27,11 @@ interface DealerOption {
   label: string;
 }
 
-const OrdersToDispatchCard: React.FC = () => {
+interface OrdersToDispatchCardProps {
+  onDispatchSuccess: (dispatchedOrderId: string) => void; // New prop to handle dispatch and print
+}
+
+const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchSuccess }) => {
   const [orders, setOrders] = useState<OrderToDispatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
@@ -241,7 +245,7 @@ const OrdersToDispatchCard: React.FC = () => {
         orderId={selectedOrderIdForDispatch}
         isOpen={isDispatchDialogOpen}
         onOpenChange={setIsDispatchDialogOpen}
-        onDispatchSuccess={fetchOrdersAndDealers} // Refresh the list after dispatch
+        onDispatchSuccess={onDispatchSuccess} // Pass the prop from parent
       />
     </Card>
   );

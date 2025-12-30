@@ -82,6 +82,7 @@ const AdminDashboard = () => {
   const [recentOrders, setRecentOrders] = useState<OrderSummary[]>([]);
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
+  const [shouldPrintOrderDetails, setShouldPrintOrderDetails] = useState(false); // New state for printing
 
   const getMonthName = (monthNum: string) => {
     const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
@@ -300,6 +301,14 @@ const AdminDashboard = () => {
   const handleViewOrderDetails = (orderId: string) => {
     setSelectedOrderIdForDetails(orderId);
     setIsOrderDetailsDialogOpen(true);
+    setShouldPrintOrderDetails(false); // Ensure printing is off for manual view
+  };
+
+  const handleDispatchSuccessAndPrint = (dispatchedOrderId: string) => {
+    setSelectedOrderIdForDetails(dispatchedOrderId);
+    setIsOrderDetailsDialogOpen(true);
+    setShouldPrintOrderDetails(true); // Set flag to print after details load
+    fetchAdminDashboardData(); // Refresh data in the background
   };
 
   if (sessionLoading || loadingData) {
@@ -370,7 +379,7 @@ const AdminDashboard = () => {
       </div>
 
       {/* Orders Awaiting Dispatch Card */}
-      <OrdersToDispatchCard />
+      <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
 
       {/* Recent Orders Card */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
@@ -521,6 +530,7 @@ const AdminDashboard = () => {
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}
         onOpenChange={setIsOrderDetailsDialogOpen}
+        shouldPrintOnLoad={shouldPrintOrderDetails} // Pass the new prop
       />
     </div>
   );
