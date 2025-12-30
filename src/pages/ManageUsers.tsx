@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -15,25 +14,8 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { ArrowLeft, Loader2, Edit, Trash2, UserCheck, UserX, PlusCircle } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, } from "@/components/ui/dialog";
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import MultiSelect from '@/components/MultiSelect';
@@ -50,11 +32,10 @@ interface UserProfile {
   last_name: string | null;
   user_type: 'admin' | 'sales_person';
   is_admin: boolean;
-  raw_app_meta_data: {
-    provider?: string;
-    providers?: string[];
-  };
+  raw_app_meta_data: { provider?: string; providers?: string[]; };
   banned_until: string | null;
+  monthly_target?: number | null;
+  target_id?: string | null;
 }
 
 interface Dealer {
@@ -68,7 +49,14 @@ const userFormSchema = z.object({
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional().or(z.literal('')),
   userType: z.enum(['admin', 'sales_person'], { message: 'Please select a user type.' }),
-  assignedDealerIds: z.array(z.string().uuid()).optional(), // Added assignedDealerIds to schema
+  assignedDealerIds: z.array(z.string().uuid()).optional(),
+});
+
+const targetFormSchema = z.object({
+  targetAmount: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Target amount cannot be negative.' })
+  ),
 });
 
 const ManageUsers = () => {
@@ -80,8 +68,9 @@ const ManageUsers = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-  // Removed assignedDealerIds local state, now managed by react-hook-form
+  const [targetUser, setTargetUser] = useState<UserProfile | null>(null);
 
   const editForm = useForm<z.infer<typeof userFormSchema>>({
     resolver: zodResolver(userFormSchema),
@@ -91,7 +80,7 @@ const ManageUsers = () => {
       email: '',
       password: '',
       userType: 'sales_person',
-      assignedDealerIds: [], // Default to empty array
+      assignedDealerIds: [],
     },
   });
 
@@ -103,15 +92,33 @@ const ManageUsers = () => {
       email: '',
       password: '',
       userType: 'sales_person',
-      assignedDealerIds: [], // Default to empty array
+      assignedDealerIds: [],
+    },
+  });
+
+  const targetForm = useForm<z.infer<typeof targetFormSchema>>({
+    resolver: zodResolver(targetFormSchema),
+    defaultValues: {
+      targetAmount: 0,
     },
   });
 
   const fetchUsersAndDealers = useCallback(async () => {
     setLoadingData(true);
+    
+    // Fetch sales persons with their targets
     const { data: usersData, error: usersError } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, user_type, is_admin, auth_users(email, banned_until, raw_app_meta_data)');
+      .select(`
+        id, 
+        first_name, 
+        last_name, 
+        user_type, 
+        is_admin, 
+        auth_users(email, banned_until, raw_app_meta_data),
+        sales_targets(id, target_amount)
+      `)
+      .eq('user_type', 'sales_person');
 
     if (usersError) {
       console.error('Error fetching users:', usersError.message);
@@ -127,6 +134,8 @@ const ManageUsers = () => {
         is_admin: profile.is_admin,
         banned_until: profile.auth_users?.banned_until,
         raw_app_meta_data: profile.auth_users?.raw_app_meta_data || {},
+        monthly_target: profile.sales_targets?.length > 0 ? profile.sales_targets[0].target_amount : null,
+        target_id: profile.sales_targets?.length > 0 ? profile.sales_targets[0].id : null,
       }));
       setUsers(formattedUsers);
     }
@@ -174,7 +183,7 @@ const ManageUsers = () => {
                 email: selectedUser.email,
                 password: '',
                 userType: selectedUser.user_type,
-                assignedDealerIds: [], // Default to empty if error
+                assignedDealerIds: [],
               });
             } else {
               editForm.reset({
@@ -194,11 +203,19 @@ const ManageUsers = () => {
           email: selectedUser.email,
           password: '',
           userType: selectedUser.user_type,
-          assignedDealerIds: [], // No dealers assigned for non-sales persons
+          assignedDealerIds: [],
         });
       }
     }
   }, [selectedUser, editForm]);
+
+  useEffect(() => {
+    if (targetUser) {
+      targetForm.reset({
+        targetAmount: targetUser.monthly_target || 0,
+      });
+    }
+  }, [targetUser, targetForm]);
 
   const handleCreateUser = async (values: z.infer<typeof userFormSchema>) => {
     setIsSubmitting(true);
@@ -218,7 +235,6 @@ const ManageUsers = () => {
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create user');
       }
@@ -238,7 +254,6 @@ const ManageUsers = () => {
   const handleUpdateUser = async (values: z.infer<typeof userFormSchema>) => {
     if (!selectedUser) return;
     setIsSubmitting(true);
-
     try {
       const payload: any = {
         userId: selectedUser.id,
@@ -253,7 +268,7 @@ const ManageUsers = () => {
       }
 
       if (values.userType === 'sales_person') {
-        payload.assignedDealerIds = values.assignedDealerIds || []; // Get from form values
+        payload.assignedDealerIds = values.assignedDealerIds || [];
       } else {
         payload.assignedDealerIds = [];
       }
@@ -267,7 +282,6 @@ const ManageUsers = () => {
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || 'Failed to update user');
       }
@@ -301,7 +315,6 @@ const ManageUsers = () => {
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || 'Failed to toggle user status');
       }
@@ -311,6 +324,51 @@ const ManageUsers = () => {
     } catch (error: any) {
       console.error('Error toggling user status:', error);
       showError(`Failed to toggle user status: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSetTarget = async (values: z.infer<typeof targetFormSchema>) => {
+    if (!targetUser) return;
+    setIsSubmitting(true);
+    try {
+      const currentDate = new Date();
+      const targetMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1); // First day of current month
+
+      if (targetUser.target_id) {
+        // Update existing target
+        const { error } = await supabase
+          .from('sales_targets')
+          .update({
+            target_amount: values.targetAmount,
+            target_month: targetMonth,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', targetUser.target_id);
+
+        if (error) throw error;
+      } else {
+        // Create new target
+        const { error } = await supabase
+          .from('sales_targets')
+          .insert({
+            sales_person_id: targetUser.id,
+            target_amount: values.targetAmount,
+            target_month: targetMonth,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+        if (error) throw error;
+      }
+
+      showSuccess(`Monthly target set for ${targetUser.first_name} ${targetUser.last_name}!`);
+      setIsTargetDialogOpen(false);
+      fetchUsersAndDealers();
+    } catch (error: any) {
+      console.error('Error setting target:', error);
+      showError(`Failed to set target: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -327,33 +385,35 @@ const ManageUsers = () => {
         <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="mb-6 flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
         </Button>
-
         <Card className="bg-card text-card-foreground shadow-lg">
           <CardHeader>
-            <CardTitle className="text-2xl font-semibold text-primary">Manage Users</CardTitle>
-            <CardDescription className="text-muted-foreground">View, edit, activate/deactivate users, and manage dealer assignments.</CardDescription>
+            <CardTitle className="text-2xl font-semibold text-primary">Manage Sales Persons</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              View, edit, activate/deactivate users, and manage dealer assignments and monthly targets.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               {users.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No users found. Create a new user to get started!</p>
+                <p className="text-center text-muted-foreground py-8">No sales persons found.</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead className="text-muted-foreground">Name</TableHead>
                       <TableHead className="text-muted-foreground">Email</TableHead>
-                      <TableHead className="text-muted-foreground">User Type</TableHead>
                       <TableHead className="text-muted-foreground">Status</TableHead>
+                      <TableHead className="text-muted-foreground">Monthly Target</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {users.map((userItem) => (
                       <TableRow key={userItem.id} className="hover:bg-accent/50">
-                        <TableCell className="font-medium text-foreground">{userItem.first_name} {userItem.last_name}</TableCell>
+                        <TableCell className="font-medium text-foreground">
+                          {userItem.first_name} {userItem.last_name}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{userItem.email}</TableCell>
-                        <TableCell className="text-muted-foreground">{userItem.user_type}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {userItem.banned_until ? (
                             <span className="text-red-500">Inactive</span>
@@ -361,15 +421,47 @@ const ManageUsers = () => {
                             <span className="text-green-500">Active</span>
                           )}
                         </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {userItem.monthly_target !== null && userItem.monthly_target !== undefined 
+                            ? `₹${userItem.monthly_target.toFixed(2)}` 
+                            : 'Not Set'}
+                        </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => { setSelectedUser(userItem); setIsEditDialogOpen(true); }} title="Edit User">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => {
+                                setSelectedUser(userItem);
+                                setIsEditDialogOpen(true);
+                              }} 
+                              title="Edit User"
+                            >
                               <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => {
+                                setTargetUser(userItem);
+                                setIsTargetDialogOpen(true);
+                              }} 
+                              title="Set Monthly Target"
+                            >
+                              <span className="text-xs font-bold">₹</span>
                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" title={userItem.banned_until ? "Activate User" : "Deactivate User"} disabled={isSubmitting}>
-                                  {userItem.banned_until ? <UserCheck className="h-4 w-4 text-green-500" /> : <UserX className="h-4 w-4 text-destructive" />}
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  title={userItem.banned_until ? "Activate User" : "Deactivate User"} 
+                                  disabled={isSubmitting}
+                                >
+                                  {userItem.banned_until ? 
+                                    <UserCheck className="h-4 w-4 text-green-500" /> : 
+                                    <UserX className="h-4 w-4 text-destructive" />
+                                  }
                                 </Button>
                               </AlertDialogTrigger>
                               <AlertDialogContent>
@@ -381,7 +473,10 @@ const ManageUsers = () => {
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleToggleUserStatus(userItem)} disabled={isSubmitting}>
+                                  <AlertDialogAction 
+                                    onClick={() => handleToggleUserStatus(userItem)} 
+                                    disabled={isSubmitting}
+                                  >
                                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Continue'}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
@@ -397,7 +492,7 @@ const ManageUsers = () => {
             </div>
             <div className="mt-6 text-right">
               <Button onClick={() => setIsCreateDialogOpen(true)} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <PlusCircle className="h-4 w-4 mr-2" /> Create New User
+                <PlusCircle className="h-4 w-4 mr-2" /> Create New Sales Person
               </Button>
             </div>
           </CardContent>
@@ -409,9 +504,9 @@ const ManageUsers = () => {
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Create New User</DialogTitle>
+            <DialogTitle>Create New Sales Person</DialogTitle>
             <DialogDescription>
-              Fill in the details to create a new user account.
+              Fill in the details to create a new sales person account.
             </DialogDescription>
           </DialogHeader>
           <Form {...createForm}>
@@ -464,27 +559,6 @@ const ManageUsers = () => {
                     <FormControl>
                       <Input type="password" placeholder="********" {...field} />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={createForm.control}
-                name="userType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>User Type</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a user type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="sales_person">Sales Person</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -563,55 +637,71 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
+                <div className="grid gap-4 mt-4">
+                  <h3 className="text-lg font-semibold">Manage Assigned Dealers</h3>
+                  <FormField
+                    control={editForm.control}
+                    name="assignedDealerIds"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Assigned Dealers</FormLabel>
+                        <FormControl>
+                          <MultiSelect
+                            options={dealerOptions}
+                            value={field.value || []}
+                            onChange={field.onChange}
+                            placeholder="Select dealers to assign"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <DialogFooter>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Set Target Dialog */}
+      {targetUser && (
+        <Dialog open={isTargetDialogOpen} onOpenChange={setIsTargetDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Set Monthly Target</DialogTitle>
+              <DialogDescription>
+                Set monthly sales target for {targetUser.first_name} {targetUser.last_name}
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...targetForm}>
+              <form onSubmit={targetForm.handleSubmit(handleSetTarget)} className="grid gap-4 py-4">
                 <FormField
-                  control={editForm.control}
-                  name="userType"
+                  control={targetForm.control}
+                  name="targetAmount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>User Type</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a user type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="sales_person">Sales Person</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>Monthly Target Amount (₹)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          placeholder="e.g., 50000.00" 
+                          {...field} 
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
-                {editForm.watch('userType') === 'sales_person' && (
-                  <div className="grid gap-4 mt-4">
-                    <h3 className="text-lg font-semibold">Manage Assigned Dealers</h3>
-                    <FormField
-                      control={editForm.control}
-                      name="assignedDealerIds" // Corrected name
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Assigned Dealers</FormLabel>
-                          <FormControl>
-                            <MultiSelect
-                              options={dealerOptions}
-                              value={field.value || []} // Pass field.value
-                              onChange={field.onChange} // Pass field.onChange
-                              placeholder="Select dealers to assign"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                )}
-
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Set Target'}
                   </Button>
                 </DialogFooter>
               </form>
