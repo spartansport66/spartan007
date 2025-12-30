@@ -9,9 +9,9 @@ import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, PlusCircle, UserCog, Loader2, Eye } from 'lucide-react';
 import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTable';
-import OrderDetailsDialog from '@/components/OrderDetailsDialog'; // Import the new component
-import OrdersToDispatchCard from '@/components/OrdersToDispatchCard'; // Import the new component
-import DispatchedOrdersCard from '@/components/DispatchedOrdersCard'; // Import the new DispatchedOrdersCard
+import OrderDetailsDialog from '@/components/OrderDetailsDialog';
+import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
+import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -80,7 +80,6 @@ const AdminDashboard = () => {
   const [loadingData, setLoadingData] = useState(true);
 
   // New states for Order Details Card
-  const [recentOrders, setRecentOrders] = useState<OrderSummary[]>([]);
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
   const [shouldPrintOrderDetails, setShouldPrintOrderDetails] = useState(false); // New state for printing
@@ -244,34 +243,6 @@ const AdminDashboard = () => {
       }
     }
 
-    // Fetch recent orders for the new card, including order_number
-    const { data: ordersData, error: ordersError } = await supabase
-      .from('orders')
-      .select(`
-        id,
-        order_number,
-        order_date,
-        total_amount,
-        dealers (name)
-      `)
-      .order('order_date', { ascending: false })
-      .limit(10); // Limit to recent 10 orders
-
-    if (ordersError) {
-      console.error('AdminDashboard: Error fetching recent orders:', ordersError);
-      showError(`Failed to load recent orders: ${ordersError.message}`);
-      setRecentOrders([]);
-    } else {
-      const formattedOrders: OrderSummary[] = (ordersData || []).map((order: any) => ({
-        id: order.id,
-        order_number: order.order_number, // Added
-        order_date: order.order_date,
-        total_amount: order.total_amount,
-        dealer_name: order.dealers?.name || 'N/A',
-      }));
-      setRecentOrders(formattedOrders);
-    }
-
     setLoadingData(false);
   }, [user, selectedSalesPersonId, selectedChartMonth, selectedChartYear]);
 
@@ -384,46 +355,6 @@ const AdminDashboard = () => {
 
       {/* Dispatched Orders Card */}
       <DispatchedOrdersCard />
-
-      {/* Recent Orders Card */}
-      <Card className="bg-card text-card-foreground shadow-lg mb-6">
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold text-primary">Recent Orders</CardTitle>
-          <CardDescription className="text-muted-foreground">Overview of recently placed orders.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            {recentOrders.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No recent orders found.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground">Order Number</TableHead> {/* Changed to Order Number */}
-                    <TableHead className="text-muted-foreground">Party Name</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Order Amount</TableHead>
-                    <TableHead className="text-muted-foreground text-center">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentOrders.map((order) => (
-                    <TableRow key={order.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{order.order_number}</TableCell> {/* Display order_number */}
-                      <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-center">
-                        <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Order Details">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Sales Person Performance Table Section */}
       <div className="grid gap-4 lg:grid-cols-1 mb-6">
