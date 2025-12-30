@@ -54,13 +54,20 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
           .eq('id', currentSession.user.id)
           .single();
 
+        // --- NEW LOGGING ADDED HERE ---
+        console.log('SessionContext: Profile fetch result - data:', data, 'error:', error);
+        // --- END NEW LOGGING ---
+
         if (error) {
           console.error('SessionContext: Error fetching user profile:', error.message);
           showError(`Failed to load user profile: ${error.message}`);
-        } else {
+        } else if (data) { // data will be null if no row found by single()
           console.log('SessionContext: User profile fetched successfully:', data);
-          fetchedIsAdmin = data?.is_admin || false;
-          fetchedUserType = data?.user_type || 'sales_person';
+          fetchedIsAdmin = data.is_admin || false;
+          fetchedUserType = data.user_type || 'sales_person';
+        } else {
+          console.warn('SessionContext: No user profile found for ID:', currentSession.user.id, 'Data was null.');
+          showError('No user profile found. Please ensure your account has a profile.');
         }
       }
       setIsAdmin(fetchedIsAdmin);
