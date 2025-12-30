@@ -452,7 +452,7 @@ const AdminDashboard = () => {
       {/* Sales Overview Cards */}
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
-          <Card key={index} className="bg-card text-card-foreground shadow-md">
+          <Card key={index} className="bg-card text-card-foreground shadow-md h-full"> {/* Added h-full here */}
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg">
               <CardTitle className="text-[0.5rem] font-medium text-white">{item.title}</CardTitle>
               {item.icon}
