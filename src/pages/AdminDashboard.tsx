@@ -229,6 +229,10 @@ const AdminDashboard = () => {
 
       // Calculate target and achievement for selected sales person
       if (selectedSalesPersonId) {
+        console.log('AdminDashboard: Fetching target for sales person:', selectedSalesPersonId);
+        console.log('AdminDashboard: For month/year:', selectedChartMonth, selectedChartYear);
+        console.log('AdminDashboard: Formatted target month date:', currentMonthTargetDate);
+
         // Fetch target for selected month for the SELECTED sales person
         const { data: targetData, error: targetError } = await supabase
           .from('sales_targets')
@@ -238,9 +242,10 @@ const AdminDashboard = () => {
           .single();
 
         if (targetError && targetError.code !== 'PGRST116') { // PGRST116 means no rows found
-          console.error('Error fetching target:', targetError);
+          console.error('AdminDashboard: Supabase Error fetching target:', targetError);
           setCurrentMonthTarget(null);
         } else {
+          console.log('AdminDashboard: Supabase Target Data:', targetData);
           setCurrentMonthTarget(targetData?.target_amount || 0); // Default to 0 if no target set
         }
 
