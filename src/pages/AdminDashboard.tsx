@@ -10,6 +10,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, PlusCircle, UserCog, Loader2, Eye } from 'lucide-react';
 import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTable';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog'; // Import the new component
+import OrdersToDispatchCard from '@/components/OrdersToDispatchCard'; // Import the new component
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -368,7 +369,10 @@ const AdminDashboard = () => {
         ))}
       </div>
 
-      {/* New Orders Card */}
+      {/* Orders Awaiting Dispatch Card */}
+      <OrdersToDispatchCard />
+
+      {/* Recent Orders Card */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
         <CardHeader>
           <CardTitle className="text-xl font-semibold text-primary">Recent Orders</CardTitle>
