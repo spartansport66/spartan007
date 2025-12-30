@@ -27,13 +27,15 @@ interface Dealer {
 
 interface Sale {
   id: string;
-  product_id: string;
-  dealer_id: string;
   quantity: number;
   total_price: number;
   sale_date: string;
   products: { name: string } | null;
-  dealers: { name: string } | null;
+  orders: { // New nested structure
+    dealers: { name: string } | null;
+    user_id: string; // Sales person ID who created the order
+    profiles: { first_name: string; last_name: string } | null; // Sales person name
+  } | null;
 }
 
 const Dashboard = () => {
@@ -67,12 +69,13 @@ const Dashboard = () => {
     }
 
     // Fetch sales (RLS handles what they can see)
+    // Now joining through 'orders' to get dealer and sales person info
     const { data: salesData, error: salesError } = await supabase
       .from('sales')
       .select(`
-        id, user_id, product_id, dealer_id, quantity, total_price, sale_date,
+        id, quantity, total_price, sale_date,
         products (name),
-        dealers (name)
+        orders (dealers (name), user_id, profiles (first_name, last_name))
       `)
       .order('sale_date', { ascending: false });
     
@@ -82,14 +85,17 @@ const Dashboard = () => {
       setSales([]);
     } else {
       // Explicitly map to ensure type compatibility for nested objects
-      const typedSalesData: Sale[] = (salesData || []).map(sale => ({
-        ...sale,
-        products: (sale.products && Array.isArray(sale.products) && sale.products.length > 0) 
-          ? (sale.products[0] as { name: string }) 
-          : null,
-        dealers: (sale.dealers && Array.isArray(sale.dealers) && sale.dealers.length > 0) 
-          ? (sale.dealers[0] as { name: string }) 
-          : null,
+      const typedSalesData: Sale[] = (salesData || []).map((sale: any) => ({
+        id: sale.id,
+        quantity: sale.quantity,
+        total_price: sale.total_price,
+        sale_date: sale.sale_date,
+        products: sale.products ? { name: sale.products.name } : null,
+        orders: sale.orders ? {
+          dealers: sale.orders.dealers ? { name: sale.orders.dealers.name } : null,
+          user_id: sale.orders.user_id,
+          profiles: sale.orders.profiles ? { first_name: sale.orders.profiles.first_name, last_name: sale.orders.profiles.last_name } : null,
+        } : null,
       }));
       setSales(typedSalesData);
 
@@ -218,7 +224,7 @@ const Dashboard = () => {
                   {sales.map((sale) => (
                     <TableRow key={sale.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{sale.products?.name || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{sale.dealers?.name || 'N/A'}</TableCell>
+                      <TableCell className="text-muted-foreground">{sale.orders?.dealers?.name || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
                       <TableCell className="text-muted-foreground">₹{sale.total_price.toFixed(2)}</TableCell>
                       <TableCell className="text-muted-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>

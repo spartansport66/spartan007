@@ -28,15 +28,15 @@ interface Dealer {
 
 interface Sale {
   id: string;
-  user_id: string; 
-  product_id: string;
-  dealer_id: string;
   quantity: number;
   total_price: number;
   sale_date: string;
   products: { name: string } | null;
-  dealers: { name: string } | null;
-  profiles: { first_name: string; last_name: string } | null; // Added for sales person name
+  orders: { // New nested structure
+    dealers: { name: string } | null;
+    user_id: string; // Sales person ID who created the order
+    profiles: { first_name: string; last_name: string } | null; // Sales person name
+  } | null;
 }
 
 interface SalesPersonProfile {
@@ -142,19 +142,13 @@ const AdminDashboard = () => {
     }
 
     // Fetch all sales with product, dealer, and sales person names
+    // Now joining through 'orders' to get dealer and sales person info
     const { data: salesData, error: salesError } = await supabase
       .from('sales')
       .select(`
-        id,
-        user_id,
-        product_id,
-        dealer_id,
-        quantity,
-        total_price,
-        sale_date,
+        id, quantity, total_price, sale_date,
         products (name),
-        dealers (name),
-        profiles (first_name, last_name)
+        orders (dealers (name), user_id, profiles (first_name, last_name))
       `)
       .order('sale_date', { ascending: false });
 
@@ -164,16 +158,16 @@ const AdminDashboard = () => {
       setSales([]);
     } else {
       const typedSalesData: Sale[] = (salesData || []).map((sale: any) => ({
-        ...sale,
-        products: (sale.products && Array.isArray(sale.products) && sale.products.length > 0) 
-          ? (sale.products[0] as { name: string }) 
-          : (sale.products || null), // Handle direct object or null
-        dealers: (sale.dealers && Array.isArray(sale.dealers) && sale.dealers.length > 0) 
-          ? (sale.dealers[0] as { name: string }) 
-          : (sale.dealers || null), // Handle direct object or null
-        profiles: (sale.profiles && Array.isArray(sale.profiles) && sale.profiles.length > 0)
-          ? (sale.profiles[0] as { first_name: string; last_name: string })
-          : (sale.profiles || null), // Handle direct object or null
+        id: sale.id,
+        quantity: sale.quantity,
+        total_price: sale.total_price,
+        sale_date: sale.sale_date,
+        products: sale.products ? { name: sale.products.name } : null,
+        orders: sale.orders ? {
+          dealers: sale.orders.dealers ? { name: sale.orders.dealers.name } : null,
+          user_id: sale.orders.user_id,
+          profiles: sale.orders.profiles ? { first_name: sale.orders.profiles.first_name, last_name: sale.orders.profiles.last_name } : null,
+        } : null,
       }));
       setSales(typedSalesData);
 
@@ -181,7 +175,7 @@ const AdminDashboard = () => {
       setTotalSalesValue(totalValue);
       setTotalOrders(typedSalesData.length || 0); // Update total orders count
 
-      // --- Logic for Sales by Sales Person Table and Target/Achievement ---
+      // --- Logic for Sales by Sales Person Table and Target/Achieved ---
       // Sales for the selected month for ALL sales persons (for the table)
       const currentMonthSalesForAllPersons = typedSalesData.filter(sale => 
         new Date(sale.sale_date) >= new Date(startOfMonth) && new Date(sale.sale_date) <= new Date(endOfMonth)
@@ -196,7 +190,7 @@ const AdminDashboard = () => {
       });
 
       currentMonthSalesForAllPersons.forEach(sale => {
-        const personId = sale.user_id; 
+        const personId = sale.orders?.user_id; // Get sales person ID from the order
         if (personId) {
           salesByPersonMap.set(personId, (salesByPersonMap.get(personId) || 0) + sale.total_price);
         }
@@ -228,7 +222,7 @@ const AdminDashboard = () => {
 
         // Calculate achieved for selected month for the SELECTED sales person
         const achieved = currentMonthSalesForAllPersons
-            .filter(sale => sale.user_id === selectedSalesPersonId) 
+            .filter(sale => sale.orders?.user_id === selectedSalesPersonId) // Filter by order's user_id
             .reduce((sum, sale) => sum + sale.total_price, 0);
         setCurrentMonthAchieved(achieved);
 
@@ -381,9 +375,9 @@ const AdminDashboard = () => {
                 <TableBody>
                   {sales.map((sale) => (
                     <TableRow key={sale.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{sale.profiles ? `${sale.profiles.first_name} ${sale.profiles.last_name}` : 'N/A'}</TableCell> {/* Display sales person name */}
+                      <TableCell className="font-medium text-foreground">{sale.orders?.profiles ? `${sale.orders.profiles.first_name} ${sale.orders.profiles.last_name}` : 'N/A'}</TableCell> {/* Display sales person name */}
                       <TableCell className="font-medium text-foreground">{sale.products?.name || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{sale.dealers?.name || 'N/A'}</TableCell>
+                      <TableCell className="text-muted-foreground">{sale.orders?.dealers?.name || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
                       <TableCell className="text-muted-foreground">₹{sale.total_price.toFixed(2)}</TableCell>
                       <TableCell className="text-muted-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>

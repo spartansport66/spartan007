@@ -30,9 +30,8 @@ interface OrderItem {
   quantity: number;
 }
 
-interface DealerBalance {
-  total_spent: number;
-}
+// IMPORTANT: Replace with the actual URL of your deployed Edge Function
+const CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-multi-item-order";
 
 const MultiItemOrderForm: React.FC = () => {
   const { user } = useSession();
@@ -93,10 +92,10 @@ const MultiItemOrderForm: React.FC = () => {
         setDealerCreditLimit(selectedDealerData.credit_limit);
       }
 
-      // Fetch total spent by this dealer
+      // Fetch total spent by this dealer from the 'orders' table
       const { data, error } = await supabase
-        .from('sales')
-        .select('total_price')
+        .from('orders')
+        .select('total_amount')
         .eq('dealer_id', selectedDealer);
 
       if (error) {
@@ -104,7 +103,7 @@ const MultiItemOrderForm: React.FC = () => {
         showError(`Failed to calculate dealer balance: ${error.message}`);
         setDealerBalance(null);
       } else {
-        const totalSpent = data.reduce((sum, sale) => sum + sale.total_price, 0);
+        const totalSpent = data.reduce((sum, order) => sum + order.total_amount, 0);
         setDealerBalance(totalSpent);
       }
     };
@@ -146,77 +145,32 @@ const MultiItemOrderForm: React.FC = () => {
       return;
     }
 
-    // Validate dealer credit limit
-    if (dealerBalance === null) {
-      showError('Unable to verify dealer balance. Please try again.');
-      return;
-    }
-
-    // Calculate total order value
-    let totalOrderValue = 0;
-    const orderDetails: { product_id: string; quantity: number; total_price: number; product: Product }[] = [];
-
-    for (const item of orderItems) {
-      const product = products.find(p => p.id === item.product_id);
-      if (!product) {
-        showError(`Product not found for item ${item.id}`);
-        return;
-      }
-
-      if (item.quantity > product.stock) {
-        showError(`Not enough stock for ${product.name}. Available: ${product.stock}`);
-        return;
-      }
-
-      const itemTotal = item.quantity * product.price;
-      totalOrderValue += itemTotal;
-      orderDetails.push({
-        product_id: item.product_id,
-        quantity: item.quantity,
-        total_price: itemTotal,
-        product
-      });
-    }
-
-    const availableCredit = dealerCreditLimit - dealerBalance;
-    
-    if (totalOrderValue > availableCredit) {
-      showError(
-        `Order exceeds dealer's credit limit. Available credit: ₹${availableCredit.toFixed(2)}. ` +
-        `Please reduce your order to ₹${availableCredit.toFixed(2)} or request a credit limit increase.`
-      );
-      return;
-    }
-
     setLoading(true);
     
     try {
-      // Record all sales in a transaction
-      const salesData = orderDetails.map(detail => ({
-        user_id: user.id,
-        product_id: detail.product_id,
-        dealer_id: selectedDealer,
-        quantity: detail.quantity,
-        total_price: detail.total_price
-      }));
+      const payload = {
+        dealerId: selectedDealer,
+        userId: user.id,
+        orderItems: orderItems.map(item => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+        })),
+      };
 
-      const { error: salesError } = await supabase.from('sales').insert(salesData);
-      
-      if (salesError) {
-        throw salesError;
-      }
+      const response = await fetch(CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Include Authorization header if your Edge Function requires JWT verification
+          // 'Authorization': `Bearer ${user.token}` 
+        },
+        body: JSON.stringify(payload),
+      });
 
-      // Update product stock for each item
-      for (const detail of orderDetails) {
-        const newStock = detail.product.stock - detail.quantity;
-        const { error: stockError } = await supabase
-          .from('products')
-          .update({ stock: newStock })
-          .eq('id', detail.product_id);
-          
-        if (stockError) {
-          throw stockError;
-        }
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to place order');
       }
 
       showSuccess('Order placed successfully!');
