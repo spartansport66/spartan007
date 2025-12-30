@@ -1,15 +1,15 @@
 "use client";
 
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 
 interface SalesPersonSalesData {
   salesPerson: string;
   totalSales: number;
-  id: string; // Include ID for internal use
+  id: string;
 }
 
 interface SalesPersonOption {
@@ -17,7 +17,7 @@ interface SalesPersonOption {
   label: string;
 }
 
-interface SalesPersonPerformanceChartProps {
+interface SalesPersonPerformanceTableProps {
   data: SalesPersonSalesData[];
   salesPersonsOptions: SalesPersonOption[];
   selectedSalesPersonId: string | null;
@@ -25,11 +25,11 @@ interface SalesPersonPerformanceChartProps {
   currentMonthTarget: number | null;
   currentMonthAchieved: number | null;
   currentMonthPending: number | null;
-  displayMonth: string; // New prop for displaying selected month
-  displayYear: string; // New prop for displaying selected year
+  displayMonth: string;
+  displayYear: string;
 }
 
-const SalesPersonPerformanceChart: React.FC<SalesPersonPerformanceChartProps> = ({
+const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = ({
   data,
   salesPersonsOptions,
   selectedSalesPersonId,
@@ -37,17 +37,22 @@ const SalesPersonPerformanceChart: React.FC<SalesPersonPerformanceChartProps> = 
   currentMonthTarget,
   currentMonthAchieved,
   currentMonthPending,
-  displayMonth, // Use new prop
-  displayYear, // Use new prop
+  displayMonth,
+  displayYear,
 }) => {
-  const currentMonthName = `${displayMonth} ${displayYear}`; // Use passed props
+  const currentMonthName = `${displayMonth} ${displayYear}`;
+
+  // Sort data by totalSales in ascending order (least sales at the top)
+  const sortedData = [...data].sort((a, b) => a.totalSales - b.totalSales);
+  // Display only the first 5 items, the rest will be in the scrollable area
+  const displayedData = sortedData.slice(0, 5);
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
       <CardHeader>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <CardTitle className="text-xl font-semibold text-primary">Sales by Sales Person</CardTitle>
+            <CardTitle className="text-xl font-semibold text-primary">Sales Person Performance</CardTitle>
             <CardDescription className="text-muted-foreground">
               Selected Month: {currentMonthName}
             </CardDescription>
@@ -71,28 +76,30 @@ const SalesPersonPerformanceChart: React.FC<SalesPersonPerformanceChartProps> = 
         </div>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart
-            data={data}
-            margin={{
-              top: 5,
-              right: 10,
-              left: 10,
-              bottom: 5,
-            }}
-          >
-            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis dataKey="salesPerson" className="text-sm text-muted-foreground" />
-            <YAxis className="text-sm text-muted-foreground" />
-            <Tooltip
-              contentStyle={{ backgroundColor: 'hsl(var(--popover))', border: '1% solid hsl(var(--border))', borderRadius: '0.5rem' }}
-              labelStyle={{ color: 'hsl(var(--foreground))' }}
-              itemStyle={{ color: 'hsl(var(--foreground))' }}
-              formatter={(value: number) => `₹${value.toFixed(2)}`}
-            />
-            <Bar dataKey="totalSales" fill="hsl(var(--accent))" />
-          </BarChart>
-        </ResponsiveContainer>
+        <div className="overflow-x-auto">
+          {data.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No sales data available for this month.</p>
+          ) : (
+            <div className="max-h-[250px] overflow-y-auto border rounded-md"> {/* Fixed height for 5 rows + header */}
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow>
+                    <TableHead className="text-muted-foreground">Sales Person</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Total Sales</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedData.map((item) => ( // Use sortedData to allow scrolling through all
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">{item.salesPerson}</TableCell>
+                      <TableCell className="text-right">₹{item.totalSales.toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
 
         {selectedSalesPersonId && (
           <div className="mt-6 p-4 border rounded-md bg-muted/50">
@@ -123,4 +130,4 @@ const SalesPersonPerformanceChart: React.FC<SalesPersonPerformanceChartProps> = 
   );
 };
 
-export default SalesPersonPerformanceChart;
+export default SalesPersonPerformanceTable;

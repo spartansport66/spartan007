@@ -8,8 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, BarChart, PlusCircle, UserCog, Loader2 } from 'lucide-react';
-import SalesChart from '@/components/SalesChart';
-import SalesPersonPerformanceChart from '@/components/SalesPersonPerformanceChart'; // Import the new component
+import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTable'; // Import the new table component
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Import Select components
@@ -55,9 +54,8 @@ const AdminDashboard = () => {
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
-  const [monthlySalesData, setMonthlySalesData] = useState<{ month: string; sales: number }[]>([]);
   
-  // New states for SalesPersonPerformanceChart
+  // New states for SalesPersonPerformanceTable
   const [allSalesPersons, setAllSalesPersons] = useState<SalesPersonProfile[]>([]);
   const [selectedSalesPersonId, setSelectedSalesPersonId] = useState<string | null>(null);
   const [salesBySalesPersonData, setSalesBySalesPersonData] = useState<{ salesPerson: string; totalSales: number; id: string }[]>([]);
@@ -65,7 +63,7 @@ const AdminDashboard = () => {
   const [currentMonthAchieved, setCurrentMonthAchieved] = useState<number | null>(null);
   const [currentMonthPending, setCurrentMonthPending] = useState<number | null>(null);
 
-  // New states for month/year selection for SalesPersonPerformanceChart
+  // New states for month/year selection for SalesPersonPerformanceTable
   const today = new Date();
   const [selectedChartMonth, setSelectedChartMonth] = useState<string>((today.getMonth() + 1).toString());
   const [selectedChartYear, setSelectedChartYear] = useState<string>(today.getFullYear().toString());
@@ -137,6 +135,7 @@ const AdminDashboard = () => {
       console.error('AdminDashboard: Error fetching dealers:', dealersError);
       showError(`Failed to load dealers: ${dealersError.message}`);
       setDealers([]);
+      setActiveDealersCount(0); // Set to 0 if there's an error
     } else {
       setDealers(dealersData || []);
       setActiveDealersCount(dealersData?.length || 0);
@@ -179,29 +178,11 @@ const AdminDashboard = () => {
       setSales(typedSalesData);
 
       const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
-      const totalOrdersCount = typedSalesData.length || 0;
       setTotalSalesValue(totalValue);
+      setTotalOrders(typedSalesData.length || 0); // Update total orders count
 
-      // Calculate monthly sales data for the overall chart
-      const monthlySalesMap = new Map<string, number>();
-      typedSalesData.forEach(sale => {
-        const date = new Date(sale.sale_date);
-        const month = date.toLocaleString('default', { month: 'short' });
-        const year = date.getFullYear();
-        const monthYear = `${month} ${year}`;
-        monthlySalesMap.set(monthYear, (monthlySalesMap.get(monthYear) || 0) + sale.total_price);
-      });
-
-      const sortedMonths = Array.from(monthlySalesMap.keys()).sort((a, b) => {
-        const dateA = new Date(a);
-        const dateB = new Date(b);
-        return dateA.getTime() - dateB.getTime();
-      });
-
-      setMonthlySalesData(sortedMonths.map(month => ({ month: month.split(' ')[0], sales: monthlySalesMap.get(month) || 0 })));
-
-      // --- Logic for Sales by Sales Person Chart and Target/Achievement ---
-      // Sales for the selected month for ALL sales persons (for the bar chart)
+      // --- Logic for Sales by Sales Person Table and Target/Achievement ---
+      // Sales for the selected month for ALL sales persons (for the table)
       const currentMonthSalesForAllPersons = typedSalesData.filter(sale => 
         new Date(sale.sale_date) >= new Date(startOfMonth) && new Date(sale.sale_date) <= new Date(endOfMonth)
       );
@@ -230,10 +211,6 @@ const AdminDashboard = () => {
 
       // Calculate target and achievement for selected sales person
       if (selectedSalesPersonId) {
-        console.log('AdminDashboard: Fetching target for sales person:', selectedSalesPersonId);
-        console.log('AdminDashboard: For month/year:', selectedChartMonth, selectedChartYear);
-        console.log('AdminDashboard: Formatted target month date:', currentMonthTargetDate);
-
         // Fetch target for selected month for the SELECTED sales person
         const { data: targetData, error: targetError } = await supabase
           .from('sales_targets')
@@ -246,7 +223,6 @@ const AdminDashboard = () => {
           console.error('AdminDashboard: Supabase Error fetching target:', targetError);
           setCurrentMonthTarget(null);
         } else {
-          console.log('AdminDashboard: Supabase Target Data:', targetData);
           setCurrentMonthTarget(targetData?.target_amount || 0); // Default to 0 if no target set
         }
 
@@ -359,9 +335,8 @@ const AdminDashboard = () => {
         ))}
       </div>
 
-      {/* Charts Section */}
-      <div className="grid gap-4 lg:grid-cols-2 mb-6">
-        <SalesChart data={monthlySalesData} />
+      {/* Sales Person Performance Table Section */}
+      <div className="grid gap-4 lg:grid-cols-1 mb-6"> {/* Changed to single column */}
         <div>
           <div className="flex gap-2 mb-4">
             <Select value={selectedChartMonth} onValueChange={setSelectedChartMonth}>
@@ -389,7 +364,7 @@ const AdminDashboard = () => {
               </SelectContent>
             </Select>
           </div>
-          <SalesPersonPerformanceChart
+          <SalesPersonPerformanceTable
             data={salesBySalesPersonData}
             salesPersonsOptions={salesPersonOptions}
             selectedSalesPersonId={selectedSalesPersonId}
