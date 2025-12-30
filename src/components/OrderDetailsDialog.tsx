@@ -36,6 +36,15 @@ interface OrderDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// Define the expected structure of the data returned by the Supabase query
+interface FetchedOrderData {
+  id: string;
+  order_date: string;
+  total_amount: number;
+  status: string;
+  dealers: { id: string; name: string; credit_limit: number } | null;
+}
+
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen, onOpenChange }) => {
   const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -43,7 +52,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
   const fetchOrderDetails = useCallback(async (id: string) => {
     setLoading(true);
     try {
-      // Fetch order details and dealer info
+      // Fetch order details and dealer info, explicitly typing the result
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .select(`
@@ -54,7 +63,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           dealers (id, name, credit_limit)
         `)
         .eq('id', id)
-        .single();
+        .single() as { data: FetchedOrderData | null; error: any }; // Cast to our defined interface
 
       if (orderError) throw orderError;
       if (!orderData) {
@@ -63,6 +72,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         return;
       }
 
+      // Now orderData.dealers is correctly typed as { id: string; name: string; credit_limit: number } | null
       const dealerId = orderData.dealers?.id;
       let dealerConsumedCredit = 0;
       if (dealerId) {
