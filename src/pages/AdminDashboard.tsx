@@ -7,11 +7,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, PlusCircle, UserCog, Loader2 } from 'lucide-react';
-import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTable'; // Import the new table component
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, PlusCircle, UserCog, Loader2, Eye } from 'lucide-react';
+import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTable';
+import OrderDetailsDialog from '@/components/OrderDetailsDialog'; // Import the new component
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Import Select components
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Product {
   id: string;
@@ -32,10 +33,10 @@ interface Sale {
   total_price: number;
   sale_date: string;
   products: { name: string } | null;
-  orders: { // New nested structure
+  orders: {
     dealers: { name: string } | null;
-    user_id: string; // Sales person ID who created the order
-    profiles: { first_name: string; last_name: string } | null; // Sales person name
+    user_id: string;
+    profiles: { first_name: string; last_name: string } | null;
   } | null;
 }
 
@@ -43,6 +44,13 @@ interface SalesPersonProfile {
   id: string;
   first_name: string;
   last_name: string;
+}
+
+interface OrderSummary {
+  id: string;
+  order_date: string;
+  total_amount: number;
+  dealer_name: string;
 }
 
 const AdminDashboard = () => {
@@ -55,7 +63,6 @@ const AdminDashboard = () => {
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   
-  // New states for SalesPersonPerformanceTable
   const [allSalesPersons, setAllSalesPersons] = useState<SalesPersonProfile[]>([]);
   const [selectedSalesPersonId, setSelectedSalesPersonId] = useState<string | null>(null);
   const [salesBySalesPersonData, setSalesBySalesPersonData] = useState<{ salesPerson: string; totalSales: number; id: string }[]>([]);
@@ -63,12 +70,16 @@ const AdminDashboard = () => {
   const [currentMonthAchieved, setCurrentMonthAchieved] = useState<number | null>(null);
   const [currentMonthPending, setCurrentMonthPending] = useState<number | null>(null);
 
-  // New states for month/year selection for SalesPersonPerformanceTable
   const today = new Date();
   const [selectedChartMonth, setSelectedChartMonth] = useState<string>((today.getMonth() + 1).toString());
   const [selectedChartYear, setSelectedChartYear] = useState<string>(today.getFullYear().toString());
 
   const [loadingData, setLoadingData] = useState(true);
+
+  // New states for Order Details Card
+  const [recentOrders, setRecentOrders] = useState<OrderSummary[]>([]);
+  const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
+  const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
 
   const getMonthName = (monthNum: string) => {
     const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
@@ -94,12 +105,11 @@ const AdminDashboard = () => {
     // Get selected month range for filtering sales and targets
     const chartYearNum = parseInt(selectedChartYear);
     const chartMonthNum = parseInt(selectedChartMonth);
-    // Use Date.UTC for consistency with how targets are stored
     const startOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString();
     const endOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum, 0, 23, 59, 59, 999)).toISOString();
-    const currentMonthTargetDate = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString().split('T')[0]; // YYYY-MM-DD
+    const currentMonthTargetDate = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString().split('T')[0];
 
-    // Fetch all sales persons for the dropdown and sales grouping
+    // Fetch all sales persons
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
       .select('id, first_name, last_name')
@@ -135,14 +145,13 @@ const AdminDashboard = () => {
       console.error('AdminDashboard: Error fetching dealers:', dealersError);
       showError(`Failed to load dealers: ${dealersError.message}`);
       setDealers([]);
-      setActiveDealersCount(0); // Set to 0 if there's an error
+      setActiveDealersCount(0);
     } else {
       setDealers(dealersData || []);
       setActiveDealersCount(dealersData?.length || 0);
     }
 
     // Fetch all sales with product, dealer, and sales person names
-    // Now joining through 'orders' to get dealer and sales person info
     const { data: salesData, error: salesError } = await supabase
       .from('sales')
       .select(`
@@ -162,9 +171,9 @@ const AdminDashboard = () => {
         quantity: sale.quantity,
         total_price: sale.total_price,
         sale_date: sale.sale_date,
-        products: sale.products ? { name: sale.products.name } : null,
+        products: sale.products || null,
         orders: sale.orders ? {
-          dealers: sale.orders.dealers ? { name: sale.orders.dealers.name } : null,
+          dealers: sale.orders.dealers || null,
           user_id: sale.orders.user_id,
           profiles: sale.orders.profiles ? { first_name: sale.orders.profiles.first_name, last_name: sale.orders.profiles.last_name } : null,
         } : null,
@@ -173,10 +182,9 @@ const AdminDashboard = () => {
 
       const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
       setTotalSalesValue(totalValue);
-      setTotalOrders(typedSalesData.length || 0); // Update total orders count
+      setTotalOrders(typedSalesData.length || 0);
 
       // --- Logic for Sales by Sales Person Table and Target/Achieved ---
-      // Sales for the selected month for ALL sales persons (for the table)
       const currentMonthSalesForAllPersons = typedSalesData.filter(sale => 
         new Date(sale.sale_date) >= new Date(startOfMonth) && new Date(sale.sale_date) <= new Date(endOfMonth)
       );
@@ -186,11 +194,11 @@ const AdminDashboard = () => {
 
       (profilesData || []).forEach(p => {
         salesPersonNamesMap.set(p.id, `${p.first_name} ${p.last_name}`);
-        salesByPersonMap.set(p.id, 0); // Initialize all sales persons to 0 sales
+        salesByPersonMap.set(p.id, 0);
       });
 
       currentMonthSalesForAllPersons.forEach(sale => {
-        const personId = sale.orders?.user_id; // Get sales person ID from the order
+        const personId = sale.orders?.user_id;
         if (personId) {
           salesByPersonMap.set(personId, (salesByPersonMap.get(personId) || 0) + sale.total_price);
         }
@@ -203,40 +211,63 @@ const AdminDashboard = () => {
       }));
       setSalesBySalesPersonData(formattedSalesByPerson);
 
-      // Calculate target and achievement for selected sales person
       if (selectedSalesPersonId) {
-        // Fetch target for selected month for the SELECTED sales person
         const { data: targetData, error: targetError } = await supabase
           .from('sales_targets')
           .select('target_amount')
           .eq('sales_person_id', selectedSalesPersonId)
-          .eq('target_month', currentMonthTargetDate) // Use YYYY-MM-DD format
+          .eq('target_month', currentMonthTargetDate)
           .single();
 
-        if (targetError && targetError.code !== 'PGRST116') { // PGRST116 means no rows found
+        if (targetError && targetError.code !== 'PGRST116') {
           console.error('AdminDashboard: Supabase Error fetching target:', targetError);
           setCurrentMonthTarget(null);
         } else {
-          setCurrentMonthTarget(targetData?.target_amount || 0); // Default to 0 if no target set
+          setCurrentMonthTarget(targetData?.target_amount || 0);
         }
 
-        // Calculate achieved for selected month for the SELECTED sales person
         const achieved = currentMonthSalesForAllPersons
-            .filter(sale => sale.orders?.user_id === selectedSalesPersonId) // Filter by order's user_id
+            .filter(sale => sale.orders?.user_id === selectedSalesPersonId)
             .reduce((sum, sale) => sum + sale.total_price, 0);
         setCurrentMonthAchieved(achieved);
 
         const pending = (targetData?.target_amount || 0) - achieved;
         setCurrentMonthPending(pending);
       } else {
-        // Reset target/achieved/pending if no sales person is selected
         setCurrentMonthTarget(null);
         setCurrentMonthAchieved(null);
         setCurrentMonthPending(null);
       }
     }
+
+    // Fetch recent orders for the new card
+    const { data: ordersData, error: ordersError } = await supabase
+      .from('orders')
+      .select(`
+        id,
+        order_date,
+        total_amount,
+        dealers (name)
+      `)
+      .order('order_date', { ascending: false })
+      .limit(10); // Limit to recent 10 orders
+
+    if (ordersError) {
+      console.error('AdminDashboard: Error fetching recent orders:', ordersError);
+      showError(`Failed to load recent orders: ${ordersError.message}`);
+      setRecentOrders([]);
+    } else {
+      const formattedOrders: OrderSummary[] = (ordersData || []).map((order: any) => ({
+        id: order.id,
+        order_date: order.order_date,
+        total_amount: order.total_amount,
+        dealer_name: order.dealers?.name || 'N/A',
+      }));
+      setRecentOrders(formattedOrders);
+    }
+
     setLoadingData(false);
-  }, [user, selectedSalesPersonId, selectedChartMonth, selectedChartYear]); // Re-run when selectedSalesPersonId, month, or year changes
+  }, [user, selectedSalesPersonId, selectedChartMonth, selectedChartYear]);
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -262,6 +293,11 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleViewOrderDetails = (orderId: string) => {
+    setSelectedOrderIdForDetails(orderId);
+    setIsOrderDetailsDialogOpen(true);
+  };
+
   if (sessionLoading || loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -272,26 +308,26 @@ const AdminDashboard = () => {
   }
 
   if (!isAdmin) {
-    return null; // Should be redirected by useEffect
+    return null;
   }
 
   const salesOverview = [
     {
       title: "Total Sales Value",
       value: `$${totalSalesValue.toFixed(2)}`,
-      change: "+20.1% from last month", // Placeholder
+      change: "+20.1% from last month",
       icon: <DollarSign className="h-3 w-3 text-primary" />
     },
     {
       title: "Total Orders",
       value: totalOrders.toString(),
-      change: "+180.1% from last month", // Placeholder
+      change: "+180.1% from last month",
       icon: <Package className="h-3 w-3 text-accent" />
     },
     {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
-      change: "+19% from last month", // Placeholder
+      change: "+19% from last month",
       icon: <Users className="h-3 w-3 text-secondary" />
     },
     {
@@ -329,8 +365,48 @@ const AdminDashboard = () => {
         ))}
       </div>
 
+      {/* New Orders Card */}
+      <Card className="bg-card text-card-foreground shadow-lg mb-6">
+        <CardHeader>
+          <CardTitle className="text-xl font-semibold text-primary">Recent Orders</CardTitle>
+          <CardDescription className="text-muted-foreground">Overview of recently placed orders.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            {recentOrders.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No recent orders found.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="text-muted-foreground">Order Number</TableHead>
+                    <TableHead className="text-muted-foreground">Party Name</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Order Amount</TableHead>
+                    <TableHead className="text-muted-foreground text-center">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentOrders.map((order) => (
+                    <TableRow key={order.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{order.id.substring(0, 8)}...</TableCell>
+                      <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
+                      <TableCell className="text-center">
+                        <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Order Details">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Sales Person Performance Table Section */}
-      <div className="grid gap-4 lg:grid-cols-1 mb-6"> {/* Changed to single column */}
+      <div className="grid gap-4 lg:grid-cols-1 mb-6">
         <SalesPersonPerformanceTable
           data={salesBySalesPersonData}
           salesPersonsOptions={salesPersonOptions}
@@ -364,7 +440,7 @@ const AdminDashboard = () => {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground">Sales Person</TableHead> {/* Added Sales Person column */}
+                    <TableHead className="text-muted-foreground">Sales Person</TableHead>
                     <TableHead className="text-muted-foreground">Product</TableHead>
                     <TableHead className="text-muted-foreground">Dealer</TableHead>
                     <TableHead className="text-muted-foreground">Quantity</TableHead>
@@ -375,7 +451,7 @@ const AdminDashboard = () => {
                 <TableBody>
                   {sales.map((sale) => (
                     <TableRow key={sale.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{sale.orders?.profiles ? `${sale.orders.profiles.first_name} ${sale.orders.profiles.last_name}` : 'N/A'}</TableCell> {/* Display sales person name */}
+                      <TableCell className="font-medium text-foreground">{sale.orders?.profiles ? `${sale.orders.profiles.first_name} ${sale.orders.profiles.last_name}` : 'N/A'}</TableCell>
                       <TableCell className="font-medium text-foreground">{sale.products?.name || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{sale.orders?.dealers?.name || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
@@ -432,6 +508,13 @@ const AdminDashboard = () => {
         </CardContent>
       </Card>
       <MadeWithDyad />
+
+      {/* Order Details Dialog */}
+      <OrderDetailsDialog
+        orderId={selectedOrderIdForDetails}
+        isOpen={isOrderDetailsDialogOpen}
+        onOpenChange={setIsOrderDetailsDialogOpen}
+      />
     </div>
   );
 };
