@@ -166,82 +166,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
     }
   }, [isOpen, orderId, fetchOrderDetails]);
 
-  const handleDownloadPdf = () => {
-    if (!orderDetails) return;
-
-    const doc = new jsPDF();
-    let yPos = 10;
-
-    doc.setFontSize(18);
-    doc.text('Order Details', 10, yPos);
-    yPos += 10;
-
-    doc.setFontSize(12);
-    doc.text(`Order Number: ${orderDetails.order_number}`, 10, yPos); // Changed to order_number
-    yPos += 7;
-    doc.text(`Order Date: ${new Date(orderDetails.order_date).toLocaleDateString()}`, 10, yPos);
-    yPos += 7;
-    doc.text(`Sales Person: ${orderDetails.sales_person_name}`, 10, yPos);
-    yPos += 7;
-    doc.text(`Status: ${orderDetails.status}`, 10, yPos);
-    yPos += 10;
-
-    doc.setFontSize(14);
-    doc.text('Dealer Information:', 10, yPos);
-    yPos += 7;
-    doc.setFontSize(12);
-    doc.text(`Name: ${orderDetails.dealer_name}`, 10, yPos);
-    yPos += 7;
-    doc.text(`Address: ${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}`, 10, yPos); // Full address
-    yPos += 7;
-    doc.text(`Phone: ${orderDetails.dealer_phone}`, 10, yPos);
-    yPos += 10;
-
-    doc.setFontSize(14);
-    doc.text('Order Items:', 10, yPos);
-    yPos += 7;
-
-    const headers = [['Product Name', 'Quantity', 'Unit Price', 'Total Price']];
-    const data = orderDetails.items.map(item => [
-      item.product_name,
-      item.quantity.toString(),
-      `₹${item.unit_price.toFixed(2)}`,
-      `₹${item.total_price.toFixed(2)}`,
-    ]);
-
-    (doc as any).autoTable({
-      startY: yPos,
-      head: headers,
-      body: data,
-      theme: 'grid',
-      headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
-      styles: { fontSize: 10, cellPadding: 2 },
-      columnStyles: {
-        0: { cellWidth: 70 },
-        1: { cellWidth: 30, halign: 'right' },
-        2: { cellWidth: 40, halign: 'right' },
-        3: { cellWidth: 40, halign: 'right' },
-      },
-    });
-    yPos = (doc as any).autoTable.previous.finalY + 10;
-
-    doc.setFontSize(12);
-    doc.text(`Total Order Amount: ₹${orderDetails.total_amount.toFixed(2)}`, 10, yPos);
-    yPos += 10;
-
-    doc.setFontSize(14);
-    doc.text('Dealer Credit Information:', 10, yPos);
-    yPos += 7;
-    doc.setFontSize(12);
-    doc.text(`Credit Limit: ₹${orderDetails.dealer_credit_limit.toFixed(2)}`, 10, yPos);
-    yPos += 7;
-    doc.text(`Consumed Credit: ₹${orderDetails.dealer_consumed_credit.toFixed(2)}`, 10, yPos);
-    yPos += 7;
-    // For PDF, direct text color change is more complex, keeping it default for simplicity
-    doc.text(`Pending Credit: ₹${orderDetails.dealer_pending_credit.toFixed(2)}`, 10, yPos);
-
-    doc.save(`Order_${orderDetails.order_number}.pdf`); // Changed filename
-  };
+  // Removed handleDownloadPdf function
 
   const handlePrint = () => {
     if (!orderDetails) return;
@@ -260,14 +185,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         .text-red-600 { color: #dc2626; } /* Tailwind red-600 */
       </style>
       <h1>Order Details</h1>
-      <p><strong>Order Number:</strong> ${orderDetails.order_number}</p> <!-- Changed to order_number -->
+      <p><strong>Order Number:</strong> ${orderDetails.order_number}</p>
       <p><strong>Order Date:</strong> ${new Date(orderDetails.order_date).toLocaleDateString()}</p>
       <p><strong>Sales Person:</strong> ${orderDetails.sales_person_name}</p>
       <p><strong>Status:</strong> ${orderDetails.status}</p>
 
       <h2>Dealer Information</h2>
       <p><strong>Name:</strong> ${orderDetails.dealer_name}</p>
-      <p><strong>Address:</strong> ${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}</p> <!-- Full address -->
+      <p><strong>Address:</strong> ${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}</p>
       <p><strong>Phone:</strong> ${orderDetails.dealer_phone}</p>
 
       <h2>Order Items</h2>
@@ -330,14 +255,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p><span className="font-semibold">Order Number:</span> {orderDetails.order_number}</p> {/* Changed to order_number */}
+                <p><span className="font-semibold">Order Number:</span> {orderDetails.order_number}</p>
                 <p><span className="font-semibold">Order Date:</span> {new Date(orderDetails.order_date).toLocaleDateString()}</p>
                 <p><span className="font-semibold">Status:</span> {orderDetails.status}</p>
                 <p><span className="font-semibold">Sales Person:</span> {orderDetails.sales_person_name}</p>
               </div>
               <div>
                 <p><span className="font-semibold">Dealer Name:</span> {orderDetails.dealer_name}</p>
-                <p><span className="font-semibold">Address:</span> {orderDetails.dealer_address}, {orderDetails.dealer_city}, {orderDetails.dealer_state}, {orderDetails.dealer_country}</p> {/* Full address */}
+                <p><span className="font-semibold">Address:</span> {orderDetails.dealer_address}, {orderDetails.dealer_city}, {orderDetails.dealer_state}, {orderDetails.dealer_country}</p>
                 <p><span className="font-semibold">Phone:</span> {orderDetails.dealer_phone}</p>
                 <p><span className="font-semibold">Credit Limit:</span> ₹{orderDetails.dealer_credit_limit.toFixed(2)}</p>
                 <p><span className="font-semibold">Consumed Credit:</span> ₹{orderDetails.dealer_consumed_credit.toFixed(2)}</p>
@@ -388,9 +313,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           <p className="text-center text-muted-foreground py-8">No order selected or details could not be loaded.</p>
         )}
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={handleDownloadPdf} disabled={!orderDetails || loading}>
-            <Download className="mr-2 h-4 w-4" /> Download PDF
-          </Button>
+          {/* Removed Download PDF button */}
           <Button variant="outline" onClick={handlePrint} disabled={!orderDetails || loading}>
             <Printer className="mr-2 h-4 w-4" /> Print Order
           </Button>
