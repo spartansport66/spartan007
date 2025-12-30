@@ -11,6 +11,7 @@ import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, PlusCirc
 import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTable';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog'; // Import the new component
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard'; // Import the new component
+import DispatchedOrdersCard from '@/components/DispatchedOrdersCard'; // Import the new DispatchedOrdersCard
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -380,6 +381,9 @@ const AdminDashboard = () => {
 
       {/* Orders Awaiting Dispatch Card */}
       <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
+
+      {/* Dispatched Orders Card */}
+      <DispatchedOrdersCard />
 
       {/* Recent Orders Card */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
