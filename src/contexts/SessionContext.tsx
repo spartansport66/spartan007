@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react'; // Added useRef
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
@@ -111,14 +111,14 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       }
     );
 
-    console.log('SessionContext: Performing initial getSession check.');
+    console.log('SessionContext: Calling supabase.auth.getSession()...'); // Added log
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      console.log('SessionContext: Initial getSession result:', initialSession);
+      console.log('SessionContext: getSession promise resolved. Initial session:', initialSession); // Added log
       await updateSessionAndProfileStates(initialSession);
       setLoading(false);
       console.log('SessionContext: Initial getSession completed. Loading set to false.');
     }).catch(error => {
-      console.error('SessionContext: Error during initial getSession promise:', error);
+      console.error('SessionContext: Error during initial getSession promise:', error); // Modified log
       showError(`Failed to load session: ${error.message}`);
       setLoading(false);
     });
