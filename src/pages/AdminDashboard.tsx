@@ -354,21 +354,21 @@ const AdminDashboard = () => {
       value: totalOrders.toString(),
       change: "+180.1% from last month",
       icon: <Package className="h-3 w-3 text-white" />, // White icon
-      valueColor: "text-blue-800 dark:text-blue-200"
+      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
     },
     {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month",
       icon: <Users className="h-3 w-3 text-white" />, // White icon
-      valueColor: "text-blue-800 dark:text-blue-200"
+      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
     },
     {
       title: "Total Products",
       value: products.length.toString(),
       change: "Overall",
       icon: <Boxes className="h-3 w-3 text-white" />, // White icon
-      valueColor: "text-blue-800 dark:text-blue-200"
+      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
     },
   ];
 
@@ -392,7 +392,7 @@ const AdminDashboard = () => {
               {item.icon}
             </CardHeader>
             <CardContent className="p-2 pt-0">
-              <div className={`text-2xl font-bold ${item.valueColor}`}>{item.value}</div> {/* Changed to text-2xl */}
+              <div className={`text-2xl font-bold ${item.valueColor}`}>{item.value}</div>
               <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
             </CardContent>
           </Card>
@@ -417,7 +417,7 @@ const AdminDashboard = () => {
           currentMonthAchieved={currentMonthAchieved}
           currentMonthPending={currentMonthPending}
           displayMonth={getMonthName(selectedChartMonth)}
-          displayYear={selectedChartYear} {/* Corrected prop name */}
+          displayYear={selectedChartYear}
           selectedChartMonth={selectedChartMonth}
           setSelectedChartMonth={setSelectedChartMonth}
           selectedChartYear={selectedChartYear}
