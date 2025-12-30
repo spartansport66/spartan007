@@ -120,7 +120,7 @@ const ManageUsers = () => {
         .eq('user_type', 'sales_person');
       
       if (profilesError) {
-        console.error('Error fetching profiles:', profilesError.message);
+        console.error('ManageUsers: Error fetching profiles:', profilesError.message);
         showError('Failed to load users.');
         setUsers([]);
       } else {
@@ -130,7 +130,7 @@ const ManageUsers = () => {
           .select('id, email, banned_until'); 
         
         if (authUsersError) {
-          console.error('Error fetching auth users:', authUsersError.message);
+          console.error('ManageUsers: Error fetching auth users:', authUsersError.message);
         }
         
         // Fetch ALL sales targets for all sales persons
@@ -140,7 +140,9 @@ const ManageUsers = () => {
           .in('sales_person_id', userIds); 
         
         if (targetsError) {
-          console.error('Error fetching sales targets:', targetsError.message);
+          console.error('ManageUsers: Error fetching sales targets:', targetsError.message);
+        } else {
+          console.log('ManageUsers: Fetched targetsData:', targetsData); // Log fetched targets
         }
         
         const formattedUsers: UserProfile[] = profilesData.map((profile: any) => {
@@ -160,6 +162,7 @@ const ManageUsers = () => {
           };
         });
         
+        console.log('ManageUsers: Formatted users with targets:', formattedUsers); // Log formatted users
         setUsers(formattedUsers);
       }
       
@@ -168,14 +171,14 @@ const ManageUsers = () => {
         .select('id, name');
       
       if (dealersError) {
-        console.error('Error fetching all dealers:', dealersError.message);
+        console.error('ManageUsers: Error fetching all dealers:', dealersError.message);
         showError('Failed to load dealers for assignment.');
         setAllDealers([]);
       } else {
         setAllDealers(dealersData || []);
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('ManageUsers: Error fetching data:', error);
       showError('Failed to load data.');
       setUsers([]);
       setAllDealers([]);
@@ -218,7 +221,7 @@ const ManageUsers = () => {
           .eq('sales_person_id', selectedUser.id)
           .then(({ data, error }) => {
             if (error) {
-              console.error('Error fetching assigned dealers for user:', error.message);
+              console.error('ManageUsers: Error fetching assigned dealers for user:', error.message);
               editForm.reset({
                 firstName: selectedUser.first_name || '',
                 lastName: selectedUser.last_name || '',
@@ -278,7 +281,7 @@ const ManageUsers = () => {
       setIsCreateDialogOpen(false);
       fetchUsersAndDealers();
     } catch (error: any) {
-      console.error('Error creating user:', error);
+      console.error('ManageUsers: Error creating user:', error);
       showError(`Failed to create user: ${error.message}`);
     } finally {
       setIsSubmitting(false);
@@ -324,7 +327,7 @@ const ManageUsers = () => {
       setIsEditDialogOpen(false);
       fetchUsersAndDealers();
     } catch (error: any) {
-      console.error('Error updating user:', error);
+      console.error('ManageUsers: Error updating user:', error);
       showError(`Failed to update user: ${error.message}`);
     } finally {
       setIsSubmitting(false);
@@ -356,7 +359,7 @@ const ManageUsers = () => {
       showSuccess(`User ${userToToggle.first_name} ${userToToggle.last_name} has been ${newStatus ? 'deactivated' : 'activated'}.`);
       fetchUsersAndDealers();
     } catch (error: any) {
-      console.error('Error toggling user status:', error);
+      console.error('ManageUsers: Error toggling user status:', error);
       showError(`Failed to toggle user status: ${error.message}`);
     } finally {
       setIsSubmitting(false);

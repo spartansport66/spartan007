@@ -66,6 +66,8 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
 
+  console.log('UserTargetsManager: Received user prop with targets:', user.targets); // Log user targets
+
   const addForm = useForm<z.infer<typeof addTargetFormSchema>>({
     resolver: zodResolver(addTargetFormSchema),
     defaultValues: {
@@ -102,6 +104,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
     try {
       const targetMonthDate = new Date(parseInt(values.year), parseInt(values.month) - 1, 1);
       const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
+      console.log('UserTargetsManager: Adding/Updating target with values:', values, 'formattedTargetMonth:', formattedTargetMonth); // Log values
 
       // Check if a target for this month already exists
       const existingTarget = user.targets.find(
@@ -150,6 +153,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   };
 
   const handleEditClick = (target: SalesTarget) => {
+    console.log('UserTargetsManager: Editing target:', target); // Log target being edited
     setEditingTargetId(target.id);
     editForm.reset({ targetAmount: target.target_amount });
   };
