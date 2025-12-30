@@ -145,6 +145,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
         year: new Date().getFullYear().toString(),
         targetAmount: 0,
       });
+      onTargetsUpdated(); // Notify parent to refresh
     } catch (error: any) {
       console.error('Error setting target:', error);
       showError(`Failed to set target: ${error.message}`);
@@ -186,6 +187,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
       
       showSuccess('Target updated successfully!');
       setEditingTargetId(null);
+      onTargetsUpdated(); // Notify parent to refresh
     } catch (error: any) {
       console.error('Error updating target:', error);
       showError(`Failed to update target: ${error.message}`);
@@ -208,6 +210,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
       setLocalTargets(prev => prev.filter(t => t.id !== targetId));
       
       showSuccess('Target deleted successfully!');
+      onTargetsUpdated(); // Notify parent to refresh
     } catch (error: any) {
       console.error('Error deleting target:', error);
       showError(`Failed to delete target: ${error.message}`);
@@ -221,6 +224,21 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
     const dateB = new Date(b.target_month);
     return dateB.getTime() - dateA.getTime(); // Newest first
   });
+
+  const isFutureMonth = (targetMonth: string) => {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-indexed
+
+    const targetDate = new Date(targetMonth);
+    const targetYear = targetDate.getFullYear();
+    const targetMonthIndex = targetDate.getMonth(); // 0-indexed
+
+    // A target is editable if its month/year is strictly after the current month/year
+    if (targetYear > currentYear) return true;
+    if (targetYear === currentYear && targetMonthIndex > currentMonth) return true;
+    return false;
+  };
 
   return (
     <div className="space-y-6">
@@ -327,6 +345,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
                 const targetDate = new Date(target.target_month);
                 const month = targetDate.toLocaleString('default', { month: 'long' });
                 const year = targetDate.getFullYear();
+                const canEdit = isFutureMonth(target.target_month);
 
                 return (
                   <TableRow key={target.id}>
@@ -363,7 +382,13 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
                     <TableCell>
                       <div className="flex gap-2">
                         {editingTargetId !== target.id && (
-                          <Button variant="ghost" size="icon" onClick={() => handleEditClick(target)} title="Edit Target">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleEditClick(target)} 
+                            title="Edit Target"
+                            disabled={!canEdit || isSubmitting}
+                          >
                             <Edit className="h-4 w-4" />
                           </Button>
                         )}
