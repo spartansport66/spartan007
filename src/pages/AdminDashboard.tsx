@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, PlusCircle, UserCog, Loader2, Eye } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, PlusCircle, UserCog, Loader2, Eye, FileText } from 'lucide-react';
 import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTable';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
@@ -15,6 +15,21 @@ import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+// Import new report dialogs
+import OrdersAwaitingDispatchReportDialog from '@/components/reports/OrdersAwaitingDispatchReportDialog';
+import DispatchedOrdersReportDialog from '@/components/reports/DispatchedOrdersReportDialog';
+import SalesPersonPerformanceReportDialog from '@/components/reports/SalesPersonPerformanceReportDialog';
+import DealerReportDialog from '@/components/reports/DealerReportDialog';
+
 
 interface Product {
   id: string;
@@ -83,6 +98,13 @@ const AdminDashboard = () => {
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
   const [shouldPrintOrderDetails, setShouldPrintOrderDetails] = useState(false); // New state for printing
+
+  // States for new report dialogs
+  const [isOrdersAwaitingDispatchReportOpen, setIsOrdersAwaitingDispatchReportOpen] = useState(false);
+  const [isDispatchedOrdersReportOpen, setIsDispatchedOrdersReportOpen] = useState(false);
+  const [isSalesPersonPerformanceReportOpen, setIsSalesPersonPerformanceReportOpen] = useState(false);
+  const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
+
 
   const getMonthName = (monthNum: string) => {
     const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
@@ -408,6 +430,37 @@ const AdminDashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Manage Users</TooltipContent>
           </Tooltip>
+
+          {/* Reports Dropdown */}
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="bg-blue-600 text-white hover:bg-blue-700">
+                    <FileText className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Reports</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent className="w-56">
+              <DropdownMenuLabel>Select a Report</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setIsOrdersAwaitingDispatchReportOpen(true)}>
+                Orders Awaiting Dispatch
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsDispatchedOrdersReportOpen(true)}>
+                Dispatched Orders
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonPerformanceReportOpen(true)}>
+                Sales Person Performance
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsDealerReportOpen(true)}>
+                Dealer Report
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
@@ -426,6 +479,24 @@ const AdminDashboard = () => {
         isOpen={isOrderDetailsDialogOpen}
         onOpenChange={setIsOrderDetailsDialogOpen}
         shouldPrintOnLoad={shouldPrintOrderDetails} // Pass the new prop
+      />
+
+      {/* Report Dialogs */}
+      <OrdersAwaitingDispatchReportDialog
+        isOpen={isOrdersAwaitingDispatchReportOpen}
+        onOpenChange={setIsOrdersAwaitingDispatchReportOpen}
+      />
+      <DispatchedOrdersReportDialog
+        isOpen={isDispatchedOrdersReportOpen}
+        onOpenChange={setIsDispatchedOrdersReportOpen}
+      />
+      <SalesPersonPerformanceReportDialog
+        isOpen={isSalesPersonPerformanceReportOpen}
+        onOpenChange={setIsSalesPersonPerformanceReportOpen}
+      />
+      <DealerReportDialog
+        isOpen={isDealerReportOpen}
+        onOpenChange={setIsDealerReportOpen}
       />
     </div>
   );
