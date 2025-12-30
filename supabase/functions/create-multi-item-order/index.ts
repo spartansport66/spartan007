@@ -130,7 +130,7 @@ serve(async (req) => {
         total_amount: totalOrderAmount,
         status: 'completed', // Assuming all orders created via this function are completed
       })
-      .select('id')
+      .select('id, order_number') // Select the new order_number
       .single();
 
     if (orderError) {
@@ -167,7 +167,7 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ message: 'Order placed successfully', orderId: newOrder.id }), {
+    return new Response(JSON.stringify({ message: 'Order placed successfully', orderId: newOrder.id, orderNumber: newOrder.order_number }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

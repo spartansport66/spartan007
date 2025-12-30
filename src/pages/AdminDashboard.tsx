@@ -47,7 +47,8 @@ interface SalesPersonProfile {
 }
 
 interface OrderSummary {
-  id: string;
+  id: string; // UUID
+  order_number: number; // New auto-incrementing ID
   order_date: string;
   total_amount: number;
   dealer_name: string;
@@ -240,11 +241,12 @@ const AdminDashboard = () => {
       }
     }
 
-    // Fetch recent orders for the new card
+    // Fetch recent orders for the new card, including order_number
     const { data: ordersData, error: ordersError } = await supabase
       .from('orders')
       .select(`
         id,
+        order_number,
         order_date,
         total_amount,
         dealers (name)
@@ -259,6 +261,7 @@ const AdminDashboard = () => {
     } else {
       const formattedOrders: OrderSummary[] = (ordersData || []).map((order: any) => ({
         id: order.id,
+        order_number: order.order_number, // Added
         order_date: order.order_date,
         total_amount: order.total_amount,
         dealer_name: order.dealers?.name || 'N/A',
@@ -379,7 +382,7 @@ const AdminDashboard = () => {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground">Order Number</TableHead>
+                    <TableHead className="text-muted-foreground">Order Number</TableHead> {/* Changed to Order Number */}
                     <TableHead className="text-muted-foreground">Party Name</TableHead>
                     <TableHead className="text-muted-foreground text-right">Order Amount</TableHead>
                     <TableHead className="text-muted-foreground text-center">Actions</TableHead>
@@ -388,7 +391,7 @@ const AdminDashboard = () => {
                 <TableBody>
                   {recentOrders.map((order) => (
                     <TableRow key={order.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{order.id.substring(0, 8)}...</TableCell>
+                      <TableCell className="font-medium text-foreground">{order.order_number}</TableCell> {/* Display order_number */}
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       <TableCell className="text-center">

@@ -19,17 +19,21 @@ interface OrderItemDetail {
 }
 
 interface OrderDetail {
-  id: string;
+  id: string; // UUID
+  order_number: number; // New auto-incrementing ID
   order_date: string;
   total_amount: number;
   status: string;
   dealer_name: string;
-  dealer_address: string; // Added
-  dealer_phone: string; // Added
+  dealer_address: string;
+  dealer_city: string; // Added
+  dealer_state: string; // Added
+  dealer_country: string; // Added
+  dealer_phone: string;
   dealer_credit_limit: number;
   dealer_consumed_credit: number;
   dealer_pending_credit: number;
-  sales_person_name: string; // Added
+  sales_person_name: string;
   items: OrderItemDetail[];
 }
 
@@ -42,11 +46,12 @@ interface OrderDetailsDialogProps {
 // Define the expected structure of the data returned by the Supabase query
 interface FetchedOrderData {
   id: string;
+  order_number: number; // Added
   order_date: string;
   total_amount: number;
   status: string;
-  dealers: { id: string; name: string; credit_limit: number; address: string; phone: string } | null; // Added address, phone
-  user_id: string; // Added to fetch sales person
+  dealers: { id: string; name: string; credit_limit: number; address: string; phone: string; city: string; state: string; country: string } | null; // Added city, state, country
+  user_id: string;
 }
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen, onOpenChange }) => {
@@ -61,11 +66,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         .from('orders')
         .select(`
           id,
+          order_number,
           order_date,
           total_amount,
           status,
           user_id,
-          dealers (id, name, credit_limit, address, phone)
+          dealers (id, name, credit_limit, address, phone, city, state, country)
         `)
         .eq('id', id)
         .single() as { data: FetchedOrderData | null; error: any };
@@ -126,16 +132,20 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
 
       setOrderDetails({
         id: orderData.id,
+        order_number: orderData.order_number, // Added
         order_date: orderData.order_date,
         total_amount: orderData.total_amount,
         status: orderData.status,
         dealer_name: orderData.dealers?.name || 'N/A',
-        dealer_address: orderData.dealers?.address || 'N/A', // Added
-        dealer_phone: orderData.dealers?.phone || 'N/A', // Added
+        dealer_address: orderData.dealers?.address || 'N/A',
+        dealer_city: orderData.dealers?.city || 'N/A', // Added
+        dealer_state: orderData.dealers?.state || 'N/A', // Added
+        dealer_country: orderData.dealers?.country || 'N/A', // Added
+        dealer_phone: orderData.dealers?.phone || 'N/A',
         dealer_credit_limit: orderData.dealers?.credit_limit || 0,
         dealer_consumed_credit: dealerConsumedCredit,
         dealer_pending_credit: (orderData.dealers?.credit_limit || 0) - dealerConsumedCredit,
-        sales_person_name: salesPersonName, // Added
+        sales_person_name: salesPersonName,
         items: items,
       });
 
@@ -167,24 +177,24 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
     yPos += 10;
 
     doc.setFontSize(12);
-    doc.text(`Order ID: ${orderDetails.id}`, 10, yPos);
+    doc.text(`Order Number: ${orderDetails.order_number}`, 10, yPos); // Changed to order_number
     yPos += 7;
     doc.text(`Order Date: ${new Date(orderDetails.order_date).toLocaleDateString()}`, 10, yPos);
     yPos += 7;
-    doc.text(`Sales Person: ${orderDetails.sales_person_name}`, 10, yPos); // Added
+    doc.text(`Sales Person: ${orderDetails.sales_person_name}`, 10, yPos);
     yPos += 7;
     doc.text(`Status: ${orderDetails.status}`, 10, yPos);
     yPos += 10;
 
     doc.setFontSize(14);
-    doc.text('Dealer Information:', 10, yPos); // Changed title
+    doc.text('Dealer Information:', 10, yPos);
     yPos += 7;
     doc.setFontSize(12);
     doc.text(`Name: ${orderDetails.dealer_name}`, 10, yPos);
     yPos += 7;
-    doc.text(`Address: ${orderDetails.dealer_address}`, 10, yPos); // Added
+    doc.text(`Address: ${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}`, 10, yPos); // Full address
     yPos += 7;
-    doc.text(`Phone: ${orderDetails.dealer_phone}`, 10, yPos); // Added
+    doc.text(`Phone: ${orderDetails.dealer_phone}`, 10, yPos);
     yPos += 10;
 
     doc.setFontSize(14);
@@ -229,7 +239,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
     yPos += 7;
     doc.text(`Pending Credit: ₹${orderDetails.dealer_pending_credit.toFixed(2)}`, 10, yPos);
 
-    doc.save(`Order_${orderDetails.id}.pdf`);
+    doc.save(`Order_${orderDetails.order_number}.pdf`); // Changed filename
   };
 
   const handlePrint = () => {
@@ -248,14 +258,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         .summary { margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; }
       </style>
       <h1>Order Details</h1>
-      <p><strong>Order ID:</strong> ${orderDetails.id}</p>
+      <p><strong>Order Number:</strong> ${orderDetails.order_number}</p> <!-- Changed to order_number -->
       <p><strong>Order Date:</strong> ${new Date(orderDetails.order_date).toLocaleDateString()}</p>
       <p><strong>Sales Person:</strong> ${orderDetails.sales_person_name}</p>
       <p><strong>Status:</strong> ${orderDetails.status}</p>
 
       <h2>Dealer Information</h2>
       <p><strong>Name:</strong> ${orderDetails.dealer_name}</p>
-      <p><strong>Address:</strong> ${orderDetails.dealer_address}</p>
+      <p><strong>Address:</strong> ${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}</p> <!-- Full address -->
       <p><strong>Phone:</strong> ${orderDetails.dealer_phone}</p>
 
       <h2>Order Items</h2>
@@ -318,14 +328,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p><span className="font-semibold">Order ID:</span> {orderDetails.id}</p>
+                <p><span className="font-semibold">Order Number:</span> {orderDetails.order_number}</p> {/* Changed to order_number */}
                 <p><span className="font-semibold">Order Date:</span> {new Date(orderDetails.order_date).toLocaleDateString()}</p>
                 <p><span className="font-semibold">Status:</span> {orderDetails.status}</p>
                 <p><span className="font-semibold">Sales Person:</span> {orderDetails.sales_person_name}</p>
               </div>
               <div>
                 <p><span className="font-semibold">Dealer Name:</span> {orderDetails.dealer_name}</p>
-                <p><span className="font-semibold">Address:</span> {orderDetails.dealer_address}</p>
+                <p><span className="font-semibold">Address:</span> {orderDetails.dealer_address}, {orderDetails.dealer_city}, {orderDetails.dealer_state}, {orderDetails.dealer_country}</p> {/* Full address */}
                 <p><span className="font-semibold">Phone:</span> {orderDetails.dealer_phone}</p>
                 <p><span className="font-semibold">Credit Limit:</span> ₹{orderDetails.dealer_credit_limit.toFixed(2)}</p>
                 <p><span className="font-semibold">Consumed Credit:</span> ₹{orderDetails.dealer_consumed_credit.toFixed(2)}</p>
