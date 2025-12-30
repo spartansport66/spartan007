@@ -61,7 +61,7 @@ const AdminDashboard = () => {
   const { user, loading: sessionLoading, isAdmin } = useSession();
   const [products, setProducts] = useState<Product[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]); // Keep sales data for overview cards
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
@@ -376,46 +376,6 @@ const AdminDashboard = () => {
           generateYears={generateYears}
         />
       </div>
-
-      {/* Recent Activities (All Sales) */}
-      <Card className="bg-card text-card-foreground shadow-lg mb-6">
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold text-primary">All Recent Sales</CardTitle>
-          <CardDescription className="text-muted-foreground">A list of all recent sales transactions across all sales persons.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            {sales.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No sales recorded yet.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground">Sales Person</TableHead>
-                    <TableHead className="text-muted-foreground">Product</TableHead>
-                    <TableHead className="text-muted-foreground">Dealer</TableHead>
-                    <TableHead className="text-muted-foreground">Quantity</TableHead>
-                    <TableHead className="text-muted-foreground">Total Price</TableHead>
-                    <TableHead className="text-muted-foreground">Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sales.map((sale) => (
-                    <TableRow key={sale.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{sale.orders?.profiles ? `${sale.orders.profiles.first_name} ${sale.orders.profiles.last_name}` : 'N/A'}</TableCell>
-                      <TableCell className="font-medium text-foreground">{sale.products?.name || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{sale.orders?.dealers?.name || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
-                      <TableCell className="text-muted-foreground">₹{sale.total_price.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Quick Actions */}
       <Card className="bg-card text-card-foreground shadow-lg">
