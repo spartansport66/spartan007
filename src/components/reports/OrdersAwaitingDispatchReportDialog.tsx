@@ -39,7 +39,8 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
   // Filter states
   const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
-  const [filterOrderDate, setFilterOrderDate] = useState<string>('');
+  const [filterFromOrderDate, setFilterFromOrderDate] = useState<string>('');
+  const [filterToOrderDate, setFilterToOrderDate] = useState<string>('');
 
   const fetchOrdersAndDealers = useCallback(async () => {
     setLoading(true);
@@ -77,10 +78,13 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
       if (filterDealerId) {
         query = query.eq('dealer_id', filterDealerId);
       }
-      if (filterOrderDate) {
-        const startOfDay = `${filterOrderDate}T00:00:00.000Z`;
-        const endOfDay = `${filterOrderDate}T23:59:59.999Z`;
-        query = query.gte('order_date', startOfDay).lte('order_date', endOfDay);
+      if (filterFromOrderDate) {
+        const startOfDay = `${filterFromOrderDate}T00:00:00.000Z`;
+        query = query.gte('order_date', startOfDay);
+      }
+      if (filterToOrderDate) {
+        const endOfDay = `${filterToOrderDate}T23:59:59.999Z`;
+        query = query.lte('order_date', endOfDay);
       }
 
       const { data: ordersData, error: ordersError } = await query;
@@ -105,7 +109,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
     } finally {
       setLoading(false);
     }
-  }, [filterOrderNumber, filterDealerId, filterOrderDate]);
+  }, [filterOrderNumber, filterDealerId, filterFromOrderDate, filterToOrderDate]);
 
   useEffect(() => {
     if (isOpen) {
@@ -116,7 +120,8 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
   const handleClearFilters = () => {
     setFilterOrderNumber('');
     setFilterDealerId('');
-    setFilterOrderDate('');
+    setFilterFromOrderDate('');
+    setFilterToOrderDate('');
   };
 
   const handlePrint = () => {
@@ -185,12 +190,22 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
             </Select>
           </div>
           <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterOrderDate">Order Date</Label>
+            <Label htmlFor="filterFromOrderDate">From Order Date</Label>
             <Input
-              id="filterOrderDate"
+              id="filterFromOrderDate"
               type="date"
-              value={filterOrderDate}
-              onChange={(e) => setFilterOrderDate(e.target.value)}
+              value={filterFromOrderDate}
+              onChange={(e) => setFilterFromOrderDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterToOrderDate">To Order Date</Label>
+            <Input
+              id="filterToOrderDate"
+              type="date"
+              value={filterToOrderDate}
+              onChange={(e) => setFilterToOrderDate(e.target.value)}
               className="w-full"
             />
           </div>

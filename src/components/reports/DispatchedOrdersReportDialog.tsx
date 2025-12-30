@@ -39,19 +39,11 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
 
-  // Get today's date in YYYY-MM-DD format
-  const getTodayDate = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // Filter states, default to today's date for dispatch date
+  // Filter states
   const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
-  const [filterDispatchDate, setFilterDispatchDate] = useState<string>(getTodayDate());
+  const [filterFromDispatchDate, setFilterFromDispatchDate] = useState<string>('');
+  const [filterToDispatchDate, setFilterToDispatchDate] = useState<string>('');
 
   const fetchOrdersAndDealers = useCallback(async () => {
     setLoading(true);
@@ -92,10 +84,13 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
       if (filterDealerId) {
         query = query.eq('dealer_id', filterDealerId);
       }
-      if (filterDispatchDate) {
-        const startOfDay = `${filterDispatchDate}T00:00:00.000Z`;
-        const endOfDay = `${filterDispatchDate}T23:59:59.999Z`;
-        query = query.gte('dispatch_date', startOfDay).lte('dispatch_date', endOfDay);
+      if (filterFromDispatchDate) {
+        const startOfDay = `${filterFromDispatchDate}T00:00:00.000Z`;
+        query = query.gte('dispatch_date', startOfDay);
+      }
+      if (filterToDispatchDate) {
+        const endOfDay = `${filterToDispatchDate}T23:59:59.999Z`;
+        query = query.lte('dispatch_date', endOfDay);
       }
 
       const { data: ordersData, error: ordersError } = await query;
@@ -123,7 +118,7 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
     } finally {
       setLoading(false);
     }
-  }, [filterOrderNumber, filterDealerId, filterDispatchDate]);
+  }, [filterOrderNumber, filterDealerId, filterFromDispatchDate, filterToDispatchDate]);
 
   useEffect(() => {
     if (isOpen) {
@@ -134,7 +129,8 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
   const handleClearFilters = () => {
     setFilterOrderNumber('');
     setFilterDealerId('');
-    setFilterDispatchDate(getTodayDate());
+    setFilterFromDispatchDate('');
+    setFilterToDispatchDate('');
   };
 
   const handlePrint = () => {
@@ -205,12 +201,22 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
             </Select>
           </div>
           <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterDispatchDate">Dispatch Date</Label>
+            <Label htmlFor="filterFromDispatchDate">From Dispatch Date</Label>
             <Input
-              id="filterDispatchDate"
+              id="filterFromDispatchDate"
               type="date"
-              value={filterDispatchDate}
-              onChange={(e) => setFilterDispatchDate(e.target.value)}
+              value={filterFromDispatchDate}
+              onChange={(e) => setFilterFromDispatchDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterToDispatchDate">To Dispatch Date</Label>
+            <Input
+              id="filterToDispatchDate"
+              type="date"
+              value={filterToDispatchDate}
+              onChange={(e) => setFilterToDispatchDate(e.target.value)}
               className="w-full"
             />
           </div>
