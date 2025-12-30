@@ -154,12 +154,15 @@ const OrdersToDispatchCard: React.FC = () => {
           </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterDealer">Dealer Name</Label>
-            <Select value={filterDealerId} onValueChange={setFilterDealerId}>
+            <Select 
+              value={filterDealerId || "all"} // Set default value for Select
+              onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)} // Handle "all" value
+            >
               <SelectTrigger id="filterDealer" className="w-full">
                 <SelectValue placeholder="Filter by dealer" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Dealers</SelectItem>
+                <SelectItem value="all">All Dealers</SelectItem> {/* Changed value to "all" */}
                 {allDealers.map(dealer => (
                   <SelectItem key={dealer.value} value={dealer.value}>{dealer.label}</SelectItem>
                 ))}
