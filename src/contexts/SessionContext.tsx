@@ -49,23 +49,40 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       if (currentSession?.user) {
         console.log('SessionContext: Attempting to fetch user profile for ID:', currentSession.user.id);
         try {
+          // --- TEST QUERY ---
+          console.log('SessionContext: Running test query on products table...');
+          const { data: testData, error: testError } = await supabase
+            .from('products')
+            .select('id')
+            .limit(1);
+          
+          if (testError) {
+            console.error('SessionContext: Test query failed:', testError.message);
+            showError(`Test query failed: ${testError.message}`);
+            // If test query fails, we can't proceed reliably, so set loading to false and return.
+            setLoading(false); 
+            return; 
+          }
+          console.log('SessionContext: Test query successful. Data:', testData);
+          // --- END TEST QUERY ---
+
+          console.log('SessionContext: Before Supabase profile query.');
           const { data, error } = await supabase
             .from('profiles')
             .select('is_admin, user_type')
-            .eq('id', currentSession.user.id); // Removed .single()
-
-          console.log('SessionContext: Profile fetch result - data:', data, 'error:', error);
+            .eq('id', currentSession.user.id);
+          console.log('SessionContext: After Supabase profile query. Raw data:', data, 'Raw error:', error);
 
           if (error) {
             console.error('SessionContext: Error fetching user profile:', error.message);
             showError(`Failed to load user profile: ${error.message}`);
-          } else if (data && data.length > 0) { // Check if data exists and is not empty
+          } else if (data === null || data === undefined || data.length === 0) { // Explicitly check for null/undefined data
+            console.warn('SessionContext: No user profile found for ID:', currentSession.user.id, 'Data was empty or null.');
+            showError('No user profile found. Please ensure your account has a profile.');
+          } else {
             console.log('SessionContext: User profile fetched successfully:', data[0]);
             fetchedIsAdmin = data[0].is_admin || false;
             fetchedUserType = data[0].user_type || 'sales_person';
-          } else {
-            console.warn('SessionContext: No user profile found for ID:', currentSession.user.id, 'Data was empty or null.');
-            showError('No user profile found. Please ensure your account has a profile.');
           }
         } catch (profileFetchError: any) {
           console.error('SessionContext: Caught error during profile fetch:', profileFetchError.message);
@@ -100,7 +117,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             setLoading(false);
           } else {
             await updateSessionAndProfileStates(currentSession);
-            console.log('SessionContext: Auth event processed. Setting loading to false.');
+            console.log('SessionContext: Auth event processed. Setting loading to false AFTER profile update.'); // Added log
             setLoading(false);
           }
         } catch (error: any) {
@@ -121,7 +138,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       showError(`Failed to load session: ${error.message}`);
     }).finally(() => { // Added finally block
       setLoading(false);
-      console.log('SessionContext: Initial getSession completed. Loading set to false in finally block.');
+      console.log('SessionContext: Initial getSession completed. Loading set to false in finally block.'); // Added log
     });
 
     return () => {
