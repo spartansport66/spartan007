@@ -70,7 +70,7 @@ const Dashboard = () => {
     const { data: salesData, error: salesError } = await supabase
       .from('sales')
       .select(`
-        id, product_id, dealer_id, quantity, total_price, sale_date,
+        id, user_id, product_id, dealer_id, quantity, total_price, sale_date,
         products (name),
         dealers (name)
       `)
