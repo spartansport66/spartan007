@@ -7,11 +7,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, PlusCircle, UserCog, Loader2, Eye, FileText } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, PlusCircle, UserCog, Loader2, Eye, FileText, CreditCard } from 'lucide-react';
 import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTable';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
+import PaymentCard from '@/components/PaymentCard'; // Import the new PaymentCard
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -377,6 +378,9 @@ const AdminDashboard = () => {
 
       {/* Dispatched Orders Card */}
       <DispatchedOrdersCard />
+
+      {/* Payment Card */}
+      <PaymentCard />
 
       {/* Sales Person Performance Table Section */}
       <div className="grid gap-4 lg:grid-cols-1 mb-6">
