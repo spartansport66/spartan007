@@ -344,35 +344,31 @@ const AdminDashboard = () => {
   const salesOverview = [
     {
       title: "Total Sales Value",
-      value: `$${totalSalesValue.toFixed(2)}`,
+      value: `₹${totalSalesValue.toFixed(2)}`, // Changed to Rupee symbol
       change: "+20.1% from last month",
       icon: <DollarSign className="h-3 w-3 text-blue-600 dark:text-blue-400" />,
-      titleColor: "text-blue-600 dark:text-blue-400",
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Orders",
       value: totalOrders.toString(),
       change: "+180.1% from last month",
-      icon: <Package className="h-3 w-3 text-green-600 dark:text-green-400" />,
-      titleColor: "text-green-600 dark:text-green-400",
-      valueColor: "text-green-800 dark:text-green-200"
+      icon: <Package className="h-3 w-3 text-blue-600 dark:text-blue-400" />, // Unified color
+      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
     },
     {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month",
-      icon: <Users className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />,
-      titleColor: "text-yellow-600 dark:text-yellow-400",
-      valueColor: "text-yellow-800 dark:text-yellow-200"
+      icon: <Users className="h-3 w-3 text-blue-600 dark:text-blue-400" />, // Unified color
+      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
     },
     {
       title: "Total Products",
       value: products.length.toString(),
       change: "Overall",
-      icon: <Boxes className="h-3 w-3 text-purple-600 dark:text-purple-400" />,
-      titleColor: "text-purple-600 dark:text-purple-400",
-      valueColor: "text-purple-800 dark:text-purple-200"
+      icon: <Boxes className="h-3 w-3 text-blue-600 dark:text-blue-400" />, // Unified color
+      valueColor: "text-blue-800 dark:text-blue-200" // Unified color
     },
   ];
 
@@ -392,11 +388,11 @@ const AdminDashboard = () => {
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2">
-              <CardTitle className={`text-[0.5rem] font-medium ${item.titleColor}`}>{item.title}</CardTitle>
+              <CardTitle className="text-[0.5rem] font-medium text-muted-foreground">{item.title}</CardTitle>
               {item.icon}
             </CardHeader>
             <CardContent className="p-2 pt-0">
-              <div className={`text-sm font-bold ${item.valueColor}`}>{item.value}</div>
+              <div className={`text-lg font-bold ${item.valueColor}`}>{item.value}</div> {/* Increased font size and applied color */}
               <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
             </CardContent>
           </Card>
