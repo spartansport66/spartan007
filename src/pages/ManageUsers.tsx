@@ -50,6 +50,12 @@ interface AuthUser {
   raw_app_meta_data?: { provider?: string; providers?: string[]; } | null;
 }
 
+interface SalesTarget {
+  id: string;
+  target_amount: number;
+  target_month: string;
+}
+
 const userFormSchema = z.object({
   firstName: z.string().min(1, { message: 'First name is required.' }),
   lastName: z.string().min(1, { message: 'Last name is required.' }),
@@ -121,8 +127,7 @@ const ManageUsers = () => {
           first_name,
           last_name,
           user_type,
-          is_admin,
-          sales_targets!left(id, target_amount, target_month)
+          is_admin
         `)
         .eq('user_type', 'sales_person');
       
@@ -135,11 +140,21 @@ const ManageUsers = () => {
         const userIds = profilesData.map(profile => profile.id);
         const { data: authUsersData, error: authUsersError } = await supabase
           .from('users') // Changed from 'auth_users' to 'users'
-          .select('id, email, banned_until, raw_app_meta_data')
+          .select('id, email, banned_until')
           .in('id', userIds);
         
         if (authUsersError) {
           console.error('Error fetching auth users:', authUsersError.message);
+        }
+        
+        // Fetch sales targets for all users
+        const { data: targetsData, error: targetsError } = await supabase
+          .from('sales_targets')
+          .select('id, sales_person_id, target_amount, target_month')
+          .in('sales_person_id', userIds);
+        
+        if (targetsError) {
+          console.error('Error fetching sales targets:', targetsError.message);
         }
         
         const formattedUsers: UserProfile[] = profilesData.map((profile: any) => {
@@ -149,7 +164,8 @@ const ManageUsers = () => {
           const currentDate = new Date();
           const currentMonthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
           
-          const currentMonthTarget = profile.sales_targets?.find((target: any) => {
+          const userTargets = targetsData?.filter((target: any) => target.sales_person_id === profile.id) || [];
+          const currentMonthTarget = userTargets.find((target: any) => {
             const targetDate = new Date(target.target_month);
             return targetDate.getFullYear() === currentMonthStart.getFullYear() && 
                    targetDate.getMonth() === currentMonthStart.getMonth();
@@ -379,7 +395,7 @@ const ManageUsers = () => {
           .from('sales_targets')
           .update({
             target_amount: values.targetAmount,
-            target_month: formattedTargetMonth,
+            target_month: formattedTargetMonth, // Use formatted date
             updated_at: new Date().toISOString()
           })
           .eq('id', targetUser.target_id);
@@ -392,7 +408,7 @@ const ManageUsers = () => {
           .insert({
             sales_person_id: targetUser.id,
             target_amount: values.targetAmount,
-            target_month: formattedTargetMonth,
+            target_month: formattedTargetMonth, // Use formatted date
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           });
@@ -449,6 +465,7 @@ const ManageUsers = () => {
                   <TableHeader>
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead className="text-muted-foreground">Name</TableHead>
+                      {/* Removed Email column */}
                       <TableHead className="text-muted-foreground">Status</TableHead>
                       <TableHead className="text-muted-foreground">Monthly Target</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
@@ -460,6 +477,7 @@ const ManageUsers = () => {
                         <TableCell className="font-medium text-foreground">
                           {userItem.first_name} {userItem.last_name}
                         </TableCell>
+                        {/* Removed Email cell */}
                         <TableCell className="text-muted-foreground">
                           {userItem.banned_until ? (
                             <span className="text-red-500">Inactive</span>
@@ -468,9 +486,9 @@ const ManageUsers = () => {
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {userItem.monthly_target !== null && userItem.monthly_target !== undefined ? 
-                            `₹${userItem.monthly_target.toFixed(2)}` : 
-                            'Not Set'}
+                          {userItem.monthly_target !== null && userItem.monthly_target !== undefined 
+                            ? `₹${userItem.monthly_target.toFixed(2)}` 
+                            : 'Not Set'}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -485,7 +503,6 @@ const ManageUsers = () => {
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -497,7 +514,6 @@ const ManageUsers = () => {
                             >
                               <span className="text-xs font-bold">₹</span>
                             </Button>
-                            
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button 
@@ -538,7 +554,6 @@ const ManageUsers = () => {
                 </Table>
               )}
             </div>
-            
             <div className="mt-6 text-right">
               <Button 
                 onClick={() => setIsCreateDialogOpen(true)} 
@@ -578,7 +593,6 @@ const ManageUsers = () => {
                   </FormItem>
                 )}
               />
-              
               <FormField
                 control={createForm.control}
                 name="lastName"
@@ -592,7 +606,6 @@ const ManageUsers = () => {
                   </FormItem>
                 )}
               />
-              
               <FormField
                 control={createForm.control}
                 name="email"
@@ -606,7 +619,6 @@ const ManageUsers = () => {
                   </FormItem>
                 )}
               />
-              
               <FormField
                 control={createForm.control}
                 name="password"
@@ -620,7 +632,6 @@ const ManageUsers = () => {
                   </FormItem>
                 )}
               />
-              
               <DialogFooter>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create User'}
@@ -656,7 +667,6 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
-                
                 <FormField
                   control={editForm.control}
                   name="lastName"
@@ -670,7 +680,6 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
-                
                 <FormField
                   control={editForm.control}
                   name="email"
@@ -684,7 +693,6 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
-                
                 <FormField
                   control={editForm.control}
                   name="password"
@@ -698,7 +706,6 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
-                
                 <div className="grid gap-4 mt-4">
                   <h3 className="text-lg font-semibold">Manage Assigned Dealers</h3>
                   <FormField
@@ -708,11 +715,11 @@ const ManageUsers = () => {
                       <FormItem>
                         <FormLabel>Assigned Dealers</FormLabel>
                         <FormControl>
-                          <MultiSelect
-                            options={dealerOptions}
-                            value={field.value || []}
-                            onChange={field.onChange}
-                            placeholder="Select dealers to assign"
+                          <MultiSelect 
+                            options={dealerOptions} 
+                            value={field.value || []} 
+                            onChange={field.onChange} 
+                            placeholder="Select dealers to assign" 
                           />
                         </FormControl>
                         <FormMessage />
@@ -720,7 +727,6 @@ const ManageUsers = () => {
                     )}
                   />
                 </div>
-                
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}
@@ -757,7 +763,6 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
-                
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Set Target'}
