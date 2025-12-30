@@ -97,11 +97,14 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   const selectedYear = addForm.watch('year');
 
   // Check if a target already exists for the selected month/year for display purposes
-  const targetMonthDateForCheck = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
-  const formattedTargetMonthForCheck = targetMonthDateForCheck.toISOString().split('T')[0];
-  const existingTargetForSelectedMonth = localTargets.find(
-    (t) => t.target_month === formattedTargetMonthForCheck
-  );
+  let existingTargetForSelectedMonth = null;
+  if (selectedMonth !== "all") {
+    const targetMonthDateForCheck = new Date(parseInt(selectedYear), parseInt(selectedMonth) - 1, 1);
+    const formattedTargetMonthForCheck = targetMonthDateForCheck.toISOString().split('T')[0];
+    existingTargetForSelectedMonth = localTargets.find(
+      (t) => t.target_month === formattedTargetMonthForCheck
+    );
+  }
 
   const handleAddTarget = async (values: z.infer<typeof addTargetFormSchema>) => {
     setIsSubmitting(true);
