@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -55,6 +55,7 @@ const editTargetFormSchema = z.object({
 const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargetsUpdated }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
+  const [localTargets, setLocalTargets] = useState<SalesTarget[]>(user.targets);
 
   const addForm = useForm<z.infer<typeof addTargetFormSchema>>({
     resolver: zodResolver(addTargetFormSchema),
@@ -71,6 +72,10 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
       targetAmount: 0,
     },
   });
+
+  useEffect(() => {
+    setLocalTargets(user.targets);
+  }, [user.targets]);
 
   const getMonthName = (monthNum: string) => {
     const date = new Date();
@@ -91,7 +96,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
   const selectedYear = addForm.watch('year');
 
   // Check if a target already exists for the selected month/year
-  const existingTargetForSelectedMonth = user.targets.find(target => {
+  const existingTargetForSelectedMonth = localTargets.find(target => {
     const targetDate = new Date(target.target_month);
     return (
       targetDate.getMonth() + 1 === parseInt(selectedMonth) &&
@@ -106,25 +111,34 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
       const formattedTargetMonth = targetMonthDate.toISOString().split('T')[0];
 
       // Check if a target for this month already exists
-      const existingTarget = user.targets.find(
+      const existingTarget = localTargets.find(
         (t) => t.target_month === formattedTargetMonth
       );
 
       if (existingTarget) {
         // Update existing target
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('sales_targets')
           .update({
             target_amount: values.targetAmount,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', existingTarget.id);
+          .eq('id', existingTarget.id)
+          .select();
 
         if (error) throw error;
+        
+        // Update local state
+        setLocalTargets(prev => prev.map(t => 
+          t.id === existingTarget.id 
+            ? { ...t, target_amount: values.targetAmount, updated_at: new Date().toISOString() } 
+            : t
+        ));
+        
         showSuccess(`Target for ${getMonthName(values.month)} ${values.year} updated successfully!`);
       } else {
         // Create new target
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('sales_targets')
           .insert({
             sales_person_id: user.id,
@@ -132,9 +146,16 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
             target_month: formattedTargetMonth,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          });
+          })
+          .select();
 
         if (error) throw error;
+        
+        // Add new target to local state
+        if (data && data.length > 0) {
+          setLocalTargets(prev => [...prev, data[0]]);
+        }
+        
         showSuccess(`Target for ${getMonthName(values.month)} ${values.year} added successfully!`);
       }
 
@@ -143,8 +164,6 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
         year: new Date().getFullYear().toString(),
         targetAmount: 0,
       });
-
-      onTargetsUpdated(); // Refresh parent component's data
     } catch (error: any) {
       console.error('Error adding/updating target:', error);
       showError(`Failed to set target: ${error.message}`);
@@ -164,18 +183,28 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
     if (!editingTargetId) return;
     setIsSubmitting(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('sales_targets')
         .update({
           target_amount: values.targetAmount,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', editingTargetId);
+        .eq('id', editingTargetId)
+        .select();
 
       if (error) throw error;
+      
+      // Update local state
+      if (data && data.length > 0) {
+        setLocalTargets(prev => prev.map(t => 
+          t.id === editingTargetId 
+            ? { ...t, target_amount: values.targetAmount, updated_at: data[0].updated_at } 
+            : t
+        ));
+      }
+      
       showSuccess('Target updated successfully!');
       setEditingTargetId(null);
-      onTargetsUpdated();
     } catch (error: any) {
       console.error('Error updating target:', error);
       showError(`Failed to update target: ${error.message}`);
@@ -193,8 +222,11 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
         .eq('id', targetId);
 
       if (error) throw error;
+      
+      // Remove from local state
+      setLocalTargets(prev => prev.filter(t => t.id !== targetId));
+      
       showSuccess('Target deleted successfully!');
-      onTargetsUpdated();
     } catch (error: any) {
       console.error('Error deleting target:', error);
       showError(`Failed to delete target: ${error.message}`);
@@ -203,7 +235,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
     }
   };
 
-  const sortedTargets = [...user.targets].sort((a, b) => {
+  const sortedTargets = [...localTargets].sort((a, b) => {
     const dateA = new Date(a.target_month);
     const dateB = new Date(b.target_month);
     return dateB.getTime() - dateA.getTime(); // Newest first
