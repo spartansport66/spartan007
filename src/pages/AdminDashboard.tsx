@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
@@ -19,7 +19,8 @@ import DispatchedOrdersReportDialog from '@/components/reports/DispatchedOrdersR
 import SalesPersonPerformanceReportDialog from '@/components/reports/SalesPersonPerformanceReportDialog';
 import DealerReportDialog from '@/components/reports/DealerReportDialog';
 import SalesPersonPerformanceOverviewCard from '@/components/SalesPersonPerformanceOverviewCard';
-import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog'; // Corrected: Added import for PaymentsReportDialog
+import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog';
+import CompanyInfoDialog from '@/components/CompanyInfoDialog'; // New import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -32,13 +33,33 @@ const AdminDashboard = () => {
   const [isDispatchedOrdersReportOpen, setIsDispatchedOrdersReportOpen] = useState(false);
   const [isSalesPersonPerformanceReportOpen, setIsSalesPersonPerformanceReportOpen] = useState(false);
   const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
-  const [isPaymentsReportOpen, setIsPaymentsReportOpen] = useState(false); // New state for Payments Report
+  const [isPaymentsReportOpen, setIsPaymentsReportOpen] = useState(false);
+  const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false); // New state for Company Info Dialog
+  const [companyName, setCompanyName] = useState<string | null>(null); // State to store company name
 
   // Simplified dashboard data
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [productsCount, setProductsCount] = useState<number>(0);
+
+  const fetchCompanyInfo = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('company_info')
+        .select('company_name')
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 means "no rows found"
+        throw error;
+      }
+      setCompanyName(data?.company_name || null);
+    } catch (error: any) {
+      console.error('Error fetching company name:', error.message);
+      setCompanyName(null);
+    }
+  }, []);
 
   const fetchDashboardData = useCallback(async () => {
     if (!user) return;
@@ -98,9 +119,10 @@ const AdminDashboard = () => {
       } else {
         console.log('User is admin, fetching dashboard data');
         fetchDashboardData();
+        fetchCompanyInfo(); // Fetch company info when admin dashboard loads
       }
     }
-  }, [sessionLoading, user, userType, isAdmin, fetchDashboardData, navigate]);
+  }, [sessionLoading, user, userType, isAdmin, fetchDashboardData, fetchCompanyInfo, navigate]);
 
   const handleLogout = async () => {
     try {
@@ -176,9 +198,19 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-primary">Admin Dashboard</h1>
-        <div className="flex gap-2 sm:gap-4">
+      <div className="grid grid-cols-3 items-center mb-6">
+        {/* Left: Company Name */}
+        <div className="text-left">
+          {companyName && (
+            <h2 className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
+              {companyName}
+            </h2>
+          )}
+        </div>
+        {/* Center: Admin Dashboard Title */}
+        <h1 className="text-center text-2xl sm:text-3xl font-bold text-primary">Admin Dashboard</h1>
+        {/* Right: Buttons */}
+        <div className="flex justify-end gap-2 sm:gap-4">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => navigate('/manage-products')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
@@ -234,6 +266,14 @@ const AdminDashboard = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={() => setIsCompanyInfoDialogOpen(true)} size="icon" className="bg-green-600 text-white hover:bg-green-700">
+                <Info className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Company Information</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
@@ -296,6 +336,11 @@ const AdminDashboard = () => {
       <PaymentsReportDialog
         isOpen={isPaymentsReportOpen}
         onOpenChange={setIsPaymentsReportOpen}
+      />
+      <CompanyInfoDialog
+        isOpen={isCompanyInfoDialogOpen}
+        onOpenChange={setIsCompanyInfoDialogOpen}
+        onCompanyInfoUpdated={fetchCompanyInfo} // Callback to refresh company name in header
       />
     </div>
   );
