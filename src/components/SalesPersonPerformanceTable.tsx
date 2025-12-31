@@ -1,5 +1,4 @@
 "use client";
-
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -53,7 +52,7 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
   generateYears,
 }) => {
   const currentMonthName = `${displayMonth} ${displayYear}`;
-
+  
   // Sort data by totalSales in ascending order (least sales at the top)
   const sortedData = [...data].sort((a, b) => a.totalSales - b.totalSales);
 
@@ -69,8 +68,8 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
           </div>
           <div className="flex flex-wrap gap-2">
             <Select value={selectedChartMonth} onValueChange={setSelectedChartMonth}>
-              <SelectTrigger className="w-[120px] text-foreground"> {/* Added text-foreground */}
-                <SelectValue placeholder="Month" className="text-foreground" /> {/* Added text-foreground */}
+              <SelectTrigger className="w-[120px] text-foreground">
+                <SelectValue placeholder="Month" className="text-foreground" />
               </SelectTrigger>
               <SelectContent>
                 {Array.from({ length: 12 }, (_, i) => (i + 1).toString()).map((monthNum) => (
@@ -81,8 +80,8 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
               </SelectContent>
             </Select>
             <Select value={selectedChartYear} onValueChange={setSelectedChartYear}>
-              <SelectTrigger className="w-[100px] text-foreground"> {/* Added text-foreground */}
-                <SelectValue placeholder="Year" className="text-foreground" /> {/* Added text-foreground */}
+              <SelectTrigger className="w-[100px] text-foreground">
+                <SelectValue placeholder="Year" className="text-foreground" />
               </SelectTrigger>
               <SelectContent>
                 {generateYears().map((year) => (
@@ -92,12 +91,12 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={selectedSalesPersonId || "all"}
+            <Select 
+              value={selectedSalesPersonId || "all"} 
               onValueChange={(value) => onSelectSalesPerson(value === "all" ? null : value)}
             >
-              <SelectTrigger className="w-[180px] text-foreground"> {/* Added text-foreground */}
-                <SelectValue placeholder="All Sales Persons" className="text-foreground" /> {/* Added text-foreground */}
+              <SelectTrigger className="w-[180px] text-foreground">
+                <SelectValue placeholder="All Sales Persons" className="text-foreground" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Sales Persons</SelectItem>
@@ -116,7 +115,7 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
           {data.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No sales data available for this month.</p>
           ) : (
-            <div className="max-h-[250px] overflow-y-auto border rounded-md"> {/* Fixed height for 5 rows + header */}
+            <div className="max-h-[250px] overflow-y-auto border rounded-md">
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
@@ -125,7 +124,7 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedData.map((item) => ( // Use sortedData to allow scrolling through all
+                  {sortedData.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.salesPerson}</TableCell>
                       <TableCell className="text-right">₹{item.totalSales.toFixed(2)}</TableCell>
@@ -136,7 +135,6 @@ const SalesPersonPerformanceTable: React.FC<SalesPersonPerformanceTableProps> = 
             </div>
           )}
         </div>
-
         {selectedSalesPersonId && (
           <div className="mt-6 p-4 border rounded-md bg-muted/50">
             <h4 className="text-lg font-semibold mb-2">
