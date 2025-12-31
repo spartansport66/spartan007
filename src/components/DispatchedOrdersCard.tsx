@@ -83,26 +83,30 @@ const DispatchedOrdersCard: React.FC = () => {
         .eq('dispatched', true) // Always filter for dispatched orders
         .order('dispatch_date', { ascending: false });
 
-      const filterConditions: string[] = [];
+      const activeFilters: string[] = [];
 
       if (filterOrderNumber) {
         const orderNum = parseInt(filterOrderNumber);
         if (!isNaN(orderNum)) {
-          filterConditions.push(`order_number.eq.${orderNum}`);
+          activeFilters.push(`order_number.eq.${orderNum}`);
         }
       }
       if (filterDealerId) {
-        filterConditions.push(`dealer_id.eq.${filterDealerId}`);
+        activeFilters.push(`dealer_id.eq.${filterDealerId}`);
       }
       if (filterDispatchDate) {
         const startOfDay = `${filterDispatchDate}T00:00:00.000Z`;
         const endOfDay = `${filterDispatchDate}T23:59:59.999Z`;
-        filterConditions.push(`and(dispatch_date.gte.${startOfDay},dispatch_date.lte.${endOfDay})`);
+        // The date range itself is an AND condition, but it's OR'd with other top-level filters
+        activeFilters.push(`and(dispatch_date.gte.${startOfDay},dispatch_date.lte.${endOfDay})`);
       }
 
-      // Apply OR logic if multiple filters are active
-      if (filterConditions.length > 0) {
-        query = query.or(filterConditions.join(','));
+      if (activeFilters.length > 0) {
+        // Combine all active filters with OR logic
+        query = query.or(activeFilters.join(','));
+        console.log('Applying OR filters:', activeFilters.join(',')); // Add log
+      } else {
+        console.log('No additional filters applied, showing all dispatched orders.'); // Add log
       }
 
       const { data: ordersData, error: ordersError } = await query;
