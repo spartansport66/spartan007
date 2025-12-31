@@ -68,10 +68,11 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
   const [filterState, setFilterState] = useState<string>('');
   const [filteredDealersForTable, setFilteredDealersForTable] = useState<DealerOption[]>([]);
 
+  console.log('SendWhatsAppOfferCard Render - isSending:', isSending, 'selectedOfferId:', selectedOfferId);
+
   const fetchInitialData = useCallback(async () => {
     setInitialLoading(true);
     try {
-      // Fetch all dealers with city and state
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name, phone, city, state');
@@ -84,7 +85,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
         state: d.state || 'N/A',
       })));
 
-      // Fetch all combo offers with their assigned dealers
       const { data: offersData, error: offersError } = await supabase
         .from('combo_offers')
         .select(`
@@ -104,7 +104,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       }));
       setComboOffers(formattedOffers);
 
-      // Fetch company name for message template
       const { data: companyInfo, error: companyInfoError } = await supabase
         .from('company_info')
         .select('company_name')
@@ -125,22 +124,18 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     fetchInitialData();
   }, [fetchInitialData]);
 
-  // Effect to filter dealers for the table based on selected offer and city/state filters
   useEffect(() => {
     let currentDealers: DealerOption[] = [];
     if (selectedOfferId) {
       const selectedOffer = comboOffers.find(o => o.id === selectedOfferId);
       if (selectedOffer) {
-        // Get dealers assigned to the selected offer
         const assignedDealerIds = new Set(selectedOffer.dealers.map(d => d.id));
         currentDealers = allRawDealers.filter(d => assignedDealerIds.has(d.value));
       }
     } else {
-      // If no offer selected, show all raw dealers (or none, depending on desired behavior)
       currentDealers = allRawDealers;
     }
 
-    // Apply city/state filters
     const filtered = currentDealers.filter(dealer => {
       const matchesCity = filterCity ? dealer.city.toLowerCase().includes(filterCity.toLowerCase()) : true;
       const matchesState = filterState ? dealer.state.toLowerCase().includes(filterState.toLowerCase()) : true;
@@ -149,7 +144,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     setFilteredDealersForTable(filtered);
   }, [selectedOfferId, comboOffers, allRawDealers, filterCity, filterState]);
 
-  // Dynamically generate WhatsApp message
   useEffect(() => {
     if (selectedOfferId) {
       const offer = comboOffers.find(o => o.id === selectedOfferId);
@@ -181,6 +175,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       return;
     }
 
+    console.log('handleSendWhatsApp called. Setting isSending to true.');
     setIsSending(true);
     try {
       const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
@@ -203,7 +198,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       }
 
       showSuccess('WhatsApp messages prepared. Please check new tabs to send them manually.');
-      // Open WhatsApp Web for each successful message
       data.results.forEach((result: any) => {
         if (result.status === 'success' && result.url) {
           window.open(result.url, '_blank');
@@ -217,12 +211,12 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       console.error('Error sending WhatsApp messages:', error);
       showError(`Failed to send WhatsApp messages: ${error.message}`);
     } finally {
+      console.log('handleSendWhatsApp finally block. Setting isSending to false.');
       setIsSending(false);
     }
   };
 
   const handleBulkSend = () => {
-    // Send to all dealers currently in the filteredDealersForTable list
     const dealerIdsToSend = filteredDealersForTable.map(d => d.value);
     handleSendWhatsApp(dealerIdsToSend);
   };
