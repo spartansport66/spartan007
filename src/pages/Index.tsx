@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
@@ -12,9 +11,10 @@ const Index = () => {
 
   useEffect(() => {
     console.log('Index.tsx useEffect: session:', session, 'loading:', loading, 'isAdmin:', isAdmin, 'userType:', userType);
+    
     if (!loading) { // Only act once loading is false
       if (session) {
-        if (isAdmin) {
+        if (userType === 'admin') {
           console.log('Index.tsx: Redirecting to /admin-dashboard');
           navigate('/admin-dashboard'); // Redirect admin users to Admin Dashboard
         } else {

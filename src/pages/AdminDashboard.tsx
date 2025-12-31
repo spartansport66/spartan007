@@ -65,7 +65,7 @@ interface OrderSummary {
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, isAdmin } = useSession();
+  const { user, loading: sessionLoading, isAdmin, userType } = useSession();
   const [products, setProducts] = useState<Product[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -105,11 +105,11 @@ const AdminDashboard = () => {
   };
 
   const fetchAdminDashboardData = useCallback(async () => {
-    if (!user || !isAdmin) {
+    if (!user || userType !== 'admin') {
       setLoadingData(false);
       return;
     }
-
+    
     setLoadingData(true);
     try {
       const chartYearNum = parseInt(selectedChartYear);
@@ -252,20 +252,20 @@ const AdminDashboard = () => {
     } finally {
       setLoadingData(false);
     }
-  }, [user, isAdmin, selectedSalesPersonId, selectedChartMonth, selectedChartYear]);
+  }, [user, userType, selectedSalesPersonId, selectedChartMonth, selectedChartYear]);
 
   useEffect(() => {
     if (!sessionLoading) {
       if (!user) {
         navigate('/login');
-      } else if (!isAdmin) {
+      } else if (userType !== 'admin') {
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
         fetchAdminDashboardData();
       }
     }
-  }, [sessionLoading, user, isAdmin, fetchAdminDashboardData, navigate]);
+  }, [sessionLoading, user, userType, fetchAdminDashboardData, navigate]);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -302,7 +302,7 @@ const AdminDashboard = () => {
   }
 
   // If not admin, don't render anything (redirect will happen)
-  if (!isAdmin) {
+  if (userType !== 'admin') {
     return null;
   }
 
@@ -452,14 +452,12 @@ const AdminDashboard = () => {
       </div>
 
       <MadeWithDyad />
-
       <OrderDetailsDialog
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}
         onOpenChange={setIsOrderDetailsDialogOpen}
         shouldPrintOnLoad={shouldPrintOrderDetails}
       />
-
       <OrdersAwaitingDispatchReportDialog
         isOpen={isOrdersAwaitingDispatchReportOpen}
         onOpenChange={setIsOrdersAwaitingDispatchReportOpen}

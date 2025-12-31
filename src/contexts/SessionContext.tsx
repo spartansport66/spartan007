@@ -24,37 +24,49 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const prevUserIdRef = useRef<string | undefined>(undefined);
   const prevSessionIdRef = useRef<string | undefined>(undefined);
 
-  // Helper function to fetch and return profile data
-  const fetchProfileData = async (userId: string | undefined): Promise<{ isAdmin: boolean; userType: string | null }> => {
+  // Helper function to fetch and return profile data with retries
+  const fetchProfileData = async (userId: string | undefined, retries = 3): Promise<{ isAdmin: boolean; userType: string | null }> => {
     let fetchedIsAdmin = false;
     let fetchedUserType: string | null = null;
 
     if (userId) {
       console.log('SessionContext: Fetching user profile for ID:', userId);
-      try {
-        // Add a small delay to ensure database consistency
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('is_admin, user_type')
-          .eq('id', userId)
-          .single(); // Use single() since id is unique
+      
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('is_admin, user_type')
+            .eq('id', userId)
+            .single();
 
-        if (error) {
-          console.error('SessionContext: Error fetching user profile:', error.message);
-          showError(`Failed to load user profile: ${error.message}`);
-        } else if (data) {
-          fetchedIsAdmin = data.is_admin || false;
-          fetchedUserType = data.user_type || 'sales_person';
-          console.log('SessionContext: User profile fetched successfully:', data);
-        } else {
-          console.warn('SessionContext: No user profile found for ID:', userId);
-          showError('No user profile found. Please ensure your account has a profile.');
+          if (error) {
+            console.error(`SessionContext: Error fetching user profile (attempt ${attempt}):`, error.message);
+            if (attempt === retries) {
+              showError(`Failed to load user profile after ${retries} attempts: ${error.message}`);
+            }
+          } else if (data) {
+            fetchedIsAdmin = data.is_admin || false;
+            fetchedUserType = data.user_type || 'sales_person';
+            console.log('SessionContext: User profile fetched successfully:', data);
+            break; // Success, exit retry loop
+          } else {
+            console.warn(`SessionContext: No user profile found for ID: ${userId} (attempt ${attempt})`);
+            if (attempt === retries) {
+              showError('No user profile found. Please ensure your account has a profile.');
+            }
+          }
+        } catch (profileFetchError: any) {
+          console.error(`SessionContext: Caught error during profile fetch (attempt ${attempt}):`, profileFetchError.message);
+          if (attempt === retries) {
+            showError(`An unexpected error occurred while fetching your profile: ${profileFetchError.message}`);
+          }
         }
-      } catch (profileFetchError: any) {
-        console.error('SessionContext: Caught error during profile fetch:', profileFetchError.message);
-        showError(`An unexpected error occurred while fetching your profile: ${profileFetchError.message}`);
+        
+        // Wait before retrying (except on last attempt)
+        if (attempt < retries) {
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+        }
       }
     }
 
@@ -67,8 +79,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     
     const handleSessionChange = async (event: AuthChangeEvent, currentSession: Session | null) => {
       console.log('SessionContext: Auth event received:', event, 'Session:', currentSession);
-      setLoading(true); // Start loading for any auth change event
-
+      
       if (event === 'SIGNED_OUT') {
         setSession(null);
         setUser(null);
@@ -76,8 +87,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         setUserType(null);
         prevUserIdRef.current = undefined;
         prevSessionIdRef.current = undefined;
-        console.log('SessionContext: SIGNED_OUT event processed. Setting loading to false.');
-        setLoading(false);
+        console.log('SessionContext: SIGNED_OUT event processed.');
       } else {
         const newUserId = currentSession?.user?.id;
         const newSessionId = currentSession?.access_token;
@@ -105,8 +115,6 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         setIsAdmin(profileData.isAdmin);
         setUserType(profileData.userType);
         console.log('SessionContext: Final state update in handleSessionChange: isAdmin', profileData.isAdmin, 'userType', profileData.userType);
-        setLoading(false); // End loading AFTER all states are updated
-        console.log('SessionContext: Auth event processed. setLoading(false).');
       }
     };
 
@@ -115,7 +123,6 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     console.log('SessionContext: Calling supabase.auth.getSession()...');
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       console.log('SessionContext: getSession promise resolved. Initial session:', initialSession);
-      setLoading(true); // Start loading for initial session fetch
       setSession(initialSession);
       setUser(initialSession?.user || null);
       prevSessionIdRef.current = initialSession?.access_token;
@@ -125,7 +132,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       setIsAdmin(profileData.isAdmin);
       setUserType(profileData.userType);
       console.log('SessionContext: Initial getSession processed. Final state: isAdmin', profileData.isAdmin, 'userType', profileData.userType);
-      setLoading(false); // End loading AFTER all states are updated
+      setLoading(false); // Only set loading to false after everything is processed
       console.log('SessionContext: Initial getSession processed. setLoading(false).');
     }).catch(error => {
       console.error('SessionContext: Error during initial getSession promise:', error);
