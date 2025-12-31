@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
@@ -211,6 +211,14 @@ const AdminDashboard = () => {
         <h1 className="text-center text-2xl sm:text-3xl font-bold text-primary">Admin Dashboard</h1>
         {/* Right: Buttons */}
         <div className="flex justify-end gap-2 sm:gap-4">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button onClick={() => navigate('/create-combo-offer')} size="icon" variant="default" className="bg-purple-600 hover:bg-purple-700 text-white">
+                <Gift className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Create Combo Offer</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => navigate('/product-management-console')} size="icon" variant="default">
