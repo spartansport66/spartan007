@@ -11,6 +11,7 @@ import { useSession } from '@/contexts/SessionContext';
 import * as XLSX from '@sheetjs/sheetjs';
 import * as z from 'zod';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input'; // Added Input import
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const BULK_ADD_PRODUCTS_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/bulk-add-products";
@@ -257,9 +258,9 @@ const BulkAddProducts = () => {
                         <TableCell className="font-medium text-foreground">{product.originalRow}</TableCell>
                         <TableCell>
                           {product.isValid ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500" title="Valid" />
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
                           ) : (
-                            <XCircle className="h-4 w-4 text-destructive" title="Invalid" />
+                            <XCircle className="h-4 w-4 text-destructive" />
                           )}
                         </TableCell>
                         <TableCell className="font-medium text-foreground">{product.name || 'N/A'}</TableCell>
