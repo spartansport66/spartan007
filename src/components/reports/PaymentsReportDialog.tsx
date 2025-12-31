@@ -213,40 +213,46 @@ Thank you!`;
   };
 
   const handlePrint = () => {
-    const doc = new jsPDF({ orientation: 'landscape' });
-    doc.setFontSize(18);
-    doc.text("Payments Report", 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
+    try {
+      const doc = new jsPDF({ orientation: 'landscape' });
+      doc.setFontSize(18);
+      doc.text("Payments Report", 14, 22);
+      doc.setFontSize(11);
+      doc.setTextColor(100);
 
-    const tableColumn = ["Order No.", "Dealer Name", "Amount", "Status", "Due Date", "Order Date"];
-    const tableRows = payments.map(payment => [
-      payment.order_number,
-      payment.dealer_name,
-      `₹${payment.total_amount.toFixed(2)}`,
-      payment.payment_status,
-      payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A',
-      new Date(payment.order_date).toLocaleDateString(),
-    ]);
+      const tableColumn = ["Order No.", "Dealer Name", "Amount", "Status", "Due Date", "Order Date"];
+      const tableRows = payments.map(payment => [
+        payment.order_number,
+        payment.dealer_name,
+        `₹${payment.total_amount.toFixed(2)}`,
+        payment.payment_status,
+        payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A',
+        new Date(payment.order_date).toLocaleDateString(),
+      ]);
 
-    (doc as any).autoTable({
-      head: [tableColumn],
-      body: tableRows,
-      startY: 30,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
-      margin: { top: 25, left: 10, right: 10 },
-      columnStyles: {
-        0: { cellWidth: 25 }, // Order No.
-        1: { cellWidth: 40 }, // Dealer Name
-        2: { cellWidth: 30, halign: 'right' }, // Amount
-        3: { cellWidth: 25 }, // Status
-        4: { cellWidth: 30 }, // Due Date
-        5: { cellWidth: 30 }, // Order Date
-      }
-    });
+      (doc as any).autoTable({
+        head: [tableColumn],
+        body: tableRows,
+        startY: 30,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
+        margin: { top: 25, left: 10, right: 10 },
+        columnStyles: {
+          0: { cellWidth: 25 }, // Order No.
+          1: { cellWidth: 40 }, // Dealer Name
+          2: { cellWidth: 30, halign: 'right' }, // Amount
+          3: { cellWidth: 25 }, // Status
+          4: { cellWidth: 30 }, // Due Date
+          5: { cellWidth: 30 }, // Order Date
+        }
+      });
 
-    doc.save('payments_report.pdf');
+      doc.save('payments_report.pdf');
+      showSuccess('Payments report generated successfully!');
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      showError(`Failed to generate payments report: ${error.message || 'An unknown error occurred.'}`);
+    }
   };
 
   return (
