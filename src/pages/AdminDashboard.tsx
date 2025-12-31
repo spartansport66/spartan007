@@ -18,7 +18,8 @@ import OrdersAwaitingDispatchReportDialog from '@/components/reports/OrdersAwait
 import DispatchedOrdersReportDialog from '@/components/reports/DispatchedOrdersReportDialog';
 import SalesPersonPerformanceReportDialog from '@/components/reports/SalesPersonPerformanceReportDialog';
 import DealerReportDialog from '@/components/reports/DealerReportDialog';
-import SalesPersonPerformanceOverviewCard from '@/components/SalesPersonPerformanceOverviewCard'; // New import
+import SalesPersonPerformanceOverviewCard from '@/components/SalesPersonPerformanceOverviewCard';
+import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog'; // Corrected: Added import for PaymentsReportDialog
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ const AdminDashboard = () => {
   const [isDispatchedOrdersReportOpen, setIsDispatchedOrdersReportOpen] = useState(false);
   const [isSalesPersonPerformanceReportOpen, setIsSalesPersonPerformanceReportOpen] = useState(false);
   const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
+  const [isPaymentsReportOpen, setIsPaymentsReportOpen] = useState(false); // New state for Payments Report
 
   // Simplified dashboard data
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
@@ -227,6 +229,9 @@ const AdminDashboard = () => {
               <DropdownMenuItem onClick={() => setIsDealerReportOpen(true)}>
                 Dealer Report
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsPaymentsReportOpen(true)}>
+                Payments Report
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Tooltip>
@@ -287,6 +292,10 @@ const AdminDashboard = () => {
       <DealerReportDialog
         isOpen={isDealerReportOpen}
         onOpenChange={setIsDealerReportOpen}
+      />
+      <PaymentsReportDialog
+        isOpen={isPaymentsReportOpen}
+        onOpenChange={setIsPaymentsReportOpen}
       />
     </div>
   );
