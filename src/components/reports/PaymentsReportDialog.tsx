@@ -38,12 +38,35 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
   const [payments, setPayments] = useState<PaymentReportData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
+  const [companyName, setCompanyName] = useState<string | null>(null); // New state for company name
+  const [companyPhone, setCompanyPhone] = useState<string | null>(null); // New state for company phone
 
   // Filter states
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming'>('pending');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
+
+  const fetchCompanyInfo = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('company_info')
+        .select('company_name, phone')
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 means "no rows found"
+        throw error;
+      }
+      setCompanyName(data?.company_name || null);
+      setCompanyPhone(data?.phone || null);
+    } catch (error: any) {
+      console.error('Error fetching company info for WhatsApp message:', error.message);
+      showError('Failed to load company information for WhatsApp message.');
+      setCompanyName(null);
+      setCompanyPhone(null);
+    }
+  }, []);
 
   const fetchPaymentsAndDealers = useCallback(async () => {
     setLoading(true);
@@ -130,9 +153,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
 
   useEffect(() => {
     if (isOpen) {
+      fetchCompanyInfo(); // Fetch company info when dialog opens
       fetchPaymentsAndDealers();
     }
-  }, [isOpen, fetchPaymentsAndDealers]);
+  }, [isOpen, fetchCompanyInfo, fetchPaymentsAndDealers]);
 
   const handleClearFilters = () => {
     setFilterStatus('pending');
@@ -146,9 +170,22 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       showError('Dealer phone number is not available.');
       return;
     }
+    if (!companyName || !companyPhone) {
+      showError('Company information (name and phone) is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
+      return;
+    }
 
     const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
-    const message = `Hello ${dealerName},\n\nThis is a reminder that payment for Order #${orderNumber} of ₹${amountDue.toFixed(2)} is due on ${formattedDueDate}. Please make the payment at your earliest convenience. Thank you.`;
+    
+    const message = 
+`Hello ${dealerName},
+
+This is a reminder from *${companyName}* (Contact: *${companyPhone}*) that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.
+
+Please make the payment at your earliest convenience.
+
+Thank you!`;
+    
     const encodedMessage = encodeURIComponent(message);
 
     // Open WhatsApp Web in a new tab
