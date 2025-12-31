@@ -285,17 +285,17 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-indigo-600">Payments Report</DialogTitle>
+          <DialogTitle className="text-2xl font-bold text-primary">Payments Report</DialogTitle>
           <DialogDescription>
             Generate a report of all orders with their payment status.
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-indigo-50 rounded-lg">
+        <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
           <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterStatus" className="text-indigo-700 font-medium">Payment Status</Label>
+            <Label htmlFor="filterStatus" className="text-foreground font-medium">Payment Status</Label>
             <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as typeof filterStatus)}>
-              <SelectTrigger id="filterStatus" className="w-full border-indigo-200">
+              <SelectTrigger id="filterStatus" className="w-full">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
@@ -310,9 +310,9 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
           </div>
           
           <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterDealer" className="text-indigo-700 font-medium">Dealer Name</Label>
+            <Label htmlFor="filterDealer" className="text-foreground font-medium">Dealer Name</Label>
             <Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}>
-              <SelectTrigger id="filterDealer" className="w-full border-indigo-200">
+              <SelectTrigger id="filterDealer" className="w-full">
                 <SelectValue placeholder="Filter by dealer" />
               </SelectTrigger>
               <SelectContent>
@@ -325,31 +325,31 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
           </div>
           
           <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterFromDate" className="text-indigo-700 font-medium">From Order Date</Label>
+            <Label htmlFor="filterFromDate" className="text-foreground font-medium">From Order Date</Label>
             <Input 
               id="filterFromDate" 
               type="date" 
               value={filterFromDate} 
               onChange={(e) => setFilterFromDate(e.target.value)} 
-              className="w-full border-indigo-200" 
+              className="w-full" 
             />
           </div>
           
           <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterToDate" className="text-indigo-700 font-medium">To Order Date</Label>
+            <Label htmlFor="filterToDate" className="text-foreground font-medium">To Order Date</Label>
             <Input 
               id="filterToDate" 
               type="date" 
               value={filterToDate} 
               onChange={(e) => setFilterToDate(e.target.value)} 
-              className="w-full border-indigo-200" 
+              className="w-full" 
             />
           </div>
           
-          <Button onClick={fetchPaymentsAndDealers} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700">
+          <Button onClick={fetchPaymentsAndDealers} className="flex items-center gap-2 bg-primary hover:bg-primary/90">
             <Search className="h-4 w-4" /> Apply Filters
           </Button>
-          <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50">
+          <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
             Clear Filters
           </Button>
         </div>
@@ -357,41 +357,41 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         <div className="overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-              <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading payment data...</p>
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2 text-lg text-foreground">Loading payment data...</p>
             </div>
           ) : payments.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No payment data found matching your criteria.</p>
           ) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
-                <TableHeader className="sticky top-0 bg-indigo-100">
-                  <TableRow className="bg-indigo-100 hover:bg-indigo-200">
-                    <TableHead className="text-indigo-800 font-bold">Order No.</TableHead>
-                    <TableHead className="text-indigo-800 font-bold">Dealer Name</TableHead>
-                    <TableHead className="text-indigo-800 font-bold text-right">Amount</TableHead>
-                    <TableHead className="text-indigo-800 font-bold">Status</TableHead>
-                    <TableHead className="text-indigo-800 font-bold">Due Date</TableHead>
-                    <TableHead className="text-indigo-800 font-bold">Order Date</TableHead>
-                    <TableHead className="text-indigo-800 font-bold text-center">Actions</TableHead>
+                <TableHeader className="sticky top-0 bg-muted">
+                  <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="text-muted-foreground font-bold">Order No.</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Dealer Name</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-right">Amount</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Status</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Due Date</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Order Date</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {payments.map((payment) => (
-                    <TableRow key={payment.id} className="hover:bg-indigo-50">
-                      <TableCell className="font-medium text-indigo-900">#{payment.order_number}</TableCell>
-                      <TableCell className="text-gray-700">{payment.dealer_name}</TableCell>
-                      <TableCell className="text-gray-700 text-right font-medium">₹{payment.total_amount.toFixed(2)}</TableCell>
+                    <TableRow key={payment.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">#{payment.order_number}</TableCell>
+                      <TableCell className="text-foreground">{payment.dealer_name}</TableCell>
+                      <TableCell className="text-foreground text-right font-medium">₹{payment.total_amount.toFixed(2)}</TableCell>
                       <TableCell>
                         <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(payment.payment_status)}`}>
                           {getStatusIcon(payment.payment_status)}
                           <span className="capitalize">{payment.payment_status}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-gray-700">
+                      <TableCell className="text-foreground">
                         {payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A'}
                       </TableCell>
-                      <TableCell className="text-gray-700">{new Date(payment.order_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-foreground">{new Date(payment.order_date).toLocaleDateString()}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
                           {payment.payment_status === 'pending' && (
@@ -433,10 +433,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         </div>
         
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={handlePrint} disabled={payments.length === 0} className="border-indigo-300 text-indigo-700 hover:bg-indigo-50">
+          <Button variant="outline" onClick={handlePrint} disabled={payments.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground">
             <Printer className="mr-2 h-4 w-4" /> Print Report
           </Button>
-          <Button onClick={() => onOpenChange(false)} className="bg-indigo-600 hover:bg-indigo-700">Close</Button>
+          <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
         </DialogFooter>
       </DialogContent>
       
