@@ -14,18 +14,28 @@ const Index = () => {
   const [forceLogoutLoading, setForceLogoutLoading] = useState(false);
 
   useEffect(() => {
+    console.log('Index useEffect triggered');
+    console.log('session:', session);
+    console.log('loading:', loading);
+    console.log('isAdmin:', isAdmin);
+    console.log('userType:', userType);
+    
     if (!loading) {
       if (session) {
+        // Check if user is admin
         if (userType === 'admin') {
+          console.log('Redirecting to admin dashboard');
           navigate('/admin-dashboard');
         } else {
+          console.log('Redirecting to user dashboard');
           navigate('/dashboard');
         }
       } else {
+        console.log('Redirecting to login');
         navigate('/login');
       }
     }
-  }, [session, loading, navigate, isAdmin, userType]);
+  }, [session, loading, isAdmin, userType, navigate]);
 
   const handleForceLogout = async () => {
     setForceLogoutLoading(true);

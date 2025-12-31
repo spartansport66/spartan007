@@ -37,8 +37,15 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             .single();
             
           if (!error && profile) {
-            setIsAdmin(profile.is_admin || false);
+            console.log('Profile data:', profile);
+            setIsAdmin(profile.is_admin === true);
             setUserType(profile.user_type || 'sales_person');
+            console.log('isAdmin set to:', profile.is_admin === true);
+            console.log('userType set to:', profile.user_type || 'sales_person');
+          } else {
+            console.log('Error fetching profile or no profile found:', error);
+            setIsAdmin(false);
+            setUserType('sales_person');
           }
         }
       } catch (error) {
@@ -51,6 +58,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     checkSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('Auth state changed:', _event);
       setSession(session);
       setUser(session?.user || null);
       
@@ -63,9 +71,13 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
           .single()
           .then(({ data: profile, error }) => {
             if (!error && profile) {
-              setIsAdmin(profile.is_admin || false);
+              console.log('Profile updated:', profile);
+              setIsAdmin(profile.is_admin === true);
               setUserType(profile.user_type || 'sales_person');
+              console.log('isAdmin updated to:', profile.is_admin === true);
+              console.log('userType updated to:', profile.user_type || 'sales_person');
             } else {
+              console.log('Error fetching updated profile or no profile found:', error);
               setIsAdmin(false);
               setUserType('sales_person');
             }

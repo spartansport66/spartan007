@@ -78,17 +78,26 @@ const AdminDashboard = () => {
   }, [user]);
 
   useEffect(() => {
+    console.log('AdminDashboard useEffect triggered');
+    console.log('sessionLoading:', sessionLoading);
+    console.log('user:', user);
+    console.log('userType:', userType);
+    console.log('isAdmin:', isAdmin);
+    
     if (!sessionLoading) {
       if (!user) {
+        console.log('No user, redirecting to login');
         navigate('/login');
       } else if (userType !== 'admin') {
+        console.log('User is not admin, redirecting to dashboard');
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
+        console.log('User is admin, fetching dashboard data');
         fetchDashboardData();
       }
     }
-  }, [sessionLoading, user, userType, fetchDashboardData, navigate]);
+  }, [sessionLoading, user, userType, isAdmin, fetchDashboardData, navigate]);
 
   const handleLogout = async () => {
     try {
