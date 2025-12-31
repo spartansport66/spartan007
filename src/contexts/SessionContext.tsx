@@ -32,20 +32,24 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     if (userId) {
       console.log('SessionContext: Fetching user profile for ID:', userId);
       try {
+        // Add a small delay to ensure database consistency
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         const { data, error } = await supabase
           .from('profiles')
           .select('is_admin, user_type')
-          .eq('id', userId);
+          .eq('id', userId)
+          .single(); // Use single() since id is unique
 
         if (error) {
           console.error('SessionContext: Error fetching user profile:', error.message);
           showError(`Failed to load user profile: ${error.message}`);
-        } else if (data && data.length > 0) {
-          fetchedIsAdmin = data[0].is_admin || false;
-          fetchedUserType = data[0].user_type || 'sales_person';
-          console.log('SessionContext: User profile fetched successfully:', data[0]);
+        } else if (data) {
+          fetchedIsAdmin = data.is_admin || false;
+          fetchedUserType = data.user_type || 'sales_person';
+          console.log('SessionContext: User profile fetched successfully:', data);
         } else {
-          console.warn('SessionContext: No user profile found for ID:', userId, 'Data was empty or null.');
+          console.warn('SessionContext: No user profile found for ID:', userId);
           showError('No user profile found. Please ensure your account has a profile.');
         }
       } catch (profileFetchError: any) {
