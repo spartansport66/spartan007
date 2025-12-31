@@ -466,16 +466,6 @@ const AdminDashboard = () => {
           generateYears={generateYears}
         />
       </div>
-
-      {/* Temporary Debug Section - Uncomment to view sales person data directly on page */}
-      {/*
-      <div className="mt-8 p-4 border rounded-md bg-gray-50 dark:bg-gray-800">
-        <h3 className="text-lg font-semibold mb-2">Debug: All Sales Persons Data</h3>
-        <pre className="text-xs text-gray-700 dark:text-gray-300 overflow-auto max-h-40">
-          {JSON.stringify(allSalesPersons, null, 2)}
-        </pre>
-      </div>
-      */}
       
       <MadeWithDyad />
       
