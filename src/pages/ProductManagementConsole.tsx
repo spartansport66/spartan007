@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, PlusCircle, Boxes, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, PlusCircle, Boxes, AlertTriangle, FileUp } from 'lucide-react'; // Added FileUp icon
 import ProductTableManager from '@/components/ProductTableManager';
 import LowStockProductsCard from '@/components/LowStockProductsCard';
 import { useSession } from '@/contexts/SessionContext';
@@ -60,19 +60,21 @@ const ProductManagementConsole = () => {
           </CardContent>
         </Card>
 
-        {/* Low Stock Products Card */}
-        <LowStockProductsCard key={`low-stock-${refreshKey}`} onProductAction={handleProductAction} />
-
-        {/* Placeholder for another product management card (e.g., Product Analytics) */}
+        {/* Bulk Add Products Card */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
-          <CardHeader className="bg-yellow-500 dark:bg-yellow-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Product Analytics</CardTitle>
-            <CardDescription className="text-yellow-100 dark:text-yellow-200">Insights into product performance.</CardDescription>
+          <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold">Bulk Add Products</CardTitle>
+            <CardDescription className="text-indigo-100 dark:text-indigo-200">Upload an Excel sheet for multiple products.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 flex-grow flex items-center justify-center">
-            <p className="text-muted-foreground text-center">Coming Soon!</p>
+            <Button onClick={() => navigate('/bulk-add-products')} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white">
+              <FileUp className="h-5 w-5 mr-2" /> Bulk Upload
+            </Button>
           </CardContent>
         </Card>
+
+        {/* Low Stock Products Card */}
+        <LowStockProductsCard key={`low-stock-${refreshKey}`} onProductAction={handleProductAction} />
       </div>
 
       {/* Manage All Products Table */}

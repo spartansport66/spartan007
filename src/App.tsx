@@ -14,6 +14,7 @@ import ManageProducts from "./pages/ManageProducts";
 import ManageUsers from "./pages/ManageUsers"; // Import ManageUsers
 import AdminDashboard from "./pages/AdminDashboard";
 import ProductManagementConsole from "./pages/ProductManagementConsole"; // New import
+import BulkAddProducts from "./pages/BulkAddProducts"; // New import
 import { SessionContextProvider } from "./contexts/SessionContext";
 
 const queryClient = new QueryClient();
@@ -35,7 +36,8 @@ const App = () => (
             <Route path="/add-product" element={<AddProduct />} />
             <Route path="/manage-products" element={<ManageProducts />} />
             <Route path="/manage-users" element={<ManageUsers />} />
-            <Route path="/product-management-console" element={<ProductManagementConsole />} /> {/* New route */}
+            <Route path="/product-management-console" element={<ProductManagementConsole />} />
+            <Route path="/bulk-add-products" element={<BulkAddProducts />} /> {/* New route */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
