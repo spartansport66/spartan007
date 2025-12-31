@@ -46,7 +46,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PaymentReportData | null>(null);
 
   // Filter states
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming'>('pending');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due'>('pending');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
@@ -103,6 +103,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Start of today
       const todayISO = today.toISOString();
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999); // End of today
+      const endOfTodayISO = endOfToday.toISOString();
+
 
       if (filterStatus === 'pending') {
         query = query.eq('payment_status', 'pending');
@@ -112,6 +116,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         query = query.eq('payment_status', 'pending').lte('payment_due_date', todayISO);
       } else if (filterStatus === 'upcoming') {
         query = query.eq('payment_status', 'pending').gte('payment_due_date', todayISO);
+      } else if (filterStatus === 'todays_due') { // New filter logic
+        query = query.eq('payment_status', 'pending')
+                     .gte('payment_due_date', todayISO)
+                     .lte('payment_due_date', endOfTodayISO);
       }
 
       if (filterDealerId) {
@@ -265,6 +273,7 @@ Thank you!`;
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="overdue">Overdue</SelectItem>
+                <SelectItem value="todays_due">Today's Due</SelectItem> {/* New item */}
                 <SelectItem value="upcoming">Upcoming</SelectItem>
               </SelectContent>
             </Select>
