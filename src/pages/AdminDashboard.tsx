@@ -307,7 +307,7 @@ const AdminDashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
-        <PaymentCard />
+        <PaymentCard onViewDetails={() => setIsPaymentsReportOpen(true)} />
       </div>
 
       <MadeWithDyad />

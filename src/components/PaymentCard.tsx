@@ -22,7 +22,11 @@ interface PendingOrderPayment {
   dealer_id: string; // For fetching total spent
 }
 
-const PaymentCard: React.FC = () => {
+interface PaymentCardProps {
+  onViewDetails: () => void; // New prop to open the detailed report dialog
+}
+
+const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
   const [pendingOrderPayments, setPendingOrderPayments] = useState<PendingOrderPayment[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -122,7 +126,7 @@ const PaymentCard: React.FC = () => {
   };
 
   return (
-    <Card className="bg-card text-card-foreground shadow-lg mb-6">
+    <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold">Pending Payments</CardTitle>
         <CardDescription className="text-indigo-100 dark:text-indigo-200">
@@ -161,7 +165,7 @@ const PaymentCard: React.FC = () => {
           ) : pendingOrderPayments.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No pending payments found matching your criteria.</p>
           ) : (
-            <div className="max-h-[400px] overflow-y-auto border rounded-md">
+            <div className="max-h-[250px] overflow-y-auto border rounded-md">
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted hover:bg-muted/90">
@@ -198,6 +202,9 @@ const PaymentCard: React.FC = () => {
             </div>
           )}
         </div>
+        <Button onClick={onViewDetails} className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white">
+          View Detailed Report
+        </Button>
       </CardContent>
 
       <UpdatePaymentDialog
