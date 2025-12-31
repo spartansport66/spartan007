@@ -36,6 +36,7 @@ const AdminDashboard = () => {
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [productsCount, setProductsCount] = useState<number>(0);
+  const [salesPersonsCount, setSalesPersonsCount] = useState<number>(0); // New state for sales persons count
 
   const fetchDashboardData = useCallback(async () => {
     if (!user) return;
@@ -66,6 +67,16 @@ const AdminDashboard = () => {
       
       if (!ordersError) {
         setTotalOrders(ordersCount || 0);
+      }
+
+      // Fetch sales persons count
+      const { count: salesPersonsCount, error: salesPersonsError } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_type', 'sales_person'); // Filter for sales persons
+      
+      if (!salesPersonsError) {
+        setSalesPersonsCount(salesPersonsCount || 0);
       }
 
       // Set a dummy sales value for now
@@ -159,7 +170,7 @@ const AdminDashboard = () => {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month",
-      icon: <Users className="h-3 w-3 text-white" />,
+      icon: <Building className="h-3 w-3 text-white" />, // Changed icon to Building for Dealers
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
@@ -167,6 +178,13 @@ const AdminDashboard = () => {
       value: productsCount.toString(),
       change: "Overall",
       icon: <Boxes className="h-3 w-3 text-white" />,
+      valueColor: "text-blue-800 dark:text-blue-200"
+    },
+    {
+      title: "Total Sales Persons", // New card title
+      value: salesPersonsCount.toString(), // New value
+      change: "Overall", // Placeholder change
+      icon: <Users className="h-3 w-3 text-white" />, // Users icon for sales persons
       valueColor: "text-blue-800 dark:text-blue-200"
     },
   ];
@@ -239,7 +257,7 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
+      <div className="grid gap-2 grid-cols-2 lg:grid-cols-5 mb-6"> {/* Adjusted grid-cols to 5 */}
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md h-full">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg">
