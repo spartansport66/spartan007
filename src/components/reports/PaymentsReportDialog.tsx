@@ -170,8 +170,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       showError('Dealer phone number is not available.');
       return;
     }
-    if (!companyName || !companyPhone) {
-      showError('Company information (name and phone) is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
+    if (!companyName) { // Only check for companyName, not companyPhone
+      showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
       return;
     }
 
@@ -180,7 +180,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
     const message = 
 `Hello ${dealerName},
 
-This is a reminder from *${companyName}* (Contact: *${companyPhone}*) that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.
+This is a reminder from *${companyName}* that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.
 
 Please make the payment at your earliest convenience.
 
