@@ -27,7 +27,8 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const prevSessionIdRef = useRef<string | undefined>(undefined);
 
   const updateSessionAndProfileStates = async (currentSession: Session | null) => {
-    console.log('SessionContext: updateSessionAndProfileStates started.');
+    console.log('SessionContext: updateSessionAndProfileStates started. Current session:', currentSession);
+    setLoading(true); // Set loading to true at the start of processing a new session/user
 
     const newUserId = currentSession?.user?.id;
     const newSessionId = currentSession?.access_token;
@@ -36,14 +37,14 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     if (newSessionId !== prevSessionIdRef.current) {
       setSession(currentSession);
       prevSessionIdRef.current = newSessionId;
-      console.log('SessionContext: Session updated.');
+      console.log('SessionContext: Session updated to:', currentSession);
     }
 
     // Only update user and fetch profile if user ID has changed
     if (newUserId !== prevUserIdRef.current) {
       setUser(currentSession?.user || null);
       prevUserIdRef.current = newUserId;
-      console.log('SessionContext: User updated.');
+      console.log('SessionContext: User updated to:', currentSession?.user);
 
       let fetchedIsAdmin = false;
       let fetchedUserType: string | null = null;
@@ -80,7 +81,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     }
     // IMPORTANT: Set loading to false ONLY after all profile data is resolved
     setLoading(false);
-    console.log('SessionContext: updateSessionAndProfileStates completed. setLoading(false).');
+    console.log('SessionContext: updateSessionAndProfileStates completed. setLoading(false). Final state: loading:', false, 'isAdmin:', isAdmin, 'userType:', userType);
   };
 
   useEffect(() => {
@@ -100,7 +101,6 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             console.log('SessionContext: SIGNED_OUT event processed. Setting loading to false.');
             setLoading(false); // Ensure loading is false on sign out
           } else {
-            // For other events (SIGNED_IN, etc.), update states and then setLoading(false)
             await updateSessionAndProfileStates(currentSession);
           }
         } catch (error: any) {
@@ -114,15 +114,12 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     console.log('SessionContext: Calling supabase.auth.getSession()...');
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       console.log('SessionContext: getSession promise resolved. Initial session:', initialSession);
-      // For initial session, update states and then setLoading(false)
       await updateSessionAndProfileStates(initialSession);
     }).catch(error => {
       console.error('SessionContext: Error during initial getSession promise:', error);
       showError(`Failed to load session: ${error.message}`);
       setLoading(false); // Ensure loading is false even on error
     });
-    // Removed the .finally() block here, as setLoading(false) is now handled within updateSessionAndProfileStates
-    // or explicitly in SIGNED_OUT/error paths.
 
     return () => {
       console.log('SessionContext: Cleaning up auth state change listener.');
