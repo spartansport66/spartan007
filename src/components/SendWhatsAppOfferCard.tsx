@@ -32,11 +32,8 @@ interface ComboOffer {
   id: string;
   name: string;
   description: string | null;
-  discount_type: 'percentage' | 'fixed_amount';
-  discount_value: number;
-  start_date: string;
-  end_date: string;
-  products: Product[]; // Nested products
+  // Removed discount_type, discount_value, start_date, end_date
+  // products: Product[]; // No longer fetching products here
   dealers: Dealer[]; // Nested dealers (all dealers assigned to this offer)
 }
 
@@ -71,21 +68,15 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       if (dealersError) throw dealersError;
       setAllDealers((dealersData || []).map(d => ({ value: d.id, label: `${d.name} (${d.phone || 'No Phone'})`, phone: d.phone || '' })));
 
-      // Fetch all active combo offers with their products and assigned dealers
+      // Fetch all combo offers with their assigned dealers
       const { data: offersData, error: offersError } = await supabase
         .from('combo_offers')
         .select(`
           id,
           name,
           description,
-          discount_type,
-          discount_value,
-          start_date,
-          end_date,
-          combo_offer_products(products(id, name, price)),
           combo_offer_dealers(dealers(id, name, phone))
         `)
-        .gte('end_date', new Date().toISOString().split('T')[0]) // Only active offers
         .order('name', { ascending: true });
 
       if (offersError) throw offersError;
@@ -93,11 +84,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
         id: offer.id,
         name: offer.name,
         description: offer.description,
-        discount_type: offer.discount_type,
-        discount_value: offer.discount_value,
-        start_date: offer.start_date,
-        end_date: offer.end_date,
-        products: offer.combo_offer_products.map((cop: any) => cop.products),
         dealers: offer.combo_offer_dealers.map((cod: any) => cod.dealers),
       }));
       setComboOffers(formattedOffers);
@@ -128,13 +114,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     if (selectedOfferId) {
       const offer = comboOffers.find(o => o.id === selectedOfferId);
       if (offer) {
-        const discountText = offer.discount_type === 'percentage'
-          ? `${offer.discount_value}% discount`
-          : `₹${offer.discount_value.toFixed(2)} off`;
-        const productsList = offer.products.map(p => p.name).join(', ');
-        const validity = `${new Date(offer.start_date).toLocaleDateString()} to ${new Date(offer.end_date).toLocaleDateString()}`;
-        
-        const message = `Hello Dealer,\n\n*${companyName || 'Our Company'}* is excited to announce a new Combo Offer: *"${offer.name}"*!\n\nDetails:\n- *Discount:* ${discountText}\n- *Products Included:* ${productsList}\n- *Validity:* ${validity}\n\nDon't miss out on this amazing deal! Contact your sales person for more details.\n\nThank you!`;
+        const message = `Hello Dealer,\n\n*${companyName || 'Our Company'}* is excited to announce a new Combo Offer: *"${offer.name}"*!\n\n${offer.description ? `Details: ${offer.description}\n\n` : ''}Contact your sales person for more details.\n\nThank you!`;
         setWhatsappMessage(message);
       }
     } else {
@@ -248,7 +228,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                 <SelectContent>
                   {comboOffers.map(offer => (
                     <SelectItem key={offer.id} value={offer.id}>
-                      {offer.name} ({offer.discount_type === 'percentage' ? `${offer.discount_value}%` : `₹${offer.discount_value.toFixed(2)}`})
+                      {offer.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

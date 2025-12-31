@@ -31,41 +31,20 @@ interface ComboOffer {
   id: string;
   name: string;
   description: string | null;
-  discount_type: 'percentage' | 'fixed_amount';
-  discount_value: number;
-  start_date: string;
-  end_date: string;
+  // Removed discount_type, discount_value, start_date, end_date from interface
   created_at: string;
 }
 
 const createOfferFormSchema = z.object({
   offerName: z.string().min(1, { message: 'Offer name is required.' }),
   description: z.string().optional(),
-  discountType: z.enum(['percentage', 'fixed_amount'], { message: 'Discount type is required.' }),
-  discountValue: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'Discount value cannot be negative.' })
-  ),
-  startDate: z.date({ required_error: 'Start date is required.' }),
-  endDate: z.date({ required_error: 'End date is required.' }),
-}).refine((data) => data.endDate >= data.startDate, {
-  message: "End date cannot be before start date.",
-  path: ["endDate"],
+  // Removed discountType, discountValue, startDate, endDate
 });
 
 const editOfferFormSchema = z.object({
   name: z.string().min(1, { message: 'Offer name is required.' }),
   description: z.string().optional(),
-  discountType: z.enum(['percentage', 'fixed_amount'], { message: 'Discount type is required.' }),
-  discountValue: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'Discount value cannot be negative.' })
-  ),
-  startDate: z.date({ required_error: 'Start date is required.' }),
-  endDate: z.date({ required_error: 'End date is required.' }),
-}).refine((data) => data.endDate >= data.startDate, {
-  message: "End date cannot be before start date.",
-  path: ["endDate"],
+  // Removed discountType, discountValue, startDate, endDate
 });
 
 const ComboOffersDashboard = () => {
@@ -83,10 +62,6 @@ const ComboOffersDashboard = () => {
     defaultValues: {
       offerName: '',
       description: '',
-      discountType: 'percentage',
-      discountValue: 0,
-      startDate: new Date(),
-      endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)), // Default to 1 year from now
     },
   });
 
@@ -95,10 +70,6 @@ const ComboOffersDashboard = () => {
     defaultValues: {
       name: '',
       description: '',
-      discountType: 'percentage',
-      discountValue: 0,
-      startDate: new Date(),
-      endDate: new Date(),
     },
   });
 
@@ -107,7 +78,7 @@ const ComboOffersDashboard = () => {
     try {
       const { data, error } = await supabase
         .from('combo_offers')
-        .select('*')
+        .select('id, name, description, created_at') // Only selecting relevant fields
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -138,10 +109,6 @@ const ComboOffersDashboard = () => {
       editForm.reset({
         name: selectedOffer.name,
         description: selectedOffer.description || '',
-        discountType: selectedOffer.discount_type,
-        discountValue: selectedOffer.discount_value,
-        startDate: new Date(selectedOffer.start_date),
-        endDate: new Date(selectedOffer.end_date),
       });
     }
   }, [selectedOffer, editForm]);
@@ -159,10 +126,7 @@ const ComboOffersDashboard = () => {
         .insert({
           name: values.offerName,
           description: values.description,
-          discount_type: values.discountType,
-          discount_value: values.discountValue,
-          start_date: format(values.startDate, 'yyyy-MM-dd'),
-          end_date: format(values.endDate, 'yyyy-MM-dd'),
+          // Removed discount_type, discount_value, start_date, end_date from insert
           created_by: user.id,
         });
 
@@ -172,10 +136,6 @@ const ComboOffersDashboard = () => {
       createForm.reset({
         offerName: '',
         description: '',
-        discountType: 'percentage',
-        discountValue: 0,
-        startDate: new Date(),
-        endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
       });
       fetchComboOffers();
     } catch (error: any) {
@@ -200,10 +160,7 @@ const ComboOffersDashboard = () => {
         .update({
           name: values.name,
           description: values.description,
-          discount_type: values.discountType,
-          discount_value: values.discountValue,
-          start_date: format(values.startDate, 'yyyy-MM-dd'),
-          end_date: format(values.endDate, 'yyyy-MM-dd'),
+          // Removed discount_type, discount_value, start_date, end_date from update
           updated_at: new Date().toISOString(),
         })
         .eq('id', selectedOffer.id);
@@ -308,118 +265,7 @@ const ComboOffersDashboard = () => {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={createForm.control}
-                  name="discountType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Discount Type</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select discount type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="percentage">Percentage (%)</SelectItem>
-                          <SelectItem value="fixed_amount">Fixed Amount (₹)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={createForm.control}
-                  name="discountValue"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Discount Value</FormLabel>
-                      <FormControl>
-                        <Input type="number" step="0.01" placeholder="e.g., 10 or 500" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={createForm.control}
-                    name="startDate"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>Start Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant={"outline"}
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                              >
-                                {field.value ? (
-                                  format(field.value, "PPP")
-                                ) : (
-                                  <span>Pick a date</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={createForm.control}
-                    name="endDate"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>End Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant={"outline"}
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                              >
-                                {field.value ? (
-                                  format(field.value, "PPP")
-                                ) : (
-                                  <span>Pick a date</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                {/* Removed Discount Type, Discount Value, Start Date, End Date fields */}
 
                 <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>
                   {isSubmitting ? (
@@ -458,8 +304,7 @@ const ComboOffersDashboard = () => {
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground">Offer Name</TableHead>
                     <TableHead className="text-muted-foreground">Description</TableHead>
-                    <TableHead className="text-muted-foreground">Discount</TableHead>
-                    <TableHead className="text-muted-foreground">Validity</TableHead>
+                    {/* Removed Discount and Validity TableHeads */}
                     <TableHead className="text-muted-foreground">Created At</TableHead>
                     <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                   </TableRow>
@@ -469,12 +314,7 @@ const ComboOffersDashboard = () => {
                     <TableRow key={offer.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{offer.name}</TableCell>
                       <TableCell className="text-muted-foreground">{offer.description || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {offer.discount_type === 'percentage' ? `${offer.discount_value}%` : `₹${offer.discount_value.toFixed(2)}`}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {format(new Date(offer.start_date), 'PPP')} - {format(new Date(offer.end_date), 'PPP')}
-                      </TableCell>
+                      {/* Removed Discount and Validity TableCells */}
                       <TableCell className="text-muted-foreground">
                         {new Date(offer.created_at).toLocaleDateString()}
                       </TableCell>
@@ -555,118 +395,7 @@ const ComboOffersDashboard = () => {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={editForm.control}
-                  name="discountType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Discount Type</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="percentage">Percentage (%)</SelectItem>
-                          <SelectItem value="fixed_amount">Fixed Amount (₹)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={editForm.control}
-                  name="discountValue"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Discount Value</FormLabel>
-                      <FormControl>
-                        <Input type="number" step="0.01" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={editForm.control}
-                    name="startDate"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>Start Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant={"outline"}
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                              >
-                                {field.value ? (
-                                  format(field.value, "PPP")
-                                ) : (
-                                  <span>Pick a date</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={editForm.control}
-                    name="endDate"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>End Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant={"outline"}
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                              >
-                                {field.value ? (
-                                  format(field.value, "PPP")
-                                ) : (
-                                  <span>Pick a date</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                {/* Removed Discount Type, Discount Value, Start Date, End Date fields */}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}
