@@ -47,7 +47,7 @@ const AdminDashboard = () => {
     try {
       const { data, error } = await supabase
         .from('company_info')
-        .select('company_name')
+        .select('company_name') // Only fetching company_name now
         .limit(1)
         .single();
 
@@ -213,7 +213,7 @@ const AdminDashboard = () => {
         <div className="flex justify-end gap-2 sm:gap-4">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/manage-products')} size="icon" className="bg-primary text-primary-foreground hover:bg-primary/90">
+              <Button onClick={() => navigate('/manage-products')} size="icon" variant="default">
                 <Boxes className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -221,7 +221,7 @@ const AdminDashboard = () => {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/manage-dealers')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
+              <Button onClick={() => navigate('/manage-dealers')} size="icon" variant="secondary">
                 <Building className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -229,7 +229,7 @@ const AdminDashboard = () => {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/manage-users')} size="icon" className="bg-purple-600 text-white hover:bg-purple-700">
+              <Button onClick={() => navigate('/manage-users')} size="icon" variant="outline" className="text-purple-600 dark:text-purple-400">
                 <UserCog className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -239,7 +239,7 @@ const AdminDashboard = () => {
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="bg-blue-600 text-white hover:bg-blue-700">
+                  <Button variant="outline" size="icon" className="text-blue-600 dark:text-blue-400">
                     <FileText className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -268,7 +268,7 @@ const AdminDashboard = () => {
           </DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => setIsCompanyInfoDialogOpen(true)} size="icon" className="bg-green-600 text-white hover:bg-green-700">
+              <Button onClick={() => setIsCompanyInfoDialogOpen(true)} size="icon" variant="outline" className="text-green-600 dark:text-green-400">
                 <Info className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -276,7 +276,7 @@ const AdminDashboard = () => {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              <Button onClick={handleLogout} variant="destructive" size="icon">
                 <LogOut className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
