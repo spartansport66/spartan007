@@ -18,12 +18,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
 
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-}
-
 interface Dealer {
   id: string;
   name: string;
@@ -36,7 +30,7 @@ interface ComboOffer {
   id: string;
   name: string;
   description: string | null;
-  dealers: Dealer[];
+  // No longer needs 'dealers' directly here, as we're selecting dealers independently
 }
 
 interface DealerOption {
@@ -55,24 +49,23 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
   const { user } = useSession();
   const [allRawDealers, setAllRawDealers] = useState<DealerOption[]>([]);
   const [comboOffers, setComboOffers] = useState<ComboOffer[]>([]);
-  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]);
+  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]); // Explicitly selected dealers
   const [selectedOfferId, setSelectedOfferId] = useState<string>('');
   const [whatsappMessage, setWhatsappMessage] = useState<string>('');
   const [initialLoading, setInitialLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [sendToAllDealers, setSendToAllDealers] = useState(false);
+  const [sendToAllFilteredDealers, setSendToAllFilteredDealers] = useState(false); // Renamed for clarity
   const [companyName, setCompanyName] = useState<string | null>(null);
 
-  // Filter states
+  // Filter states for the MultiSelect options
   const [filterCity, setFilterCity] = useState<string>('');
   const [filterState, setFilterState] = useState<string>('');
-  const [filteredDealersForTable, setFilteredDealersForTable] = useState<DealerOption[]>([]);
-
-  console.log('SendWhatsAppOfferCard Render - isSending:', isSending, 'selectedOfferId:', selectedOfferId);
+  const [filteredDealersForMultiSelect, setFilteredDealersForMultiSelect] = useState<DealerOption[]>([]);
 
   const fetchInitialData = useCallback(async () => {
     setInitialLoading(true);
     try {
+      // Fetch all dealers
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name, phone, city, state');
@@ -85,25 +78,16 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
         state: d.state || 'N/A',
       })));
 
+      // Fetch all combo offers
       const { data: offersData, error: offersError } = await supabase
         .from('combo_offers')
-        .select(`
-          id,
-          name,
-          description,
-          combo_offer_dealers(dealers(id, name, phone, city, state))
-        `)
+        .select(`id, name, description`)
         .order('name', { ascending: true });
 
       if (offersError) throw offersError;
-      const formattedOffers: ComboOffer[] = (offersData || []).map((offer: any) => ({
-        id: offer.id,
-        name: offer.name,
-        description: offer.description,
-        dealers: offer.combo_offer_dealers.map((cod: any) => cod.dealers),
-      }));
-      setComboOffers(formattedOffers);
+      setComboOffers(offersData || []);
 
+      // Fetch company info
       const { data: companyInfo, error: companyInfoError } = await supabase
         .from('company_info')
         .select('company_name')
@@ -124,32 +108,21 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     fetchInitialData();
   }, [fetchInitialData]);
 
-  // Effect to filter dealers for the table based on selected offer and city/state filters
+  // Effect to filter dealers for the MultiSelect options based on city/state filters
   useEffect(() => {
-    let currentDealers: DealerOption[] = [];
-    if (selectedOfferId) {
-      const selectedOffer = comboOffers.find(o => o.id === selectedOfferId);
-      if (selectedOffer) {
-        // Get dealers assigned to the selected offer
-        const assignedDealerIds = new Set(selectedOffer.dealers.map(d => d.id));
-        currentDealers = allRawDealers.filter(d => assignedDealerIds.has(d.value));
-      }
-    } else {
-      // If no offer selected, show all raw dealers (or none, depending on desired behavior)
-      currentDealers = allRawDealers;
-    }
-
-    // Apply city/state filters
-    const filtered = currentDealers.filter(dealer => {
+    const filtered = allRawDealers.filter(dealer => {
       const matchesCity = filterCity ? dealer.city.toLowerCase().includes(filterCity.toLowerCase()) : true;
       const matchesState = filterState ? dealer.state.toLowerCase().includes(filterState.toLowerCase()) : true;
       return matchesCity && matchesState;
     });
-    setFilteredDealersForTable(filtered);
-    console.log('Filtered dealers for table count:', filtered.length); // Log the count
-  }, [selectedOfferId, comboOffers, allRawDealers, filterCity, filterState]);
+    setFilteredDealersForMultiSelect(filtered);
+    // If "send to all filtered" is checked, update selectedDealerIds to match
+    if (sendToAllFilteredDealers) {
+      setSelectedDealerIds(filtered.map(d => d.value));
+    }
+  }, [allRawDealers, filterCity, filterState, sendToAllFilteredDealers]);
 
-  // Dynamically generate WhatsApp message
+  // Dynamically generate WhatsApp message based on selected offer
   useEffect(() => {
     if (selectedOfferId) {
       const offer = comboOffers.find(o => o.id === selectedOfferId);
@@ -177,7 +150,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     }
 
     if (targetDealerIds.length === 0) {
-      showError('No dealers selected or filtered to send messages to.');
+      showError('No dealers selected to send messages to.');
       return;
     }
 
@@ -203,15 +176,14 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       }
 
       showSuccess('WhatsApp messages prepared. Please check new tabs to send them manually.');
-      // Open WhatsApp Web for each successful message
       data.results.forEach((result: any) => {
         if (result.status === 'success' && result.url) {
           window.open(result.url, '_blank');
         }
       });
 
-      setSelectedDealerIds([]);
-      setSendToAllDealers(false);
+      setSelectedDealerIds([]); // Clear selected dealers after sending
+      setSendToAllFilteredDealers(false); // Reset checkbox
       onMessageSent();
     } catch (error: any) {
       console.error('Error sending WhatsApp messages:', error);
@@ -222,8 +194,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
   };
 
   const handleBulkSend = () => {
-    // Send to all dealers currently in the filteredDealersForTable list
-    const dealerIdsToSend = filteredDealersForTable.map(d => d.value);
+    const dealerIdsToSend = sendToAllFilteredDealers ? filteredDealersForMultiSelect.map(d => d.value) : selectedDealerIds;
     handleSendWhatsApp(dealerIdsToSend);
   };
 
@@ -236,6 +207,8 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     setFilterState('');
   };
 
+  const isSendButtonDisabled = isSending || !selectedOfferId || (selectedDealerIds.length === 0 && !sendToAllFilteredDealers) || !whatsappMessage.trim();
+
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-blue-600 dark:bg-blue-800 text-white rounded-t-lg p-4">
@@ -243,7 +216,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
           <MessageCircle className="h-6 w-6" /> Send WhatsApp Offer
         </CardTitle>
         <CardDescription className="text-blue-100 dark:text-blue-200">
-          Select an offer and dealers to send a personalized WhatsApp message.
+          Select dealers, then choose an offer to send a personalized WhatsApp message.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
@@ -254,6 +227,69 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
           </div>
         ) : (
           <>
+            {/* Dealer Filters */}
+            <div className="flex flex-wrap items-end gap-4 p-3 border rounded-md bg-muted/50">
+              <div className="flex-1 min-w-[120px]">
+                <Label htmlFor="filterCity">Filter by City</Label>
+                <Input
+                  id="filterCity"
+                  placeholder="e.g., Mumbai"
+                  value={filterCity}
+                  onChange={(e) => setFilterCity(e.target.value)}
+                  disabled={isSending}
+                />
+              </div>
+              <div className="flex-1 min-w-[120px]">
+                <Label htmlFor="filterState">Filter by State</Label>
+                <Input
+                  id="filterState"
+                  placeholder="e.g., Maharashtra"
+                  value={filterState}
+                  onChange={(e) => setFilterState(e.target.value)}
+                  disabled={isSending}
+                />
+              </div>
+              <Button onClick={handleClearFilters} variant="outline" disabled={isSending}>
+                Clear Filters
+              </Button>
+            </div>
+
+            {/* Multi-Select Dealers */}
+            <div className="space-y-2">
+              <Label htmlFor="selectDealers">Select Dealers</Label>
+              <MultiSelect
+                options={filteredDealersForMultiSelect.map(d => ({ value: d.value, label: d.label }))}
+                value={selectedDealerIds}
+                onChange={setSelectedDealerIds}
+                placeholder="Select dealers"
+                disabled={isSending || filteredDealersForMultiSelect.length === 0 || sendToAllFilteredDealers}
+              />
+              {filteredDealersForMultiSelect.length === 0 && (
+                <p className="text-sm text-muted-foreground">No dealers found matching your filters.</p>
+              )}
+            </div>
+
+            {/* Send to All Filtered Dealers Checkbox */}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="sendToAllFilteredDealers"
+                checked={sendToAllFilteredDealers}
+                onCheckedChange={(checked) => {
+                  setSendToAllFilteredDealers(!!checked);
+                  if (!!checked) {
+                    setSelectedDealerIds(filteredDealersForMultiSelect.map(d => d.value));
+                  } else {
+                    setSelectedDealerIds([]);
+                  }
+                }}
+                disabled={isSending || filteredDealersForMultiSelect.length === 0}
+              />
+              <Label htmlFor="sendToAllFilteredDealers" className="text-base font-medium flex items-center gap-2">
+                <Users className="h-4 w-4" /> Send to All {filteredDealersForMultiSelect.length} Filtered Dealers
+              </Label>
+            </div>
+
+            {/* Select Combo Offer */}
             <div>
               <Label htmlFor="selectOffer">Select Combo Offer</Label>
               <Select value={selectedOfferId} onValueChange={setSelectedOfferId} disabled={comboOffers.length === 0 || isSending}>
@@ -270,126 +306,71 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
               </Select>
             </div>
 
-            {selectedOfferId && (
-              <>
-                <div className="flex flex-wrap items-end gap-4 mb-4 p-3 border rounded-md bg-muted/50">
-                  <div className="flex-1 min-w-[120px]">
-                    <Label htmlFor="filterCity">Filter by City</Label>
-                    <Input
-                      id="filterCity"
-                      placeholder="e.g., Mumbai"
-                      value={filterCity}
-                      onChange={(e) => setFilterCity(e.target.value)}
-                      disabled={isSending}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-[120px]">
-                    <Label htmlFor="filterState">Filter by State</Label>
-                    <Input
-                      id="filterState"
-                      placeholder="e.g., Maharashtra"
-                      value={filterState}
-                      onChange={(e) => setFilterState(e.target.value)}
-                      disabled={isSending}
-                    />
-                  </div>
-                  <Button onClick={handleClearFilters} variant="outline" disabled={isSending}>
-                    Clear Filters
-                  </Button>
-                </div>
+            {/* WhatsApp Message Preview */}
+            <div>
+              <Label htmlFor="whatsappMessage">WhatsApp Message Preview</Label>
+              <Textarea
+                id="whatsappMessage"
+                value={whatsappMessage}
+                onChange={(e) => setWhatsappMessage(e.target.value)}
+                rows={8}
+                placeholder="Your dynamic message will appear here..."
+                className="resize-y"
+                disabled={isSending || !selectedOfferId}
+              />
+            </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="sendToAllDealers"
-                      checked={sendToAllDealers}
-                      onCheckedChange={(checked) => {
-                        setSendToAllDealers(!!checked);
-                        if (!!checked) {
-                          setSelectedDealerIds([]);
-                        }
-                      }}
-                      disabled={isSending || filteredDealersForTable.length === 0}
-                    />
-                    <Label htmlFor="sendToAllDealers" className="text-base font-medium flex items-center gap-2">
-                      <Users className="h-4 w-4" /> Send to All {filteredDealersForTable.length} Filtered Dealers
-                    </Label>
-                  </div>
-                  {!sendToAllDealers && (
-                    <>
-                      <Label htmlFor="selectDealers">Select Specific Dealers from Filtered List</Label>
-                      <MultiSelect
-                        options={filteredDealersForTable.map(d => ({ value: d.value, label: d.label }))}
-                        value={selectedDealerIds}
-                        onChange={setSelectedDealerIds}
-                        placeholder="Select dealers"
-                        disabled={isSending || filteredDealersForTable.length === 0}
-                      />
-                    </>
-                  )}
-                </div>
+            {/* Send Button */}
+            <Button
+              onClick={handleBulkSend}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+              disabled={isSendButtonDisabled}
+            >
+              {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {isSending ? 'Preparing Messages...' : `Send to ${selectedDealerIds.length} Selected Dealers`}
+            </Button>
 
-                <div className="overflow-x-auto max-h-[300px] overflow-y-auto border rounded-md">
-                  {filteredDealersForTable.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-4">No dealers found matching criteria for this offer.</p>
-                  ) : (
-                    <Table>
-                      <TableHeader className="sticky top-0 bg-background z-10">
-                        <TableRow className="bg-muted hover:bg-muted/90">
-                          <TableHead className="text-muted-foreground">Dealer Name</TableHead>
-                          <TableHead className="text-muted-foreground">Phone</TableHead>
-                          <TableHead className="text-muted-foreground">City</TableHead>
-                          <TableHead className="text-muted-foreground">State</TableHead>
-                          <TableHead className="text-muted-foreground text-center">Action</TableHead>
+            {/* Individual Send Table (Optional, for quick individual sends) */}
+            {selectedDealerIds.length > 0 && (
+              <div className="overflow-x-auto max-h-[300px] overflow-y-auto border rounded-md mt-4">
+                <h3 className="text-lg font-semibold p-2 bg-muted/50 sticky top-0 z-10">Selected Dealers for Individual Send</h3>
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background z-10">
+                    <TableRow className="bg-muted hover:bg-muted/90">
+                      <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                      <TableHead className="text-muted-foreground">Phone</TableHead>
+                      <TableHead className="text-muted-foreground">City</TableHead>
+                      <TableHead className="text-muted-foreground">State</TableHead>
+                      <TableHead className="text-muted-foreground text-center">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedDealerIds.map((dealerId) => {
+                      const dealer = allRawDealers.find(d => d.value === dealerId);
+                      if (!dealer) return null;
+                      return (
+                        <TableRow key={dealer.value} className="hover:bg-accent/50">
+                          <TableCell className="font-medium text-foreground">{dealer.label.split('(')[0].trim()}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleIndividualSend(dealer.value)}
+                              title={`Send to ${dealer.label.split('(')[0].trim()}`}
+                              disabled={isSending || !dealer.phone || !selectedOfferId || !whatsappMessage.trim()}
+                            >
+                              <Send className="h-4 w-4 text-blue-500" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredDealersForTable.map((dealer) => (
-                          <TableRow key={dealer.value} className="hover:bg-accent/50">
-                            <TableCell className="font-medium text-foreground">{dealer.label.split('(')[0].trim()}</TableCell>
-                            <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
-                            <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
-                            <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
-                            <TableCell className="text-center">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleIndividualSend(dealer.value)}
-                                title={`Send to ${dealer.label.split('(')[0].trim()}`}
-                                disabled={isSending || !dealer.phone}
-                              >
-                                <Send className="h-4 w-4 text-blue-500" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="whatsappMessage">WhatsApp Message Preview</Label>
-                  <Textarea
-                    id="whatsappMessage"
-                    value={whatsappMessage}
-                    onChange={(e) => setWhatsappMessage(e.target.value)}
-                    rows={8}
-                    placeholder="Your dynamic message will appear here..."
-                    className="resize-y"
-                    disabled={isSending}
-                  />
-                </div>
-
-                <Button
-                  onClick={handleBulkSend}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
-                  disabled={isSending || !selectedOfferId || (filteredDealersForTable.length === 0) || !whatsappMessage.trim()}
-                >
-                  {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  {isSending ? 'Preparing Messages...' : `Send to All ${filteredDealersForTable.length} Filtered Dealers`}
-                </Button>
-              </>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </>
         )}
