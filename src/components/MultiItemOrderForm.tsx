@@ -38,7 +38,7 @@ const CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.
 const MultiItemOrderForm: React.FC = () => {
   const { user } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
-  const [products, setProducts] = useState<Product[]>(([]);
+  const [products, setProducts] = useState<Product[]>([]); // Fixed TypeScript error here
   const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
   const [loading, setLoading] = useState(false);
