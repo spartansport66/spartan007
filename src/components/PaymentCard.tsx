@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { Loader2, DollarSign, CalendarDays, TrendingUp } from 'lucide-react'; // Added CalendarDays, TrendingUp
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
-import UpdatePaymentDialog from '@/components/UpdatePaymentDialog'; // Import the new dialog
 import { Separator } from '@/components/ui/separator'; // Added Separator
 
 interface PendingOrderPayment {
@@ -39,10 +38,6 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
 
   // Filter states
   const [filterPeriod, setFilterPeriod] = useState<'pending_today' | 'upcoming' | '7_days' | '15_days' | '30_days' | '60_days'>('pending_today');
-
-  // Dialog states for updating payment
-  const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
-  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PendingOrderPayment | null>(null);
 
   const getTodayDateISO = () => {
     const today = new Date();
@@ -133,6 +128,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .order('payment_due_date', { ascending: true }); // Order by due date
 
       const todayISO = getTodayDateISO();
+      const todayDateObject = new Date(todayISO); // Define today as a Date object here
 
       if (filterPeriod === 'pending_today') {
         query = query.lte('payment_due_date', todayISO);
@@ -140,22 +136,22 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         // Upcoming payments (due date in the future)
         query = query.gte('payment_due_date', todayISO);
       } else if (filterPeriod === '7_days') {
-        const sevenDaysFromNow = new Date(new Date(todayISO));
-        sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+        const sevenDaysFromNow = new Date(todayDateObject);
+        sevenDaysFromNow.setDate(todayDateObject.getDate() + 7);
         sevenDaysFromNow.setHours(23, 59, 59, 999);
         query = query.gte('payment_due_date', todayISO).lte('payment_due_date', sevenDaysFromNow.toISOString());
       } else if (filterPeriod === '15_days') {
-        const fifteenDaysFromNow = new Date(new Date(todayISO));
-        fifteenDaysFromNow.setDate(fifteenDaysFromNow.getDate() + 15);
+        const fifteenDaysFromNow = new Date(todayDateObject);
+        fifteenDaysFromNow.setDate(todayDateObject.getDate() + 15);
         fifteenDaysFromNow.setHours(23, 59, 59, 999);
         query = query.gte('payment_due_date', todayISO).lte('payment_due_date', fifteenDaysFromNow.toISOString());
       } else if (filterPeriod === '30_days') {
-        const thirtyDaysFromNow = new Date(new Date(todayISO));
-        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        const thirtyDaysFromNow = new Date(todayDateObject);
+        thirtyDaysFromNow.setDate(todayDateObject.getDate() + 30);
         thirtyDaysFromNow.setHours(23, 59, 59, 999);
         query = query.gte('payment_due_date', todayISO).lte('payment_due_date', thirtyDaysFromNow.toISOString());
       } else if (filterPeriod === '60_days') {
-        const sixtyDaysFromNow = new Date(new Date(todayISO));
+        const sixtyDaysFromNow = new Date(todayDateObject);
         sixtyDaysFromNow.setDate(sixtyDaysFromNow.getDate() + 60);
         sixtyDaysFromNow.setHours(23, 59, 59, 999);
         query = query.gte('payment_due_date', todayISO).lte('payment_due_date', sixtyDaysFromNow.toISOString());
@@ -192,16 +188,6 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
     fetchPaymentOverviewData();
     fetchPendingOrderPayments();
   }, [fetchPaymentOverviewData, fetchPendingOrderPayments]);
-
-  const handleUpdatePaymentClick = (order: PendingOrderPayment) => {
-    setSelectedOrderForPaymentUpdate(order);
-    setIsUpdatePaymentDialogOpen(true);
-  };
-
-  const handlePaymentUpdated = () => {
-    fetchPendingOrderPayments(); // Refresh the list of pending payments
-    fetchPaymentOverviewData(); // Refresh the overview data
-  };
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
@@ -285,7 +271,6 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground text-right">Amount Due</TableHead>
                     <TableHead className="text-muted-foreground">Due Date</TableHead>
-                    <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -296,16 +281,6 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
                       <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {order.payment_due_date ? new Date(order.payment_due_date).toLocaleDateString() : 'N/A'}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleUpdatePaymentClick(order)} 
-                          title="Update Payment"
-                        >
-                          <DollarSign className="h-4 w-4 text-green-600" />
-                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -318,13 +293,6 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
           View Detailed Report
         </Button>
       </CardContent>
-
-      <UpdatePaymentDialog
-        orderToUpdate={selectedOrderForPaymentUpdate}
-        isOpen={isUpdatePaymentDialogOpen}
-        onOpenChange={setIsUpdatePaymentDialogOpen}
-        onPaymentUpdated={handlePaymentUpdated}
-      />
     </Card>
   );
 };

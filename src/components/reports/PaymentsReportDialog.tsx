@@ -7,11 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, MessageCircle } from 'lucide-react';
+import { Loader2, Search, Printer, MessageCircle, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import UpdatePaymentDialog from '@/components/UpdatePaymentDialog'; // Import UpdatePaymentDialog
 
 interface PaymentReportData {
   id: string;
@@ -38,8 +39,11 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
   const [payments, setPayments] = useState<PaymentReportData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
-  const [companyName, setCompanyName] = useState<string | null>(null); // New state for company name
-  const [companyPhone, setCompanyPhone] = useState<string | null>(null); // New state for company phone
+  const [companyName, setCompanyName] = useState<string | null>(null);
+
+  // State for UpdatePaymentDialog
+  const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
+  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PaymentReportData | null>(null);
 
   // Filter states
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming'>('pending');
@@ -51,7 +55,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
     try {
       const { data, error } = await supabase
         .from('company_info')
-        .select('company_name, phone')
+        .select('company_name') // Only fetching company_name now
         .limit(1)
         .single();
 
@@ -59,12 +63,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         throw error;
       }
       setCompanyName(data?.company_name || null);
-      setCompanyPhone(data?.phone || null);
     } catch (error: any) {
       console.error('Error fetching company info for WhatsApp message:', error.message);
       showError('Failed to load company information for WhatsApp message.');
       setCompanyName(null);
-      setCompanyPhone(null);
     }
   }, []);
 
@@ -170,7 +172,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       showError('Dealer phone number is not available.');
       return;
     }
-    if (!companyName) { // Only check for companyName, not companyPhone
+    if (!companyName) {
       showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
       return;
     }
@@ -191,6 +193,15 @@ Thank you!`;
     // Open WhatsApp Web in a new tab
     window.open(`https://web.whatsapp.com/send?phone=${dealerPhone}&text=${encodedMessage}`, '_blank');
     showSuccess('WhatsApp message drafted. Please check the new tab.');
+  };
+
+  const handleUpdatePaymentClick = (order: PaymentReportData) => {
+    setSelectedOrderForPaymentUpdate(order);
+    setIsUpdatePaymentDialogOpen(true);
+  };
+
+  const handlePaymentUpdated = () => {
+    fetchPaymentsAndDealers(); // Refresh the report data after payment is updated
   };
 
   const handlePrint = () => {
@@ -337,16 +348,28 @@ Thank you!`;
                       </TableCell>
                       <TableCell className="text-muted-foreground">{new Date(payment.order_date).toLocaleDateString()}</TableCell>
                       <TableCell className="text-center">
-                        {payment.payment_status === 'pending' && payment.dealer_phone && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleSendWhatsApp(payment.dealer_phone, payment.dealer_name, payment.order_number, payment.total_amount, payment.payment_due_date)} 
-                            title="Send WhatsApp Reminder"
-                          >
-                            <MessageCircle className="h-4 w-4 text-green-500" />
-                          </Button>
-                        )}
+                        <div className="flex justify-center gap-2">
+                          {payment.payment_status === 'pending' && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleUpdatePaymentClick(payment)} 
+                              title="Update Payment"
+                            >
+                              <DollarSign className="h-4 w-4 text-green-600" />
+                            </Button>
+                          )}
+                          {payment.payment_status === 'pending' && payment.dealer_phone && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleSendWhatsApp(payment.dealer_phone, payment.dealer_name, payment.order_number, payment.total_amount, payment.payment_due_date)} 
+                              title="Send WhatsApp Reminder"
+                            >
+                              <MessageCircle className="h-4 w-4 text-green-500" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -362,6 +385,15 @@ Thank you!`;
           <Button onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>
+
+      {selectedOrderForPaymentUpdate && (
+        <UpdatePaymentDialog
+          orderToUpdate={selectedOrderForPaymentUpdate}
+          isOpen={isUpdatePaymentDialogOpen}
+          onOpenChange={setIsUpdatePaymentDialogOpen}
+          onPaymentUpdated={handlePaymentUpdated}
+        />
+      )}
     </Dialog>
   );
 };
