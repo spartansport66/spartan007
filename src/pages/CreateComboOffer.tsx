@@ -13,15 +13,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Loader2, Gift, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Gift } from 'lucide-react'; // Removed MessageCircle
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import MultiSelect from '@/components/MultiSelect';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-
-// IMPORTANT: Replace with the actual URL of your deployed Edge Function
-const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
+// Removed Checkbox import as sendWhatsApp is no longer here
 
 interface Product {
   id: string;
@@ -47,16 +44,7 @@ const formSchema = z.object({
   endDate: z.string().min(1, { message: 'End date is required.' }),
   selectedProductIds: z.array(z.string().uuid()).min(1, { message: 'At least one product must be selected for the combo.' }),
   selectedDealerIds: z.array(z.string().uuid()).min(1, { message: 'At least one dealer must be assigned to the offer.' }),
-  sendWhatsApp: z.boolean().default(false),
-  whatsappMessage: z.string().optional(),
 }).superRefine((data, ctx) => {
-  if (data.sendWhatsApp && !data.whatsappMessage) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'WhatsApp message is required if sending WhatsApp.',
-      path: ['whatsappMessage'],
-    });
-  }
   if (new Date(data.startDate) > new Date(data.endDate)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -73,7 +61,6 @@ const CreateComboOffer = () => {
   const [allDealers, setAllDealers] = useState<Dealer[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [companyName, setCompanyName] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -86,8 +73,6 @@ const CreateComboOffer = () => {
       endDate: new Date().toISOString().split('T')[0],
       selectedProductIds: [],
       selectedDealerIds: [],
-      sendWhatsApp: false,
-      whatsappMessage: '',
     },
   });
 
@@ -112,15 +97,6 @@ const CreateComboOffer = () => {
       if (dealersError) throw dealersError;
       setAllDealers(dealersData || []);
 
-      // Fetch company name for WhatsApp message template
-      const { data: companyInfo, error: companyInfoError } = await supabase
-        .from('company_info')
-        .select('company_name')
-        .limit(1)
-        .single();
-      if (companyInfoError && companyInfoError.code !== 'PGRST116') throw companyInfoError;
-      setCompanyName(companyInfo?.company_name || null);
-
     } catch (error: any) {
       console.error('Error fetching initial data:', error.message);
       showError(`Failed to load initial data: ${error.message}`);
@@ -139,36 +115,6 @@ const CreateComboOffer = () => {
       fetchInitialData();
     }
   }, [sessionLoading, user, isAdmin, navigate, fetchInitialData]);
-
-  const selectedProductIds = form.watch('selectedProductIds');
-  const selectedDealerIds = form.watch('selectedDealerIds');
-  const sendWhatsApp = form.watch('sendWhatsApp');
-  const offerName = form.watch('offerName');
-  const discountValue = form.watch('discountValue');
-  const discountType = form.watch('discountType');
-
-  // Auto-generate WhatsApp message
-  useEffect(() => {
-    if (sendWhatsApp && offerName && discountValue !== undefined && discountType) {
-      let discountText = '';
-      if (discountType === 'percentage') {
-        discountText = `${discountValue}% discount`;
-      } else if (discountType === 'fixed_amount') {
-        discountText = `₹${discountValue.toFixed(2)} off`;
-      }
-
-      const productsInOffer = allProducts
-        .filter(p => selectedProductIds.includes(p.id))
-        .map(p => p.name)
-        .join(', ');
-
-      const defaultMessage = `Hello Dealer,\n\nWe have a new exciting combo offer for you from *${companyName || 'Our Company'}*!\n\n*Offer Name:* ${offerName}\n*Products Included:* ${productsInOffer || 'Selected Products'}\n*Discount:* Enjoy a *${discountText}* on this combo.\n\nContact your sales person for more details!\n\nThank you!`;
-      form.setValue('whatsappMessage', defaultMessage);
-    } else if (!sendWhatsApp) {
-      form.setValue('whatsappMessage', '');
-    }
-  }, [sendWhatsApp, offerName, discountValue, discountType, selectedProductIds, allProducts, companyName, form]);
-
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!user) {
@@ -219,41 +165,7 @@ const CreateComboOffer = () => {
 
       showSuccess('Combo offer created successfully!');
       form.reset();
-
-      // 4. Send WhatsApp messages if requested
-      if (values.sendWhatsApp && values.whatsappMessage) {
-        const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            dealerIds: values.selectedDealerIds,
-            message: values.whatsappMessage,
-          }),
-        });
-
-        const whatsappData = await response.json();
-
-        if (!response.ok) {
-          showError(`Failed to send some WhatsApp messages: ${whatsappData.error || 'Unknown error'}`);
-        } else {
-          const failedMessages = whatsappData.results.filter((r: any) => r.status === 'failed');
-          if (failedMessages.length > 0) {
-            showError(`WhatsApp messages sent with some failures: ${failedMessages.map((f: any) => f.error).join(', ')}`);
-          } else {
-            showSuccess('WhatsApp messages prepared for selected dealers!');
-          }
-          // For successful messages, open WhatsApp Web tabs
-          whatsappData.results.forEach((result: any) => {
-            if (result.status === 'success' && result.url) {
-              window.open(result.url, '_blank');
-            }
-          });
-        }
-      }
-
-      navigate('/admin-dashboard'); // Redirect back to admin dashboard
+      navigate('/manage-combo-offers'); // Redirect to manage page after creation
     } catch (error: any) {
       console.error('Error creating combo offer:', error);
       showError(`Failed to create combo offer: ${error.message}`);
@@ -427,52 +339,6 @@ const CreateComboOffer = () => {
                     </FormItem>
                   )}
                 />
-
-                <div className="space-y-4 p-4 border rounded-md bg-muted/50">
-                  <FormField
-                    control={form.control}
-                    name="sendWhatsApp"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>
-                            Send WhatsApp Notification to Selected Dealers
-                          </FormLabel>
-                          <FormDescription>
-                            A WhatsApp message will be drafted for each selected dealer. You will need to manually send them.
-                          </FormDescription>
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  {sendWhatsApp && (
-                    <FormField
-                      control={form.control}
-                      name="whatsappMessage"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="flex items-center gap-2">
-                            <MessageCircle className="h-4 w-4" /> WhatsApp Message Content
-                          </FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="Your custom message for the dealers..."
-                              className="min-h-[120px]"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
-                </div>
 
                 <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>
                   {isSubmitting ? (

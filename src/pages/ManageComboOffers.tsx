@@ -13,12 +13,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Loader2, Gift, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Gift, MessageCircle, Edit, Trash2, PlusCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import MultiSelect from '@/components/MultiSelect';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -33,6 +37,31 @@ interface Dealer {
   id: string;
   name: string;
   phone: string;
+}
+
+interface ProductOption {
+  value: string;
+  label: string;
+}
+
+interface DealerOption {
+  value: string;
+  label: string;
+  phone: string; // Include phone for WhatsApp
+}
+
+interface ComboOffer {
+  id: string;
+  name: string;
+  description: string | null;
+  discount_type: 'percentage' | 'fixed_amount';
+  discount_value: number;
+  start_date: string;
+  end_date: string;
+  created_by: string;
+  created_at: string;
+  products: Product[]; // Nested products
+  dealers: Dealer[]; // Nested dealers
 }
 
 const formSchema = z.object({
@@ -73,9 +102,10 @@ const ManageComboOffers = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<ComboOffer | null>(null);
-  const [allProducts, setAllProducts] = useState<ProductOption[]>([]);
-  const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]); // Changed type to Product[]
+  const [allDealers, setAllDealers] = useState<Dealer[]>([]); // Changed type to Dealer[]
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -88,6 +118,8 @@ const ManageComboOffers = () => {
       endDate: '',
       selectedProductIds: [],
       selectedDealerIds: [],
+      sendWhatsApp: false, // Reset WhatsApp checkbox for edit dialog
+      whatsappMessage: '',
     },
   });
 
@@ -103,14 +135,23 @@ const ManageComboOffers = () => {
         .from('products')
         .select('id, name, price');
       if (productsError) throw productsError;
-      setAllProducts((productsData || []).map(p => ({ value: p.id, label: `${p.name} (₹${p.price.toFixed(2)})` })));
+      setAllProducts(productsData || []); // Store raw Product[]
 
       // Fetch all dealers for MultiSelect options
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name, phone');
       if (dealersError) throw dealersError;
-      setAllDealers((dealersData || []).map(d => ({ value: d.id, label: `${d.name} (${d.phone || 'No Phone'})` })));
+      setAllDealers(dealersData || []); // Store raw Dealer[]
+
+      // Fetch company name for WhatsApp message template
+      const { data: companyInfo, error: companyInfoError } = await supabase
+        .from('company_info')
+        .select('company_name')
+        .limit(1)
+        .single();
+      if (companyInfoError && companyInfoError.code !== 'PGRST116') throw companyInfoError;
+      setCompanyName(companyInfo?.company_name || null);
 
       // Fetch combo offers with nested products and dealers
       const { data: offersData, error: offersError } = await supabase
@@ -180,6 +221,8 @@ const ManageComboOffers = () => {
         endDate: selectedOffer.end_date,
         selectedProductIds: selectedOffer.products.map(p => p.id),
         selectedDealerIds: selectedOffer.dealers.map(d => d.id),
+        sendWhatsApp: false, // Reset WhatsApp checkbox for edit dialog
+        whatsappMessage: '',
       });
     }
   }, [selectedOffer, form]);
@@ -299,7 +342,7 @@ const ManageComboOffers = () => {
   }
 
   const productOptions = allProducts.map(p => ({ value: p.id, label: `${p.name} (₹${p.price.toFixed(2)})` }));
-  const dealerOptions = allDealers.map(d => ({ value: d.id, label: `${d.name} (${d.phone || 'No Phone'})` }));
+  const dealerOptions = allDealers.map(d => ({ value: d.id, label: `${d.name} (${d.phone || 'No Phone'})`, phone: d.phone || '' }));
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -490,7 +533,7 @@ const ManageComboOffers = () => {
                   <FormItem>
                     <Label htmlFor="selectedProductIds">Products in Combo</Label>
                     <MultiSelect
-                      options={allProducts}
+                      options={productOptions}
                       value={field.value}
                       onChange={field.onChange}
                       placeholder="Select products for the combo"
@@ -506,7 +549,7 @@ const ManageComboOffers = () => {
                   <FormItem>
                     <Label htmlFor="selectedDealerIds">Assign to Dealers</Label>
                     <MultiSelect
-                      options={allDealers}
+                      options={dealerOptions}
                       value={field.value}
                       onChange={field.onChange}
                       placeholder="Select dealers for this offer"
