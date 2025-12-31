@@ -12,25 +12,15 @@ import SalesPersonPerformanceTable from '@/components/SalesPersonPerformanceTabl
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
-import PaymentCard from '@/components/PaymentCard'; // Import the updated PaymentCard
+import PaymentCard from '@/components/PaymentCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-
-// Import new report dialogs
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import OrdersAwaitingDispatchReportDialog from '@/components/reports/OrdersAwaitingDispatchReportDialog';
 import DispatchedOrdersReportDialog from '@/components/reports/DispatchedOrdersReportDialog';
 import SalesPersonPerformanceReportDialog from '@/components/reports/SalesPersonPerformanceReportDialog';
 import DealerReportDialog from '@/components/reports/DealerReportDialog';
-
 
 interface Product {
   id: string;
@@ -55,7 +45,7 @@ interface Sale {
     dealers: { name: string } | null;
     user_id: string;
     profiles: { first_name: string; last_name: string } | null;
-    payment_status: string; // Added
+    payment_status: string;
   } | null;
 }
 
@@ -78,38 +68,32 @@ const AdminDashboard = () => {
   const { user, loading: sessionLoading, isAdmin } = useSession();
   const [products, setProducts] = useState<Product[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]); // Keep sales data for overview cards
+  const [sales, setSales] = useState<Sale[]>([]);
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
-  
   const [allSalesPersons, setAllSalesPersons] = useState<SalesPersonProfile[]>([]);
   const [selectedSalesPersonId, setSelectedSalesPersonId] = useState<string | null>(null);
   const [salesBySalesPersonData, setSalesBySalesPersonData] = useState<{ salesPerson: string; totalSales: number; id: string }[]>([]);
   const [currentMonthTarget, setCurrentMonthTarget] = useState<number | null>(null);
   const [currentMonthAchieved, setCurrentMonthAchieved] = useState<number | null>(null);
   const [currentMonthPending, setCurrentMonthPending] = useState<number | null>(null);
-
+  
   const today = new Date();
   const [selectedChartMonth, setSelectedChartMonth] = useState<string>((today.getMonth() + 1).toString());
   const [selectedChartYear, setSelectedChartYear] = useState<string>(today.getFullYear().toString());
-
   const [loadingData, setLoadingData] = useState(true);
-
-  // New states for Order Details Card
+  
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
-  const [shouldPrintOrderDetails, setShouldPrintOrderDetails] = useState(false); // New state for printing
-
-  // States for new report dialogs
+  const [shouldPrintOrderDetails, setShouldPrintOrderDetails] = useState(false);
+  
   const [isOrdersAwaitingDispatchReportOpen, setIsOrdersAwaitingDispatchReportOpen] = useState(false);
   const [isDispatchedOrdersReportOpen, setIsDispatchedOrdersReportOpen] = useState(false);
   const [isSalesPersonPerformanceReportOpen, setIsSalesPersonPerformanceReportOpen] = useState(false);
   const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
 
-
   console.log('AdminDashboard: Component rendered. sessionLoading:', sessionLoading, 'loadingData:', loadingData, 'isAdmin:', isAdmin);
-
 
   const getMonthName = (monthNum: string) => {
     const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
@@ -134,21 +118,19 @@ const AdminDashboard = () => {
     }
     setLoadingData(true);
     console.log('AdminDashboard: setLoadingData(true)');
-
+    
     try {
-      // Get selected month range for filtering sales and targets
       const chartYearNum = parseInt(selectedChartYear);
       const chartMonthNum = parseInt(selectedChartMonth);
       const startOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString();
       const endOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum, 0, 23, 59, 59, 999)).toISOString();
       const currentMonthTargetDate = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString().split('T')[0];
-
-      // Fetch all sales persons
+      
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name')
         .eq('user_type', 'sales_person');
-
+      
       if (profilesError) {
         console.error('AdminDashboard: Error fetching sales persons:', profilesError);
         showError(`Failed to load sales persons: ${profilesError.message}`);
@@ -156,12 +138,11 @@ const AdminDashboard = () => {
       } else {
         setAllSalesPersons(profilesData || []);
       }
-
-      // Fetch all products
+      
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('id, name, price, stock, description');
-
+      
       if (productsError) {
         console.error('AdminDashboard: Error fetching products:', productsError);
         showError(`Failed to load products: ${productsError.message}`);
@@ -169,12 +150,11 @@ const AdminDashboard = () => {
       } else {
         setProducts(productsData || []);
       }
-
-      // Fetch all dealers
+      
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name');
-
+      
       if (dealersError) {
         console.error('AdminDashboard: Error fetching dealers:', dealersError);
         showError(`Failed to load dealers: ${dealersError.message}`);
@@ -184,17 +164,12 @@ const AdminDashboard = () => {
         setDealers(dealersData || []);
         setActiveDealersCount(dealersData?.length || 0);
       }
-
-      // Fetch all sales with product, dealer, and sales person names
+      
       const { data: salesData, error: salesError } = await supabase
         .from('sales')
-        .select(`
-          id, quantity, total_price, sale_date,
-          products (name),
-          orders (dealers (name), user_id, profiles (first_name, last_name), payment_status)
-        `)
+        .select(`id, quantity, total_price, sale_date, products (name), orders (dealers (name), user_id, profiles (first_name, last_name), payment_status)`)
         .order('sale_date', { ascending: false });
-
+      
       if (salesError) {
         console.error('AdminDashboard: Error fetching sales:', salesError);
         showError(`Failed to load sales data: ${salesError.message}`);
@@ -209,43 +184,46 @@ const AdminDashboard = () => {
           orders: sale.orders ? {
             dealers: sale.orders.dealers || null,
             user_id: sale.orders.user_id,
-            profiles: sale.orders.profiles ? { first_name: sale.orders.profiles.first_name, last_name: sale.orders.profiles.last_name } : null,
-            payment_status: sale.orders.payment_status, // Added
+            profiles: sale.orders.profiles ? {
+              first_name: sale.orders.profiles.first_name,
+              last_name: sale.orders.profiles.last_name
+            } : null,
+            payment_status: sale.orders.payment_status,
           } : null,
         }));
         setSales(typedSalesData);
-
         const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
         setTotalSalesValue(totalValue);
         setTotalOrders(typedSalesData.length || 0);
-
-        // --- Logic for Sales by Sales Person Table and Target/Achieved ---
+        
         const currentMonthSalesForAllPersons = typedSalesData.filter(sale => 
-          new Date(sale.sale_date) >= new Date(startOfMonth) && new Date(sale.sale_date) <= new Date(endOfMonth)
+          new Date(sale.sale_date) >= new Date(startOfMonth) && 
+          new Date(sale.sale_date) <= new Date(endOfMonth)
         );
-
+        
         const salesByPersonMap = new Map<string, number>();
         const salesPersonNamesMap = new Map<string, string>();
-
+        
         (profilesData || []).forEach(p => {
           salesPersonNamesMap.set(p.id, `${p.first_name} ${p.last_name}`);
           salesByPersonMap.set(p.id, 0);
         });
-
+        
         currentMonthSalesForAllPersons.forEach(sale => {
           const personId = sale.orders?.user_id;
           if (personId) {
             salesByPersonMap.set(personId, (salesByPersonMap.get(personId) || 0) + sale.total_price);
           }
         });
-
+        
         const formattedSalesByPerson = Array.from(salesByPersonMap.entries()).map(([id, totalSales]) => ({
           salesPerson: salesPersonNamesMap.get(id) || 'Unknown',
           totalSales: totalSales,
           id: id,
         }));
+        
         setSalesBySalesPersonData(formattedSalesByPerson);
-
+        
         if (selectedSalesPersonId) {
           const { data: targetData, error: targetError } = await supabase
             .from('sales_targets')
@@ -253,19 +231,19 @@ const AdminDashboard = () => {
             .eq('sales_person_id', selectedSalesPersonId)
             .eq('target_month', currentMonthTargetDate)
             .single();
-
+          
           if (targetError && targetError.code !== 'PGRST116') {
             console.error('AdminDashboard: Supabase Error fetching target:', targetError);
             setCurrentMonthTarget(null);
           } else {
             setCurrentMonthTarget(targetData?.target_amount || 0);
           }
-
+          
           const achieved = currentMonthSalesForAllPersons
-              .filter(sale => sale.orders?.user_id === selectedSalesPersonId)
-              .reduce((sum, sale) => sum + sale.total_price, 0);
+            .filter(sale => sale.orders?.user_id === selectedSalesPersonId)
+            .reduce((sum, sale) => sum + sale.total_price, 0);
+          
           setCurrentMonthAchieved(achieved);
-
           const pending = (targetData?.target_amount || 0) - achieved;
           setCurrentMonthPending(pending);
         } else {
@@ -274,7 +252,6 @@ const AdminDashboard = () => {
           setCurrentMonthPending(null);
         }
       }
-
       console.log('AdminDashboard: All data fetched successfully.');
     } catch (error: any) {
       console.error('AdminDashboard: Error in fetchAdminDashboardData:', error);
@@ -318,14 +295,14 @@ const AdminDashboard = () => {
   const handleViewOrderDetails = (orderId: string) => {
     setSelectedOrderIdForDetails(orderId);
     setIsOrderDetailsDialogOpen(true);
-    setShouldPrintOrderDetails(false); // Ensure printing is off for manual view
+    setShouldPrintOrderDetails(false);
   };
 
   const handleDispatchSuccessAndPrint = (dispatchedOrderId: string) => {
     setSelectedOrderIdForDetails(dispatchedOrderId);
     setIsOrderDetailsDialogOpen(true);
-    setShouldPrintOrderDetails(true); // Set flag to print after details load
-    fetchAdminDashboardData(); // Refresh data in the background
+    setShouldPrintOrderDetails(true);
+    fetchAdminDashboardData();
   };
 
   if (sessionLoading || loadingData) {
@@ -344,30 +321,30 @@ const AdminDashboard = () => {
   const salesOverview = [
     {
       title: "Total Sales Value",
-      value: `₹${totalSalesValue.toFixed(2)}`, // Rupee symbol
+      value: `₹${totalSalesValue.toFixed(2)}`,
       change: "+20.1% from last month",
-      icon: <DollarSign className="h-3 w-3 text-white" />, // White icon
+      icon: <DollarSign className="h-3 w-3 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Orders",
       value: totalOrders.toString(),
       change: "+180.1% from last month",
-      icon: <Package className="h-3 w-3 text-white" />, // White icon
+      icon: <Package className="h-3 w-3 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month",
-      icon: <Users className="h-3 w-3 text-white" />, // White icon
+      icon: <Users className="h-3 w-3 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Products",
       value: products.length.toString(),
       change: "Overall",
-      icon: <Boxes className="h-3 w-3 text-white" />, // White icon
+      icon: <Boxes className="h-3 w-3 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
   ];
@@ -381,7 +358,6 @@ const AdminDashboard = () => {
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">Admin Dashboard</h1>
-        {/* Quick Actions Buttons */}
         <div className="flex gap-2 sm:gap-4">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -407,8 +383,6 @@ const AdminDashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Manage Users</TooltipContent>
           </Tooltip>
-
-          {/* Reports Dropdown */}
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -437,7 +411,6 @@ const AdminDashboard = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
@@ -448,11 +421,10 @@ const AdminDashboard = () => {
           </Tooltip>
         </div>
       </div>
-
-      {/* Sales Overview Cards */}
+      
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
-          <Card key={index} className="bg-card text-card-foreground shadow-md h-full"> {/* Added h-full here */}
+          <Card key={index} className="bg-card text-card-foreground shadow-md h-full">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg">
               <CardTitle className="text-[0.5rem] font-medium text-white">{item.title}</CardTitle>
               {item.icon}
@@ -464,17 +436,15 @@ const AdminDashboard = () => {
           </Card>
         ))}
       </div>
-
-      {/* Orders Awaiting Dispatch and Dispatched Orders in a single row */}
+      
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
         <DispatchedOrdersCard />
       </div>
-
-      {/* Payment Transactions and Sales Person Performance in a single row */}
+      
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <PaymentCard /> {/* Updated PaymentCard */}
-        <SalesPersonPerformanceTable
+        <PaymentCard />
+        <SalesPersonPerformanceTable 
           data={salesBySalesPersonData}
           salesPersonsOptions={salesPersonOptions}
           selectedSalesPersonId={selectedSalesPersonId}
@@ -492,33 +462,31 @@ const AdminDashboard = () => {
           generateYears={generateYears}
         />
       </div>
-
+      
       <MadeWithDyad />
-
-      {/* Order Details Dialog */}
-      <OrderDetailsDialog
-        orderId={selectedOrderIdForDetails}
-        isOpen={isOrderDetailsDialogOpen}
-        onOpenChange={setIsOrderDetailsDialogOpen}
-        shouldPrintOnLoad={shouldPrintOrderDetails} // Pass the new prop
+      
+      <OrderDetailsDialog 
+        orderId={selectedOrderIdForDetails} 
+        isOpen={isOrderDetailsDialogOpen} 
+        onOpenChange={setIsOrderDetailsDialogOpen} 
+        shouldPrintOnLoad={shouldPrintOrderDetails}
       />
-
-      {/* Report Dialogs */}
-      <OrdersAwaitingDispatchReportDialog
-        isOpen={isOrdersAwaitingDispatchReportOpen}
-        onOpenChange={setIsOrdersAwaitingDispatchReportOpen}
+      
+      <OrdersAwaitingDispatchReportDialog 
+        isOpen={isOrdersAwaitingDispatchReportOpen} 
+        onOpenChange={setIsOrdersAwaitingDispatchReportOpen} 
       />
-      <DispatchedOrdersReportDialog
-        isOpen={isDispatchedOrdersReportOpen}
-        onOpenChange={setIsDispatchedOrdersReportOpen}
+      <DispatchedOrdersReportDialog 
+        isOpen={isDispatchedOrdersReportOpen} 
+        onOpenChange={setIsDispatchedOrdersReportOpen} 
       />
-      <SalesPersonPerformanceReportDialog
-        isOpen={isSalesPersonPerformanceReportOpen}
-        onOpenChange={setIsSalesPersonPerformanceReportOpen}
+      <SalesPersonPerformanceReportDialog 
+        isOpen={isSalesPersonPerformanceReportOpen} 
+        onOpenChange={setIsSalesPersonPerformanceReportOpen} 
       />
-      <DealerReportDialog
-        isOpen={isDealerReportOpen}
-        onOpenChange={setIsDealerReportOpen}
+      <DealerReportDialog 
+        isOpen={isDealerReportOpen} 
+        onOpenChange={setIsDealerReportOpen} 
       />
     </div>
   );
