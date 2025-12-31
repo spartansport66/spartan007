@@ -38,7 +38,7 @@ const CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.
 const MultiItemOrderForm: React.FC = () => {
   const { user } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(([]);
   const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
   const [loading, setLoading] = useState(false);
@@ -51,8 +51,21 @@ const MultiItemOrderForm: React.FC = () => {
   const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  // Cheque/DD fields
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
+  // Card fields
+  const [cardNumber, setCardNumber] = useState<string>('');
+  const [cardHolderName, setCardHolderName] = useState<string>('');
+  const [expiryDate, setExpiryDate] = useState<string>('');
+  const [cvv, setCvv] = useState<string>('');
+  // Bank Transfer fields
+  const [bankName, setBankName] = useState<string>('');
+  const [accountNumber, setAccountNumber] = useState<string>('');
+  const [ifscCode, setIfscCode] = useState<string>('');
+  // UPI fields
+  const [upiId, setUpiId] = useState<string>('');
+  const [transactionId, setTransactionId] = useState<string>(''); // Common for Bank Transfer and UPI
 
   const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
 
@@ -200,8 +213,21 @@ const MultiItemOrderForm: React.FC = () => {
         showError('Payment amount must be positive.');
         return;
       }
+      // Conditional validation for specific payment methods
       if (paymentMethod === 'Cheque/DD' && (!chequeDdNo || !chequeDdDate)) {
         showError('Please enter Cheque/DD number and date.');
+        return;
+      }
+      if (paymentMethod === 'Card' && (!cardNumber || !cardHolderName || !expiryDate || !cvv)) {
+        showError('Please fill in all card details.');
+        return;
+      }
+      if (paymentMethod === 'Bank Transfer' && (!bankName || !accountNumber || !ifscCode || !transactionId)) {
+        showError('Please fill in all bank transfer details.');
+        return;
+      }
+      if (paymentMethod === 'UPI' && (!upiId || !transactionId)) {
+        showError('Please fill in all UPI details.');
         return;
       }
     }
@@ -226,6 +252,15 @@ const MultiItemOrderForm: React.FC = () => {
           payment_method: paymentMethod,
           cheque_dd_no: paymentMethod === 'Cheque/DD' ? chequeDdNo : null,
           cheque_dd_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : null,
+          card_number: paymentMethod === 'Card' ? cardNumber : null,
+          card_holder_name: paymentMethod === 'Card' ? cardHolderName : null,
+          expiry_date: paymentMethod === 'Card' ? expiryDate : null,
+          cvv: paymentMethod === 'Card' ? cvv : null,
+          bank_name: paymentMethod === 'Bank Transfer' ? bankName : null,
+          account_number: paymentMethod === 'Bank Transfer' ? accountNumber : null,
+          ifsc_code: paymentMethod === 'Bank Transfer' ? ifscCode : null,
+          upi_id: paymentMethod === 'UPI' ? upiId : null,
+          transaction_id: (paymentMethod === 'Bank Transfer' || paymentMethod === 'UPI') ? transactionId : null,
         };
       }
 
@@ -256,6 +291,15 @@ const MultiItemOrderForm: React.FC = () => {
       setPaymentAmount(0);
       setChequeDdNo('');
       setChequeDdDate('');
+      setCardNumber('');
+      setCardHolderName('');
+      setExpiryDate('');
+      setCvv('');
+      setBankName('');
+      setAccountNumber('');
+      setIfscCode('');
+      setUpiId('');
+      setTransactionId('');
       setPaymentDueDate(null);
     } catch (error: any) {
       console.error('Error placing order:', error);
@@ -420,6 +464,15 @@ const MultiItemOrderForm: React.FC = () => {
                     setPaymentAmount(0);
                     setChequeDdNo('');
                     setChequeDdDate('');
+                    setCardNumber('');
+                    setCardHolderName('');
+                    setExpiryDate('');
+                    setCvv('');
+                    setBankName('');
+                    setAccountNumber('');
+                    setIfscCode('');
+                    setUpiId('');
+                    setTransactionId('');
                   }
                 }}
               />
@@ -477,6 +530,131 @@ const MultiItemOrderForm: React.FC = () => {
                         value={chequeDdDate}
                         onChange={(e) => setChequeDdDate(e.target.value)}
                         className="w-full"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {paymentMethod === 'Card' && (
+                  <>
+                    <div>
+                      <Label htmlFor="cardNumber">Card Number</Label>
+                      <Input
+                        id="cardNumber"
+                        type="text"
+                        value={cardNumber}
+                        onChange={(e) => setCardNumber(e.target.value)}
+                        className="w-full"
+                        placeholder="XXXX XXXX XXXX 1234"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="cardHolderName">Card Holder Name</Label>
+                      <Input
+                        id="cardHolderName"
+                        type="text"
+                        value={cardHolderName}
+                        onChange={(e) => setCardHolderName(e.target.value)}
+                        className="w-full"
+                        placeholder="John Doe"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="expiryDate">Expiry Date (MM/YY)</Label>
+                      <Input
+                        id="expiryDate"
+                        type="text"
+                        value={expiryDate}
+                        onChange={(e) => setExpiryDate(e.target.value)}
+                        className="w-full"
+                        placeholder="MM/YY"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="cvv">CVV</Label>
+                      <Input
+                        id="cvv"
+                        type="text"
+                        value={cvv}
+                        onChange={(e) => setCvv(e.target.value)}
+                        className="w-full"
+                        placeholder="XXX"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {paymentMethod === 'Bank Transfer' && (
+                  <>
+                    <div>
+                      <Label htmlFor="bankName">Bank Name</Label>
+                      <Input
+                        id="bankName"
+                        type="text"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        className="w-full"
+                        placeholder="State Bank of India"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="accountNumber">Account Number</Label>
+                      <Input
+                        id="accountNumber"
+                        type="text"
+                        value={accountNumber}
+                        onChange={(e) => setAccountNumber(e.target.value)}
+                        className="w-full"
+                        placeholder="123456789012"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ifscCode">IFSC Code</Label>
+                      <Input
+                        id="ifscCode"
+                        type="text"
+                        value={ifscCode}
+                        onChange={(e) => setIfscCode(e.target.value)}
+                        className="w-full"
+                        placeholder="SBIN0000001"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="transactionId">Transaction ID</Label>
+                      <Input
+                        id="transactionId"
+                        type="text"
+                        value={transactionId}
+                        onChange={(e) => setTransactionId(e.target.value)}
+                        className="w-full"
+                        placeholder="TXN123456789"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {paymentMethod === 'UPI' && (
+                  <>
+                    <div>
+                      <Label htmlFor="upiId">UPI ID</Label>
+                      <Input
+                        id="upiId"
+                        type="text"
+                        value={upiId}
+                        onChange={(e) => setUpiId(e.target.value)}
+                        className="w-full"
+                        placeholder="user@bank"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="transactionId">Transaction ID</Label>
+                      <Input
+                        id="transactionId"
+                        type="text"
+                        value={transactionId}
+                        onChange={(e) => setTransactionId(e.target.value)}
+                        className="w-full"
+                        placeholder="UPI123456789"
                       />
                     </div>
                   </>

@@ -35,8 +35,21 @@ const formSchema = z.object({
     (val) => Number(val),
     z.number().min(0.01, { message: 'Amount must be a positive number.' })
   ),
+  // Cheque/DD fields
   chequeDdNo: z.string().optional(),
   chequeDdDate: z.string().optional(),
+  // Card fields
+  cardNumber: z.string().optional(),
+  cardHolderName: z.string().optional(),
+  expiryDate: z.string().optional(),
+  cvv: z.string().optional(),
+  // Bank Transfer fields
+  bankName: z.string().optional(),
+  accountNumber: z.string().optional(),
+  ifscCode: z.string().optional(),
+  // UPI fields
+  upiId: z.string().optional(),
+  transactionId: z.string().optional(), // Common for Bank Transfer and UPI
 }).superRefine((data, ctx) => {
   if (data.paymentMethod === 'Cheque/DD') {
     if (!data.chequeDdNo) {
@@ -53,6 +66,19 @@ const formSchema = z.object({
         path: ['chequeDdDate'],
       });
     }
+  } else if (data.paymentMethod === 'Card') {
+    if (!data.cardNumber) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Card Number is required.', path: ['cardNumber'] });
+    if (!data.cardHolderName) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Card Holder Name is required.', path: ['cardHolderName'] });
+    if (!data.expiryDate) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Expiry Date is required.', path: ['expiryDate'] });
+    if (!data.cvv) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'CVV is required.', path: ['cvv'] });
+  } else if (data.paymentMethod === 'Bank Transfer') {
+    if (!data.bankName) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Bank Name is required.', path: ['bankName'] });
+    if (!data.accountNumber) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Account Number is required.', path: ['accountNumber'] });
+    if (!data.ifscCode) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'IFSC Code is required.', path: ['ifscCode'] });
+    if (!data.transactionId) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Transaction ID is required.', path: ['transactionId'] });
+  } else if (data.paymentMethod === 'UPI') {
+    if (!data.upiId) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'UPI ID is required.', path: ['upiId'] });
+    if (!data.transactionId) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Transaction ID is required.', path: ['transactionId'] });
   }
 });
 
@@ -68,6 +94,15 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
       amount: 0,
       chequeDdNo: '',
       chequeDdDate: '',
+      cardNumber: '',
+      cardHolderName: '',
+      expiryDate: '',
+      cvv: '',
+      bankName: '',
+      accountNumber: '',
+      ifscCode: '',
+      upiId: '',
+      transactionId: '',
     },
   });
 
@@ -78,6 +113,15 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         amount: orderToUpdate.total_amount,
         chequeDdNo: '',
         chequeDdDate: '',
+        cardNumber: '',
+        cardHolderName: '',
+        expiryDate: '',
+        cvv: '',
+        bankName: '',
+        accountNumber: '',
+        ifscCode: '',
+        upiId: '',
+        transactionId: '',
       });
     }
   }, [orderToUpdate, isOpen, form]);
@@ -103,10 +147,20 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
           order_id: orderToUpdate.id,
           amount: values.amount,
           payment_method: values.paymentMethod,
+          payment_date: new Date().toISOString(), // Record current date as payment date
+          status: 'completed', // Payment is now completed
+          // Conditional fields based on payment method
           cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
           cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
-          status: 'completed', // Payment is now completed
-          payment_date: new Date().toISOString(), // Record current date as payment date
+          card_number: values.paymentMethod === 'Card' ? values.cardNumber : null,
+          card_holder_name: values.paymentMethod === 'Card' ? values.cardHolderName : null,
+          expiry_date: values.paymentMethod === 'Card' ? values.expiryDate : null,
+          cvv: values.paymentMethod === 'Card' ? values.cvv : null,
+          bank_name: values.paymentMethod === 'Bank Transfer' ? values.bankName : null,
+          account_number: values.paymentMethod === 'Bank Transfer' ? values.accountNumber : null,
+          ifsc_code: values.paymentMethod === 'Bank Transfer' ? values.ifscCode : null,
+          upi_id: values.paymentMethod === 'UPI' ? values.upiId : null,
+          transaction_id: (values.paymentMethod === 'Bank Transfer' || values.paymentMethod === 'UPI') ? values.transactionId : null,
         });
 
       if (paymentInsertError) {
@@ -215,6 +269,153 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                         <Label htmlFor="chequeDdDate">Cheque/DD Date</Label>
                         <FormControl>
                           <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+
+              {selectedPaymentMethod === 'Card' && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="cardNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="cardNumber">Card Number</Label>
+                        <FormControl>
+                          <Input type="text" placeholder="e.g., XXXX XXXX XXXX 1234" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="cardHolderName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="cardHolderName">Card Holder Name</Label>
+                        <FormControl>
+                          <Input type="text" placeholder="e.g., John Doe" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="expiryDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label htmlFor="expiryDate">Expiry Date (MM/YY)</Label>
+                          <FormControl>
+                            <Input type="text" placeholder="MM/YY" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="cvv"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label htmlFor="cvv">CVV</Label>
+                          <FormControl>
+                            <Input type="text" placeholder="XXX" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </>
+              )}
+
+              {selectedPaymentMethod === 'Bank Transfer' && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="bankName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="bankName">Bank Name</Label>
+                        <FormControl>
+                          <Input type="text" placeholder="e.g., State Bank of India" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="accountNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="accountNumber">Account Number</Label>
+                        <FormControl>
+                          <Input type="text" placeholder="e.g., 123456789012" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="ifscCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="ifscCode">IFSC Code</Label>
+                        <FormControl>
+                          <Input type="text" placeholder="e.g., SBIN0000001" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="transactionId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="transactionId">Transaction ID</Label>
+                        <FormControl>
+                          <Input type="text" placeholder="e.g., TXN123456789" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+
+              {selectedPaymentMethod === 'UPI' && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="upiId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="upiId">UPI ID</Label>
+                        <FormControl>
+                          <Input type="text" placeholder="e.g., user@bank" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="transactionId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="transactionId">Transaction ID</Label>
+                        <FormControl>
+                          <Input type="text" placeholder="e.g., UPI123456789" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

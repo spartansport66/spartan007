@@ -45,6 +45,16 @@ interface OrderDetail {
   payment_amount: number | null; // New (from payments table if paid at order time)
   cheque_dd_no: string | null; // New
   cheque_dd_date: string | null; // New
+  // New payment detail fields
+  card_number: string | null;
+  card_holder_name: string | null;
+  expiry_date: string | null;
+  cvv: string | null;
+  bank_name: string | null;
+  account_number: string | null;
+  ifsc_code: string | null;
+  upi_id: string | null;
+  transaction_id: string | null;
 }
 
 interface OrderDetailsDialogProps {
@@ -69,7 +79,21 @@ interface FetchedOrderData {
   dispatch_date: string | null; // New
   dispatch_number: number | null; // New
   dispatched: boolean; // New
-  payments: { amount: number; payment_method: string; cheque_dd_no: string | null; cheque_dd_date: string | null }[] | null; // New
+  payments: { 
+    amount: number; 
+    payment_method: string; 
+    cheque_dd_no: string | null; 
+    cheque_dd_date: string | null;
+    card_number: string | null;
+    card_holder_name: string | null;
+    expiry_date: string | null;
+    cvv: string | null;
+    bank_name: string | null;
+    account_number: string | null;
+    ifsc_code: string | null;
+    upi_id: string | null;
+    transaction_id: string | null;
+  }[] | null; // New
 }
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen, onOpenChange, shouldPrintOnLoad = false }) => {
@@ -96,7 +120,21 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           dispatch_number,
           dispatched,
           dealers (id, name, credit_limit, address, phone, city, state, country),
-          payments (amount, payment_method, cheque_dd_no, cheque_dd_date)
+          payments (
+            amount, 
+            payment_method, 
+            cheque_dd_no, 
+            cheque_dd_date,
+            card_number,
+            card_holder_name,
+            expiry_date,
+            cvv,
+            bank_name,
+            account_number,
+            ifsc_code,
+            upi_id,
+            transaction_id
+          )
         `)
         .eq('id', id)
         .single() as { data: FetchedOrderData | null; error: any }; // Explicitly type data
@@ -184,6 +222,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         payment_amount: paymentInfo?.amount || null, // New
         cheque_dd_no: paymentInfo?.cheque_dd_no || null, // New
         cheque_dd_date: paymentInfo?.cheque_dd_date || null, // New
+        card_number: paymentInfo?.card_number || null,
+        card_holder_name: paymentInfo?.card_holder_name || null,
+        expiry_date: paymentInfo?.expiry_date || null,
+        cvv: paymentInfo?.cvv || null,
+        bank_name: paymentInfo?.bank_name || null,
+        account_number: paymentInfo?.account_number || null,
+        ifsc_code: paymentInfo?.ifsc_code || null,
+        upi_id: paymentInfo?.upi_id || null,
+        transaction_id: paymentInfo?.transaction_id || null,
       });
 
     } catch (error: any) {
@@ -210,8 +257,63 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
     }
   }, [isOpen, orderDetails, shouldPrintOnLoad, onOpenChange]);
 
+  const renderPaymentDetails = (details: OrderDetail) => {
+    if (details.payment_status !== 'paid' || !details.payment_method) return null;
+
+    switch (details.payment_method) {
+      case 'Cash':
+        return <p><strong>Amount Paid:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>;
+      case 'Card':
+        return (
+          <>
+            <p><strong>Amount Paid:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
+            <p><strong>Card Number:</strong> {details.card_number || 'N/A'}</p>
+            <p><strong>Card Holder:</strong> {details.card_holder_name || 'N/A'}</p>
+            <p><strong>Expiry Date:</strong> {details.expiry_date || 'N/A'}</p>
+          </>
+        );
+      case 'Bank Transfer':
+        return (
+          <>
+            <p><strong>Amount Paid:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
+            <p><strong>Bank Name:</strong> {details.bank_name || 'N/A'}</p>
+            <p><strong>Account Number:</strong> {details.account_number || 'N/A'}</p>
+            <p><strong>IFSC Code:</strong> {details.ifsc_code || 'N/A'}</p>
+            <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
+          </>
+        );
+      case 'UPI':
+        return (
+          <>
+            <p><strong>Amount Paid:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
+            <p><strong>UPI ID:</strong> {details.upi_id || 'N/A'}</p>
+            <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
+          </>
+        );
+      case 'Cheque/DD':
+        return (
+          <>
+            <p><strong>Amount Paid:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
+            <p><strong>Cheque/DD No:</strong> {details.cheque_dd_no || 'N/A'}</p>
+            <p><strong>Cheque/DD Date:</strong> {details.cheque_dd_date ? new Date(details.cheque_dd_date).toLocaleDateString() : 'N/A'}</p>
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
   const handlePrint = () => {
     if (!orderDetails) return;
+
+    let paymentDetailsHtml = '';
+    if (orderDetails.payment_status === 'paid' && orderDetails.payment_method) {
+      paymentDetailsHtml = `
+        <h2>Payment Details</h2>
+        <p><strong>Payment Method:</strong> ${orderDetails.payment_method}</p>
+        ${renderPaymentDetails(orderDetails)}
+      `;
+    }
 
     const printContent = `
       <style>
@@ -268,13 +370,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         <p><strong>Total Order Amount:</strong> <span class="text-right">₹${orderDetails.total_amount.toFixed(2)}</span></p>
       </div>
 
-      ${orderDetails.payment_status === 'paid' && orderDetails.payment_method ? `
-        <h2>Payment Details</h2>
-        <p><strong>Amount Paid:</strong> ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}</p>
-        <p><strong>Payment Method:</strong> ${orderDetails.payment_method}</p>
-        ${orderDetails.cheque_dd_no ? `<p><strong>Cheque/DD No:</strong> ${orderDetails.cheque_dd_no}</p>` : ''}
-        ${orderDetails.cheque_dd_date ? `<p><strong>Cheque/DD Date:</strong> ${new Date(orderDetails.cheque_dd_date).toLocaleDateString()}</p>` : ''}
-      ` : ''}
+      ${paymentDetailsHtml}
 
       <h2>Dealer Credit Information</h2>
       <p><strong>Credit Limit:</strong> <span class="text-right">₹${orderDetails.dealer_credit_limit.toFixed(2)}</span></p>
@@ -344,10 +440,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 <Separator />
                 <h3 className="text-lg font-semibold">Payment Details</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <p><span className="font-semibold">Amount Paid:</span> ₹{orderDetails.payment_amount?.toFixed(2) || 'N/A'}</p>
-                  <p><span className="font-semibold">Payment Method:</span> {orderDetails.payment_method}</p>
-                  {orderDetails.cheque_dd_no && <p><span className="font-semibold">Cheque/DD No:</span> {orderDetails.cheque_dd_no}</p>}
-                  {orderDetails.cheque_dd_date && <p><span className="font-semibold">Cheque/DD Date:</span> {new Date(orderDetails.cheque_dd_date).toLocaleDateString()}</p>}
+                  {renderPaymentDetails(orderDetails)}
                 </div>
               </>
             )}

@@ -165,6 +165,15 @@ serve(async (req) => {
           payment_method: paymentDetails.payment_method,
           cheque_dd_no: paymentDetails.cheque_dd_no,
           cheque_dd_date: paymentDetails.cheque_dd_date,
+          card_number: paymentDetails.card_number,
+          card_holder_name: paymentDetails.card_holder_name,
+          expiry_date: paymentDetails.expiry_date,
+          cvv: paymentDetails.cvv,
+          bank_name: paymentDetails.bank_name,
+          account_number: paymentDetails.account_number,
+          ifsc_code: paymentDetails.ifsc_code,
+          upi_id: paymentDetails.upi_id,
+          transaction_id: paymentDetails.transaction_id,
           status: 'completed', // Payment made at order time is considered completed
         });
 
