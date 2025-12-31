@@ -17,10 +17,10 @@ serve(async (req) => {
   }
 
   try {
-    const { dealerIds, message } = await req.json();
+    const { dealerIds, message, comboOfferId, sentByUserId } = await req.json(); // Added comboOfferId and sentByUserId
 
-    if (!dealerIds || !Array.isArray(dealerIds) || dealerIds.length === 0 || !message) {
-      return new Response(JSON.stringify({ error: 'Missing or invalid dealer IDs or message.' }), {
+    if (!dealerIds || !Array.isArray(dealerIds) || dealerIds.length === 0 || !message || !comboOfferId || !sentByUserId) {
+      return new Response(JSON.stringify({ error: 'Missing or invalid dealer IDs, message, combo offer ID, or sender user ID.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -43,18 +43,22 @@ serve(async (req) => {
     }
 
     const messagesSent: { dealerId: string; dealerName: string; phone: string; status: string; url?: string; error?: string }[] = [];
+    const logsToInsert: { combo_offer_id: string; dealer_id: string; message_content: string; sent_by: string }[] = [];
 
     for (const dealer of dealers) {
       if (dealer.phone) {
-        // For simplicity, we'll return the WhatsApp Web URL.
-        // Actual sending would require a WhatsApp Business API integration.
-        // This approach opens a new tab for the user to manually send.
         messagesSent.push({
           dealerId: dealer.id,
           dealerName: dealer.name,
           phone: dealer.phone,
           status: 'success',
           url: `https://web.whatsapp.com/send?phone=${dealer.phone}&text=${encodeURIComponent(message)}`,
+        });
+        logsToInsert.push({
+          combo_offer_id: comboOfferId,
+          dealer_id: dealer.id,
+          message_content: message,
+          sent_by: sentByUserId,
         });
       } else {
         messagesSent.push({
@@ -64,6 +68,18 @@ serve(async (req) => {
           status: 'failed',
           error: 'Phone number not available for this dealer.',
         });
+      }
+    }
+
+    // Insert logs into the database
+    if (logsToInsert.length > 0) {
+      const { error: logError } = await supabaseAdmin
+        .from('whatsapp_sent_logs')
+        .insert(logsToInsert);
+
+      if (logError) {
+        console.error('Error inserting WhatsApp sent logs:', logError.message);
+        // Continue to return message results even if logging fails
       }
     }
 

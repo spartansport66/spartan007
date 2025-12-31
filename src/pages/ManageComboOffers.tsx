@@ -13,19 +13,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Loader2, Gift, MessageCircle, Edit, Trash2, PlusCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Gift, Edit, Trash2, PlusCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import MultiSelect from '@/components/MultiSelect';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
-
-// IMPORTANT: Replace with the actual URL of your deployed Edge Function
-const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
 
 interface Product {
   id: string;
@@ -64,7 +60,7 @@ interface ComboOffer {
   dealers: Dealer[]; // Nested dealers
 }
 
-const formSchema = z.object({
+const editFormSchema = z.object({
   offerName: z.string().min(1, { message: 'Offer name is required.' }),
   description: z.string().optional(),
   discountType: z.enum(['percentage', 'fixed_amount'], { message: 'Please select a discount type.' }),
@@ -76,16 +72,7 @@ const formSchema = z.object({
   endDate: z.string().min(1, { message: 'End date is required.' }),
   selectedProductIds: z.array(z.string().uuid()).min(1, { message: 'At least one product must be selected for the combo.' }),
   selectedDealerIds: z.array(z.string().uuid()).min(1, { message: 'At least one dealer must be assigned to the offer.' }),
-  sendWhatsApp: z.boolean().default(false),
-  whatsappMessage: z.string().optional(),
 }).superRefine((data, ctx) => {
-  if (data.sendWhatsApp && !data.whatsappMessage) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'WhatsApp message is required if sending WhatsApp.',
-      path: ['whatsappMessage'],
-    });
-  }
   if (new Date(data.startDate) > new Date(data.endDate)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -102,13 +89,13 @@ const ManageComboOffers = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<ComboOffer | null>(null);
-  const [allProducts, setAllProducts] = useState<Product[]>([]); // Changed type to Product[]
-  const [allDealers, setAllDealers] = useState<Dealer[]>([]); // Changed type to Dealer[]
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [allDealers, setAllDealers] = useState<Dealer[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [whatsappRefreshKey, setWhatsappRefreshKey] = useState(0); // Key to refresh WhatsApp logs
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const editForm = useForm<z.infer<typeof editFormSchema>>({
+    resolver: zodResolver(editFormSchema),
     defaultValues: {
       offerName: '',
       description: '',
@@ -118,8 +105,6 @@ const ManageComboOffers = () => {
       endDate: '',
       selectedProductIds: [],
       selectedDealerIds: [],
-      sendWhatsApp: false, // Reset WhatsApp checkbox for edit dialog
-      whatsappMessage: '',
     },
   });
 
@@ -135,23 +120,14 @@ const ManageComboOffers = () => {
         .from('products')
         .select('id, name, price');
       if (productsError) throw productsError;
-      setAllProducts(productsData || []); // Store raw Product[]
+      setAllProducts(productsData || []);
 
       // Fetch all dealers for MultiSelect options
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name, phone');
       if (dealersError) throw dealersError;
-      setAllDealers(dealersData || []); // Store raw Dealer[]
-
-      // Fetch company name for WhatsApp message template
-      const { data: companyInfo, error: companyInfoError } = await supabase
-        .from('company_info')
-        .select('company_name')
-        .limit(1)
-        .single();
-      if (companyInfoError && companyInfoError.code !== 'PGRST116') throw companyInfoError;
-      setCompanyName(companyInfo?.company_name || null);
+      setAllDealers(dealersData || []);
 
       // Fetch combo offers with nested products and dealers
       const { data: offersData, error: offersError } = await supabase
@@ -212,7 +188,7 @@ const ManageComboOffers = () => {
 
   useEffect(() => {
     if (selectedOffer) {
-      form.reset({
+      editForm.reset({
         offerName: selectedOffer.name,
         description: selectedOffer.description || '',
         discountType: selectedOffer.discount_type,
@@ -221,18 +197,16 @@ const ManageComboOffers = () => {
         endDate: selectedOffer.end_date,
         selectedProductIds: selectedOffer.products.map(p => p.id),
         selectedDealerIds: selectedOffer.dealers.map(d => d.id),
-        sendWhatsApp: false, // Reset WhatsApp checkbox for edit dialog
-        whatsappMessage: '',
       });
     }
-  }, [selectedOffer, form]);
+  }, [selectedOffer, editForm]);
 
   const handleEdit = (offer: ComboOffer) => {
     setSelectedOffer(offer);
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateOffer = async (values: z.infer<typeof formSchema>) => {
+  const handleUpdateOffer = async (values: z.infer<typeof editFormSchema>) => {
     if (!selectedOffer || !user) return;
     setIsSubmitting(true);
 
@@ -328,6 +302,10 @@ const ManageComboOffers = () => {
     }
   };
 
+  const handleWhatsAppMessageSent = () => {
+    setWhatsappRefreshKey(prev => prev + 1); // Increment key to refresh SentWhatsAppOffersCard
+  };
+
   if (sessionLoading || loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -351,12 +329,40 @@ const ManageComboOffers = () => {
           <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
         </Button>
 
+        <h1 className="text-2xl sm:text-3xl font-bold text-primary text-center mb-6">Combo Offer Management</h1>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
+          {/* Card 1: Create New Combo Offer */}
+          <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
+            <CardHeader className="bg-purple-600 dark:bg-purple-800 text-white rounded-t-lg p-4">
+              <CardTitle className="text-xl font-semibold flex items-center gap-2">
+                <PlusCircle className="h-6 w-6" /> Create New Offer
+              </CardTitle>
+              <CardDescription className="text-purple-100 dark:text-purple-200">
+                Define a new combo offer with products and discounts.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 flex-grow flex items-center justify-center">
+              <Button onClick={() => navigate('/create-combo-offer')} className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                <Gift className="h-5 w-5 mr-2" /> Create Combo Offer
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Send WhatsApp Offer */}
+          <SendWhatsAppOfferCard onMessageSent={handleWhatsAppMessageSent} />
+
+          {/* Card 3: Manage Sent WhatsApp Offers */}
+          <SentWhatsAppOffersCard refreshKey={whatsappRefreshKey} />
+        </div>
+
+        {/* Card 4: Manage Existing Combo Offers (Table) */}
         <Card className="bg-card text-card-foreground shadow-lg">
-          <CardHeader className="bg-purple-600 dark:bg-purple-800 text-white rounded-t-lg p-4">
-            <CardTitle className="text-2xl font-semibold flex items-center gap-2">
-              <Gift className="h-6 w-6" /> Manage Combo Offers
+          <CardHeader className="bg-pink-600 dark:bg-pink-800 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold flex items-center gap-2">
+              <Gift className="h-6 w-6" /> Existing Combo Offers
             </CardTitle>
-            <CardDescription className="text-purple-100 dark:text-purple-200">
+            <CardDescription className="text-pink-100 dark:text-pink-200">
               View, edit, or delete existing combo offers.
             </CardDescription>
           </CardHeader>
@@ -428,11 +434,6 @@ const ManageComboOffers = () => {
                 </div>
               )}
             </div>
-            <div className="mt-6 text-right">
-              <Button onClick={() => navigate('/create-combo-offer')} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <PlusCircle className="h-4 w-4 mr-2" /> Create New Combo Offer
-              </Button>
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -447,123 +448,125 @@ const ManageComboOffers = () => {
                 Make changes to the combo offer details, products, and assigned dealers.
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={form.handleSubmit(handleUpdateOffer)} className="grid gap-4 py-4">
-              <FormField
-                control={form.control}
-                name="offerName"
-                render={({ field }) => (
-                  <FormItem>
-                    <Label htmlFor="offerName">Offer Name</Label>
-                    <Input id="offerName" {...field} />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <Label htmlFor="description">Description (Optional)</Label>
-                    <Textarea id="description" {...field} />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-2 gap-4">
+            <Form {...editForm}>
+              <form onSubmit={editForm.handleSubmit(handleUpdateOffer)} className="grid gap-4 py-4">
                 <FormField
-                  control={form.control}
-                  name="discountType"
+                  control={editForm.control}
+                  name="offerName"
                   render={({ field }) => (
                     <FormItem>
-                      <Label htmlFor="discountType">Discount Type</Label>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <SelectTrigger id="discountType">
-                          <SelectValue placeholder="Select discount type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="percentage">Percentage (%)</SelectItem>
-                          <SelectItem value="fixed_amount">Fixed Amount (₹)</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormLabel htmlFor="offerName">Offer Name</FormLabel>
+                      <Input id="offerName" {...field} />
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <FormField
-                  control={form.control}
-                  name="discountValue"
+                  control={editForm.control}
+                  name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <Label htmlFor="discountValue">Discount Value</Label>
-                      <Input id="discountValue" type="number" step="0.01" {...field} />
+                      <FormLabel htmlFor="description">Description (Optional)</FormLabel>
+                      <Textarea id="description" {...field} />
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={editForm.control}
+                    name="discountType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel htmlFor="discountType">Discount Type</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <SelectTrigger id="discountType">
+                            <SelectValue placeholder="Select discount type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="percentage">Percentage (%)</SelectItem>
+                            <SelectItem value="fixed_amount">Fixed Amount (₹)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editForm.control}
+                    name="discountValue"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel htmlFor="discountValue">Discount Value</FormLabel>
+                        <Input id="discountValue" type="number" step="0.01" {...field} />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={editForm.control}
+                    name="startDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel htmlFor="startDate">Start Date</FormLabel>
+                        <Input id="startDate" type="date" {...field} />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editForm.control}
+                    name="endDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel htmlFor="endDate">End Date</FormLabel>
+                        <Input id="endDate" type="date" {...field} />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <FormField
-                  control={form.control}
-                  name="startDate"
+                  control={editForm.control}
+                  name="selectedProductIds"
                   render={({ field }) => (
                     <FormItem>
-                      <Label htmlFor="startDate">Start Date</Label>
-                      <Input id="startDate" type="date" {...field} />
+                      <FormLabel htmlFor="selectedProductIds">Products in Combo</FormLabel>
+                      <MultiSelect
+                        options={productOptions}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Select products for the combo"
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <FormField
-                  control={form.control}
-                  name="endDate"
+                  control={editForm.control}
+                  name="selectedDealerIds"
                   render={({ field }) => (
                     <FormItem>
-                      <Label htmlFor="endDate">End Date</Label>
-                      <Input id="endDate" type="date" {...field} />
+                      <FormLabel htmlFor="selectedDealerIds">Assign to Dealers</FormLabel>
+                      <MultiSelect
+                        options={dealerOptions}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Select dealers for this offer"
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              </div>
-              <FormField
-                control={form.control}
-                name="selectedProductIds"
-                render={({ field }) => (
-                  <FormItem>
-                    <Label htmlFor="selectedProductIds">Products in Combo</Label>
-                    <MultiSelect
-                      options={productOptions}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Select products for the combo"
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="selectedDealerIds"
-                render={({ field }) => (
-                  <FormItem>
-                    <Label htmlFor="selectedDealerIds">Assign to Dealers</Label>
-                    <MultiSelect
-                      options={dealerOptions}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Select dealers for this offer"
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}
-                </Button>
-              </DialogFooter>
-            </form>
+                <DialogFooter>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
           </DialogContent>
         </Dialog>
       )}
