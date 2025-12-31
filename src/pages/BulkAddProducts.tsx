@@ -8,7 +8,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { ArrowLeft, Upload, Download, Loader2, AlertTriangle } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
-// import * as XLSX from '@sheetjs/sheetjs'; // Temporarily commented out due to import error
+import * as XLSX from 'xlsx'; // Updated import
 import * as z from 'zod';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -52,7 +52,6 @@ const BulkAddProducts = () => {
     if (selectedFile) {
       setFile(selectedFile);
       setParsedProducts([]);
-      showError('Excel parsing is currently disabled due to a dependency issue. Please add products individually or fix the @sheetjs/sheetjs installation.');
     } else {
       setFile(null);
     }
@@ -68,20 +67,172 @@ const BulkAddProducts = () => {
       return;
     }
 
-    showError('Excel parsing functionality is currently disabled. Please add products individually or fix the @sheetjs/sheetjs installation.');
-    // setLoading(true);
-    // // XLSX parsing logic would go here
-    // setLoading(false);
+    setLoading(true);
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Assume first sheet is the one we want
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (jsonData.length < 2) {
+          showError('Excel file is empty or has no data rows.');
+          setLoading(false);
+          return;
+        }
+        
+        // Assume first row is header
+        const headers = jsonData[0] as string[];
+        const requiredHeaders = ['name', 'description', 'price', 'stock'];
+        
+        // Check if all required headers are present
+        const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+        if (missingHeaders.length > 0) {
+          showError(`Missing required columns: ${missingHeaders.join(', ')}`);
+          setLoading(false);
+          return;
+        }
+        
+        // Process data rows
+        const products: ParsedProduct[] = [];
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (!row) continue;
+          
+          const productData: any = {};
+          headers.forEach((header, index) => {
+            productData[header] = row[index];
+          });
+          
+          try {
+            // Validate with zod
+            const validatedProduct = productSchema.parse({
+              name: productData.name,
+              description: productData.description || null,
+              price: parseFloat(productData.price),
+              stock: parseInt(productData.stock)
+            });
+            
+            products.push({
+              ...validatedProduct,
+              user_id: user.id,
+              originalRow: i + 1,
+              isValid: true,
+              errors: []
+            });
+          } catch (validationError: any) {
+            const fieldErrors = validationError.errors.map((err: any) => err.message).join(', ');
+            products.push({
+              name: productData.name || 'N/A',
+              description: productData.description || null,
+              price: parseFloat(productData.price) || 0,
+              stock: parseInt(productData.stock) || 0,
+              user_id: user.id,
+              originalRow: i + 1,
+              isValid: false,
+              errors: [fieldErrors]
+            });
+          }
+        }
+        
+        setParsedProducts(products);
+        showSuccess(`Parsed ${products.length} products from Excel file.`);
+      } catch (error: any) {
+        console.error('Error parsing Excel file:', error);
+        showError(`Error parsing Excel file: ${error.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    reader.onerror = () => {
+      showError('Error reading file. Please try again.');
+      setLoading(false);
+    };
+    
+    reader.readAsArrayBuffer(file);
   };
 
   const handleBulkUpload = async () => {
-    showError('Bulk upload functionality is currently disabled. Please add products individually or fix the @sheetjs/sheetjs installation.');
-    // // Upload logic would go here
+    if (!user?.id) {
+      showError('User not authenticated. Please log in again.');
+      return;
+    }
+    
+    const validProducts = parsedProducts.filter(p => p.isValid);
+    if (validProducts.length === 0) {
+      showError('No valid products to upload.');
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      const response = await fetch(BULK_ADD_PRODUCTS_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          products: validProducts.map(p => ({
+            name: p.name,
+            description: p.description,
+            price: p.price,
+            stock: p.stock,
+            user_id: p.user_id
+          }))
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload products');
+      }
+      
+      showSuccess(data.message);
+      setParsedProducts([]);
+      setFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error: any) {
+      console.error('Error uploading products:', error);
+      showError(`Failed to upload products: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDownloadSample = () => {
-    showError('Sample download functionality is currently disabled. Please add products individually or fix the @sheetjs/sheetjs installation.');
-    // // Sample download logic would go here
+    try {
+      // Create sample data
+      const sampleData = [
+        ['name', 'description', 'price', 'stock'],
+        ['Product A', 'Description for Product A', 29.99, 100],
+        ['Product B', 'Description for Product B', 39.99, 50],
+        ['Product C', 'Description for Product C', 19.99, 200]
+      ];
+      
+      // Create workbook and worksheet
+      const ws = XLSX.utils.aoa_to_sheet(sampleData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Products');
+      
+      // Export to file
+      XLSX.writeFile(wb, 'sample_products.xlsx');
+      showSuccess('Sample Excel file downloaded successfully!');
+    } catch (error: any) {
+      console.error('Error creating sample file:', error);
+      showError(`Failed to create sample file: ${error.message}`);
+    }
   };
 
   if (sessionLoading) {
@@ -125,16 +276,14 @@ const BulkAddProducts = () => {
                 <Download className="h-4 w-4" /> Download Sample
               </Button>
             </div>
-            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-              <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
-                <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-                <span className="font-medium">Feature Temporarily Disabled</span>
+            
+            {!file && (
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  <strong>Tip:</strong> Download the sample Excel file to see the required format for bulk uploading products.
+                </p>
               </div>
-              <p className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
-                Excel parsing functionality is currently disabled due to a dependency installation issue. 
-                Please add products individually or fix the <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">@sheetjs/sheetjs</code> installation.
-              </p>
-            </div>
+            )}
           </CardContent>
         </Card>
 
@@ -143,7 +292,7 @@ const BulkAddProducts = () => {
             <CardHeader className="bg-purple-500 dark:bg-purple-700 text-white rounded-t-lg p-4">
               <CardTitle className="text-xl font-semibold">Review Products</CardTitle>
               <CardDescription className="text-purple-100 dark:text-purple-200">
-                Review the parsed data. Products with errors will not be uploaded.
+                Review the parsed data. Only valid products will be uploaded.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4">
@@ -165,7 +314,11 @@ const BulkAddProducts = () => {
                       <TableRow key={index} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">{product.originalRow}</TableCell>
                         <TableCell>
-                          <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                          {product.isValid ? (
+                            <span className="text-green-600">Valid</span>
+                          ) : (
+                            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                          )}
                         </TableCell>
                         <TableCell className="font-medium text-foreground">{product.name || 'N/A'}</TableCell>
                         <TableCell className="text-muted-foreground">{product.description || 'N/A'}</TableCell>
@@ -176,20 +329,26 @@ const BulkAddProducts = () => {
                           {typeof product.stock === 'number' ? product.stock : 'N/A'}
                         </TableCell>
                         <TableCell className="text-yellow-600 dark:text-yellow-400 text-sm">
-                          Feature disabled - dependency issue
+                          {product.errors.length > 0 ? product.errors.join(', ') : 'None'}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
-              <Button
-                onClick={handleBulkUpload}
-                disabled={true}
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2"
-              >
-                <Upload className="h-4 w-4" /> Upload Disabled
-              </Button>
+              <div className="flex justify-between items-center mb-4">
+                <p className="text-sm text-muted-foreground">
+                  {parsedProducts.filter(p => p.isValid).length} valid products, {parsedProducts.filter(p => !p.isValid).length} invalid products
+                </p>
+                <Button
+                  onClick={handleBulkUpload}
+                  disabled={loading || parsedProducts.filter(p => p.isValid).length === 0}
+                  className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {loading ? 'Uploading...' : 'Upload Valid Products'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
