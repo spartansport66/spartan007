@@ -1,40 +1,63 @@
 "use client";
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { Loader2 } from 'lucide-react';
+import { Loader2, LogOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
+import { showError, showSuccess } from '@/utils/toast';
 
 const Index = () => {
   const navigate = useNavigate();
   const { session, loading, isAdmin, userType } = useSession();
+  const [forceLogoutLoading, setForceLogoutLoading] = useState(false);
 
   useEffect(() => {
-    console.log('Index.tsx useEffect: session:', session, 'loading:', loading, 'isAdmin:', isAdmin, 'userType:', userType);
-    
-    if (!loading) { // Only act once loading is false
+    if (!loading) {
       if (session) {
         if (userType === 'admin') {
-          console.log('Index.tsx: Redirecting to /admin-dashboard');
-          navigate('/admin-dashboard'); // Redirect admin users to Admin Dashboard
+          navigate('/admin-dashboard');
         } else {
-          console.log('Index.tsx: Redirecting to /dashboard');
-          navigate('/dashboard'); // Redirect other users to Sales Dashboard
+          navigate('/dashboard');
         }
       } else {
-        console.log('Index.tsx: Redirecting to /login');
         navigate('/login');
       }
-    } else {
-      console.log('Index.tsx: Still loading, waiting for session context to resolve.');
     }
   }, [session, loading, navigate, isAdmin, userType]);
 
+  const handleForceLogout = async () => {
+    setForceLogoutLoading(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        showError(`Failed to log out: ${error.message}`);
+      } else {
+        showSuccess('Logged out successfully!');
+        navigate('/login');
+      }
+    } catch (error: any) {
+      showError(`Unexpected error during logout: ${error.message}`);
+    } finally {
+      setForceLogoutLoading(false);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading...</p>
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300 mb-4">Loading...</p>
+        <Button 
+          onClick={handleForceLogout} 
+          variant="destructive" 
+          className="flex items-center gap-2"
+          disabled={forceLogoutLoading}
+        >
+          <LogOut className="h-4 w-4" /> 
+          {forceLogoutLoading ? 'Logging out...' : 'Force Logout'}
+        </Button>
       </div>
     );
   }
