@@ -221,6 +221,14 @@ const AdminDashboard = () => {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
+              <Button onClick={() => navigate('/manage-combo-offers')} size="icon" variant="default" className="bg-pink-600 hover:bg-pink-700 text-white">
+                <Gift className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Manage Combo Offers</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Button onClick={() => navigate('/product-management-console')} size="icon" variant="default">
                 <Boxes className="h-4 w-4" />
               </Button>

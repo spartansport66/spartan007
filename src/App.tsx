@@ -11,11 +11,12 @@ import AddDealer from "./pages/AddDealer";
 import ManageDealers from "./pages/ManageDealers";
 import AddProduct from "./pages/AddProduct";
 import ManageProducts from "./pages/ManageProducts";
-import ManageUsers from "./pages/ManageUsers"; // Import ManageUsers
+import ManageUsers from "./pages/ManageUsers";
 import AdminDashboard from "./pages/AdminDashboard";
-import ProductManagementConsole from "./pages/ProductManagementConsole"; // New import
-import BulkAddProducts from "./pages/BulkAddProducts"; // New import
-import CreateComboOffer from "./pages/CreateComboOffer"; // New import
+import ProductManagementConsole from "./pages/ProductManagementConsole";
+import BulkAddProducts from "./pages/BulkAddProducts";
+import CreateComboOffer from "./pages/CreateComboOffer";
+import ManageComboOffers from "./pages/ManageComboOffers"; // New import
 import { SessionContextProvider } from "./contexts/SessionContext";
 
 const queryClient = new QueryClient();
@@ -39,7 +40,8 @@ const App = () => (
             <Route path="/manage-users" element={<ManageUsers />} />
             <Route path="/product-management-console" element={<ProductManagementConsole />} />
             <Route path="/bulk-add-products" element={<BulkAddProducts />} />
-            <Route path="/create-combo-offer" element={<CreateComboOffer />} /> {/* New route */}
+            <Route path="/create-combo-offer" element={<CreateComboOffer />} />
+            <Route path="/manage-combo-offers" element={<ManageComboOffers />} /> {/* New route */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
