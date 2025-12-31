@@ -12,8 +12,8 @@ import { showError, showSuccess } from '@/utils/toast';
 import MultiSelect from '@/components/MultiSelect';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useSession } from '@/contexts/SessionContext';
-import { Input } from '@/components/ui/input'; // Import Input for filter fields
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'; // Import Table components
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -28,15 +28,15 @@ interface Dealer {
   id: string;
   name: string;
   phone: string;
-  city: string; // Added city
-  state: string; // Added state
+  city: string;
+  state: string;
 }
 
 interface ComboOffer {
   id: string;
   name: string;
   description: string | null;
-  dealers: Dealer[]; // Nested dealers (all dealers assigned to this offer)
+  dealers: Dealer[];
 }
 
 interface DealerOption {
@@ -48,28 +48,28 @@ interface DealerOption {
 }
 
 interface SendWhatsAppOfferCardProps {
-  onMessageSent: () => void; // Callback to refresh sent logs
+  onMessageSent: () => void;
 }
 
 const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessageSent }) => {
   const { user } = useSession();
-  const [allRawDealers, setAllRawDealers] = useState<DealerOption[]>([]); // All dealers fetched from DB
+  const [allRawDealers, setAllRawDealers] = useState<DealerOption[]>([]);
   const [comboOffers, setComboOffers] = useState<ComboOffer[]>([]);
   const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]);
   const [selectedOfferId, setSelectedOfferId] = useState<string>('');
   const [whatsappMessage, setWhatsappMessage] = useState<string>('');
-  const [initialLoading, setInitialLoading] = useState(true); // Separate loading for initial data fetch
-  const [isSending, setIsSending] = useState(false); // Separate loading for send action
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const [sendToAllDealers, setSendToAllDealers] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
 
   // Filter states
   const [filterCity, setFilterCity] = useState<string>('');
   const [filterState, setFilterState] = useState<string>('');
-  const [filteredDealersForTable, setFilteredDealersForTable] = useState<DealerOption[]>([]); // Dealers shown in the table
+  const [filteredDealersForTable, setFilteredDealersForTable] = useState<DealerOption[]>([]);
 
   const fetchInitialData = useCallback(async () => {
-    setInitialLoading(true); // Use initialLoading here
+    setInitialLoading(true);
     try {
       // Fetch all dealers with city and state
       const { data: dealersData, error: dealersError } = await supabase
@@ -117,7 +117,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       console.error('Error fetching initial data for WhatsApp card:', error.message);
       showError(`Failed to load data: ${error.message}`);
     } finally {
-      setInitialLoading(false); // Set initialLoading to false here
+      setInitialLoading(false);
     }
   }, []);
 
@@ -137,7 +137,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       }
     } else {
       // If no offer selected, show all raw dealers (or none, depending on desired behavior)
-      // For now, let's show all raw dealers if no offer is selected, but they won't be "sendable"
       currentDealers = allRawDealers;
     }
 
@@ -182,7 +181,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       return;
     }
 
-    setIsSending(true); // Use isSending here
+    setIsSending(true);
     try {
       const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
         method: 'POST',
@@ -192,8 +191,8 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
         body: JSON.stringify({
           dealerIds: targetDealerIds,
           message: whatsappMessage,
-          comboOfferId: selectedOfferId, // Pass comboOfferId
-          sentByUserId: user.id, // Pass sender user ID
+          comboOfferId: selectedOfferId,
+          sentByUserId: user.id,
         }),
       });
 
@@ -211,14 +210,14 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
         }
       });
 
-      setSelectedDealerIds([]); // Clear multi-select after sending
-      setSendToAllDealers(false); // Reset bulk send checkbox
-      onMessageSent(); // Notify parent to refresh sent logs
+      setSelectedDealerIds([]);
+      setSendToAllDealers(false);
+      onMessageSent();
     } catch (error: any) {
       console.error('Error sending WhatsApp messages:', error);
       showError(`Failed to send WhatsApp messages: ${error.message}`);
     } finally {
-      setIsSending(false); // Set isSending to false here
+      setIsSending(false);
     }
   };
 
@@ -248,7 +247,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
-        {initialLoading ? ( /* Use initialLoading here */
+        {initialLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading data...</p>
@@ -281,7 +280,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                       placeholder="e.g., Mumbai"
                       value={filterCity}
                       onChange={(e) => setFilterCity(e.target.value)}
-                      disabled={isSending} /* Only disable during sending */
+                      disabled={isSending}
                     />
                   </div>
                   <div className="flex-1 min-w-[120px]">
@@ -291,7 +290,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                       placeholder="e.g., Maharashtra"
                       value={filterState}
                       onChange={(e) => setFilterState(e.target.value)}
-                      disabled={isSending} /* Only disable during sending */
+                      disabled={isSending}
                     />
                   </div>
                   <Button onClick={handleClearFilters} variant="outline" disabled={isSending}>
@@ -307,7 +306,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                       onCheckedChange={(checked) => {
                         setSendToAllDealers(!!checked);
                         if (!!checked) {
-                          setSelectedDealerIds([]); // Clear individual selections if sending to all
+                          setSelectedDealerIds([]);
                         }
                       }}
                       disabled={isSending || filteredDealersForTable.length === 0}
