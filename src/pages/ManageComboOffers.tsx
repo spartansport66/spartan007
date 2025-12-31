@@ -21,6 +21,8 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import SendWhatsAppOfferCard from '@/components/SendWhatsAppOfferCard'; // New import
+import SentWhatsAppOffersCard from '@/components/SentWhatsAppOffersCard'; // New import
 
 
 interface Product {
@@ -455,7 +457,7 @@ const ManageComboOffers = () => {
                   name="offerName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel htmlFor="offerName">Offer Name</FormLabel>
+                      <Label htmlFor="offerName">Offer Name</Label>
                       <Input id="offerName" {...field} />
                       <FormMessage />
                     </FormItem>
@@ -466,7 +468,7 @@ const ManageComboOffers = () => {
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel htmlFor="description">Description (Optional)</FormLabel>
+                      <Label htmlFor="description">Description (Optional)</Label>
                       <Textarea id="description" {...field} />
                       <FormMessage />
                     </FormItem>
@@ -478,7 +480,7 @@ const ManageComboOffers = () => {
                     name="discountType"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel htmlFor="discountType">Discount Type</FormLabel>
+                        <Label htmlFor="discountType">Discount Type</Label>
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <SelectTrigger id="discountType">
                             <SelectValue placeholder="Select discount type" />
@@ -497,7 +499,7 @@ const ManageComboOffers = () => {
                     name="discountValue"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel htmlFor="discountValue">Discount Value</FormLabel>
+                        <Label htmlFor="discountValue">Discount Value</Label>
                         <Input id="discountValue" type="number" step="0.01" {...field} />
                         <FormMessage />
                       </FormItem>
@@ -510,7 +512,7 @@ const ManageComboOffers = () => {
                     name="startDate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel htmlFor="startDate">Start Date</FormLabel>
+                        <Label htmlFor="startDate">Start Date</Label>
                         <Input id="startDate" type="date" {...field} />
                         <FormMessage />
                       </FormItem>
@@ -521,7 +523,7 @@ const ManageComboOffers = () => {
                     name="endDate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel htmlFor="endDate">End Date</FormLabel>
+                        <Label htmlFor="endDate">End Date</Label>
                         <Input id="endDate" type="date" {...field} />
                         <FormMessage />
                       </FormItem>
@@ -533,7 +535,7 @@ const ManageComboOffers = () => {
                   name="selectedProductIds"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel htmlFor="selectedProductIds">Products in Combo</FormLabel>
+                      <Label htmlFor="selectedProductIds">Products in Combo</Label>
                       <MultiSelect
                         options={productOptions}
                         value={field.value}
@@ -549,7 +551,7 @@ const ManageComboOffers = () => {
                   name="selectedDealerIds"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel htmlFor="selectedDealerIds">Assign to Dealers</FormLabel>
+                      <Label htmlFor="selectedDealerIds">Assign to Dealers</Label>
                       <MultiSelect
                         options={dealerOptions}
                         value={field.value}

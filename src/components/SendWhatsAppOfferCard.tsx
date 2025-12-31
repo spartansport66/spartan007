@@ -158,11 +158,17 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
 
     let targetDealerIds = selectedDealerIds;
     if (sendToAllDealers) {
-      targetDealerIds = allDealers.map(d => d.value);
+      const selectedOffer = comboOffers.find(o => o.id === selectedOfferId);
+      if (selectedOffer) {
+        targetDealerIds = selectedOffer.dealers.map(d => d.id);
+      } else {
+        showError('Selected offer not found to determine all assigned dealers.');
+        return;
+      }
     }
 
     if (targetDealerIds.length === 0) {
-      showError('Please select at least one dealer or choose to send to all dealers.');
+      showError('Please select at least one dealer or choose to send to all assigned dealers for the selected offer.');
       return;
     }
 
@@ -176,6 +182,8 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
         body: JSON.stringify({
           dealerIds: targetDealerIds,
           message: whatsappMessage,
+          comboOfferId: selectedOfferId, // Pass comboOfferId
+          sentByUserId: user.id, // Pass sender user ID
         }),
       });
 
@@ -183,18 +191,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to send WhatsApp messages');
-      }
-
-      // Log each sent message to the database
-      for (const result of data.results) {
-        if (result.status === 'success') {
-          await supabase.from('whatsapp_sent_logs').insert({
-            combo_offer_id: selectedOfferId,
-            dealer_id: result.dealerId,
-            message_content: whatsappMessage,
-            sent_by: user.id,
-          });
-        }
       }
 
       showSuccess('WhatsApp messages prepared. Please check new tabs to send them manually.');
