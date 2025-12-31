@@ -5,13 +5,13 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Upload, Download, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Upload, Download, Loader2, AlertTriangle } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
-import * as XLSX from '@sheetjs/sheetjs';
+// import * as XLSX from '@sheetjs/sheetjs'; // Temporarily commented out due to import error
 import * as z from 'zod';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Input } from '@/components/ui/input'; // Added Input import
+import { Input } from '@/components/ui/input';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const BULK_ADD_PRODUCTS_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/bulk-add-products";
@@ -24,8 +24,8 @@ const productSchema = z.object({
 });
 
 interface ParsedProduct extends z.infer<typeof productSchema> {
-  user_id: string; // Add user_id for the Edge Function
-  originalRow: number; // For error reporting
+  user_id: string;
+  originalRow: number;
   isValid: boolean;
   errors: string[];
 }
@@ -51,7 +51,8 @@ const BulkAddProducts = () => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
-      setParsedProducts([]); // Clear previous data
+      setParsedProducts([]);
+      showError('Excel parsing is currently disabled due to a dependency issue. Please add products individually or fix the @sheetjs/sheetjs installation.');
     } else {
       setFile(null);
     }
@@ -67,119 +68,20 @@ const BulkAddProducts = () => {
       return;
     }
 
-    setLoading(true);
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json: any[] = XLSX.utils.sheet_to_json(worksheet);
-
-        const validatedProducts: ParsedProduct[] = json.map((row, index) => {
-          const productData = {
-            name: row['Product Name'],
-            description: row['Description'],
-            price: row['Price'],
-            stock: row['Stock'],
-          };
-
-          const result = productSchema.safeParse(productData);
-          if (result.success) {
-            return {
-              ...result.data,
-              user_id: user.id!,
-              originalRow: index + 2, // +1 for 0-index to 1-index, +1 for header row
-              isValid: true,
-              errors: [],
-            };
-          } else {
-            return {
-              ...productData, // Keep original data for display
-              user_id: user.id!,
-              originalRow: index + 2,
-              isValid: false,
-              errors: result.error.errors.map(err => `${err.path.join('.')}: ${err.message}`),
-            };
-          }
-        });
-        setParsedProducts(validatedProducts);
-        showSuccess('Excel file parsed. Review data before uploading.');
-      } catch (error: any) {
-        console.error('Error parsing Excel file:', error);
-        showError(`Failed to parse Excel file: ${error.message}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    reader.onerror = (error) => {
-      console.error('FileReader error:', error);
-      showError('Error reading file.');
-      setLoading(false);
-    };
-
-    reader.readAsBinaryString(file);
+    showError('Excel parsing functionality is currently disabled. Please add products individually or fix the @sheetjs/sheetjs installation.');
+    // setLoading(true);
+    // // XLSX parsing logic would go here
+    // setLoading(false);
   };
 
   const handleBulkUpload = async () => {
-    const validProducts = parsedProducts.filter(p => p.isValid);
-    if (validProducts.length === 0) {
-      showError('No valid products to upload. Please correct errors in the sheet.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const productsToUpload = validProducts.map(({ name, description, price, stock, user_id }) => ({
-        name,
-        description,
-        price,
-        stock,
-        user_id,
-      }));
-
-      const response = await fetch(BULK_ADD_PRODUCTS_EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ products: productsToUpload }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to bulk add products');
-      }
-
-      showSuccess(`${data.products.length} products added successfully!`);
-      setFile(null);
-      setParsedProducts([]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''; // Clear file input
-      }
-      navigate('/product-management-console'); // Go back to console
-    } catch (error: any) {
-      console.error('Error during bulk upload:', error);
-      showError(`Failed to bulk add products: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
+    showError('Bulk upload functionality is currently disabled. Please add products individually or fix the @sheetjs/sheetjs installation.');
+    // // Upload logic would go here
   };
 
   const handleDownloadSample = () => {
-    const ws = XLSX.utils.json_to_sheet([
-      { "Product Name": "Sample Product A", "Description": "Description for product A", "Price": 19.99, "Stock": 100 },
-      { "Product Name": "Sample Product B", "Description": "Description for product B", "Price": 29.50, "Stock": 50 },
-      { "Product Name": "Sample Product C", "Description": null, "Price": 5.00, "Stock": 200 }, // Description can be empty/null
-    ]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Products");
-    XLSX.writeFile(wb, "sample_products_template.xlsx");
-    showSuccess('Sample Excel template downloaded!');
+    showError('Sample download functionality is currently disabled. Please add products individually or fix the @sheetjs/sheetjs installation.');
+    // // Sample download logic would go here
   };
 
   if (sessionLoading) {
@@ -223,10 +125,16 @@ const BulkAddProducts = () => {
                 <Download className="h-4 w-4" /> Download Sample
               </Button>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Please ensure your Excel sheet has columns named "Product Name", "Description", "Price", and "Stock".
-              "Description" is optional.
-            </p>
+            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+              <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+                <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+                <span className="font-medium">Feature Temporarily Disabled</span>
+              </div>
+              <p className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
+                Excel parsing functionality is currently disabled due to a dependency installation issue. 
+                Please add products individually or fix the <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">@sheetjs/sheetjs</code> installation.
+              </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -254,14 +162,10 @@ const BulkAddProducts = () => {
                   </TableHeader>
                   <TableBody>
                     {parsedProducts.map((product, index) => (
-                      <TableRow key={index} className={product.isValid ? 'hover:bg-accent/50' : 'bg-red-50 dark:bg-red-950 hover:bg-red-100 dark:hover:bg-red-900'}>
+                      <TableRow key={index} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">{product.originalRow}</TableCell>
                         <TableCell>
-                          {product.isValid ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-destructive" />
-                          )}
+                          <AlertTriangle className="h-4 w-4 text-yellow-500" />
                         </TableCell>
                         <TableCell className="font-medium text-foreground">{product.name || 'N/A'}</TableCell>
                         <TableCell className="text-muted-foreground">{product.description || 'N/A'}</TableCell>
@@ -271,8 +175,8 @@ const BulkAddProducts = () => {
                         <TableCell className="text-muted-foreground text-right">
                           {typeof product.stock === 'number' ? product.stock : 'N/A'}
                         </TableCell>
-                        <TableCell className="text-destructive text-sm">
-                          {product.errors.length > 0 ? product.errors.join(', ') : '-'}
+                        <TableCell className="text-yellow-600 dark:text-yellow-400 text-sm">
+                          Feature disabled - dependency issue
                         </TableCell>
                       </TableRow>
                     ))}
@@ -281,11 +185,10 @@ const BulkAddProducts = () => {
               </div>
               <Button
                 onClick={handleBulkUpload}
-                disabled={loading || parsedProducts.filter(p => p.isValid).length === 0}
+                disabled={true}
                 className="w-full bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2"
               >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {loading ? 'Uploading...' : `Upload ${parsedProducts.filter(p => p.isValid).length} Valid Products`}
+                <Upload className="h-4 w-4" /> Upload Disabled
               </Button>
             </CardContent>
           </Card>
