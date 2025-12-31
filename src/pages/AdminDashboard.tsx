@@ -51,8 +51,8 @@ interface Sale {
 
 interface SalesPersonProfile {
   id: string;
-  first_name: string;
-  last_name: string;
+  first_name: string | null; // Allow null
+  last_name: string | null;  // Allow null
 }
 
 interface OrderSummary {
@@ -136,6 +136,7 @@ const AdminDashboard = () => {
         showError(`Failed to load sales persons: ${profilesError.message}`);
         setAllSalesPersons([]);
       } else {
+        console.log('AdminDashboard: Raw profilesData:', profilesData);
         setAllSalesPersons(profilesData || []);
       }
       
@@ -205,9 +206,11 @@ const AdminDashboard = () => {
         const salesPersonNamesMap = new Map<string, string>();
         
         (profilesData || []).forEach(p => {
-          salesPersonNamesMap.set(p.id, `${p.first_name} ${p.last_name}`);
+          const fullName = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+          salesPersonNamesMap.set(p.id, fullName || 'Unknown Sales Person');
           salesByPersonMap.set(p.id, 0);
         });
+        console.log('AdminDashboard: salesPersonNamesMap:', salesPersonNamesMap);
         
         currentMonthSalesForAllPersons.forEach(sale => {
           const personId = sale.orders?.user_id;
@@ -217,11 +220,11 @@ const AdminDashboard = () => {
         });
         
         const formattedSalesByPerson = Array.from(salesByPersonMap.entries()).map(([id, totalSales]) => ({
-          salesPerson: salesPersonNamesMap.get(id) || 'Unknown',
+          salesPerson: salesPersonNamesMap.get(id) || 'Unknown Sales Person',
           totalSales: totalSales,
           id: id,
         }));
-        
+        console.log('AdminDashboard: formattedSalesByPerson:', formattedSalesByPerson);
         setSalesBySalesPersonData(formattedSalesByPerson);
         
         if (selectedSalesPersonId) {
@@ -232,7 +235,7 @@ const AdminDashboard = () => {
             .eq('target_month', currentMonthTargetDate)
             .single();
           
-          if (targetError && targetError.code !== 'PGRST116') {
+          if (targetError && targetError.code !== 'PGRST116') { // PGRST116 means no rows found
             console.error('AdminDashboard: Supabase Error fetching target:', targetError);
             setCurrentMonthTarget(null);
           } else {
@@ -351,8 +354,9 @@ const AdminDashboard = () => {
 
   const salesPersonOptions = allSalesPersons.map(sp => ({
     value: sp.id,
-    label: `${sp.first_name} ${sp.last_name}`,
+    label: `${sp.first_name || ''} ${sp.last_name || ''}`.trim() || 'Unknown Sales Person',
   }));
+  console.log('AdminDashboard: salesPersonOptions for filter:', salesPersonOptions);
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
