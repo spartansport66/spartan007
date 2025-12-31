@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Loader2, Gift, PlusCircle, Edit, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Gift, PlusCircle, Edit, Trash2, Users } from 'lucide-react'; // Added Users icon
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import SendWhatsAppOfferCard from '@/components/SendWhatsAppOfferCard';
@@ -21,30 +21,25 @@ import SentWhatsAppOffersCard from '@/components/SentWhatsAppOffersCard';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { CalendarIcon } from '@radix-ui/react-icons';
+import ComboOfferDealerAssignment from '@/components/ComboOfferDealerAssignment'; // New import
 
 interface ComboOffer {
   id: string;
   name: string;
   description: string | null;
-  // Removed discount_type, discount_value, start_date, end_date from interface
   created_at: string;
+  // Add a placeholder for assigned dealers to trigger re-render if needed
+  assigned_dealers_count?: number; 
 }
 
 const createOfferFormSchema = z.object({
   offerName: z.string().min(1, { message: 'Offer name is required.' }),
   description: z.string().optional(),
-  // Removed discountType, discountValue, startDate, endDate
 });
 
 const editOfferFormSchema = z.object({
   name: z.string().min(1, { message: 'Offer name is required.' }),
   description: z.string().optional(),
-  // Removed discountType, discountValue, startDate, endDate
 });
 
 const ComboOffersDashboard = () => {
@@ -56,6 +51,8 @@ const ComboOffersDashboard = () => {
   const [comboOffersList, setComboOffersList] = useState<ComboOffer[]>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<ComboOffer | null>(null);
+  const [isAssignDealersDialogOpen, setIsAssignDealersDialogOpen] = useState(false); // New state
+  const [selectedOfferForAssignment, setSelectedOfferForAssignment] = useState<ComboOffer | null>(null); // New state
 
   const createForm = useForm<z.infer<typeof createOfferFormSchema>>({
     resolver: zodResolver(createOfferFormSchema),
@@ -78,11 +75,25 @@ const ComboOffersDashboard = () => {
     try {
       const { data, error } = await supabase
         .from('combo_offers')
-        .select('id, name, description, created_at') // Only selecting relevant fields
+        .select(`
+          id, 
+          name, 
+          description, 
+          created_at,
+          combo_offer_dealers(count)
+        `) // Fetch count of assigned dealers
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setComboOffersList(data || []);
+      
+      const formattedOffers: ComboOffer[] = (data || []).map((offer: any) => ({
+        id: offer.id,
+        name: offer.name,
+        description: offer.description,
+        created_at: offer.created_at,
+        assigned_dealers_count: offer.combo_offer_dealers[0]?.count || 0, // Extract count
+      }));
+      setComboOffersList(formattedOffers);
     } catch (error: any) {
       console.error('Error fetching combo offers:', error.message);
       showError(`Failed to load combo offers: ${error.message}`);
@@ -126,7 +137,6 @@ const ComboOffersDashboard = () => {
         .insert({
           name: values.offerName,
           description: values.description,
-          // Removed discount_type, discount_value, start_date, end_date from insert
           created_by: user.id,
         });
 
@@ -160,7 +170,6 @@ const ComboOffersDashboard = () => {
         .update({
           name: values.name,
           description: values.description,
-          // Removed discount_type, discount_value, start_date, end_date from update
           updated_at: new Date().toISOString(),
         })
         .eq('id', selectedOffer.id);
@@ -200,6 +209,16 @@ const ComboOffersDashboard = () => {
 
   const handleWhatsAppMessageSent = () => {
     setWhatsappRefreshKey(prev => prev + 1);
+  };
+
+  const handleManageDealers = (offer: ComboOffer) => {
+    setSelectedOfferForAssignment(offer);
+    setIsAssignDealersDialogOpen(true);
+  };
+
+  const handleAssignmentsUpdated = () => {
+    fetchComboOffers(); // Refresh combo offers list to update dealer counts
+    setWhatsappRefreshKey(prev => prev + 1); // Also refresh WhatsApp card
   };
 
   if (sessionLoading || loadingData) {
@@ -265,8 +284,6 @@ const ComboOffersDashboard = () => {
                     </FormItem>
                   )}
                 />
-                {/* Removed Discount Type, Discount Value, Start Date, End Date fields */}
-
                 <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>
                   {isSubmitting ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -304,7 +321,7 @@ const ComboOffersDashboard = () => {
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground">Offer Name</TableHead>
                     <TableHead className="text-muted-foreground">Description</TableHead>
-                    {/* Removed Discount and Validity TableHeads */}
+                    <TableHead className="text-muted-foreground">Assigned Dealers</TableHead> {/* New column */}
                     <TableHead className="text-muted-foreground">Created At</TableHead>
                     <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                   </TableRow>
@@ -314,12 +331,15 @@ const ComboOffersDashboard = () => {
                     <TableRow key={offer.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{offer.name}</TableCell>
                       <TableCell className="text-muted-foreground">{offer.description || 'N/A'}</TableCell>
-                      {/* Removed Discount and Validity TableCells */}
+                      <TableCell className="text-muted-foreground">{offer.assigned_dealers_count}</TableCell> {/* Display count */}
                       <TableCell className="text-muted-foreground">
                         {new Date(offer.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => handleManageDealers(offer)} title="Manage Assigned Dealers">
+                            <Users className="h-4 w-4 text-blue-500" />
+                          </Button>
                           <Button variant="ghost" size="icon" onClick={() => handleEditOffer(offer)} title="Edit Offer">
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -395,7 +415,6 @@ const ComboOffersDashboard = () => {
                     </FormItem>
                   )}
                 />
-                {/* Removed Discount Type, Discount Value, Start Date, End Date fields */}
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}
@@ -403,6 +422,24 @@ const ComboOffersDashboard = () => {
                 </DialogFooter>
               </form>
             </Form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Assign Dealers Dialog */}
+      {selectedOfferForAssignment && (
+        <Dialog open={isAssignDealersDialogOpen} onOpenChange={setIsAssignDealersDialogOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Assign Dealers to "{selectedOfferForAssignment.name}"</DialogTitle>
+              <DialogDescription>
+                Select which dealers should receive this combo offer.
+              </DialogDescription>
+            </DialogHeader>
+            <ComboOfferDealerAssignment 
+              comboOfferId={selectedOfferForAssignment.id} 
+              onAssignmentsUpdated={handleAssignmentsUpdated} 
+            />
           </DialogContent>
         </Dialog>
       )}
