@@ -32,12 +32,14 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     const newUserId = currentSession?.user?.id;
     const newSessionId = currentSession?.access_token;
 
+    // Only update session if it's actually new or changed
     if (newSessionId !== prevSessionIdRef.current) {
       setSession(currentSession);
       prevSessionIdRef.current = newSessionId;
       console.log('SessionContext: Session updated.');
     }
 
+    // Only update user and fetch profile if user ID has changed
     if (newUserId !== prevUserIdRef.current) {
       setUser(currentSession?.user || null);
       prevUserIdRef.current = newUserId;
@@ -49,26 +51,21 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       if (currentSession?.user) {
         console.log('SessionContext: Attempting to fetch user profile for ID:', currentSession.user.id);
         try {
-          // Removed the problematic test query on products table.
-          // The primary goal here is to fetch the user's profile for role determination.
-
-          console.log('SessionContext: Before Supabase profile query.');
           const { data, error } = await supabase
             .from('profiles')
             .select('is_admin, user_type')
             .eq('id', currentSession.user.id);
-          console.log('SessionContext: After Supabase profile query. Raw data:', data, 'Raw error:', error);
 
           if (error) {
             console.error('SessionContext: Error fetching user profile:', error.message);
             showError(`Failed to load user profile: ${error.message}`);
-          } else if (data === null || data === undefined || data.length === 0) {
-            console.warn('SessionContext: No user profile found for ID:', currentSession.user.id, 'Data was empty or null.');
-            showError('No user profile found. Please ensure your account has a profile.');
-          } else {
+          } else if (data && data.length > 0) {
             console.log('SessionContext: User profile fetched successfully:', data[0]);
             fetchedIsAdmin = data[0].is_admin || false;
             fetchedUserType = data[0].user_type || 'sales_person';
+          } else {
+            console.warn('SessionContext: No user profile found for ID:', currentSession.user.id, 'Data was empty or null.');
+            showError('No user profile found. Please ensure your account has a profile.');
           }
         } catch (profileFetchError: any) {
           console.error('SessionContext: Caught error during profile fetch:', profileFetchError.message);
@@ -78,11 +75,12 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       setIsAdmin(fetchedIsAdmin);
       setUserType(fetchedUserType);
       console.log('SessionContext: isAdmin set to', fetchedIsAdmin, 'userType set to', fetchedUserType);
-
     } else {
       console.log('SessionContext: User ID and Session ID are unchanged. Skipping profile fetch and state updates.');
     }
-    console.log('SessionContext: updateSessionAndProfileStates completed.');
+    // IMPORTANT: Set loading to false ONLY after all profile data is resolved
+    setLoading(false);
+    console.log('SessionContext: updateSessionAndProfileStates completed. setLoading(false).');
   };
 
   useEffect(() => {
@@ -100,17 +98,15 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             prevUserIdRef.current = undefined;
             prevSessionIdRef.current = undefined;
             console.log('SessionContext: SIGNED_OUT event processed. Setting loading to false.');
-            setLoading(false);
+            setLoading(false); // Ensure loading is false on sign out
           } else {
+            // For other events (SIGNED_IN, etc.), update states and then setLoading(false)
             await updateSessionAndProfileStates(currentSession);
-            console.log('SessionContext: Auth event processed. Setting loading to false AFTER profile update.');
-            setLoading(false);
           }
         } catch (error: any) {
           console.error('SessionContext: Error in onAuthStateChange handler:', error);
           showError(`Authentication error: ${error.message}`);
-          console.log('SessionContext: Auth event error. Setting loading to false.');
-          setLoading(false);
+          setLoading(false); // Ensure loading is false even on error
         }
       }
     );
@@ -118,14 +114,15 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
     console.log('SessionContext: Calling supabase.auth.getSession()...');
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       console.log('SessionContext: getSession promise resolved. Initial session:', initialSession);
+      // For initial session, update states and then setLoading(false)
       await updateSessionAndProfileStates(initialSession);
     }).catch(error => {
       console.error('SessionContext: Error during initial getSession promise:', error);
       showError(`Failed to load session: ${error.message}`);
-    }).finally(() => {
-      setLoading(false);
-      console.log('SessionContext: Initial getSession completed. Loading set to false in finally block.');
+      setLoading(false); // Ensure loading is false even on error
     });
+    // Removed the .finally() block here, as setLoading(false) is now handled within updateSessionAndProfileStates
+    // or explicitly in SIGNED_OUT/error paths.
 
     return () => {
       console.log('SessionContext: Cleaning up auth state change listener.');
