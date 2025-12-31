@@ -213,7 +213,7 @@ const AdminDashboard = () => {
         <div className="flex justify-end gap-2 sm:gap-4">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/manage-products')} size="icon" variant="default">
+              <Button onClick={() => navigate('/product-management-console')} size="icon" variant="default">
                 <Boxes className="h-4 w-4" />
               </Button>
             </TooltipTrigger>

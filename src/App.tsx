@@ -13,6 +13,7 @@ import AddProduct from "./pages/AddProduct";
 import ManageProducts from "./pages/ManageProducts";
 import ManageUsers from "./pages/ManageUsers"; // Import ManageUsers
 import AdminDashboard from "./pages/AdminDashboard";
+import ProductManagementConsole from "./pages/ProductManagementConsole"; // New import
 import { SessionContextProvider } from "./contexts/SessionContext";
 
 const queryClient = new QueryClient();
@@ -33,7 +34,8 @@ const App = () => (
             <Route path="/manage-dealers" element={<ManageDealers />} />
             <Route path="/add-product" element={<AddProduct />} />
             <Route path="/manage-products" element={<ManageProducts />} />
-            <Route path="/manage-users" element={<ManageUsers />} /> {/* Updated route */}
+            <Route path="/manage-users" element={<ManageUsers />} />
+            <Route path="/product-management-console" element={<ProductManagementConsole />} /> {/* New route */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
