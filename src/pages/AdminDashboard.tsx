@@ -51,13 +51,13 @@ interface Sale {
 
 interface SalesPersonProfile {
   id: string;
-  first_name: string | null; // Allow null
-  last_name: string | null;  // Allow null
+  first_name: string | null;
+  last_name: string | null;
 }
 
 interface OrderSummary {
-  id: string; // UUID
-  order_number: number; // New auto-incrementing ID
+  id: string;
+  order_number: number;
   order_date: string;
   total_amount: number;
   dealer_name: string;
@@ -78,22 +78,17 @@ const AdminDashboard = () => {
   const [currentMonthTarget, setCurrentMonthTarget] = useState<number | null>(null);
   const [currentMonthAchieved, setCurrentMonthAchieved] = useState<number | null>(null);
   const [currentMonthPending, setCurrentMonthPending] = useState<number | null>(null);
-  
   const today = new Date();
   const [selectedChartMonth, setSelectedChartMonth] = useState<string>((today.getMonth() + 1).toString());
   const [selectedChartYear, setSelectedChartYear] = useState<string>(today.getFullYear().toString());
   const [loadingData, setLoadingData] = useState(true);
-  
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
   const [shouldPrintOrderDetails, setShouldPrintOrderDetails] = useState(false);
-  
   const [isOrdersAwaitingDispatchReportOpen, setIsOrdersAwaitingDispatchReportOpen] = useState(false);
   const [isDispatchedOrdersReportOpen, setIsDispatchedOrdersReportOpen] = useState(false);
   const [isSalesPersonPerformanceReportOpen, setIsSalesPersonPerformanceReportOpen] = useState(false);
   const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
-
-  console.log('AdminDashboard: Component rendered. sessionLoading:', sessionLoading, 'loadingData:', loadingData, 'isAdmin:', isAdmin);
 
   const getMonthName = (monthNum: string) => {
     const date = new Date(Date.UTC(2000, parseInt(monthNum) - 1, 1));
@@ -110,40 +105,36 @@ const AdminDashboard = () => {
   };
 
   const fetchAdminDashboardData = useCallback(async () => {
-    console.log('AdminDashboard: fetchAdminDashboardData called.');
-    if (!user) {
-      console.log('AdminDashboard: No user, returning from fetchAdminDashboardData.');
+    if (!user || !isAdmin) {
       setLoadingData(false);
       return;
     }
+
     setLoadingData(true);
-    console.log('AdminDashboard: setLoadingData(true)');
-    
     try {
       const chartYearNum = parseInt(selectedChartYear);
       const chartMonthNum = parseInt(selectedChartMonth);
       const startOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString();
       const endOfMonth = new Date(Date.UTC(chartYearNum, chartMonthNum, 0, 23, 59, 59, 999)).toISOString();
       const currentMonthTargetDate = new Date(Date.UTC(chartYearNum, chartMonthNum - 1, 1)).toISOString().split('T')[0];
-      
+
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name')
         .eq('user_type', 'sales_person');
-      
+
       if (profilesError) {
         console.error('AdminDashboard: Error fetching sales persons:', profilesError);
         showError(`Failed to load sales persons: ${profilesError.message}`);
         setAllSalesPersons([]);
       } else {
-        console.log('AdminDashboard: Raw profilesData:', profilesData);
         setAllSalesPersons(profilesData || []);
       }
-      
+
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('id, name, price, stock, description');
-      
+
       if (productsError) {
         console.error('AdminDashboard: Error fetching products:', productsError);
         showError(`Failed to load products: ${productsError.message}`);
@@ -151,11 +142,11 @@ const AdminDashboard = () => {
       } else {
         setProducts(productsData || []);
       }
-      
+
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name');
-      
+
       if (dealersError) {
         console.error('AdminDashboard: Error fetching dealers:', dealersError);
         showError(`Failed to load dealers: ${dealersError.message}`);
@@ -165,12 +156,12 @@ const AdminDashboard = () => {
         setDealers(dealersData || []);
         setActiveDealersCount(dealersData?.length || 0);
       }
-      
+
       const { data: salesData, error: salesError } = await supabase
         .from('sales')
         .select(`id, quantity, total_price, sale_date, products (name), orders (dealers (name), user_id, profiles (first_name, last_name), payment_status)`)
         .order('sale_date', { ascending: false });
-      
+
       if (salesError) {
         console.error('AdminDashboard: Error fetching sales:', salesError);
         showError(`Failed to load sales data: ${salesError.message}`);
@@ -192,41 +183,41 @@ const AdminDashboard = () => {
             payment_status: sale.orders.payment_status,
           } : null,
         }));
+
         setSales(typedSalesData);
         const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
         setTotalSalesValue(totalValue);
         setTotalOrders(typedSalesData.length || 0);
-        
-        const currentMonthSalesForAllPersons = typedSalesData.filter(sale => 
-          new Date(sale.sale_date) >= new Date(startOfMonth) && 
+
+        const currentMonthSalesForAllPersons = typedSalesData.filter(sale =>
+          new Date(sale.sale_date) >= new Date(startOfMonth) &&
           new Date(sale.sale_date) <= new Date(endOfMonth)
         );
-        
+
         const salesByPersonMap = new Map<string, number>();
         const salesPersonNamesMap = new Map<string, string>();
-        
+
         (profilesData || []).forEach(p => {
           const fullName = `${p.first_name || ''} ${p.last_name || ''}`.trim();
           salesPersonNamesMap.set(p.id, fullName || 'Unknown Sales Person');
           salesByPersonMap.set(p.id, 0);
         });
-        console.log('AdminDashboard: salesPersonNamesMap:', salesPersonNamesMap);
-        
+
         currentMonthSalesForAllPersons.forEach(sale => {
           const personId = sale.orders?.user_id;
           if (personId) {
             salesByPersonMap.set(personId, (salesByPersonMap.get(personId) || 0) + sale.total_price);
           }
         });
-        
+
         const formattedSalesByPerson = Array.from(salesByPersonMap.entries()).map(([id, totalSales]) => ({
           salesPerson: salesPersonNamesMap.get(id) || 'Unknown Sales Person',
           totalSales: totalSales,
           id: id,
         }));
-        console.log('AdminDashboard: formattedSalesByPerson:', formattedSalesByPerson);
+
         setSalesBySalesPersonData(formattedSalesByPerson);
-        
+
         if (selectedSalesPersonId) {
           const { data: targetData, error: targetError } = await supabase
             .from('sales_targets')
@@ -234,18 +225,18 @@ const AdminDashboard = () => {
             .eq('sales_person_id', selectedSalesPersonId)
             .eq('target_month', currentMonthTargetDate)
             .single();
-          
-          if (targetError && targetError.code !== 'PGRST116') { // PGRST116 means no rows found
+
+          if (targetError && targetError.code !== 'PGRST116') {
             console.error('AdminDashboard: Supabase Error fetching target:', targetError);
             setCurrentMonthTarget(null);
           } else {
             setCurrentMonthTarget(targetData?.target_amount || 0);
           }
-          
+
           const achieved = currentMonthSalesForAllPersons
             .filter(sale => sale.orders?.user_id === selectedSalesPersonId)
             .reduce((sum, sale) => sum + sale.total_price, 0);
-          
+
           setCurrentMonthAchieved(achieved);
           const pending = (targetData?.target_amount || 0) - achieved;
           setCurrentMonthPending(pending);
@@ -255,32 +246,24 @@ const AdminDashboard = () => {
           setCurrentMonthPending(null);
         }
       }
-      console.log('AdminDashboard: All data fetched successfully.');
     } catch (error: any) {
       console.error('AdminDashboard: Error in fetchAdminDashboardData:', error);
       showError(`Failed to load dashboard data: ${error.message}`);
     } finally {
       setLoadingData(false);
-      console.log('AdminDashboard: setLoadingData(false)');
     }
-  }, [user, selectedSalesPersonId, selectedChartMonth, selectedChartYear]);
+  }, [user, isAdmin, selectedSalesPersonId, selectedChartMonth, selectedChartYear]);
 
   useEffect(() => {
-    console.log('AdminDashboard: useEffect triggered. sessionLoading:', sessionLoading, 'user:', user, 'isAdmin:', isAdmin);
     if (!sessionLoading) {
       if (!user) {
-        console.log('AdminDashboard: useEffect: No user, navigating to /login.');
         navigate('/login');
       } else if (!isAdmin) {
-        console.log('AdminDashboard: useEffect: Not admin, navigating to /dashboard.');
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
-        console.log('AdminDashboard: useEffect: User is admin, calling fetchAdminDashboardData.');
         fetchAdminDashboardData();
       }
-    } else {
-      console.log('AdminDashboard: useEffect: Session still loading.');
     }
   }, [sessionLoading, user, isAdmin, fetchAdminDashboardData, navigate]);
 
@@ -308,6 +291,7 @@ const AdminDashboard = () => {
     fetchAdminDashboardData();
   };
 
+  // Show loading state while session or data is loading
   if (sessionLoading || loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -317,6 +301,7 @@ const AdminDashboard = () => {
     );
   }
 
+  // If not admin, don't render anything (redirect will happen)
   if (!isAdmin) {
     return null;
   }
@@ -356,7 +341,6 @@ const AdminDashboard = () => {
     value: sp.id,
     label: `${sp.first_name || ''} ${sp.last_name || ''}`.trim() || 'Unknown Sales Person',
   }));
-  console.log('AdminDashboard: salesPersonOptions for filter:', salesPersonOptions);
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
@@ -425,7 +409,7 @@ const AdminDashboard = () => {
           </Tooltip>
         </div>
       </div>
-      
+
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md h-full">
@@ -440,15 +424,15 @@ const AdminDashboard = () => {
           </Card>
         ))}
       </div>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
         <DispatchedOrdersCard />
       </div>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <PaymentCard />
-        <SalesPersonPerformanceTable 
+        <SalesPersonPerformanceTable
           data={salesBySalesPersonData}
           salesPersonsOptions={salesPersonOptions}
           selectedSalesPersonId={selectedSalesPersonId}
@@ -466,31 +450,31 @@ const AdminDashboard = () => {
           generateYears={generateYears}
         />
       </div>
-      
+
       <MadeWithDyad />
-      
-      <OrderDetailsDialog 
-        orderId={selectedOrderIdForDetails} 
-        isOpen={isOrderDetailsDialogOpen} 
-        onOpenChange={setIsOrderDetailsDialogOpen} 
+
+      <OrderDetailsDialog
+        orderId={selectedOrderIdForDetails}
+        isOpen={isOrderDetailsDialogOpen}
+        onOpenChange={setIsOrderDetailsDialogOpen}
         shouldPrintOnLoad={shouldPrintOrderDetails}
       />
-      
-      <OrdersAwaitingDispatchReportDialog 
-        isOpen={isOrdersAwaitingDispatchReportOpen} 
-        onOpenChange={setIsOrdersAwaitingDispatchReportOpen} 
+
+      <OrdersAwaitingDispatchReportDialog
+        isOpen={isOrdersAwaitingDispatchReportOpen}
+        onOpenChange={setIsOrdersAwaitingDispatchReportOpen}
       />
-      <DispatchedOrdersReportDialog 
-        isOpen={isDispatchedOrdersReportOpen} 
-        onOpenChange={setIsDispatchedOrdersReportOpen} 
+      <DispatchedOrdersReportDialog
+        isOpen={isDispatchedOrdersReportOpen}
+        onOpenChange={setIsDispatchedOrdersReportOpen}
       />
-      <SalesPersonPerformanceReportDialog 
-        isOpen={isSalesPersonPerformanceReportOpen} 
-        onOpenChange={setIsSalesPersonPerformanceReportOpen} 
+      <SalesPersonPerformanceReportDialog
+        isOpen={isSalesPersonPerformanceReportOpen}
+        onOpenChange={setIsSalesPersonPerformanceReportOpen}
       />
-      <DealerReportDialog 
-        isOpen={isDealerReportOpen} 
-        onOpenChange={setIsDealerReportOpen} 
+      <DealerReportDialog
+        isOpen={isDealerReportOpen}
+        onOpenChange={setIsDealerReportOpen}
       />
     </div>
   );
