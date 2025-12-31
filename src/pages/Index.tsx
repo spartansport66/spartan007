@@ -22,13 +22,15 @@ const Index = () => {
     
     if (!loading) {
       if (session) {
-        // Check if user is admin
-        if (userType === 'admin') {
-          console.log('Redirecting to admin dashboard');
-          navigate('/admin-dashboard');
-        } else {
-          console.log('Redirecting to user dashboard');
-          navigate('/dashboard');
+        // Only redirect if userType has been determined (is not null)
+        if (userType !== null) { 
+          if (userType === 'admin') {
+            console.log('Redirecting to admin dashboard');
+            navigate('/admin-dashboard');
+          } else {
+            console.log('Redirecting to user dashboard');
+            navigate('/dashboard');
+          }
         }
       } else {
         console.log('Redirecting to login');
@@ -54,7 +56,7 @@ const Index = () => {
     }
   };
 
-  if (loading) {
+  if (loading || (session && userType === null)) { // Also show loading if session exists but userType is not yet fetched
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
