@@ -2,23 +2,124 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Loader2, Gift, PlusCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Gift, PlusCircle, Edit, Trash2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import SendWhatsAppOfferCard from '@/components/SendWhatsAppOfferCard';
 import SentWhatsAppOffersCard from '@/components/SentWhatsAppOffersCard';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { CalendarIcon } from '@radix-ui/react-icons';
+
+interface ComboOffer {
+  id: string;
+  name: string;
+  description: string | null;
+  discount_type: 'percentage' | 'fixed_amount';
+  discount_value: number;
+  start_date: string;
+  end_date: string;
+  created_at: string;
+}
+
+const createOfferFormSchema = z.object({
+  offerName: z.string().min(1, { message: 'Offer name is required.' }),
+  description: z.string().optional(),
+  discountType: z.enum(['percentage', 'fixed_amount'], { message: 'Discount type is required.' }),
+  discountValue: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Discount value cannot be negative.' })
+  ),
+  startDate: z.date({ required_error: 'Start date is required.' }),
+  endDate: z.date({ required_error: 'End date is required.' }),
+}).refine((data) => data.endDate >= data.startDate, {
+  message: "End date cannot be before start date.",
+  path: ["endDate"],
+});
+
+const editOfferFormSchema = z.object({
+  name: z.string().min(1, { message: 'Offer name is required.' }),
+  description: z.string().optional(),
+  discountType: z.enum(['percentage', 'fixed_amount'], { message: 'Discount type is required.' }),
+  discountValue: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Discount value cannot be negative.' })
+  ),
+  startDate: z.date({ required_error: 'Start date is required.' }),
+  endDate: z.date({ required_error: 'End date is required.' }),
+}).refine((data) => data.endDate >= data.startDate, {
+  message: "End date cannot be before start date.",
+  path: ["endDate"],
+});
 
 const ComboOffersDashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
   const [loadingData, setLoadingData] = useState(true);
-  const [whatsappRefreshKey, setWhatsappRefreshKey] = useState(0); // Key to refresh WhatsApp logs
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [whatsappRefreshKey, setWhatsappRefreshKey] = useState(0);
+  const [comboOffersList, setComboOffersList] = useState<ComboOffer[]>([]);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedOffer, setSelectedOffer] = useState<ComboOffer | null>(null);
 
-  // This component doesn't need to fetch combo offers directly,
-  // but it needs to ensure the user is an admin.
+  const createForm = useForm<z.infer<typeof createOfferFormSchema>>({
+    resolver: zodResolver(createOfferFormSchema),
+    defaultValues: {
+      offerName: '',
+      description: '',
+      discountType: 'percentage',
+      discountValue: 0,
+      startDate: new Date(),
+      endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)), // Default to 1 year from now
+    },
+  });
+
+  const editForm = useForm<z.infer<typeof editOfferFormSchema>>({
+    resolver: zodResolver(editOfferFormSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      discountType: 'percentage',
+      discountValue: 0,
+      startDate: new Date(),
+      endDate: new Date(),
+    },
+  });
+
+  const fetchComboOffers = useCallback(async () => {
+    setLoadingData(true);
+    try {
+      const { data, error } = await supabase
+        .from('combo_offers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setComboOffersList(data || []);
+    } catch (error: any) {
+      console.error('Error fetching combo offers:', error.message);
+      showError(`Failed to load combo offers: ${error.message}`);
+    } finally {
+      setLoadingData(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!sessionLoading) {
       if (!user) {
@@ -27,13 +128,121 @@ const ComboOffersDashboard = () => {
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
-        setLoadingData(false); // Admin user, no further data to load for this dashboard itself
+        fetchComboOffers();
       }
     }
-  }, [sessionLoading, user, isAdmin, navigate]);
+  }, [sessionLoading, user, isAdmin, navigate, fetchComboOffers]);
+
+  useEffect(() => {
+    if (selectedOffer) {
+      editForm.reset({
+        name: selectedOffer.name,
+        description: selectedOffer.description || '',
+        discountType: selectedOffer.discount_type,
+        discountValue: selectedOffer.discount_value,
+        startDate: new Date(selectedOffer.start_date),
+        endDate: new Date(selectedOffer.end_date),
+      });
+    }
+  }, [selectedOffer, editForm]);
+
+  const handleCreateOffer = async (values: z.infer<typeof createOfferFormSchema>) => {
+    if (!user) {
+      showError('You must be logged in to create a combo offer.');
+      return;
+    }
+    setIsSubmitting(true);
+
+    try {
+      const { error: offerError } = await supabase
+        .from('combo_offers')
+        .insert({
+          name: values.offerName,
+          description: values.description,
+          discount_type: values.discountType,
+          discount_value: values.discountValue,
+          start_date: format(values.startDate, 'yyyy-MM-dd'),
+          end_date: format(values.endDate, 'yyyy-MM-dd'),
+          created_by: user.id,
+        });
+
+      if (offerError) throw offerError;
+
+      showSuccess('Combo offer created successfully!');
+      createForm.reset({
+        offerName: '',
+        description: '',
+        discountType: 'percentage',
+        discountValue: 0,
+        startDate: new Date(),
+        endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
+      });
+      fetchComboOffers();
+    } catch (error: any) {
+      console.error('Error creating combo offer:', error);
+      showError(`Failed to create combo offer: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEditOffer = (offer: ComboOffer) => {
+    setSelectedOffer(offer);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateOffer = async (values: z.infer<typeof editOfferFormSchema>) => {
+    if (!selectedOffer) return;
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('combo_offers')
+        .update({
+          name: values.name,
+          description: values.description,
+          discount_type: values.discountType,
+          discount_value: values.discountValue,
+          start_date: format(values.startDate, 'yyyy-MM-dd'),
+          end_date: format(values.endDate, 'yyyy-MM-dd'),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedOffer.id);
+
+      if (error) throw error;
+
+      showSuccess('Combo offer updated successfully!');
+      setIsEditDialogOpen(false);
+      fetchComboOffers();
+    } catch (error: any) {
+      console.error('Error updating combo offer:', error);
+      showError(`Failed to update combo offer: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteOffer = async (offerId: string) => {
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('combo_offers')
+        .delete()
+        .eq('id', offerId);
+
+      if (error) throw error;
+
+      showSuccess('Combo offer deleted successfully!');
+      fetchComboOffers();
+    } catch (error: any) {
+      console.error('Error deleting combo offer:', error);
+      showError(`Failed to delete combo offer: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleWhatsAppMessageSent = () => {
-    setWhatsappRefreshKey(prev => prev + 1); // Increment key to refresh SentWhatsAppOffersCard
+    setWhatsappRefreshKey(prev => prev + 1);
   };
 
   if (sessionLoading || loadingData) {
@@ -46,7 +255,7 @@ const ComboOffersDashboard = () => {
   }
 
   if (!isAdmin) {
-    return null; // Should be redirected by useEffect
+    return null;
   }
 
   return (
@@ -56,24 +265,171 @@ const ComboOffersDashboard = () => {
           <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
         </Button>
         <h1 className="text-2xl sm:text-3xl font-bold text-primary">Combo Offer Management</h1>
-        <div className="w-fit"></div> {/* Spacer for alignment */}
+        <div className="w-fit"></div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6 flex-grow"> {/* Added flex-grow */}
-        {/* Card 1: Create New Combo Offer */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
+        {/* Card 1: Create New Combo Offer (Inline Form) */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-purple-600 dark:bg-purple-800 text-white rounded-t-lg p-4">
             <CardTitle className="text-xl font-semibold flex items-center gap-2">
               <PlusCircle className="h-6 w-6" /> Create New Offer
             </CardTitle>
             <CardDescription className="text-purple-100 dark:text-purple-200">
-              Define a new combo offer with products and discounts.
+              Define a new combo offer with details.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-4 flex-grow flex items-center justify-center">
-            <Button onClick={() => navigate('/create-combo-offer')} className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-              <Gift className="h-5 w-5 mr-2" /> Create Combo Offer
-            </Button>
+          <CardContent className="p-6 flex-grow">
+            <Form {...createForm}>
+              <form onSubmit={createForm.handleSubmit(handleCreateOffer)} className="space-y-4">
+                <FormField
+                  control={createForm.control}
+                  name="offerName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Offer Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Summer Sales Combo" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={createForm.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="e.g., Special discount on selected products for summer." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={createForm.control}
+                  name="discountType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount Type</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select discount type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="percentage">Percentage (%)</SelectItem>
+                          <SelectItem value="fixed_amount">Fixed Amount (₹)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={createForm.control}
+                  name="discountValue"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount Value</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="e.g., 10 or 500" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={createForm.control}
+                    name="startDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Start Date</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "PPP")
+                                ) : (
+                                  <span>Pick a date</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={createForm.control}
+                    name="endDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>End Date</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "PPP")
+                                ) : (
+                                  <span>Pick a date</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    'Create Combo Offer'
+                  )}
+                </Button>
+              </form>
+            </Form>
           </CardContent>
         </Card>
 
@@ -83,7 +439,244 @@ const ComboOffersDashboard = () => {
         {/* Card 3: Manage Sent WhatsApp Offers */}
         <SentWhatsAppOffersCard refreshKey={whatsappRefreshKey} />
       </div>
+
+      {/* Section for Existing Combo Offers */}
+      <Card className="bg-card text-card-foreground shadow-lg mb-6">
+        <CardHeader className="bg-blue-600 dark:bg-blue-800 text-white rounded-t-lg p-4">
+          <CardTitle className="text-xl font-semibold">Existing Combo Offers</CardTitle>
+          <CardDescription className="text-blue-100 dark:text-blue-200">
+            View, edit, or delete your active and past combo offers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4">
+          {comboOffersList.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No combo offers created yet.</p>
+          ) : (
+            <div className="max-h-[400px] overflow-y-auto border rounded-md">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="text-muted-foreground">Offer Name</TableHead>
+                    <TableHead className="text-muted-foreground">Description</TableHead>
+                    <TableHead className="text-muted-foreground">Discount</TableHead>
+                    <TableHead className="text-muted-foreground">Validity</TableHead>
+                    <TableHead className="text-muted-foreground">Created At</TableHead>
+                    <TableHead className="text-muted-foreground text-center">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {comboOffersList.map((offer) => (
+                    <TableRow key={offer.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{offer.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{offer.description || 'N/A'}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {offer.discount_type === 'percentage' ? `${offer.discount_value}%` : `₹${offer.discount_value.toFixed(2)}`}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {format(new Date(offer.start_date), 'PPP')} - {format(new Date(offer.end_date), 'PPP')}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(offer.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex justify-center gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditOffer(offer)} title="Edit Offer">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" title="Delete Offer" disabled={isSubmitting}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action cannot be undone. This will permanently delete the combo offer "{offer.name}".
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteOffer(offer.id)} disabled={isSubmitting}>
+                                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <MadeWithDyad />
+
+      {/* Edit Offer Dialog */}
+      {selectedOffer && (
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Edit Combo Offer</DialogTitle>
+              <DialogDescription>
+                Make changes to the combo offer details.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...editForm}>
+              <form onSubmit={editForm.handleSubmit(handleUpdateOffer)} className="grid gap-4 py-4">
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Offer Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="discountType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount Type</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="percentage">Percentage (%)</SelectItem>
+                          <SelectItem value="fixed_amount">Fixed Amount (₹)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="discountValue"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount Value</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={editForm.control}
+                    name="startDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Start Date</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "PPP")
+                                ) : (
+                                  <span>Pick a date</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editForm.control}
+                    name="endDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>End Date</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "PPP")
+                                ) : (
+                                  <span>Pick a date</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <DialogFooter>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };
