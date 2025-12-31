@@ -127,7 +127,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     if (selectedOfferId) {
       const offer = comboOffers.find(o => o.id === selectedOfferId);
       if (offer) {
-        const message = `Hello Dealer,\n\n*${companyName || 'Our Company'}* is excited to announce a new Combo Offer: *"${offer.name}"*!\n\n${offer.description ? `Details: ${offer.description}\n\n` : ''}Contact your sales person for more details.\n\nThank you!`;
+        const message = `Hello Dealer,\n\n*${companyName || 'Our Company'}* is excited to announce a new Combo Offer: *"${offer.name}"*!\n\n${offer.description ? `Details: ${offer.description}\n\n` : ''}\n\nThank you!`; // Removed the line
         setWhatsappMessage(message);
       }
     } else {
