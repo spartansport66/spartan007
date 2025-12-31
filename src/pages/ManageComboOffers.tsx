@@ -325,120 +325,120 @@ const ManageComboOffers = () => {
   const dealerOptions = allDealers.map(d => ({ value: d.id, label: `${d.name} (${d.phone || 'No Phone'})`, phone: d.phone || '' }));
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
-      <div className="w-full max-w-full">
-        <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="mb-6 flex items-center gap-2">
+    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col"> {/* Changed to flex-col */}
+      <div className="flex justify-between items-center mb-6">
+        <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
         </Button>
+        <h1 className="text-2xl sm:text-3xl font-bold text-primary">Combo Offer Management</h1>
+        <div className="w-fit"></div> {/* Spacer for alignment */}
+      </div>
 
-        <h1 className="text-2xl sm:text-3xl font-bold text-primary text-center mb-6">Combo Offer Management</h1>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
-          {/* Card 1: Create New Combo Offer */}
-          <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
-            <CardHeader className="bg-purple-600 dark:bg-purple-800 text-white rounded-t-lg p-4">
-              <CardTitle className="text-xl font-semibold flex items-center gap-2">
-                <PlusCircle className="h-6 w-6" /> Create New Offer
-              </CardTitle>
-              <CardDescription className="text-purple-100 dark:text-purple-200">
-                Define a new combo offer with products and discounts.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 flex-grow flex items-center justify-center">
-              <Button onClick={() => navigate('/create-combo-offer')} className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                <Gift className="h-5 w-5 mr-2" /> Create Combo Offer
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Card 2: Send WhatsApp Offer */}
-          <SendWhatsAppOfferCard onMessageSent={handleWhatsAppMessageSent} />
-
-          {/* Card 3: Manage Sent WhatsApp Offers */}
-          <SentWhatsAppOffersCard refreshKey={whatsappRefreshKey} />
-        </div>
-
-        {/* Card 4: Manage Existing Combo Offers (Table) */}
-        <Card className="bg-card text-card-foreground shadow-lg">
-          <CardHeader className="bg-pink-600 dark:bg-pink-800 text-white rounded-t-lg p-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
+        {/* Card 1: Create New Combo Offer */}
+        <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
+          <CardHeader className="bg-purple-600 dark:bg-purple-800 text-white rounded-t-lg p-4">
             <CardTitle className="text-xl font-semibold flex items-center gap-2">
-              <Gift className="h-6 w-6" /> Existing Combo Offers
+              <PlusCircle className="h-6 w-6" /> Create New Offer
             </CardTitle>
-            <CardDescription className="text-pink-100 dark:text-pink-200">
-              View, edit, or delete existing combo offers.
+            <CardDescription className="text-purple-100 dark:text-purple-200">
+              Define a new combo offer with products and discounts.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-4">
-            <div className="overflow-x-auto">
-              {comboOffers.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No combo offers found. Create a new one!</p>
-              ) : (
-                <div className="max-h-[500px] overflow-y-auto border rounded-md">
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-background z-10">
-                      <TableRow className="bg-muted hover:bg-muted/90">
-                        <TableHead className="text-muted-foreground">Offer Name</TableHead>
-                        <TableHead className="text-muted-foreground">Discount</TableHead>
-                        <TableHead className="text-muted-foreground">Validity</TableHead>
-                        <TableHead className="text-muted-foreground">Products</TableHead>
-                        <TableHead className="text-muted-foreground">Assigned Dealers</TableHead>
-                        <TableHead className="text-muted-foreground text-center">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {comboOffers.map((offer) => (
-                        <TableRow key={offer.id} className="hover:bg-accent/50">
-                          <TableCell className="font-medium text-foreground">{offer.name}</TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {offer.discount_type === 'percentage' ? `${offer.discount_value}%` : `₹${offer.discount_value.toFixed(2)}`}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {new Date(offer.start_date).toLocaleDateString()} - {new Date(offer.end_date).toLocaleDateString()}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {offer.products.map(p => p.name).join(', ') || 'N/A'}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {offer.dealers.map(d => d.name).join(', ') || 'N/A'}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex justify-center gap-2">
-                              <Button variant="ghost" size="icon" onClick={() => handleEdit(offer)} title="Edit Offer">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" title="Delete Offer" disabled={isSubmitting}>
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This action cannot be undone. This will permanently delete the combo offer.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDelete(offer.id)} disabled={isSubmitting}>
-                                      {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </div>
+          <CardContent className="p-4 flex-grow flex items-center justify-center">
+            <Button onClick={() => navigate('/create-combo-offer')} className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+              <Gift className="h-5 w-5 mr-2" /> Create Combo Offer
+            </Button>
           </CardContent>
         </Card>
+
+        {/* Card 2: Send WhatsApp Offer */}
+        <SendWhatsAppOfferCard onMessageSent={handleWhatsAppMessageSent} />
+
+        {/* Card 3: Manage Sent WhatsApp Offers */}
+        <SentWhatsAppOffersCard refreshKey={whatsappRefreshKey} />
       </div>
+
+      {/* Card 4: Manage Existing Combo Offers (Table) */}
+      <Card className="bg-card text-card-foreground shadow-lg flex-grow"> {/* Added flex-grow */}
+        <CardHeader className="bg-pink-600 dark:bg-pink-800 text-white rounded-t-lg p-4">
+          <CardTitle className="text-xl font-semibold flex items-center gap-2">
+            <Gift className="h-6 w-6" /> Existing Combo Offers
+          </CardTitle>
+          <CardDescription className="text-pink-100 dark:text-pink-200">
+            View, edit, or delete existing combo offers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="overflow-x-auto">
+            {comboOffers.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No combo offers found. Create a new one!</p>
+            ) : (
+              <div className="max-h-[500px] overflow-y-auto border rounded-md">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background z-10">
+                    <TableRow className="bg-muted hover:bg-muted/90">
+                      <TableHead className="text-muted-foreground">Offer Name</TableHead>
+                      <TableHead className="text-muted-foreground">Discount</TableHead>
+                      <TableHead className="text-muted-foreground">Validity</TableHead>
+                      <TableHead className="text-muted-foreground">Products</TableHead>
+                      <TableHead className="text-muted-foreground">Assigned Dealers</TableHead>
+                      <TableHead className="text-muted-foreground text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {comboOffers.map((offer) => (
+                      <TableRow key={offer.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{offer.name}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {offer.discount_type === 'percentage' ? `${offer.discount_value}%` : `₹${offer.discount_value.toFixed(2)}`}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(offer.start_date).toLocaleDateString()} - {new Date(offer.end_date).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {offer.products.map(p => p.name).join(', ') || 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {offer.dealers.map(d => d.name).join(', ') || 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(offer)} title="Edit Offer">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" title="Delete Offer" disabled={isSubmitting}>
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete the combo offer.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDelete(offer.id)} disabled={isSubmitting}>
+                                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
       <MadeWithDyad />
 
       {selectedOffer && (
