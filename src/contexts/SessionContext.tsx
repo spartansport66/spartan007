@@ -1,5 +1,4 @@
 "use client";
-
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { Session, User, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,7 +21,6 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userType, setUserType] = useState<string | null>(null);
-
   const prevUserIdRef = useRef<string | undefined>(undefined);
   const prevSessionIdRef = useRef<string | undefined>(undefined);
 
@@ -55,13 +53,14 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         showError(`An unexpected error occurred while fetching your profile: ${profileFetchError.message}`);
       }
     }
+
     console.log('SessionContext: Profile data fetched: isAdmin', fetchedIsAdmin, 'userType', fetchedUserType);
     return { isAdmin: fetchedIsAdmin, userType: fetchedUserType };
   };
 
   useEffect(() => {
     console.log('SessionContextProvider: useEffect for auth state change listener mounted.');
-
+    
     const handleSessionChange = async (event: AuthChangeEvent, currentSession: Session | null) => {
       console.log('SessionContext: Auth event received:', event, 'Session:', currentSession);
       setLoading(true); // Start loading for any auth change event
@@ -78,7 +77,6 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       } else {
         const newUserId = currentSession?.user?.id;
         const newSessionId = currentSession?.access_token;
-
         let profileData = { isAdmin: false, userType: null };
 
         if (newSessionId !== prevSessionIdRef.current) {
@@ -99,7 +97,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         } else {
           console.log('SessionContext: No user in session, resetting profile states.');
         }
-        
+
         setIsAdmin(profileData.isAdmin);
         setUserType(profileData.userType);
         console.log('SessionContext: Final state update in handleSessionChange: isAdmin', profileData.isAdmin, 'userType', profileData.userType);
