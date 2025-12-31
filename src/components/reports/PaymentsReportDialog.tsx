@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Search, Printer, MessageCircle, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
-import { jsPDF } from 'jspdf'; // Changed to named import
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable'; // Explicitly import autoTable
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog'; // Import UpdatePaymentDialog
 
 interface PaymentReportData {
@@ -233,7 +233,8 @@ Thank you!`;
       console.log('Payments Report - Table Columns:', tableColumn);
       console.log('Payments Report - Table Rows:', tableRows);
 
-      (doc as any).autoTable({
+      // Explicitly call autoTable as a function on the doc instance
+      autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
         startY: 30,
