@@ -67,7 +67,7 @@ const DispatchedOrdersCard: React.FC = () => {
         setAllDealers(dealersData.map(d => ({ value: d.id, label: d.name })));
       }
 
-      // Build the query for dispatched orders
+      // Build the base query for dispatched orders
       let query = supabase
         .from('orders')
         .select(`
@@ -80,21 +80,29 @@ const DispatchedOrdersCard: React.FC = () => {
           bill_no,
           dealers (id, name)
         `)
-        .eq('dispatched', true)
+        .eq('dispatched', true) // Always filter for dispatched orders
         .order('dispatch_date', { ascending: false });
 
-      // Apply filters
+      const filterConditions: string[] = [];
+
       if (filterOrderNumber) {
-        query = query.eq('order_number', parseInt(filterOrderNumber));
+        const orderNum = parseInt(filterOrderNumber);
+        if (!isNaN(orderNum)) {
+          filterConditions.push(`order_number.eq.${orderNum}`);
+        }
       }
       if (filterDealerId) {
-        query = query.eq('dealer_id', filterDealerId);
+        filterConditions.push(`dealer_id.eq.${filterDealerId}`);
       }
       if (filterDispatchDate) {
-        // Filter by date (assuming filterDispatchDate is YYYY-MM-DD)
         const startOfDay = `${filterDispatchDate}T00:00:00.000Z`;
         const endOfDay = `${filterDispatchDate}T23:59:59.999Z`;
-        query = query.gte('dispatch_date', startOfDay).lte('dispatch_date', endOfDay);
+        filterConditions.push(`and(dispatch_date.gte.${startOfDay},dispatch_date.lte.${endOfDay})`);
+      }
+
+      // Apply OR logic if multiple filters are active
+      if (filterConditions.length > 0) {
+        query = query.or(filterConditions.join(','));
       }
 
       const { data: ordersData, error: ordersError } = await query;
