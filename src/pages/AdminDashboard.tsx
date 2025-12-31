@@ -18,6 +18,7 @@ import OrdersAwaitingDispatchReportDialog from '@/components/reports/OrdersAwait
 import DispatchedOrdersReportDialog from '@/components/reports/DispatchedOrdersReportDialog';
 import SalesPersonPerformanceReportDialog from '@/components/reports/SalesPersonPerformanceReportDialog';
 import DealerReportDialog from '@/components/reports/DealerReportDialog';
+import SalesPersonPerformanceOverviewCard from '@/components/SalesPersonPerformanceOverviewCard'; // New import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -260,6 +261,7 @@ const AdminDashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
         <PaymentCard />
       </div>
 
