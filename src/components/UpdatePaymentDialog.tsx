@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -38,18 +37,12 @@ const formSchema = z.object({
   // Cheque/DD fields
   chequeDdNo: z.string().optional(),
   chequeDdDate: z.string().optional(),
-  // Card fields
-  cardNumber: z.string().optional(),
-  cardHolderName: z.string().optional(),
-  expiryDate: z.string().optional(),
-  cvv: z.string().optional(),
-  // Bank Transfer fields
-  bankName: z.string().optional(),
-  accountNumber: z.string().optional(),
-  ifscCode: z.string().optional(),
-  // UPI fields
-  upiId: z.string().optional(),
-  transactionId: z.string().optional(), // Common for Bank Transfer and UPI
+  // Card fields (only transaction ID)
+  cardTransactionId: z.string().optional(),
+  // Bank Transfer fields (only transaction ID)
+  bankTransactionId: z.string().optional(),
+  // UPI fields (only transaction ID)
+  upiTransactionId: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.paymentMethod === 'Cheque/DD') {
     if (!data.chequeDdNo) {
@@ -67,18 +60,29 @@ const formSchema = z.object({
       });
     }
   } else if (data.paymentMethod === 'Card') {
-    if (!data.cardNumber) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Card Number is required.', path: ['cardNumber'] });
-    if (!data.cardHolderName) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Card Holder Name is required.', path: ['cardHolderName'] });
-    if (!data.expiryDate) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Expiry Date is required.', path: ['expiryDate'] });
-    if (!data.cvv) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'CVV is required.', path: ['cvv'] });
+    if (!data.cardTransactionId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Transaction ID is required for Card payment.',
+        path: ['cardTransactionId'],
+      });
+    }
   } else if (data.paymentMethod === 'Bank Transfer') {
-    if (!data.bankName) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Bank Name is required.', path: ['bankName'] });
-    if (!data.accountNumber) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Account Number is required.', path: ['accountNumber'] });
-    if (!data.ifscCode) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'IFSC Code is required.', path: ['ifscCode'] });
-    if (!data.transactionId) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Transaction ID is required.', path: ['transactionId'] });
+    if (!data.bankTransactionId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Transaction ID is required for Bank Transfer.',
+        path: ['bankTransactionId'],
+      });
+    }
   } else if (data.paymentMethod === 'UPI') {
-    if (!data.upiId) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'UPI ID is required.', path: ['upiId'] });
-    if (!data.transactionId) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Transaction ID is required.', path: ['transactionId'] });
+    if (!data.upiTransactionId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Transaction ID is required for UPI payment.',
+        path: ['upiTransactionId'],
+      });
+    }
   }
 });
 
@@ -86,7 +90,6 @@ const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/D
 
 const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate, isOpen, onOpenChange, onPaymentUpdated }) => {
   const [loading, setLoading] = useState(false);
-
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -94,15 +97,9 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
       amount: 0,
       chequeDdNo: '',
       chequeDdDate: '',
-      cardNumber: '',
-      cardHolderName: '',
-      expiryDate: '',
-      cvv: '',
-      bankName: '',
-      accountNumber: '',
-      ifscCode: '',
-      upiId: '',
-      transactionId: '',
+      cardTransactionId: '',
+      bankTransactionId: '',
+      upiTransactionId: '',
     },
   });
 
@@ -113,15 +110,9 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         amount: orderToUpdate.total_amount,
         chequeDdNo: '',
         chequeDdDate: '',
-        cardNumber: '',
-        cardHolderName: '',
-        expiryDate: '',
-        cvv: '',
-        bankName: '',
-        accountNumber: '',
-        ifscCode: '',
-        upiId: '',
-        transactionId: '',
+        cardTransactionId: '',
+        bankTransactionId: '',
+        upiTransactionId: '',
       });
     }
   }, [orderToUpdate, isOpen, form]);
@@ -135,7 +126,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         .from('orders')
         .update({ payment_status: 'paid' })
         .eq('id', orderToUpdate.id);
-
+      
       if (orderUpdateError) {
         throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
       }
@@ -152,15 +143,18 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
           // Conditional fields based on payment method
           cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
           cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
-          card_number: values.paymentMethod === 'Card' ? values.cardNumber : null,
-          card_holder_name: values.paymentMethod === 'Card' ? values.cardHolderName : null,
-          expiry_date: values.paymentMethod === 'Card' ? values.expiryDate : null,
-          cvv: values.paymentMethod === 'Card' ? values.cvv : null,
-          bank_name: values.paymentMethod === 'Bank Transfer' ? values.bankName : null,
-          account_number: values.paymentMethod === 'Bank Transfer' ? values.accountNumber : null,
-          ifsc_code: values.paymentMethod === 'Bank Transfer' ? values.ifscCode : null,
-          upi_id: values.paymentMethod === 'UPI' ? values.upiId : null,
-          transaction_id: (values.paymentMethod === 'Bank Transfer' || values.paymentMethod === 'UPI') ? values.transactionId : null,
+          card_number: null, // Not collecting card details anymore
+          card_holder_name: null, // Not collecting card details anymore
+          expiry_date: null, // Not collecting card details anymore
+          cvv: null, // Not collecting card details anymore
+          bank_name: null, // Not collecting bank details anymore
+          account_number: null, // Not collecting bank details anymore
+          ifsc_code: null, // Not collecting bank details anymore
+          upi_id: null, // Not collecting UPI ID anymore
+          transaction_id: 
+            values.paymentMethod === 'Card' ? values.cardTransactionId :
+            values.paymentMethod === 'Bank Transfer' ? values.bankTransactionId :
+            values.paymentMethod === 'UPI' ? values.upiTransactionId : null,
         });
 
       if (paymentInsertError) {
@@ -206,7 +200,6 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                   <Input value={new Date(orderToUpdate.payment_due_date).toLocaleDateString()} readOnly className="bg-muted" />
                 </div>
               )}
-
               <FormField
                 control={form.control}
                 name="paymentMethod"
@@ -231,7 +224,6 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
                 name="amount"
@@ -245,7 +237,6 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                   </FormItem>
                 )}
               />
-
               {selectedPaymentMethod === 'Cheque/DD' && (
                 <>
                   <FormField
@@ -276,154 +267,51 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                   />
                 </>
               )}
-
               {selectedPaymentMethod === 'Card' && (
-                <>
-                  <FormField
-                    control={form.control}
-                    name="cardNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label htmlFor="cardNumber">Card Number</Label>
-                        <FormControl>
-                          <Input type="text" placeholder="e.g., XXXX XXXX XXXX 1234" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="cardHolderName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label htmlFor="cardHolderName">Card Holder Name</Label>
-                        <FormControl>
-                          <Input type="text" placeholder="e.g., John Doe" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="expiryDate"
-                      render={({ field }) => (
-                        <FormItem>
-                          <Label htmlFor="expiryDate">Expiry Date (MM/YY)</Label>
-                          <FormControl>
-                            <Input type="text" placeholder="MM/YY" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="cvv"
-                      render={({ field }) => (
-                        <FormItem>
-                          <Label htmlFor="cvv">CVV</Label>
-                          <FormControl>
-                            <Input type="text" placeholder="XXX" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </>
+                <FormField
+                  control={form.control}
+                  name="cardTransactionId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label htmlFor="cardTransactionId">Transaction ID</Label>
+                      <FormControl>
+                        <Input type="text" placeholder="e.g., TXN123456789" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-
               {selectedPaymentMethod === 'Bank Transfer' && (
-                <>
-                  <FormField
-                    control={form.control}
-                    name="bankName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label htmlFor="bankName">Bank Name</Label>
-                        <FormControl>
-                          <Input type="text" placeholder="e.g., State Bank of India" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="accountNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label htmlFor="accountNumber">Account Number</Label>
-                        <FormControl>
-                          <Input type="text" placeholder="e.g., 123456789012" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="ifscCode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label htmlFor="ifscCode">IFSC Code</Label>
-                        <FormControl>
-                          <Input type="text" placeholder="e.g., SBIN0000001" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="transactionId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label htmlFor="transactionId">Transaction ID</Label>
-                        <FormControl>
-                          <Input type="text" placeholder="e.g., TXN123456789" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </>
+                <FormField
+                  control={form.control}
+                  name="bankTransactionId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label htmlFor="bankTransactionId">Transaction ID</Label>
+                      <FormControl>
+                        <Input type="text" placeholder="e.g., TXN123456789" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-
               {selectedPaymentMethod === 'UPI' && (
-                <>
-                  <FormField
-                    control={form.control}
-                    name="upiId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label htmlFor="upiId">UPI ID</Label>
-                        <FormControl>
-                          <Input type="text" placeholder="e.g., user@bank" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="transactionId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label htmlFor="transactionId">Transaction ID</Label>
-                        <FormControl>
-                          <Input type="text" placeholder="e.g., UPI123456789" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </>
+                <FormField
+                  control={form.control}
+                  name="upiTransactionId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label htmlFor="upiTransactionId">Transaction ID</Label>
+                      <FormControl>
+                        <Input type="text" placeholder="e.g., UPI123456789" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-
               <DialogFooter>
                 <Button type="submit" disabled={loading}>
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Record Payment'}
