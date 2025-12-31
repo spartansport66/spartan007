@@ -230,6 +230,9 @@ Thank you!`;
         new Date(payment.order_date).toLocaleDateString(),
       ]);
 
+      console.log('Payments Report - Table Columns:', tableColumn);
+      console.log('Payments Report - Table Rows:', tableRows);
+
       (doc as any).autoTable({
         head: [tableColumn],
         body: tableRows,
