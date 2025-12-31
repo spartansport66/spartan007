@@ -26,8 +26,8 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const prevUserIdRef = useRef<string | undefined>(undefined);
   const prevSessionIdRef = useRef<string | undefined>(undefined);
 
-  // Helper function to fetch and set profile data
-  const fetchAndSetProfile = async (userId: string | undefined) => {
+  // Helper function to fetch and return profile data
+  const fetchProfileData = async (userId: string | undefined): Promise<{ isAdmin: boolean; userType: string | null }> => {
     let fetchedIsAdmin = false;
     let fetchedUserType: string | null = null;
 
@@ -55,9 +55,8 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         showError(`An unexpected error occurred while fetching your profile: ${profileFetchError.message}`);
       }
     }
-    setIsAdmin(fetchedIsAdmin);
-    setUserType(fetchedUserType);
-    console.log('SessionContext: isAdmin set to', fetchedIsAdmin, 'userType set to', fetchedUserType);
+    console.log('SessionContext: Profile data fetched: isAdmin', fetchedIsAdmin, 'userType', fetchedUserType);
+    return { isAdmin: fetchedIsAdmin, userType: fetchedUserType };
   };
 
   useEffect(() => {
@@ -74,10 +73,13 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         setUserType(null);
         prevUserIdRef.current = undefined;
         prevSessionIdRef.current = undefined;
-        console.log('SessionContext: SIGNED_OUT event processed.');
+        console.log('SessionContext: SIGNED_OUT event processed. Setting loading to false.');
+        setLoading(false);
       } else {
         const newUserId = currentSession?.user?.id;
         const newSessionId = currentSession?.access_token;
+
+        let profileData = { isAdmin: false, userType: null };
 
         if (newSessionId !== prevSessionIdRef.current) {
           setSession(currentSession);
@@ -89,21 +91,21 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
           setUser(currentSession?.user || null);
           prevUserIdRef.current = newUserId;
           console.log('SessionContext: User updated.');
-          await fetchAndSetProfile(newUserId); // Fetch profile for new user
+          profileData = await fetchProfileData(newUserId); // Await profile data
+        } else if (currentSession?.user) {
+          // If user ID is unchanged but session might have refreshed, re-fetch profile to ensure up-to-date roles
+          console.log('SessionContext: User ID unchanged, re-fetching profile for robustness.');
+          profileData = await fetchProfileData(currentSession.user.id);
         } else {
-          console.log('SessionContext: User ID unchanged. Skipping profile fetch.');
-          // If user ID is unchanged, but session might have refreshed, ensure isAdmin/userType are still correct
-          // This might be redundant if profile is always fetched on user change, but good for robustness.
-          if (currentSession?.user) {
-            await fetchAndSetProfile(currentSession.user.id);
-          } else {
-            setIsAdmin(false);
-            setUserType(null);
-          }
+          console.log('SessionContext: No user in session, resetting profile states.');
         }
+        
+        setIsAdmin(profileData.isAdmin);
+        setUserType(profileData.userType);
+        console.log('SessionContext: Final state update in handleSessionChange: isAdmin', profileData.isAdmin, 'userType', profileData.userType);
+        setLoading(false); // End loading AFTER all states are updated
+        console.log('SessionContext: Auth event processed. setLoading(false).');
       }
-      setLoading(false); // End loading after all state updates
-      console.log('SessionContext: Auth event processed. setLoading(false).');
     };
 
     const { data: authListener } = supabase.auth.onAuthStateChange(handleSessionChange);
@@ -117,8 +119,11 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       prevSessionIdRef.current = initialSession?.access_token;
       prevUserIdRef.current = initialSession?.user?.id;
 
-      await fetchAndSetProfile(initialSession?.user?.id); // Fetch profile for initial user
-      setLoading(false); // End loading after initial session and profile are set
+      const profileData = await fetchProfileData(initialSession?.user?.id); // Await profile data
+      setIsAdmin(profileData.isAdmin);
+      setUserType(profileData.userType);
+      console.log('SessionContext: Initial getSession processed. Final state: isAdmin', profileData.isAdmin, 'userType', profileData.userType);
+      setLoading(false); // End loading AFTER all states are updated
       console.log('SessionContext: Initial getSession processed. setLoading(false).');
     }).catch(error => {
       console.error('SessionContext: Error during initial getSession promise:', error);
@@ -130,7 +135,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       console.log('SessionContext: Cleaning up auth state change listener.');
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, []); // Dependencies are empty, so it runs once on mount
 
   return (
     <SessionContext.Provider value={{ session, user, loading, isAdmin, userType }}>
