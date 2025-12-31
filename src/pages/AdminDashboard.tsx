@@ -213,15 +213,7 @@ const AdminDashboard = () => {
         <div className="flex justify-end gap-2 sm:gap-4">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/create-combo-offer')} size="icon" variant="default" className="bg-purple-600 hover:bg-purple-700 text-white">
-                <Gift className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Create Combo Offer</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/manage-combo-offers')} size="icon" variant="default" className="bg-pink-600 hover:bg-pink-700 text-white">
+              <Button onClick={() => navigate('/combo-offers-dashboard')} size="icon" variant="default" className="bg-purple-600 hover:bg-purple-700 text-white">
                 <Gift className="h-4 w-4" />
               </Button>
             </TooltipTrigger>

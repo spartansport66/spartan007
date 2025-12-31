@@ -16,7 +16,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import ProductManagementConsole from "./pages/ProductManagementConsole";
 import BulkAddProducts from "./pages/BulkAddProducts";
 import CreateComboOffer from "./pages/CreateComboOffer";
-import ManageComboOffers from "./pages/ManageComboOffers"; // New import
+import ComboOffersDashboard from "./pages/ComboOffersDashboard"; // Updated import
 import { SessionContextProvider } from "./contexts/SessionContext";
 
 const queryClient = new QueryClient();
@@ -41,7 +41,7 @@ const App = () => (
             <Route path="/product-management-console" element={<ProductManagementConsole />} />
             <Route path="/bulk-add-products" element={<BulkAddProducts />} />
             <Route path="/create-combo-offer" element={<CreateComboOffer />} />
-            <Route path="/manage-combo-offers" element={<ManageComboOffers />} /> {/* New route */}
+            <Route path="/combo-offers-dashboard" element={<ComboOffersDashboard />} /> {/* Updated route */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
