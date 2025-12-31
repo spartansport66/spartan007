@@ -281,7 +281,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                       placeholder="e.g., Mumbai"
                       value={filterCity}
                       onChange={(e) => setFilterCity(e.target.value)}
-                      disabled={isSending} {/* Only disable during sending */}
+                      disabled={isSending} /* Only disable during sending */
                     />
                   </div>
                   <div className="flex-1 min-w-[120px]">
@@ -291,7 +291,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                       placeholder="e.g., Maharashtra"
                       value={filterState}
                       onChange={(e) => setFilterState(e.target.value)}
-                      disabled={isSending} {/* Only disable during sending */}
+                      disabled={isSending} /* Only disable during sending */
                     />
                   </div>
                   <Button onClick={handleClearFilters} variant="outline" disabled={isSending}>
