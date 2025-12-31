@@ -17,7 +17,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
 
   // Overview metrics states
   const [totalPendingAmountOverview, setTotalPendingAmountOverview] = useState<number>(0);
-  const [upcoming7DaysAmountOverview, setUpcoming7DaysAmountOverview] = useState<number>(0);
+  const [todaysDueAmountOverview, setTodaysDueAmountOverview] = useState<number>(0); // Changed state name
   const [todayReceivedAmountOverview, setTodayReceivedAmountOverview] = useState<number>(0);
 
   const getTodayDateISO = () => {
@@ -26,26 +26,17 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
     return today.toISOString();
   };
 
-  const getTomorrowDateISO = () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    return tomorrow.toISOString();
-  };
-
-  const getSevenDaysFromTomorrowISO = () => {
-    const sevenDaysFromTomorrow = new Date();
-    sevenDaysFromTomorrow.setDate(sevenDaysFromTomorrow.getDate() + 7);
-    sevenDaysFromTomorrow.setHours(23, 59, 59, 999);
-    return sevenDaysFromTomorrow.toISOString();
+  const getEndOfTodayDateISO = () => { // New helper function
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return today.toISOString();
   };
 
   const fetchPaymentOverviewData = useCallback(async () => {
     setOverviewLoading(true);
     try {
       const todayISO = getTodayDateISO();
-      const tomorrowISO = getTomorrowDateISO();
-      const sevenDaysFromTomorrowISO = getSevenDaysFromTomorrowISO();
+      const endOfTodayISO = getEndOfTodayDateISO(); // Use end of today
 
       // 1. Fetch Total Pending Amount (all pending orders)
       const { data: allPendingOrders, error: allPendingError } = await supabase
@@ -57,17 +48,17 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       const totalPending = (allPendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
       setTotalPendingAmountOverview(totalPending);
 
-      // 2. Fetch Upcoming Payments (within next 7 days, excluding today)
-      const { data: upcoming7DaysOrders, error: upcoming7DaysError } = await supabase
+      // 2. Fetch Today's Due Payments (payments due today)
+      const { data: todaysDueOrders, error: todaysDueError } = await supabase
         .from('orders')
         .select('total_amount')
         .eq('payment_status', 'pending')
-        .gte('payment_due_date', tomorrowISO)
-        .lte('payment_due_date', sevenDaysFromTomorrowISO);
+        .gte('payment_due_date', todayISO)
+        .lte('payment_due_date', endOfTodayISO); // Filter for today's date range
 
-      if (upcoming7DaysError) throw upcoming7DaysError;
-      const upcoming7Days = (upcoming7DaysOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
-      setUpcoming7DaysAmountOverview(upcoming7Days);
+      if (todaysDueError) throw todaysDueError;
+      const todaysDue = (todaysDueOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
+      setTodaysDueAmountOverview(todaysDue); // Set to new state
 
       // 3. Fetch Today Received Payments
       const { data: todayPayments, error: todayPaymentsError } = await supabase
@@ -84,7 +75,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       console.error('Error fetching payment overview:', error.message);
       showError('Failed to load payment overview data.');
       setTotalPendingAmountOverview(0);
-      setUpcoming7DaysAmountOverview(0);
+      setTodaysDueAmountOverview(0); // Reset new state
       setTodayReceivedAmountOverview(0);
     } finally {
       setOverviewLoading(false);
@@ -121,9 +112,9 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-orange-600" />
-                <span className="text-muted-foreground">Upcoming (7 Days):</span>
+                <span className="text-muted-foreground">Today's Due:</span> {/* Changed label */}
               </div>
-              <span className="text-lg font-bold text-orange-600">₹{upcoming7DaysAmountOverview.toFixed(2)}</span>
+              <span className="text-lg font-bold text-orange-600">₹{todaysDueAmountOverview.toFixed(2)}</span> {/* Display new state */}
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
