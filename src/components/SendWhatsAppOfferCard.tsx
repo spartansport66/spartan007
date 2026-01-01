@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, MessageCircle, Send, Users, Search } from 'lucide-react'; // Removed LinkIcon
+import { Loader2, MessageCircle, Send, Users, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import MultiSelect from '@/components/MultiSelect';
@@ -195,17 +195,19 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     }
   };
 
-  const handleBulkSend = () => {
-    const dealerIdsToSend = sendToAllFilteredDealers ? filteredDealersForMultiSelect.map(d => d.value) : selectedDealerIds;
-    handleSendWhatsApp(dealerIdsToSend);
-  };
+  // Removed handleBulkSend as the button is being removed.
+  // const handleBulkSend = () => {
+  //   const dealerIdsToSend = sendToAllFilteredDealers ? filteredDealersForMultiSelect.map(d => d.value) : selectedDealerIds;
+  //   handleSendWhatsApp(dealerIdsToSend);
+  // };
 
   const handleClearFilters = () => {
     setFilterCity('');
     setFilterState('');
   };
 
-  const isSendButtonDisabled = isSending || !selectedOfferId || (selectedDealerIds.length === 0 && !sendToAllFilteredDealers) || !whatsappMessage.trim();
+  // Removed isSendButtonDisabled as the button is being removed.
+  // const isSendButtonDisabled = isSending || !selectedOfferId || (selectedDealerIds.length === 0 && !sendToAllFilteredDealers) || !whatsappMessage.trim();
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
@@ -318,15 +320,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
               />
             </div>
 
-            {/* Send Button */}
-            <Button
-              onClick={handleBulkSend}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
-              disabled={isSendButtonDisabled}
-            >
-              {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {isSending ? 'Preparing Messages...' : `Send to ${selectedDealerIds.length} Selected Dealers`}
-            </Button>
+            {/* Removed Send Button */}
 
             {/* Individual Send Table (Optional, for quick individual sends) */}
             {selectedDealerIds.length > 0 && (
@@ -339,7 +333,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                       <TableHead className="text-muted-foreground">Phone</TableHead>
                       <TableHead className="text-muted-foreground">City</TableHead>
                       <TableHead className="text-muted-foreground">State</TableHead>
-                      {/* Removed Action TableHead */}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -352,7 +345,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                           <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
-                          {/* Removed Action TableCell */}
                         </TableRow>
                       );
                     })}
