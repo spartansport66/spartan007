@@ -161,7 +161,46 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
       }
 
-      showSuccess(`Payment for Order #${orderToUpdate.order_number} recorded successfully!`);
+      // 3. Fetch the dealer_id for the order
+      const { data: orderData, error: fetchOrderError } = await supabase
+        .from('orders')
+        .select('dealer_id')
+        .eq('id', orderToUpdate.id)
+        .single();
+
+      if (fetchOrderError) {
+        throw new Error(`Failed to fetch dealer ID for order: ${fetchOrderError.message}`);
+      }
+      if (!orderData?.dealer_id) {
+        throw new Error('Dealer ID not found for the order.');
+      }
+
+      // 4. Update the dealer's credit_limit
+      const { data: dealerCurrentCredit, error: fetchDealerError } = await supabase
+        .from('dealers')
+        .select('credit_limit')
+        .eq('id', orderData.dealer_id)
+        .single();
+
+      if (fetchDealerError) {
+        throw new Error(`Failed to fetch current dealer credit limit: ${fetchDealerError.message}`);
+      }
+      if (!dealerCurrentCredit) {
+        throw new Error('Dealer not found for credit limit update.');
+      }
+
+      const newCreditLimit = dealerCurrentCredit.credit_limit + values.amount;
+
+      const { error: updateCreditError } = await supabase
+        .from('dealers')
+        .update({ credit_limit: newCreditLimit })
+        .eq('id', orderData.dealer_id);
+
+      if (updateCreditError) {
+        throw new Error(`Failed to update dealer credit limit: ${updateCreditError.message}`);
+      }
+
+      showSuccess(`Payment for Order #${orderToUpdate.order_number} recorded successfully! Dealer credit limit increased by ₹${values.amount.toFixed(2)}.`);
       onPaymentUpdated();
       onOpenChange(false);
     } catch (error: any) {
