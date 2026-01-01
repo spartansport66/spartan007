@@ -13,22 +13,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Loader2, Gift, PlusCircle, Edit, Trash2, Users } from 'lucide-react'; // Added Users icon
+import { ArrowLeft, Loader2, Gift, PlusCircle, Edit, Trash2, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import SendWhatsAppOfferCard from '@/components/SendWhatsAppOfferCard';
-import SentWhatsAppOffersCard from '@/components/SentWhatsAppOffersCard';
+import WhatsAppMessageSender from '@/components/WhatsAppMessageSender';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import ComboOfferDealerAssignment from '@/components/ComboOfferDealerAssignment'; // New import
+import ComboOfferDealerAssignment from '@/components/ComboOfferDealerAssignment';
 
 interface ComboOffer {
   id: string;
   name: string;
   description: string | null;
   created_at: string;
-  // Add a placeholder for assigned dealers to trigger re-render if needed
   assigned_dealers_count?: number; 
 }
 
@@ -51,8 +49,8 @@ const ComboOffersDashboard = () => {
   const [comboOffersList, setComboOffersList] = useState<ComboOffer[]>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<ComboOffer | null>(null);
-  const [isAssignDealersDialogOpen, setIsAssignDealersDialogOpen] = useState(false); // New state
-  const [selectedOfferForAssignment, setSelectedOfferForAssignment] = useState<ComboOffer | null>(null); // New state
+  const [isAssignDealersDialogOpen, setIsAssignDealersDialogOpen] = useState(false);
+  const [selectedOfferForAssignment, setSelectedOfferForAssignment] = useState<ComboOffer | null>(null);
 
   const createForm = useForm<z.infer<typeof createOfferFormSchema>>({
     resolver: zodResolver(createOfferFormSchema),
@@ -81,7 +79,7 @@ const ComboOffersDashboard = () => {
           description, 
           created_at,
           combo_offer_dealers(count)
-        `) // Fetch count of assigned dealers
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -91,7 +89,7 @@ const ComboOffersDashboard = () => {
         name: offer.name,
         description: offer.description,
         created_at: offer.created_at,
-        assigned_dealers_count: offer.combo_offer_dealers[0]?.count || 0, // Extract count
+        assigned_dealers_count: offer.combo_offer_dealers[0]?.count || 0,
       }));
       setComboOffersList(formattedOffers);
     } catch (error: any) {
@@ -217,8 +215,8 @@ const ComboOffersDashboard = () => {
   };
 
   const handleAssignmentsUpdated = () => {
-    fetchComboOffers(); // Refresh combo offers list to update dealer counts
-    setWhatsappRefreshKey(prev => prev + 1); // Also refresh WhatsApp card
+    fetchComboOffers();
+    setWhatsappRefreshKey(prev => prev + 1);
   };
 
   if (sessionLoading || loadingData) {
@@ -244,7 +242,7 @@ const ComboOffersDashboard = () => {
         <div className="w-fit"></div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6"> {/* Adjusted grid layout */}
         {/* Card 1: Create New Combo Offer (Inline Form) */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-purple-600 dark:bg-purple-800 text-white rounded-t-lg p-4">
@@ -296,11 +294,8 @@ const ComboOffersDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Card 2: Send WhatsApp Offer */}
-        <SendWhatsAppOfferCard onMessageSent={handleWhatsAppMessageSent} />
-
-        {/* Card 3: Manage Sent WhatsApp Offers */}
-        <SentWhatsAppOffersCard refreshKey={whatsappRefreshKey} />
+        {/* Card 2: WhatsApp Message Sender (now includes selected dealers list) */}
+        <WhatsAppMessageSender onMessageSent={handleWhatsAppMessageSent} />
       </div>
 
       {/* Section for Existing Combo Offers */}
@@ -321,7 +316,7 @@ const ComboOffersDashboard = () => {
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground">Offer Name</TableHead>
                     <TableHead className="text-muted-foreground">Description</TableHead>
-                    <TableHead className="text-muted-foreground">Assigned Dealers</TableHead> {/* New column */}
+                    <TableHead className="text-muted-foreground">Assigned Dealers</TableHead>
                     <TableHead className="text-muted-foreground">Created At</TableHead>
                     <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                   </TableRow>
@@ -331,7 +326,7 @@ const ComboOffersDashboard = () => {
                     <TableRow key={offer.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{offer.name}</TableCell>
                       <TableCell className="text-muted-foreground">{offer.description || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{offer.assigned_dealers_count}</TableCell> {/* Display count */}
+                      <TableCell className="text-muted-foreground">{offer.assigned_dealers_count}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {new Date(offer.created_at).toLocaleDateString()}
                       </TableCell>

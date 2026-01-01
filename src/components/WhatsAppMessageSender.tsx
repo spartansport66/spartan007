@@ -10,7 +10,6 @@ import { Loader2, MessageCircle, Send, Users, Search, RotateCcw } from 'lucide-r
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import MultiSelect from '@/components/MultiSelect';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useSession } from '@/contexts/SessionContext';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -41,11 +40,11 @@ interface DealerOption {
   state: string;
 }
 
-interface SendWhatsAppOfferCardProps {
+interface WhatsAppMessageSenderProps {
   onMessageSent: () => void;
 }
 
-const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessageSent }) => {
+const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({ onMessageSent }) => {
   const { user } = useSession();
   const [allRawDealers, setAllRawDealers] = useState<DealerOption[]>([]);
   const [comboOffers, setComboOffers] = useState<ComboOffer[]>([]);
@@ -70,7 +69,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     }
     return '';
   });
-  // Removed sendToAllFilteredDealers state and related logic
   const [filterCity, setFilterCity] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return sessionStorage.getItem('whatsapp_filterCity') || '';
@@ -83,7 +81,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     }
     return '';
   });
-  // New state for tracking sent dealers, persisted in sessionStorage
   const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('whatsapp_sentDealerIds');
@@ -116,8 +113,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     }
   }, [whatsappMessage]);
 
-  // Removed useEffect for sendToAllFilteredDealers
-
   useEffect(() => {
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('whatsapp_filterCity', filterCity);
@@ -130,7 +125,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     }
   }, [filterState]);
 
-  // Effect to save sentDealerIds to sessionStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('whatsapp_sentDealerIds', JSON.stringify(Array.from(sentDealerIds)));
@@ -183,7 +177,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     fetchInitialData();
   }, [fetchInitialData]);
 
-  // Effect to filter dealers for the MultiSelect options based on city/state filters
   useEffect(() => {
     const filtered = allRawDealers.filter(dealer => {
       const matchesCity = filterCity ? dealer.city.toLowerCase().includes(filterCity.toLowerCase()) : true;
@@ -191,27 +184,23 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       return matchesCity && matchesState;
     });
     setFilteredDealersForMultiSelect(filtered);
-    // No "send to all filtered" checkbox, so no need to update selectedDealerIds here based on it.
   }, [allRawDealers, filterCity, filterState]);
 
-  // Dynamically generate WhatsApp message based on selected offer
   useEffect(() => {
     if (selectedOfferId) {
       const offer = comboOffers.find(o => o.id === selectedOfferId);
       if (offer) {
-        // Updated message template with [DEALER_NAME] placeholder
         const message = `Hello [DEALER_NAME],\n\n*${companyName || 'Our Company'}* is excited to announce a new Combo Offer: *"${offer.name}"*!\n\n${offer.description ? `Details: ${offer.description}\n\n` : ''}\n\nThank you!`;
         setWhatsappMessage(message);
       }
     } else {
-      // Only clear if the message was dynamically generated for an offer
       if (whatsappMessage.startsWith(`Hello [DEALER_NAME],\n\n*${companyName || 'Our Company'}*`)) {
         setWhatsappMessage('');
       }
     }
   }, [selectedOfferId, comboOffers, companyName]);
 
-  const handleSendWhatsApp = async (targetDealerId: string) => { // Changed to single ID
+  const handleSendWhatsApp = async (targetDealerId: string) => {
     if (!user) {
       showError('You must be logged in to send WhatsApp messages.');
       return;
@@ -248,10 +237,8 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
 
       showSuccess('WhatsApp message prepared. A new tab may open, please ensure pop-ups are allowed.');
       
-      // Open WhatsApp for the single dealer
       const result = data.results.find((r: any) => r.dealerId === targetDealerId);
       if (result && result.status === 'success' && result.phone) {
-        // Personalize the message with the dealer's name before encoding
         const personalizedMessage = whatsappMessage.replace('[DEALER_NAME]', result.dealerName);
         const encodedMessage = encodeURIComponent(personalizedMessage);
         const whatsappUrl = `https://web.whatsapp.com/send?phone=${result.phone}&text=${encodedMessage}`;
@@ -261,7 +248,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
         showError(`Failed to open WhatsApp for ${result?.dealerName || 'selected dealer'}. Phone number might be missing or an error occurred.`);
       }
 
-      onMessageSent(); // This is a general refresh for the parent component, keep it.
+      onMessageSent();
     } catch (error: any) {
       console.error('Error sending WhatsApp message:', error);
       showError(`Failed to send WhatsApp message: ${error.message}`);
@@ -270,18 +257,10 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     }
   };
 
-  // Removed handleBulkSend function
-
-  const handleIndividualSend = (dealerId: string) => {
-    handleSendWhatsApp(dealerId); // Call with single ID
-  };
-
   const handleClearFilters = () => {
     setFilterCity('');
     setFilterState('');
   };
-
-  // Removed isBulkSendButtonDisabled as there is no bulk send button
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
@@ -343,8 +322,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
               )}
             </div>
 
-            {/* Removed Send to All Filtered Dealers Checkbox */}
-
             {/* Select Combo Offer */}
             <div>
               <Label htmlFor="selectOffer">Select Combo Offer</Label>
@@ -376,8 +353,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
               />
             </div>
 
-            {/* Removed Bulk Send Button */}
-
             {/* Individual Send Table */}
             {selectedDealerIds.length > 0 && (
               <div className="overflow-x-auto max-h-[300px] overflow-y-auto border rounded-md mt-4">
@@ -396,12 +371,12 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                     {selectedDealerIds.map((dealerId) => {
                       const dealer = allRawDealers.find(d => d.value === dealerId);
                       if (!dealer) return null;
-                      const isDealerSent = sentDealerIds.has(dealer.value); // Check if this dealer has been sent to
+                      const isDealerSent = sentDealerIds.has(dealer.value);
                       
                       return (
                         <TableRow 
                           key={dealer.value} 
-                          className={cn("hover:bg-accent/50", isDealerSent && "opacity-50 cursor-not-allowed")} // Apply disabled style
+                          className={cn("hover:bg-accent/50", isDealerSent && "opacity-50 cursor-not-allowed")}
                         >
                           <TableCell className="font-medium text-foreground">{dealer.label.split('(')[0].trim()}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
@@ -411,9 +386,9 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleIndividualSend(dealer.value)}
+                              onClick={() => handleSendWhatsApp(dealer.value)}
                               title={isDealerSent ? "Already Sent" : `Send to ${dealer.label.split('(')[0].trim()}`}
-                              disabled={isSending || !dealer.phone || !selectedOfferId || !whatsappMessage.trim() || isDealerSent} // Disable if already sent
+                              disabled={isSending || !dealer.phone || !selectedOfferId || !whatsappMessage.trim() || isDealerSent}
                             >
                               <Send className="h-4 w-4 text-blue-500" />
                             </Button>
@@ -446,4 +421,4 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
   );
 };
 
-export default SendWhatsAppOfferCard;
+export default WhatsAppMessageSender;
