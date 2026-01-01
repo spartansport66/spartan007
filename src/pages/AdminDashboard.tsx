@@ -20,7 +20,8 @@ import SalesPersonPerformanceReportDialog from '@/components/reports/SalesPerson
 import DealerReportDialog from '@/components/reports/DealerReportDialog';
 import SalesPersonPerformanceOverviewCard from '@/components/SalesPersonPerformanceOverviewCard';
 import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog';
-import CompanyInfoDialog from '@/components/CompanyInfoDialog'; // New import
+import CompanyInfoDialog from '@/components/CompanyInfoDialog';
+import PaymentsForApprovalCard from '@/components/PaymentsForApprovalCard'; // New import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -34,8 +35,9 @@ const AdminDashboard = () => {
   const [isSalesPersonPerformanceReportOpen, setIsSalesPersonPerformanceReportOpen] = useState(false);
   const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
   const [isPaymentsReportOpen, setIsPaymentsReportOpen] = useState(false);
-  const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false); // New state for Company Info Dialog
-  const [companyName, setCompanyName] = useState<string | null>(null); // State to store company name
+  const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0); // Key to force re-fetch in child components
 
   // Simplified dashboard data
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
@@ -47,11 +49,11 @@ const AdminDashboard = () => {
     try {
       const { data, error } = await supabase
         .from('company_info')
-        .select('company_name') // Only fetching company_name now
+        .select('company_name')
         .limit(1)
         .single();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 means "no rows found"
+      if (error && error.code !== 'PGRST116') {
         throw error;
       }
       setCompanyName(data?.company_name || null);
@@ -119,7 +121,7 @@ const AdminDashboard = () => {
       } else {
         console.log('User is admin, fetching dashboard data');
         fetchDashboardData();
-        fetchCompanyInfo(); // Fetch company info when admin dashboard loads
+        fetchCompanyInfo();
       }
     }
   }, [sessionLoading, user, userType, isAdmin, fetchDashboardData, fetchCompanyInfo, navigate]);
@@ -144,7 +146,12 @@ const AdminDashboard = () => {
     setSelectedOrderIdForDetails(dispatchedOrderId);
     setIsOrderDetailsDialogOpen(true);
     setShouldPrintOrderDetails(true);
-    fetchDashboardData();
+    fetchDashboardData(); // Refresh dashboard data
+  };
+
+  const handlePaymentAction = () => {
+    setRefreshKey(prev => prev + 1); // Increment key to trigger re-fetch in child components
+    fetchDashboardData(); // Also refresh main dashboard data
   };
 
   // Show loading state with logout option
@@ -184,7 +191,7 @@ const AdminDashboard = () => {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month",
-      icon: <Building className="h-3 w-3 text-white" />, // Changed icon to Building for Dealers
+      icon: <Building className="h-3 w-3 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
@@ -315,7 +322,12 @@ const AdminDashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
-        <PaymentCard onViewDetails={() => setIsPaymentsReportOpen(true)} />
+        <PaymentCard onViewDetails={() => setIsPaymentsReportOpen(true)} key={`payment-card-${refreshKey}`} /> {/* Added key for refresh */}
+      </div>
+
+      {/* New: Payments Pending Approval Card */}
+      <div className="mb-6">
+        <PaymentsForApprovalCard onPaymentAction={handlePaymentAction} key={`payments-for-approval-${refreshKey}`} /> {/* Added key for refresh */}
       </div>
 
       <MadeWithDyad />
@@ -348,7 +360,7 @@ const AdminDashboard = () => {
       <CompanyInfoDialog
         isOpen={isCompanyInfoDialogOpen}
         onOpenChange={setIsCompanyInfoDialogOpen}
-        onCompanyInfoUpdated={fetchCompanyInfo} // Callback to refresh company name in header
+        onCompanyInfoUpdated={fetchCompanyInfo}
       />
     </div>
   );
