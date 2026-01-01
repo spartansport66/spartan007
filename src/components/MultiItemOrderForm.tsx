@@ -7,10 +7,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
-import { useSession } from '@/contexts/SessionContext'; // Corrected import path
+import { useSession } from '@/contexts/SessionContext';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -22,7 +24,7 @@ interface Product {
 interface Dealer {
   id: string;
   name: string;
-  credit_limit: number; // General credit limit
+  credit_limit: number;
   allotted_credit_days: number;
 }
 
@@ -30,6 +32,12 @@ interface OrderItem {
   id: string;
   product_id: string;
   quantity: number;
+}
+
+interface OverduePayment {
+  order_number: number;
+  total_amount: number;
+  payment_due_date: string;
 }
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
@@ -42,10 +50,12 @@ const MultiItemOrderForm: React.FC = () => {
   const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
   const [loading, setLoading] = useState(false);
-  const [dealerBalance, setDealerBalance] = useState<number | null>(null); // This will now represent consumed credit from pending orders
-  const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0); // This will be the effective credit limit (monthly or general)
+  const [dealerBalance, setDealerBalance] = useState<number | null>(null);
+  const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
+  const [overduePayments, setOverduePayments] = useState<OverduePayment[]>([]);
+  const [totalOverdueAmount, setTotalOverdueAmount] = useState<number>(0);
 
   // Payment at order time states
   const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
@@ -109,7 +119,50 @@ const MultiItemOrderForm: React.FC = () => {
     fetchData();
   }, [user]);
 
-  // Calculate dealer balance (consumed credit from pending orders) and payment due date
+  // Check for overdue payments when dealer is selected
+  useEffect(() => {
+    const checkOverduePayments = async () => {
+      if (!selectedDealer) {
+        setOverduePayments([]);
+        setTotalOverdueAmount(0);
+        return;
+      }
+
+      try {
+        const today = new Date().toISOString();
+        
+        // Fetch overdue payments for the selected dealer
+        const { data, error } = await supabase
+          .from('orders')
+          .select('order_number, total_amount, payment_due_date')
+          .eq('dealer_id', selectedDealer)
+          .eq('payment_status', 'pending')
+          .lte('payment_due_date', today);
+
+        if (error) {
+          console.error('Error fetching overdue payments:', error);
+          showError(`Failed to check overdue payments: ${error.message}`);
+          setOverduePayments([]);
+          setTotalOverdueAmount(0);
+          return;
+        }
+
+        const overdueData = data || [];
+        setOverduePayments(overdueData);
+        const total = overdueData.reduce((sum, order) => sum + order.total_amount, 0);
+        setTotalOverdueAmount(total);
+      } catch (error: any) {
+        console.error('Error checking overdue payments:', error);
+        showError(`Failed to check overdue payments: ${error.message}`);
+        setOverduePayments([]);
+        setTotalOverdueAmount(0);
+      }
+    };
+
+    checkOverduePayments();
+  }, [selectedDealer]);
+
+  // Calculate dealer balance and payment due date
   useEffect(() => {
     const calculateBalanceAndDueDate = async () => {
       if (!selectedDealer) {
@@ -133,7 +186,7 @@ const MultiItemOrderForm: React.FC = () => {
 
       // Determine the effective credit limit for the current month
       const today = new Date();
-      const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0]; // YYYY-MM-01
+      const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0];
       
       const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
         .from('dealer_monthly_credit_limits')
@@ -142,14 +195,14 @@ const MultiItemOrderForm: React.FC = () => {
         .eq('month_year', currentMonthYear)
         .single();
 
-      if (monthlyLimitError && monthlyLimitError.code !== 'PGRST116') { // PGRST116 means "no rows found"
+      if (monthlyLimitError && monthlyLimitError.code !== 'PGRST116') {
         console.error('Error fetching monthly credit limit:', monthlyLimitError.message);
         showError(`Failed to load monthly credit limit: ${monthlyLimitError.message}`);
-        setDealerCreditLimit(selectedDealerData?.credit_limit || 0); // Fallback to general limit on error
+        setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
       } else if (monthlyLimitData) {
         setDealerCreditLimit(monthlyLimitData.credit_limit);
       } else {
-        setDealerCreditLimit(selectedDealerData?.credit_limit || 0); // Fallback to general limit if no monthly limit set
+        setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
       }
 
       // Fetch total spent by this dealer from 'pending' AND 'pending_approval' orders
@@ -157,7 +210,7 @@ const MultiItemOrderForm: React.FC = () => {
         .from('orders')
         .select('total_amount')
         .eq('dealer_id', selectedDealer)
-        .in('payment_status', ['pending', 'pending_approval']); // Include pending_approval orders
+        .in('payment_status', ['pending', 'pending_approval']);
 
       if (error) {
         console.error('Error fetching dealer balance:', error);
@@ -219,6 +272,12 @@ const MultiItemOrderForm: React.FC = () => {
       return;
     }
     
+    // Check if dealer has overdue payments
+    if (totalOverdueAmount > 0) {
+      showError(`Cannot place order. Dealer has overdue payments of ₹${totalOverdueAmount.toFixed(2)}. Please clear overdue payments first.`);
+      return;
+    }
+    
     if (orderItems.some(item => !item.product_id || item.quantity <= 0)) {
       showError('Please fill in all product fields and ensure quantities are positive.');
       return;
@@ -272,7 +331,7 @@ const MultiItemOrderForm: React.FC = () => {
           product_id: item.product_id,
           quantity: item.quantity,
         })),
-        paymentStatus: isPaidAtOrderTime ? 'pending_approval' : 'pending', // Changed to 'pending_approval'
+        paymentStatus: isPaidAtOrderTime ? 'pending_approval' : 'pending',
         paymentDueDate: paymentDueDate,
       };
 
@@ -329,6 +388,8 @@ const MultiItemOrderForm: React.FC = () => {
       setUpiId('');
       setTransactionId('');
       setPaymentDueDate(null);
+      setOverduePayments([]);
+      setTotalOverdueAmount(0);
     } catch (error: any) {
       console.error('Error placing order:', error);
       showError(`Failed to place order: ${error.message}`);
@@ -366,10 +427,41 @@ const MultiItemOrderForm: React.FC = () => {
               </SelectContent>
             </Select>
             
+            {selectedDealer && totalOverdueAmount > 0 && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Overdue Payments</AlertTitle>
+                <AlertDescription>
+                  This dealer has overdue payments totaling ₹{totalOverdueAmount.toFixed(2)}. 
+                  Please clear these payments before placing a new order.
+                  <div className="mt-2 max-h-32 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left">Order #</th>
+                          <th className="text-left">Due Date</th>
+                          <th className="text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {overduePayments.map((payment, index) => (
+                          <tr key={index} className="border-b">
+                            <td>#{payment.order_number}</td>
+                            <td>{new Date(payment.payment_due_date).toLocaleDateString()}</td>
+                            <td className="text-right">₹{payment.total_amount.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+            
             {selectedDealer && dealerBalance !== null && (
               <div className="mt-2 p-3 bg-muted rounded-md">
                 <div className="flex justify-between text-sm">
-                  <span>Credit Limit (Current Month):</span> {/* Updated label */}
+                  <span>Credit Limit (Current Month):</span>
                   <span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -699,7 +791,7 @@ const MultiItemOrderForm: React.FC = () => {
           <Button 
             type="submit" 
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-            disabled={loading || !selectedDealer || (remainingCredit !== null && remainingCredit < 0)}
+            disabled={loading || !selectedDealer || (remainingCredit !== null && remainingCredit < 0) || totalOverdueAmount > 0}
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}
           </Button>
