@@ -281,9 +281,9 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       // Update sentDealerIds state with all newly sent IDs
       setSentDealerIds(prev => new Set([...prev, ...newlySentIds]));
 
-      setSelectedDealerIds([]); // Clear selected dealers after sending
-      setSendToAllFilteredDealers(false); // Reset checkbox
-      onMessageSent();
+      // IMPORTANT: Removed setSelectedDealerIds([]) and setSendToAllFilteredDealers(false) from here.
+      // These should only happen for bulk send, not individual.
+      onMessageSent(); // This is a general refresh for the parent component, keep it.
     } catch (error: any) {
       console.error('Error sending WhatsApp messages:', error);
       showError(`Failed to send WhatsApp messages: ${error.message}`);
@@ -292,7 +292,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     }
   };
 
-  const handleBulkSend = () => {
+  const handleBulkSend = async () => {
     const dealerIdsToSend = sendToAllFilteredDealers 
       ? filteredDealersForMultiSelect.map(d => d.value).filter(id => !sentDealerIds.has(id)) // Only send to unsent filtered dealers
       : selectedDealerIds.filter(id => !sentDealerIds.has(id)); // Only send to unsent selected dealers
@@ -301,7 +301,12 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       showError('No unsent dealers selected for bulk send.');
       return;
     }
-    handleSendWhatsApp(dealerIdsToSend);
+    
+    await handleSendWhatsApp(dealerIdsToSend); // Await the send operation
+    
+    // Now perform cleanup specific to bulk send
+    setSelectedDealerIds([]); // Clear all selections
+    setSendToAllFilteredDealers(false); // Reset checkbox
   };
 
   const handleIndividualSend = (dealerId: string) => {
