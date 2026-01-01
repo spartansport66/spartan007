@@ -54,9 +54,6 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
   const [orders, setOrders] = useState<OrderDisplay[]>([]); // Changed from sales to orders
-  const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
-  const [totalOrdersCount, setTotalOrdersCount] = useState<number>(0); // Renamed to avoid conflict
-  const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [loadingData, setLoadingData] = useState(true);
 
   // Filter states for recent sales
@@ -89,7 +86,6 @@ const Dashboard = () => {
       setAllDealers([]);
     } else {
       const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
-      setActiveDealersCount(formattedDealers.length || 0);
       setAllDealers(formattedDealers);
     }
 
@@ -147,11 +143,6 @@ const Dashboard = () => {
       }));
 
       setOrders(processedOrders);
-
-      const totalValue = processedOrders.reduce((sum, order) => sum + order.total_amount, 0) || 0;
-      const totalOrdersCountValue = processedOrders.length || 0;
-      setTotalSalesValue(totalValue);
-      setTotalOrdersCount(totalOrdersCountValue);
     }
 
     setLoadingData(false);
@@ -204,61 +195,10 @@ const Dashboard = () => {
     return null;
   }
 
-  const salesOverview = [
-    {
-      title: "My Total Sales",
-      value: `₹${totalSalesValue.toFixed(2)}`,
-      change: "+20.1% from last month",
-      icon: <DollarSign className="h-3 w-3 text-white" />,
-      headerBg: "bg-green-500 dark:bg-green-700",
-      valueColor: "text-green-800 dark:text-green-200"
-    },
-    {
-      title: "My Total Orders",
-      value: totalOrdersCount.toString(), // Use totalOrdersCount
-      change: "+180.1% from last month",
-      icon: <Package className="h-3 w-3 text-white" />,
-      headerBg: "bg-indigo-500 dark:bg-indigo-700",
-      valueColor: "text-indigo-800 dark:text-indigo-200"
-    },
-    {
-      title: "My Active Dealers",
-      value: activeDealersCount.toString(),
-      change: "+19% from last month",
-      icon: <Users className="h-3 w-3 text-white" />,
-      headerBg: "bg-purple-500 dark:bg-purple-700",
-      valueColor: "text-purple-800 dark:text-purple-200"
-    },
-    {
-      title: "Pending Tasks",
-      value: "57",
-      change: "-5% from last month",
-      icon: <Activity className="h-3 w-3 text-white" />,
-      headerBg: "bg-red-500 dark:bg-red-700",
-      valueColor: "text-red-800 dark:text-red-200"
-    },
-  ];
-
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">Sales Dashboard</h1>
-      </div>
-
-      {/* Sales Overview Cards */}
-      <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
-        {salesOverview.map((item, index) => (
-          <Card key={index} className="bg-card text-card-foreground shadow-md">
-            <CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-0 p-2 ${item.headerBg} text-white rounded-t-lg`}>
-              <CardTitle className="text-[0.5rem] font-medium text-white">{item.title}</CardTitle>
-              {item.icon}
-            </CardHeader>
-            <CardContent className="p-2 pt-0">
-              <div className={`text-sm font-bold ${item.valueColor}`}>{item.value}</div>
-              <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
-            </CardContent>
-          </Card>
-        ))}
       </div>
 
       {/* Sales Person Performance Card */}
