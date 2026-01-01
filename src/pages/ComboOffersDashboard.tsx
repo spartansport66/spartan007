@@ -17,10 +17,14 @@ import { ArrowLeft, Loader2, Gift, PlusCircle, Edit, Trash2, Users } from 'lucid
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import WhatsAppMessageSender from '@/components/WhatsAppMessageSender';
+import SelectedDealersListCard from '@/components/SelectedDealersListCard'; // New import
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import ComboOfferDealerAssignment from '@/components/ComboOfferDealerAssignment';
+
+// IMPORTANT: Replace with the actual URL of your deployed Edge Function
+const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
 
 interface ComboOffer {
   id: string;
@@ -28,6 +32,14 @@ interface ComboOffer {
   description: string | null;
   created_at: string;
   assigned_dealers_count?: number; 
+}
+
+interface DealerOption {
+  value: string;
+  label: string;
+  phone: string;
+  city: string;
+  state: string;
 }
 
 const createOfferFormSchema = z.object({
@@ -45,13 +57,59 @@ const ComboOffersDashboard = () => {
   const { user, loading: sessionLoading, isAdmin } = useSession();
   const [loadingData, setLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [whatsappRefreshKey, setWhatsappRefreshKey] = useState(0);
   const [comboOffersList, setComboOffersList] = useState<ComboOffer[]>([]);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<ComboOffer | null>(null);
   const [isAssignDealersDialogOpen, setIsAssignDealersDialogOpen] = useState(false);
   const [selectedOfferForAssignment, setSelectedOfferForAssignment] = useState<ComboOffer | null>(null);
 
+  // WhatsApp Sender States (lifted from WhatsAppMessageSender)
+  const [allRawDealers, setAllRawDealers] = useState<DealerOption[]>([]);
+  const [comboOffersForSender, setComboOffersForSender] = useState<ComboOffer[]>([]); // Renamed to avoid conflict
+  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('whatsapp_selectedDealerIds');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+  const [selectedOfferId, setSelectedOfferId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('whatsapp_selectedOfferId') || '';
+    }
+    return '';
+  });
+  const [whatsappMessage, setWhatsappMessage] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('whatsapp_message') || '';
+    }
+    return '';
+  });
+  const [filterCity, setFilterCity] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('whatsapp_filterCity') || '';
+    }
+    return '';
+  });
+  const [filterState, setFilterState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('whatsapp_filterState') || '';
+    }
+    return '';
+  });
+  const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('whatsapp_sentDealerIds');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    }
+    return new Set();
+  });
+  const [initialLoadingWhatsApp, setInitialLoadingWhatsApp] = useState(true);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [filteredDealersForMultiSelect, setFilteredDealersForMultiSelect] = useState<DealerOption[]>([]);
+
+  // Forms
   const createForm = useForm<z.infer<typeof createOfferFormSchema>>({
     resolver: zodResolver(createOfferFormSchema),
     defaultValues: {
@@ -68,6 +126,44 @@ const ComboOffersDashboard = () => {
     },
   });
 
+  // Effects to save WhatsApp sender state to sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_selectedDealerIds', JSON.stringify(selectedDealerIds));
+    }
+  }, [selectedDealerIds]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_selectedOfferId', selectedOfferId);
+    }
+  }, [selectedOfferId]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_message', whatsappMessage);
+    }
+  }, [whatsappMessage]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_filterCity', filterCity);
+    }
+  }, [filterCity]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_filterState', filterState);
+    }
+  }, [filterState]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_sentDealerIds', JSON.stringify(Array.from(sentDealerIds)));
+    }
+  }, [sentDealerIds]);
+
+  // Fetch initial data for Combo Offers List
   const fetchComboOffers = useCallback(async () => {
     setLoadingData(true);
     try {
@@ -92,6 +188,7 @@ const ComboOffersDashboard = () => {
         assigned_dealers_count: offer.combo_offer_dealers[0]?.count || 0,
       }));
       setComboOffersList(formattedOffers);
+      setComboOffersForSender(formattedOffers); // Also update for the sender component
     } catch (error: any) {
       console.error('Error fetching combo offers:', error.message);
       showError(`Failed to load combo offers: ${error.message}`);
@@ -100,6 +197,41 @@ const ComboOffersDashboard = () => {
     }
   }, []);
 
+  // Fetch initial data for WhatsApp Sender
+  const fetchWhatsAppInitialData = useCallback(async () => {
+    setInitialLoadingWhatsApp(true);
+    try {
+      // Fetch all dealers
+      const { data: dealersData, error: dealersError } = await supabase
+        .from('dealers')
+        .select('id, name, phone, city, state');
+      if (dealersError) throw dealersError;
+      setAllRawDealers((dealersData || []).map(d => ({ 
+        value: d.id, 
+        label: `${d.name} (${d.phone || 'No Phone'})`, 
+        phone: d.phone || '',
+        city: d.city || 'N/A',
+        state: d.state || 'N/A',
+      })));
+
+      // Fetch company info
+      const { data: companyInfo, error: companyInfoError } = await supabase
+        .from('company_info')
+        .select('company_name')
+        .limit(1)
+        .single();
+      if (companyInfoError && companyInfoError.code !== 'PGRST116') throw companyInfoError;
+      setCompanyName(companyInfo?.company_name || null);
+
+    } catch (error: any) {
+      console.error('Error fetching initial data for WhatsApp sender:', error.message);
+      showError(`Failed to load WhatsApp sender data: ${error.message}`);
+    } finally {
+      setInitialLoadingWhatsApp(false);
+    }
+  }, []);
+
+  // Main useEffect for page load and session checks
   useEffect(() => {
     if (!sessionLoading) {
       if (!user) {
@@ -109,9 +241,20 @@ const ComboOffersDashboard = () => {
         navigate('/dashboard');
       } else {
         fetchComboOffers();
+        fetchWhatsAppInitialData();
       }
     }
-  }, [sessionLoading, user, isAdmin, navigate, fetchComboOffers]);
+  }, [sessionLoading, user, isAdmin, navigate, fetchComboOffers, fetchWhatsAppInitialData]);
+
+  // Effect to filter dealers for the MultiSelect options based on city/state filters
+  useEffect(() => {
+    const filtered = allRawDealers.filter(dealer => {
+      const matchesCity = filterCity ? dealer.city.toLowerCase().includes(filterCity.toLowerCase()) : true;
+      const matchesState = filterState ? dealer.state.toLowerCase().includes(filterState.toLowerCase()) : true;
+      return matchesCity && matchesState;
+    });
+    setFilteredDealersForMultiSelect(filtered);
+  }, [allRawDealers, filterCity, filterState]);
 
   useEffect(() => {
     if (selectedOffer) {
@@ -206,7 +349,8 @@ const ComboOffersDashboard = () => {
   };
 
   const handleWhatsAppMessageSent = () => {
-    setWhatsappRefreshKey(prev => prev + 1);
+    // This callback is triggered when a message is sent, useful for refreshing logs if any
+    // For now, it just ensures the sent status is updated in the UI via setSentDealerIds
   };
 
   const handleManageDealers = (offer: ComboOffer) => {
@@ -216,10 +360,61 @@ const ComboOffersDashboard = () => {
 
   const handleAssignmentsUpdated = () => {
     fetchComboOffers();
-    setWhatsappRefreshKey(prev => prev + 1);
+    // No need for whatsappRefreshKey anymore, as state is lifted
   };
 
-  if (sessionLoading || loadingData) {
+  const handleClearFilters = () => {
+    setFilterCity('');
+    setFilterState('');
+  };
+
+  const handleIndividualSendWhatsApp = async (dealerId: string, dealerName: string, dealerPhone: string, personalizedMessage: string) => {
+    if (!user) {
+      showError('You must be logged in to send WhatsApp messages.');
+      return;
+    }
+    setIsSendingWhatsApp(true);
+    try {
+      const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dealerIds: [dealerId],
+          message: personalizedMessage, // Use the already personalized message
+          comboOfferId: selectedOfferId,
+          sentByUserId: user.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send WhatsApp message');
+      }
+
+      showSuccess('WhatsApp message prepared. A new tab may open, please ensure pop-ups are allowed.');
+      
+      const encodedMessage = encodeURIComponent(personalizedMessage);
+      const whatsappUrl = `https://web.whatsapp.com/send?phone=${dealerPhone}&text=${encodedMessage}`;
+      window.open(whatsappUrl, '_blank');
+      setSentDealerIds(prev => new Set([...prev, dealerId]));
+      handleWhatsAppMessageSent(); // Trigger parent refresh if needed
+    } catch (error: any) {
+      console.error('Error sending WhatsApp message:', error);
+      showError(`Failed to send WhatsApp message: ${error.message}`);
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
+  };
+
+  const handleResetSentStatus = () => {
+    setSentDealerIds(new Set());
+    showSuccess('Sent status reset for all dealers.');
+  };
+
+  if (sessionLoading || loadingData || initialLoadingWhatsApp) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -242,7 +437,7 @@ const ComboOffersDashboard = () => {
         <div className="w-fit"></div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6"> {/* Adjusted grid layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Card 1: Create New Combo Offer (Inline Form) */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-purple-600 dark:bg-purple-800 text-white rounded-t-lg p-4">
@@ -294,8 +489,41 @@ const ComboOffersDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Card 2: WhatsApp Message Sender (now includes selected dealers list) */}
-        <WhatsAppMessageSender onMessageSent={handleWhatsAppMessageSent} />
+        {/* Card 2: WhatsApp Message Sender (now only filters and message prep) */}
+        <WhatsAppMessageSender 
+          allRawDealers={allRawDealers}
+          comboOffers={comboOffersForSender}
+          selectedDealerIds={selectedDealerIds}
+          setSelectedDealerIds={setSelectedDealerIds}
+          selectedOfferId={selectedOfferId}
+          setSelectedOfferId={setSelectedOfferId}
+          whatsappMessage={whatsappMessage}
+          setWhatsappMessage={setWhatsappMessage}
+          filterCity={filterCity}
+          setFilterCity={setFilterCity}
+          filterState={filterState}
+          setFilterState={setFilterState}
+          isSending={isSendingWhatsApp}
+          companyName={companyName}
+          initialLoading={initialLoadingWhatsApp}
+          filteredDealersForMultiSelect={filteredDealersForMultiSelect}
+          handleClearFilters={handleClearFilters}
+        />
+      </div>
+
+      {/* New Card: Selected Dealers List for WhatsApp */}
+      <div className="mb-6">
+        <SelectedDealersListCard
+          selectedDealerIds={selectedDealerIds}
+          allRawDealers={allRawDealers}
+          sentDealerIds={sentDealerIds}
+          isSending={isSendingWhatsApp}
+          selectedOfferId={selectedOfferId}
+          whatsappMessage={whatsappMessage}
+          companyName={companyName}
+          onIndividualSend={handleIndividualSendWhatsApp}
+          onResetSentStatus={handleResetSentStatus}
+        />
       </div>
 
       {/* Section for Existing Combo Offers */}

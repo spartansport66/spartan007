@@ -6,25 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, MessageCircle, Send, Users, Search, RotateCcw } from 'lucide-react';
+import { Loader2, MessageCircle, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { showError, showSuccess } from '@/utils/toast';
+import { showError } from '@/utils/toast';
 import MultiSelect from '@/components/MultiSelect';
-import { useSession } from '@/contexts/SessionContext';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { cn } from '@/lib/utils'; // Import cn for conditional classNames
-
-// IMPORTANT: Replace with the actual URL of your deployed Edge Function
-const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
-
-interface Dealer {
-  id: string;
-  name: string;
-  phone: string;
-  city: string;
-  state: string;
-}
 
 interface ComboOffer {
   id: string;
@@ -41,151 +27,45 @@ interface DealerOption {
 }
 
 interface WhatsAppMessageSenderProps {
-  onMessageSent: () => void;
+  allRawDealers: DealerOption[];
+  comboOffers: ComboOffer[];
+  selectedDealerIds: string[];
+  setSelectedDealerIds: (ids: string[]) => void;
+  selectedOfferId: string;
+  setSelectedOfferId: (id: string) => void;
+  whatsappMessage: string;
+  setWhatsappMessage: (message: string) => void;
+  filterCity: string;
+  setFilterCity: (city: string) => void;
+  filterState: string;
+  setFilterState: (state: string) => void;
+  isSending: boolean;
+  companyName: string | null;
+  initialLoading: boolean;
+  filteredDealersForMultiSelect: DealerOption[];
+  handleClearFilters: () => void;
 }
 
-const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({ onMessageSent }) => {
-  const { user } = useSession();
-  const [allRawDealers, setAllRawDealers] = useState<DealerOption[]>([]);
-  const [comboOffers, setComboOffers] = useState<ComboOffer[]>([]);
-  
-  // State variables to persist
-  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('whatsapp_selectedDealerIds');
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
-  const [selectedOfferId, setSelectedOfferId] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('whatsapp_selectedOfferId') || '';
-    }
-    return '';
-  });
-  const [whatsappMessage, setWhatsappMessage] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('whatsapp_message') || '';
-    }
-    return '';
-  });
-  const [filterCity, setFilterCity] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('whatsapp_filterCity') || '';
-    }
-    return '';
-  });
-  const [filterState, setFilterState] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('whatsapp_filterState') || '';
-    }
-    return '';
-  });
-  const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('whatsapp_sentDealerIds');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    }
-    return new Set();
-  });
-
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
-  const [companyName, setCompanyName] = useState<string | null>(null);
-  const [filteredDealersForMultiSelect, setFilteredDealersForMultiSelect] = useState<DealerOption[]>([]);
-
-  // Effects to save state to sessionStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('whatsapp_selectedDealerIds', JSON.stringify(selectedDealerIds));
-    }
-  }, [selectedDealerIds]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('whatsapp_selectedOfferId', selectedOfferId);
-    }
-  }, [selectedOfferId]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('whatsapp_message', whatsappMessage);
-    }
-  }, [whatsappMessage]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('whatsapp_filterCity', filterCity);
-    }
-  }, [filterCity]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('whatsapp_filterState', filterState);
-    }
-  }, [filterState]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('whatsapp_sentDealerIds', JSON.stringify(Array.from(sentDealerIds)));
-    }
-  }, [sentDealerIds]);
-
-  const fetchInitialData = useCallback(async () => {
-    setInitialLoading(true);
-    try {
-      // Fetch all dealers
-      const { data: dealersData, error: dealersError } = await supabase
-        .from('dealers')
-        .select('id, name, phone, city, state');
-      if (dealersError) throw dealersError;
-      setAllRawDealers((dealersData || []).map(d => ({ 
-        value: d.id, 
-        label: `${d.name} (${d.phone || 'No Phone'})`, 
-        phone: d.phone || '',
-        city: d.city || 'N/A',
-        state: d.state || 'N/A',
-      })));
-
-      // Fetch all combo offers
-      const { data: offersData, error: offersError } = await supabase
-        .from('combo_offers')
-        .select(`id, name, description`)
-        .order('name', { ascending: true });
-
-      if (offersError) throw offersError;
-      setComboOffers(offersData || []);
-
-      // Fetch company info
-      const { data: companyInfo, error: companyInfoError } = await supabase
-        .from('company_info')
-        .select('company_name')
-        .limit(1)
-        .single();
-      if (companyInfoError && companyInfoError.code !== 'PGRST116') throw companyInfoError;
-      setCompanyName(companyInfo?.company_name || null);
-
-    } catch (error: any) {
-      console.error('Error fetching initial data for WhatsApp card:', error.message);
-      showError(`Failed to load data: ${error.message}`);
-    } finally {
-      setInitialLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchInitialData();
-  }, [fetchInitialData]);
-
-  useEffect(() => {
-    const filtered = allRawDealers.filter(dealer => {
-      const matchesCity = filterCity ? dealer.city.toLowerCase().includes(filterCity.toLowerCase()) : true;
-      const matchesState = filterState ? dealer.state.toLowerCase().includes(filterState.toLowerCase()) : true;
-      return matchesCity && matchesState;
-    });
-    setFilteredDealersForMultiSelect(filtered);
-  }, [allRawDealers, filterCity, filterState]);
-
+const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
+  allRawDealers,
+  comboOffers,
+  selectedDealerIds,
+  setSelectedDealerIds,
+  selectedOfferId,
+  setSelectedOfferId,
+  whatsappMessage,
+  setWhatsappMessage,
+  filterCity,
+  setFilterCity,
+  filterState,
+  setFilterState,
+  isSending,
+  companyName,
+  initialLoading,
+  filteredDealersForMultiSelect,
+  handleClearFilters,
+}) => {
+  // Dynamically generate WhatsApp message based on selected offer
   useEffect(() => {
     if (selectedOfferId) {
       const offer = comboOffers.find(o => o.id === selectedOfferId);
@@ -198,78 +78,16 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({ onMessage
         setWhatsappMessage('');
       }
     }
-  }, [selectedOfferId, comboOffers, companyName]);
-
-  const handleSendWhatsApp = async (targetDealerId: string) => {
-    if (!user) {
-      showError('You must be logged in to send WhatsApp messages.');
-      return;
-    }
-    if (!selectedOfferId) {
-      showError('Please select a combo offer.');
-      return;
-    }
-    if (!whatsappMessage.trim()) {
-      showError('WhatsApp message cannot be empty.');
-      return;
-    }
-
-    setIsSending(true);
-    try {
-      const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          dealerIds: [targetDealerId], // Always send a single ID in an array
-          message: whatsappMessage,
-          comboOfferId: selectedOfferId,
-          sentByUserId: user.id,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to send WhatsApp message');
-      }
-
-      showSuccess('WhatsApp message prepared. A new tab may open, please ensure pop-ups are allowed.');
-      
-      const result = data.results.find((r: any) => r.dealerId === targetDealerId);
-      if (result && result.status === 'success' && result.phone) {
-        const personalizedMessage = whatsappMessage.replace('[DEALER_NAME]', result.dealerName);
-        const encodedMessage = encodeURIComponent(personalizedMessage);
-        const whatsappUrl = `https://web.whatsapp.com/send?phone=${result.phone}&text=${encodedMessage}`;
-        window.open(whatsappUrl, '_blank');
-        setSentDealerIds(prev => new Set([...prev, targetDealerId])); // Mark this single dealer as sent
-      } else {
-        showError(`Failed to open WhatsApp for ${result?.dealerName || 'selected dealer'}. Phone number might be missing or an error occurred.`);
-      }
-
-      onMessageSent();
-    } catch (error: any) {
-      console.error('Error sending WhatsApp message:', error);
-      showError(`Failed to send WhatsApp message: ${error.message}`);
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const handleClearFilters = () => {
-    setFilterCity('');
-    setFilterState('');
-  };
+  }, [selectedOfferId, comboOffers, companyName, setWhatsappMessage]);
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-blue-600 dark:bg-blue-800 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold flex items-center gap-2">
-          <MessageCircle className="h-6 w-6" /> Send WhatsApp Offer
+          <MessageCircle className="h-6 w-6" /> Prepare WhatsApp Offer
         </CardTitle>
         <CardDescription className="text-blue-100 dark:text-blue-200">
-          Select dealers, then choose an offer to send a personalized WhatsApp message.
+          Filter dealers, select an offer, and preview your personalized message.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
@@ -352,68 +170,6 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({ onMessage
                 disabled={isSending || !selectedOfferId}
               />
             </div>
-
-            {/* Individual Send Table */}
-            {selectedDealerIds.length > 0 && (
-              <div className="overflow-x-auto max-h-[300px] overflow-y-auto border rounded-md mt-4">
-                <h3 className="text-lg font-semibold p-2 bg-muted/50 sticky top-0 z-10">Selected Dealers</h3>
-                <Table>
-                  <TableHeader className="sticky top-0 bg-background z-10">
-                    <TableRow className="bg-muted hover:bg-muted/90">
-                      <TableHead className="text-muted-foreground">Dealer Name</TableHead>
-                      <TableHead className="text-muted-foreground">Phone</TableHead>
-                      <TableHead className="text-muted-foreground">City</TableHead>
-                      <TableHead className="text-muted-foreground">State</TableHead>
-                      <TableHead className="text-muted-foreground text-center">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedDealerIds.map((dealerId) => {
-                      const dealer = allRawDealers.find(d => d.value === dealerId);
-                      if (!dealer) return null;
-                      const isDealerSent = sentDealerIds.has(dealer.value);
-                      
-                      return (
-                        <TableRow 
-                          key={dealer.value} 
-                          className={cn("hover:bg-accent/50", isDealerSent && "opacity-50 cursor-not-allowed")}
-                        >
-                          <TableCell className="font-medium text-foreground">{dealer.label.split('(')[0].trim()}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
-                          <TableCell className="text-center">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleSendWhatsApp(dealer.value)}
-                              title={isDealerSent ? "Already Sent" : `Send to ${dealer.label.split('(')[0].trim()}`}
-                              disabled={isSending || !dealer.phone || !selectedOfferId || !whatsappMessage.trim() || isDealerSent}
-                            >
-                              <Send className="h-4 w-4 text-blue-500" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-
-            {/* Reset Sent Status Button */}
-            {sentDealerIds.size > 0 && (
-              <div className="flex justify-end mt-4">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setSentDealerIds(new Set())} 
-                  disabled={isSending}
-                  className="flex items-center gap-2"
-                >
-                  <RotateCcw className="h-4 w-4" /> Reset Sent Status
-                </Button>
-              </div>
-            )}
           </>
         )}
       </CardContent>
