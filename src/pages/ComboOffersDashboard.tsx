@@ -17,7 +17,7 @@ import { ArrowLeft, Loader2, Gift, PlusCircle, Edit, Trash2, Users } from 'lucid
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import WhatsAppMessageSender from '@/components/WhatsAppMessageSender';
-import SelectedDealersListCard from '@/components/SelectedDealersListCard'; // New import
+import SelectedDealersListCard from '@/components/SelectedDealersListCard';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -450,6 +450,58 @@ const ComboOffersDashboard = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-6 flex-grow">
+            {/* List of existing offers with edit/delete icons */}
+            {comboOffersList.length > 0 && (
+              <div className="mb-4 max-h-40 overflow-y-auto border rounded-md p-2 bg-muted/10">
+                <h3 className="text-sm font-medium mb-2 text-muted-foreground">Existing Offers:</h3>
+                <ul className="space-y-1">
+                  {comboOffersList.map((offer) => (
+                    <li key={offer.id} className="flex justify-between items-center text-sm p-1 hover:bg-accent rounded">
+                      <span className="truncate">{offer.name}</span>
+                      <div className="flex space-x-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleEditOffer(offer)}
+                          title="Edit Offer"
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              title="Delete Offer"
+                              disabled={isSubmitting}
+                            >
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the combo offer "{offer.name}".
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteOffer(offer.id)} disabled={isSubmitting}>
+                                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <Form {...createForm}>
               <form onSubmit={createForm.handleSubmit(handleCreateOffer)} className="space-y-4">
                 <FormField
