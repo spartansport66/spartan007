@@ -283,7 +283,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
 
   const renderPaymentDetails = (details: OrderDetail) => {
     if (details.payment_status !== 'paid' && details.payment_status !== 'pending_approval' || !details.payment_method) return null;
-    
+
     return (
       <div className="space-y-2">
         <h3 className="text-lg font-semibold">Payment Details</h3>
@@ -334,7 +334,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
 
   const handlePrint = () => {
     if (!orderDetails) return;
-    
+
     let paymentDetailsHtml = '';
     if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
       paymentDetailsHtml = `
@@ -354,16 +354,46 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
 
     const printContent = `
       <style>
-        body { font-family: sans-serif; margin: 20px; }
-        h1 { font-size: 24px; margin-bottom: 15px; }
-        h2 { font-size: 18px; margin-top: 20px; margin-bottom: 10px; }
-        p { margin-bottom: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        .text-right { text-align: right; }
-        .summary { margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; }
-        .text-red-600 { color: #dc2626; } /* Tailwind red-600 */
+        body {
+          font-family: sans-serif;
+          margin: 20px;
+        }
+        h1 {
+          font-size: 24px;
+          margin-bottom: 15px;
+        }
+        h2 {
+          font-size: 18px;
+          margin-top: 20px;
+          margin-bottom: 10px;
+        }
+        p {
+          margin-bottom: 5px;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 10px;
+        }
+        th, td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+        th {
+          background-color: #f2f2f2;
+        }
+        .text-right {
+          text-align: right;
+        }
+        .summary {
+          margin-top: 20px;
+          padding-top: 10px;
+          border-top: 1px solid #eee;
+        }
+        .text-red-600 {
+          color: #dc2626;
+        } /* Tailwind red-600 */
       </style>
       <h1>Order Details</h1>
       <p><strong>Order Number:</strong> ${orderDetails.order_number}</p>
@@ -469,7 +499,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 </p>
               </div>
             </div>
-            
+
             {(orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') && orderDetails.payment_method && (
               <>
                 <Separator />
@@ -485,7 +515,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                     {showPaymentDetails ? 'Hide Details' : 'View Details'}
                   </Button>
                 </div>
-                
                 {showPaymentDetails && (
                   <div className="p-3 bg-muted rounded-md">
                     {renderPaymentDetails(orderDetails)}
@@ -493,7 +522,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 )}
               </>
             )}
-            
+
             <Separator />
             <h3 className="text-lg font-semibold">Order Items</h3>
             {orderDetails.items.length === 0 ? (
