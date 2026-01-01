@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -76,7 +75,10 @@ const PaymentStatusCard: React.FC = () => {
         showError('Failed to load dealers for filter.');
         setAllDealers([]);
       } else {
-        setAllDealers((assignedDealersData || []).map((item: any) => ({ value: item.dealers.id, label: item.dealers.name })));
+        setAllDealers((assignedDealersData || []).map((item: any) => ({
+          value: item.dealers.id,
+          label: item.dealers.name
+        })));
       }
 
       // Build the query for orders
@@ -112,6 +114,7 @@ const PaymentStatusCard: React.FC = () => {
           .gte('payment_due_date', todayISO)
           .lte('payment_due_date', endOfTodayISO);
       }
+
       // If filterStatus is 'all', no payment_status filter is applied here.
 
       // Apply dealer filter
@@ -124,6 +127,7 @@ const PaymentStatusCard: React.FC = () => {
         const startOfDay = `${filterFromDate}T00:00:00.000Z`;
         query = query.gte('order_date', startOfDay);
       }
+
       if (filterToDate) {
         const endOfDay = `${filterToDate}T23:59:59.999Z`;
         query = query.lte('order_date', endOfDay);
@@ -146,6 +150,7 @@ const PaymentStatusCard: React.FC = () => {
           payment_due_date: order.payment_due_date,
           payment_status: order.payment_status,
         }));
+
         setOrders(formattedOrders);
       }
     } catch (error: any) {
@@ -231,10 +236,11 @@ const PaymentStatusCard: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
+          
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterDealer">Dealer Name</Label>
             <Select 
-              value={filterDealerId || "all"}
+              value={filterDealerId || "all"} 
               onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}
             >
               <SelectTrigger id="filterDealer" className="w-full">
@@ -248,26 +254,29 @@ const PaymentStatusCard: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
+          
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterFromDate">From Order Date</Label>
-            <Input
-              id="filterFromDate"
-              type="date"
-              value={filterFromDate}
-              onChange={(e) => setFilterFromDate(e.target.value)}
+            <Input 
+              id="filterFromDate" 
+              type="date" 
+              value={filterFromDate} 
+              onChange={(e) => setFilterFromDate(e.target.value)} 
               className="w-full"
             />
           </div>
+          
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterToDate">To Order Date</Label>
-            <Input
-              id="filterToDate"
-              type="date"
-              value={filterToDate}
-              onChange={(e) => setFilterToDate(e.target.value)}
+            <Input 
+              id="filterToDate" 
+              type="date" 
+              value={filterToDate} 
+              onChange={(e) => setFilterToDate(e.target.value)} 
               className="w-full"
             />
           </div>
+          
           <Button onClick={fetchOrdersAndDealers} className="flex items-center gap-2">
             <Search className="h-4 w-4" /> Apply Filters
           </Button>
@@ -275,7 +284,7 @@ const PaymentStatusCard: React.FC = () => {
             Clear Filters
           </Button>
         </div>
-
+        
         <div className="overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -300,7 +309,10 @@ const PaymentStatusCard: React.FC = () => {
                 </TableHeader>
                 <TableBody>
                   {orders.map((order) => (
-                    <TableRow key={order.id} className={isOverdue(order.payment_due_date, order.payment_status) ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-accent/50"}>
+                    <TableRow 
+                      key={order.id} 
+                      className={isOverdue(order.payment_due_date, order.payment_status) ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-accent/50"}
+                    >
                       <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
                       <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
@@ -319,7 +331,7 @@ const PaymentStatusCard: React.FC = () => {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            onClick={() => handleAddPaymentDetails(order)} 
+                            onClick={() => handleAddPaymentDetails(order)}
                             title="Add Payment Details"
                           >
                             <DollarSign className="h-4 w-4 text-green-600" />
@@ -334,7 +346,7 @@ const PaymentStatusCard: React.FC = () => {
           )}
         </div>
       </CardContent>
-
+      
       {selectedOrderForPaymentUpdate && (
         <UpdatePaymentDialog 
           orderToUpdate={selectedOrderForPaymentUpdate} 
