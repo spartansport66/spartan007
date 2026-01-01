@@ -14,7 +14,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useSession } from '@/contexts/SessionContext';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-// Removed Dialog components import
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -49,18 +48,88 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
   const { user } = useSession();
   const [allRawDealers, setAllRawDealers] = useState<DealerOption[]>([]);
   const [comboOffers, setComboOffers] = useState<ComboOffer[]>([]);
-  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]);
-  const [selectedOfferId, setSelectedOfferId] = useState<string>('');
-  const [whatsappMessage, setWhatsappMessage] = useState<string>('');
+  
+  // State variables to persist
+  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('whatsapp_selectedDealerIds');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+  const [selectedOfferId, setSelectedOfferId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('whatsapp_selectedOfferId') || '';
+    }
+    return '';
+  });
+  const [whatsappMessage, setWhatsappMessage] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('whatsapp_message') || '';
+    }
+    return '';
+  });
+  const [sendToAllFilteredDealers, setSendToAllFilteredDealers] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('whatsapp_sendToAllFiltered');
+      return saved ? JSON.parse(saved) : false;
+    }
+    return false;
+  });
+  const [filterCity, setFilterCity] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('whatsapp_filterCity') || '';
+    }
+    return '';
+  });
+  const [filterState, setFilterState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('whatsapp_filterState') || '';
+    }
+    return '';
+  });
+
   const [initialLoading, setInitialLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [sendToAllFilteredDealers, setSendToAllFilteredDealers] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
-
-  // Filter states for the MultiSelect options
-  const [filterCity, setFilterCity] = useState<string>('');
-  const [filterState, setFilterState] = useState<string>('');
   const [filteredDealersForMultiSelect, setFilteredDealersForMultiSelect] = useState<DealerOption[]>([]);
+
+  // Effects to save state to sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_selectedDealerIds', JSON.stringify(selectedDealerIds));
+    }
+  }, [selectedDealerIds]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_selectedOfferId', selectedOfferId);
+    }
+  }, [selectedOfferId]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_message', whatsappMessage);
+    }
+  }, [whatsappMessage]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_sendToAllFiltered', JSON.stringify(sendToAllFilteredDealers));
+    }
+  }, [sendToAllFilteredDealers]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_filterCity', filterCity);
+    }
+  }, [filterCity]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_filterState', filterState);
+    }
+  }, [filterState]);
 
   const fetchInitialData = useCallback(async () => {
     setInitialLoading(true);
@@ -131,7 +200,13 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
         setWhatsappMessage(message);
       }
     } else {
-      setWhatsappMessage('');
+      // Only clear if the message was dynamically generated for an offer
+      // If the user manually typed a message, we don't want to clear it
+      // This logic might need refinement if user expects manual message to persist
+      // even after clearing offer selection. For now, it clears if no offer is selected.
+      if (whatsappMessage.startsWith(`Hello Dealer,\n\n*${companyName || 'Our Company'}*`)) {
+        setWhatsappMessage('');
+      }
     }
   }, [selectedOfferId, comboOffers, companyName]);
 
@@ -343,7 +418,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                       <TableHead className="text-muted-foreground">Phone</TableHead>
                       <TableHead className="text-muted-foreground">City</TableHead>
                       <TableHead className="text-muted-foreground">State</TableHead>
-                      <TableHead className="text-muted-foreground text-center">Action</TableHead> {/* Re-added Action TableHead */}
+                      <TableHead className="text-muted-foreground text-center">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
