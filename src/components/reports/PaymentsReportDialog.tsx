@@ -141,7 +141,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         const { data, error } = await query;
         fetchedData = data;
         fetchError = error;
-
+        console.log("DEBUG: Raw fetchedData for pending_approval:", fetchedData); // DEBUG LOG
       } else {
         // For other statuses, query orders table
         let query = supabase
@@ -227,6 +227,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
             };
           }
         });
+        console.log("DEBUG: Formatted payments after mapping:", formattedPayments); // DEBUG LOG
         setPayments(formattedPayments);
       }
     } catch (error: any) {
@@ -282,6 +283,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
 
   const handleApproveRejectPayment = async (payment: PaymentReportData, action: 'approve' | 'reject') => {
     if (!payment.payment_id) {
+      console.error("ERROR: payment.payment_id is missing for this record:", payment); // DEBUG LOG
       showError('Payment ID is missing for this record.');
       return;
     }
@@ -559,7 +561,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction 
-                                      onClick={() => handleApproveRejectPayment(payment, 'approve')} 
+                                      onClick={() => {
+                                        console.log("DEBUG: Approving payment:", payment); // DEBUG LOG
+                                        handleApproveRejectPayment(payment, 'approve');
+                                      }} 
                                       disabled={isSubmittingAction}
                                     >
                                       {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
@@ -584,7 +589,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction 
-                                      onClick={() => handleApproveRejectPayment(payment, 'reject')} 
+                                      onClick={() => {
+                                        console.log("DEBUG: Rejecting payment:", payment); // DEBUG LOG
+                                        handleApproveRejectPayment(payment, 'reject');
+                                      }} 
                                       disabled={isSubmittingAction}
                                     >
                                       {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reject'}
