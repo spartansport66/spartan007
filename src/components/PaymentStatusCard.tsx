@@ -108,22 +108,7 @@ const PaymentStatusCard: React.FC = () => {
           total_amount,
           payment_due_date,
           payment_status,
-          dealers (name, phone),
-          payments (
-            amount,
-            payment_method,
-            payment_date,
-            cheque_dd_no,
-            cheque_dd_date,
-            card_number,
-            card_holder_name,
-            expiry_date,
-            bank_name,
-            account_number,
-            ifsc_code,
-            upi_id,
-            transaction_id
-          )
+          dealers (name, phone)
         `)
         .eq('user_id', user.id) // Filter by current sales person
         .order('payment_due_date', { ascending: true });
@@ -170,36 +155,82 @@ const PaymentStatusCard: React.FC = () => {
         showError('Failed to load orders.');
         setOrders([]);
       } else {
-        const formattedOrders: Order[] = (ordersData || []).map((order: any) => {
-          const paymentInfo = order.payments && order.payments.length > 0 ? order.payments[0] : null;
-          
-          return {
-            id: order.id,
-            order_number: order.order_number,
-            order_date: order.order_date,
-            total_amount: order.total_amount,
-            dealer_name: order.dealers?.name || 'N/A',
-            dealer_phone: order.dealers?.phone || '',
-            payment_due_date: order.payment_due_date,
-            payment_status: order.payment_status,
-            // Payment details
-            payment_method: paymentInfo?.payment_method || null,
-            payment_amount: paymentInfo?.amount || null,
-            payment_date: paymentInfo?.payment_date || null,
-            cheque_dd_no: paymentInfo?.cheque_dd_no || null,
-            cheque_dd_date: paymentInfo?.cheque_dd_date || null,
-            card_number: paymentInfo?.card_number || null,
-            card_holder_name: paymentInfo?.card_holder_name || null,
-            expiry_date: paymentInfo?.expiry_date || null,
-            bank_name: paymentInfo?.bank_name || null,
-            account_number: paymentInfo?.account_number || null,
-            ifsc_code: paymentInfo?.ifsc_code || null,
-            upi_id: paymentInfo?.upi_id || null,
-            transaction_id: paymentInfo?.transaction_id || null,
-          };
-        });
+        // For each order with payment_status 'paid' or 'pending_approval', fetch payment details
+        const ordersWithPaymentDetails = await Promise.all(
+          (ordersData || []).map(async (order: any) => {
+            let paymentDetails = {
+              payment_method: null,
+              payment_amount: null,
+              payment_date: null,
+              cheque_dd_no: null,
+              cheque_dd_date: null,
+              card_number: null,
+              card_holder_name: null,
+              expiry_date: null,
+              bank_name: null,
+              account_number: null,
+              ifsc_code: null,
+              upi_id: null,
+              transaction_id: null,
+            };
 
-        setOrders(formattedOrders);
+            // Only fetch payment details for paid or pending_approval orders
+            if (order.payment_status === 'paid' || order.payment_status === 'pending_approval') {
+              const { data: paymentData, error: paymentError } = await supabase
+                .from('payments')
+                .select(`
+                  amount,
+                  payment_method,
+                  payment_date,
+                  cheque_dd_no,
+                  cheque_dd_date,
+                  card_number,
+                  card_holder_name,
+                  expiry_date,
+                  bank_name,
+                  account_number,
+                  ifsc_code,
+                  upi_id,
+                  transaction_id
+                `)
+                .eq('order_id', order.id)
+                .single();
+
+              if (!paymentError && paymentData) {
+                paymentDetails = {
+                  payment_method: paymentData.payment_method || null,
+                  payment_amount: paymentData.amount || null,
+                  payment_date: paymentData.payment_date || null,
+                  cheque_dd_no: paymentData.cheque_dd_no || null,
+                  cheque_dd_date: paymentData.cheque_dd_date || null,
+                  card_number: paymentData.card_number || null,
+                  card_holder_name: paymentData.card_holder_name || null,
+                  expiry_date: paymentData.expiry_date || null,
+                  bank_name: paymentData.bank_name || null,
+                  account_number: paymentData.account_number || null,
+                  ifsc_code: paymentData.ifsc_code || null,
+                  upi_id: paymentData.upi_id || null,
+                  transaction_id: paymentData.transaction_id || null,
+                };
+              }
+            }
+
+            return {
+              id: order.id,
+              order_number: order.order_number,
+              order_date: order.order_date,
+              total_amount: order.total_amount,
+              dealer_name: order.dealers?.name || 'N/A',
+              dealer_phone: order.dealers?.phone || '',
+              payment_due_date: order.payment_due_date,
+              payment_status: order.payment_status,
+              // Payment details
+              ...paymentDetails
+            };
+          })
+        );
+
+        setOrders(ordersWithPaymentDetails);
       }
     } catch (error: any) {
       console.error('Error in fetchOrdersAndDealers:', error.message);
