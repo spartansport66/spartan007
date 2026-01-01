@@ -54,6 +54,7 @@ const Dashboard = () => {
       setLoadingData(false);
       return;
     }
+
     setLoadingData(true);
 
     // Fetch dealers assigned to the current user via the join table
@@ -61,7 +62,7 @@ const Dashboard = () => {
       .from('dealer_sales_persons')
       .select('dealers(id, name)')
       .eq('sales_person_id', user.id);
-    
+
     if (assignedDealersError) {
       console.error('Error fetching assigned dealers:', assignedDealersError);
       showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
@@ -75,12 +76,20 @@ const Dashboard = () => {
     const { data: salesData, error: salesError } = await supabase
       .from('sales')
       .select(`
-        id, quantity, total_price, sale_date,
+        id,
+        quantity,
+        total_price,
+        sale_date,
         products (name),
-        orders (dealers (name), user_id, profiles (first_name, last_name), payment_status)
+        orders (
+          dealers (name),
+          user_id,
+          profiles (first_name, last_name),
+          payment_status
+        )
       `)
       .order('sale_date', { ascending: false });
-    
+
     if (salesError) {
       console.error('Error fetching sales:', salesError);
       showError(`Failed to load sales data: ${salesError.message}`);
@@ -96,10 +105,14 @@ const Dashboard = () => {
         orders: sale.orders ? {
           dealers: sale.orders.dealers ? { name: sale.orders.dealers.name } : null,
           user_id: sale.orders.user_id,
-          profiles: sale.orders.profiles ? { first_name: sale.orders.profiles.first_name, last_name: sale.orders.profiles.last_name } : null,
+          profiles: sale.orders.profiles ? {
+            first_name: sale.orders.profiles.first_name,
+            last_name: sale.orders.profiles.last_name
+          } : null,
           payment_status: sale.orders.payment_status, // Added
         } : null,
       }));
+
       setSales(typedSalesData);
 
       // Calculate total sales value and total orders
@@ -108,6 +121,7 @@ const Dashboard = () => {
       setTotalSalesValue(totalValue);
       setTotalOrders(totalOrdersCount);
     }
+
     setLoadingData(false);
   }, [user]);
 
@@ -211,7 +225,9 @@ const Dashboard = () => {
       </div>
 
       {/* Payment Status Card */}
-      <PaymentStatusCard />
+      <div className="mb-6">
+        <PaymentStatusCard />
+      </div>
 
       {/* Recent Activities (Sales) */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
