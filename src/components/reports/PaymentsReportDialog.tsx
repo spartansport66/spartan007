@@ -7,15 +7,16 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, MessageCircle, DollarSign, Calendar, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, Search, Printer, MessageCircle, DollarSign, Calendar, Clock, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface PaymentReportData {
-  id: string;
+  id: string; // Order ID
   order_number: number;
   dealer_name: string;
   dealer_phone: string;
@@ -23,6 +24,8 @@ interface PaymentReportData {
   payment_status: string;
   payment_due_date: string | null;
   order_date: string;
+  payment_id: string | null; // New: to store the actual payment record ID for approval actions
+  dealer_id: string; // New: to pass to the approve-payment edge function
 }
 
 interface DealerOption {
@@ -35,6 +38,9 @@ interface PaymentsReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// IMPORTANT: Replace with the actual URL of your deployed Edge Function
+const APPROVE_PAYMENT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/approve-payment";
+
 const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const [payments, setPayments] = useState<PaymentReportData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,9 +48,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PaymentReportData | null>(null);
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false); // For approve/reject actions
   
   // Filter states
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due'>('pending');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('pending');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
@@ -94,7 +101,9 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
           total_amount, 
           payment_status, 
           payment_due_date, 
-          dealers (name, phone)
+          dealer_id,
+          dealers (name, phone),
+          payments (id)
         `)
         .order('payment_due_date', { ascending: true });
 
@@ -109,6 +118,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         query = query.eq('payment_status', 'pending');
       } else if (filterStatus === 'paid') {
         query = query.eq('payment_status', 'paid');
+      } else if (filterStatus === 'pending_approval') {
+        query = query.eq('payment_status', 'pending_approval');
       } else if (filterStatus === 'overdue') {
         query = query.eq('payment_status', 'pending').lte('payment_due_date', todayISO);
       } else if (filterStatus === 'upcoming') {
@@ -141,7 +152,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         setPayments([]);
       } else {
         const formattedPayments: PaymentReportData[] = (paymentsData || []).map((order: any) => ({
-          id: order.id,
+          id: order.id, // This is the order ID
           order_number: order.order_number,
           dealer_name: order.dealers?.name || 'N/A',
           dealer_phone: order.dealers?.phone || '',
@@ -149,6 +160,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
           payment_status: order.payment_status,
           payment_due_date: order.payment_due_date,
           order_date: order.order_date,
+          payment_id: order.payments?.[0]?.id || null, // Get the first payment ID if available
+          dealer_id: order.dealer_id,
         }));
         setPayments(formattedPayments);
       }
@@ -201,6 +214,43 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
 
   const handlePaymentUpdated = () => {
     fetchPaymentsAndDealers();
+  };
+
+  const handleApproveRejectPayment = async (payment: PaymentReportData, action: 'approve' | 'reject') => {
+    if (!payment.payment_id) {
+      showError('Payment ID is missing for this record.');
+      return;
+    }
+    setIsSubmittingAction(true);
+    try {
+      const response = await fetch(APPROVE_PAYMENT_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          paymentId: payment.payment_id,
+          orderId: payment.id, // This is the order ID
+          dealerId: payment.dealer_id,
+          amount: payment.total_amount,
+          action: action,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to ${action} payment`);
+      }
+
+      showSuccess(`Payment ${action === 'approve' ? 'approved' : 'rejected'} successfully!`);
+      fetchPaymentsAndDealers(); // Refresh the list
+    } catch (error: any) {
+      console.error(`Error ${action}ing payment:`, error);
+      showError(`Failed to ${action} payment: ${error.message}`);
+    } finally {
+      setIsSubmittingAction(false);
+    }
   };
 
   const handlePrint = () => {
@@ -260,6 +310,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         return 'text-green-600 bg-green-100';
       case 'pending':
         return 'text-yellow-600 bg-yellow-100';
+      case 'pending_approval':
+        return 'text-blue-600 bg-blue-100';
       case 'overdue':
         return 'text-red-600 bg-red-100';
       default:
@@ -274,6 +326,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         return <CheckCircle className="h-4 w-4 text-green-600" />;
       case 'pending':
         return <Clock className="h-4 w-4 text-yellow-600" />;
+      case 'pending_approval':
+        return <Clock className="h-4 w-4 text-blue-600" />;
       case 'overdue':
         return <AlertCircle className="h-4 w-4 text-red-600" />;
       default:
@@ -302,6 +356,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="pending_approval">Pending Approval</SelectItem>
                 <SelectItem value="overdue">Overdue</SelectItem>
                 <SelectItem value="todays_due">Today's Due</SelectItem>
                 <SelectItem value="upcoming">Upcoming</SelectItem>
@@ -385,7 +440,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                       <TableCell>
                         <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(payment.payment_status)}`}>
                           {getStatusIcon(payment.payment_status)}
-                          <span className="capitalize">{payment.payment_status}</span>
+                          <span className="capitalize">{payment.payment_status.replace('_', ' ')}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-foreground">
@@ -421,6 +476,59 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                             >
                               <MessageCircle className="h-4 w-4 text-blue-500" />
                             </Button>
+                          )}
+                          {payment.payment_status === 'pending_approval' && (
+                            <>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" title="Approve Payment" disabled={isSubmittingAction}>
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to approve the payment of ₹{payment.total_amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will mark the order as paid and update the dealer's credit.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => handleApproveRejectPayment(payment, 'approve')} 
+                                      disabled={isSubmittingAction}
+                                    >
+                                      {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" title="Reject Payment" disabled={isSubmittingAction}>
+                                    <XCircle className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Reject Payment?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to reject the payment of ₹{payment.total_amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will revert the order to pending status.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => handleApproveRejectPayment(payment, 'reject')} 
+                                      disabled={isSubmittingAction}
+                                    >
+                                      {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reject'}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </>
                           )}
                         </div>
                       </TableCell>
