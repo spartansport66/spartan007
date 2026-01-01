@@ -152,7 +152,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         const { data: totalSpentData, error: totalSpentError } = await supabase
           .from('orders')
           .select('total_amount')
-          .eq('dealer_id', dealerId);
+          .eq('dealer_id', dealerId)
+          .eq('payment_status', 'pending'); // Only count pending orders for consumed credit
 
         if (totalSpentError) throw totalSpentError;
         dealerConsumedCredit = totalSpentData.reduce((sum, order) => sum + order.total_amount, 0);
@@ -258,60 +259,42 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
   }, [isOpen, orderDetails, shouldPrintOnLoad, onOpenChange]);
 
   const renderPaymentDetails = (details: OrderDetail) => {
-    if (details.payment_status !== 'paid' || !details.payment_method) return null;
+    if (details.payment_status !== 'paid' && details.payment_status !== 'pending_approval' || !details.payment_method) return null;
 
-    switch (details.payment_method) {
-      case 'Cash':
-        return <p><strong>Amount Paid:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>;
-      case 'Card':
-        return (
+    return (
+      <>
+        <p><strong>Payment Method:</strong> {details.payment_method || 'N/A'}</p>
+        <p><strong>Amount:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
+        {details.payment_method === 'Cheque/DD' && (
           <>
-            <p><strong>Amount Paid:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
-            <p><strong>Card Number:</strong> {details.card_number || 'N/A'}</p>
-            <p><strong>Card Holder:</strong> {details.card_holder_name || 'N/A'}</p>
-            <p><strong>Expiry Date:</strong> {details.expiry_date || 'N/A'}</p>
-          </>
-        );
-      case 'Bank Transfer':
-        return (
-          <>
-            <p><strong>Amount Paid:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
-            <p><strong>Bank Name:</strong> {details.bank_name || 'N/A'}</p>
-            <p><strong>Account Number:</strong> {details.account_number || 'N/A'}</p>
-            <p><strong>IFSC Code:</strong> {details.ifsc_code || 'N/A'}</p>
-            <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
-          </>
-        );
-      case 'UPI':
-        return (
-          <>
-            <p><strong>Amount Paid:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
-            <p><strong>UPI ID:</strong> {details.upi_id || 'N/A'}</p>
-            <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
-          </>
-        );
-      case 'Cheque/DD':
-        return (
-          <>
-            <p><strong>Amount Paid:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
             <p><strong>Cheque/DD No:</strong> {details.cheque_dd_no || 'N/A'}</p>
             <p><strong>Cheque/DD Date:</strong> {details.cheque_dd_date ? new Date(details.cheque_dd_date).toLocaleDateString() : 'N/A'}</p>
           </>
-        );
-      default:
-        return null;
-    }
+        )}
+        {(details.payment_method === 'Card' || details.payment_method === 'Bank Transfer' || details.payment_method === 'UPI') && (
+          <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
+        )}
+        {/* Add other specific payment details if needed, e.g., card number, bank name, UPI ID */}
+      </>
+    );
   };
 
   const handlePrint = () => {
     if (!orderDetails) return;
 
     let paymentDetailsHtml = '';
-    if (orderDetails.payment_status === 'paid' && orderDetails.payment_method) {
+    if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
       paymentDetailsHtml = `
         <h2>Payment Details</h2>
-        <p><strong>Payment Method:</strong> ${orderDetails.payment_method}</p>
-        ${renderPaymentDetails(orderDetails)}
+        <p><strong>Payment Method:</strong> ${orderDetails.payment_method || 'N/A'}</p>
+        <p><strong>Amount:</strong> ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}</p>
+        ${orderDetails.payment_method === 'Cheque/DD' ? `
+          <p><strong>Cheque/DD No:</strong> ${orderDetails.cheque_dd_no || 'N/A'}</p>
+          <p><strong>Cheque/DD Date:</strong> ${orderDetails.cheque_dd_date ? new Date(orderDetails.cheque_dd_date).toLocaleDateString() : 'N/A'}</p>
+        ` : ''}
+        ${(orderDetails.payment_method === 'Card' || orderDetails.payment_method === 'Bank Transfer' || orderDetails.payment_method === 'UPI') ? `
+          <p><strong>Transaction ID:</strong> ${orderDetails.transaction_id || 'N/A'}</p>
+        ` : ''}
       `;
     }
 
@@ -328,16 +311,19 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         .summary { margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; }
         .text-red-600 { color: #dc2626; } /* Tailwind red-600 */
       </style>
-      <h1>Dispatch Receipt</h1>
-      <p><strong>Dispatch Number:</strong> ${orderDetails.dispatch_number || 'N/A'}</p>
-      <p><strong>Dispatch Date:</strong> ${orderDetails.dispatch_date ? new Date(orderDetails.dispatch_date).toLocaleDateString() : 'N/A'}</p>
+      <h1>Order Details</h1>
       <p><strong>Order Number:</strong> ${orderDetails.order_number}</p>
       <p><strong>Order Date:</strong> ${new Date(orderDetails.order_date).toLocaleDateString()}</p>
-      <p><strong>Bill Number:</strong> ${orderDetails.bill_no || 'N/A'}</p>
-      <p><strong>Sales Person:</strong> ${orderDetails.sales_person_name}</p>
       <p><strong>Order Status:</strong> ${orderDetails.status}</p>
       <p><strong>Payment Status:</strong> ${orderDetails.payment_status}</p>
       <p><strong>Payment Due Date:</strong> ${orderDetails.payment_due_date ? new Date(orderDetails.payment_due_date).toLocaleDateString() : 'N/A'}</p>
+      <p><strong>Sales Person:</strong> ${orderDetails.sales_person_name}</p>
+      ${orderDetails.dispatched ? `
+        <h2>Dispatch Information</h2>
+        <p><strong>Dispatch Number:</strong> ${orderDetails.dispatch_number || 'N/A'}</p>
+        <p><strong>Dispatch Date:</strong> ${orderDetails.dispatch_date ? new Date(orderDetails.dispatch_date).toLocaleDateString() : 'N/A'}</p>
+        <p><strong>Bill Number:</strong> ${orderDetails.bill_no || 'N/A'}</p>
+      ` : ''}
 
       <h2>Dealer Information</h2>
       <p><strong>Name:</strong> ${orderDetails.dealer_name}</p>
@@ -374,8 +360,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
 
       <h2>Dealer Credit Information</h2>
       <p><strong>Credit Limit:</strong> <span class="text-right">₹${orderDetails.dealer_credit_limit.toFixed(2)}</span></p>
-      <p><strong>Consumed Credit:</strong> <span class="text-right">₹${orderDetails.dealer_consumed_credit.toFixed(2)}</span></p>
-      <p><strong>Pending Credit:</strong> <span class="${orderDetails.dealer_pending_credit > 0 ? 'text-red-600' : ''}">₹${orderDetails.dealer_pending_credit.toFixed(2)}</span></p>
+      <p><strong>Consumed Credit (Pending Orders):</strong> <span class="text-right">₹${orderDetails.dealer_consumed_credit.toFixed(2)}</span></p>
+      <p><strong>Available Credit:</strong> <span class="${orderDetails.dealer_pending_credit < 0 ? 'text-red-600' : ''}">₹${orderDetails.dealer_pending_credit.toFixed(2)}</span></p>
     `;
 
     const printWindow = window.open('', '_blank');
@@ -425,17 +411,17 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 <p><span className="font-semibold">Address:</span> {orderDetails.dealer_address}, {orderDetails.dealer_city}, {orderDetails.dealer_state}, {orderDetails.dealer_country}</p>
                 <p><span className="font-semibold">Phone:</span> {orderDetails.dealer_phone}</p>
                 <p><span className="font-semibold">Credit Limit:</span> ₹{orderDetails.dealer_credit_limit.toFixed(2)}</p>
-                <p><span className="font-semibold">Consumed Credit:</span> ₹{orderDetails.dealer_consumed_credit.toFixed(2)}</p>
+                <p><span className="font-semibold">Consumed Credit (Pending Orders):</span> ₹{orderDetails.dealer_consumed_credit.toFixed(2)}</p>
                 <p>
-                  <span className="font-semibold">Pending Credit:</span>{' '}
-                  <span className={orderDetails.dealer_pending_credit > 0 ? 'text-destructive' : ''}>
+                  <span className="font-semibold">Available Credit:</span>{' '}
+                  <span className={orderDetails.dealer_pending_credit < 0 ? 'text-destructive' : ''}>
                     ₹{orderDetails.dealer_pending_credit.toFixed(2)}
                   </span>
                 </p>
               </div>
             </div>
 
-            {orderDetails.payment_status === 'paid' && orderDetails.payment_method && (
+            {(orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') && orderDetails.payment_method && (
               <>
                 <Separator />
                 <h3 className="text-lg font-semibold">Payment Details</h3>

@@ -121,17 +121,17 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     if (!orderToUpdate) return;
     setLoading(true);
     try {
-      // 1. Update the order's payment status to 'paid'
+      // 1. Update the order's payment status to 'pending_approval'
       const { error: orderUpdateError } = await supabase
         .from('orders')
-        .update({ payment_status: 'paid' })
+        .update({ payment_status: 'pending_approval' })
         .eq('id', orderToUpdate.id);
       
       if (orderUpdateError) {
         throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
       }
 
-      // 2. Insert a new payment record
+      // 2. Insert a new payment record with status 'pending_approval'
       const { error: paymentInsertError } = await supabase
         .from('payments')
         .insert({
@@ -139,7 +139,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
           amount: values.amount,
           payment_method: values.paymentMethod,
           payment_date: new Date().toISOString(), // Record current date as payment date
-          status: 'completed', // Payment is now completed
+          status: 'pending_approval', // Payment is now pending approval
           // Conditional fields based on payment method
           cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
           cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
@@ -161,46 +161,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
       }
 
-      // 3. Fetch the dealer_id for the order
-      const { data: orderData, error: fetchOrderError } = await supabase
-        .from('orders')
-        .select('dealer_id')
-        .eq('id', orderToUpdate.id)
-        .single();
-
-      if (fetchOrderError) {
-        throw new Error(`Failed to fetch dealer ID for order: ${fetchOrderError.message}`);
-      }
-      if (!orderData?.dealer_id) {
-        throw new Error('Dealer ID not found for the order.');
-      }
-
-      // 4. Update the dealer's credit_limit
-      const { data: dealerCurrentCredit, error: fetchDealerError } = await supabase
-        .from('dealers')
-        .select('credit_limit')
-        .eq('id', orderData.dealer_id)
-        .single();
-
-      if (fetchDealerError) {
-        throw new Error(`Failed to fetch current dealer credit limit: ${fetchDealerError.message}`);
-      }
-      if (!dealerCurrentCredit) {
-        throw new Error('Dealer not found for credit limit update.');
-      }
-
-      const newCreditLimit = dealerCurrentCredit.credit_limit + values.amount;
-
-      const { error: updateCreditError } = await supabase
-        .from('dealers')
-        .update({ credit_limit: newCreditLimit })
-        .eq('id', orderData.dealer_id);
-
-      if (updateCreditError) {
-        throw new Error(`Failed to update dealer credit limit: ${updateCreditError.message}`);
-      }
-
-      showSuccess(`Payment for Order #${orderToUpdate.order_number} recorded successfully! Dealer credit limit increased by ₹${values.amount.toFixed(2)}.`);
+      showSuccess(`Payment for Order #${orderToUpdate.order_number} submitted for approval.`);
       onPaymentUpdated();
       onOpenChange(false);
     } catch (error: any) {
@@ -315,7 +276,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                       <Label htmlFor="cardTransactionId">Transaction ID</Label>
                       <FormControl>
                         <Input type="text" placeholder="e.g., TXN123456789" {...field} />
-                      </FormControl>
+                        </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

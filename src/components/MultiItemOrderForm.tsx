@@ -252,7 +252,7 @@ const MultiItemOrderForm: React.FC = () => {
           product_id: item.product_id,
           quantity: item.quantity,
         })),
-        paymentStatus: isPaidAtOrderTime ? 'paid' : 'pending',
+        paymentStatus: isPaidAtOrderTime ? 'pending_approval' : 'pending', // Changed to 'pending_approval'
         paymentDueDate: paymentDueDate,
       };
 
@@ -409,7 +409,7 @@ const MultiItemOrderForm: React.FC = () => {
                 <div className="col-span-3">
                   <Label htmlFor={`quantity-${item.id}`}>Quantity</Label>
                   <Input 
-                    id={`quantity-${item.id}`} 
+                    id="quantity-${item.id}" 
                     type="number" 
                     value={item.quantity} 
                     onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 1)}

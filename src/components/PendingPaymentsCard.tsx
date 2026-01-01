@@ -6,11 +6,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, CalendarDays, Building } from 'lucide-react';
+import { Loader2, Search, CalendarDays, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
 import { Label } from '@/components/ui/label';
+import UpdatePaymentDialog from '@/components/UpdatePaymentDialog'; // New import
 
 interface Order {
   id: string;
@@ -18,7 +19,9 @@ interface Order {
   order_date: string;
   total_amount: number;
   dealer_name: string;
+  dealer_phone: string; // Added for WhatsApp
   payment_due_date: string | null;
+  payment_status: string; // Added
 }
 
 interface DealerOption {
@@ -26,7 +29,7 @@ interface DealerOption {
   label: string;
 }
 
-const TodaysReceivedOrdersCard: React.FC = () => {
+const PendingPaymentsCard: React.FC = () => {
   const { user } = useSession();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,9 +44,13 @@ const TodaysReceivedOrdersCard: React.FC = () => {
     return `${year}-${month}-${day}`;
   };
 
-  // Filter states, default to today's date
-  const [filterDate, setFilterDate] = useState<string>(getTodayDate());
+  // Filter states, default to today's date for due date
+  const [filterDueDate, setFilterDueDate] = useState<string>(getTodayDate());
   const [filterDealerId, setFilterDealerId] = useState<string>('');
+
+  // Dialog states
+  const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
+  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<Order | null>(null);
 
   const fetchOrdersAndDealers = useCallback(async () => {
     if (!user) {
@@ -67,7 +74,7 @@ const TodaysReceivedOrdersCard: React.FC = () => {
         setAllDealers((assignedDealersData || []).map((item: any) => ({ value: item.dealers.id, label: item.dealers.name })));
       }
 
-      // Build the query for orders
+      // Build the query for pending orders due till today
       let query = supabase
         .from('orders')
         .select(`
@@ -76,17 +83,13 @@ const TodaysReceivedOrdersCard: React.FC = () => {
           order_date,
           total_amount,
           payment_due_date,
-          dealers (name)
+          payment_status,
+          dealers (name, phone)
         `)
         .eq('user_id', user.id) // Filter by current sales person
-        .order('order_date', { ascending: false });
-
-      // Apply date filter
-      if (filterDate) {
-        const startOfDay = `${filterDate}T00:00:00.000Z`;
-        const endOfDay = `${filterDate}T23:59:59.999Z`;
-        query = query.gte('order_date', startOfDay).lte('order_date', endOfDay);
-      }
+        .eq('payment_status', 'pending') // Only pending payments
+        .lte('payment_due_date', `${filterDueDate}T23:59:59.999Z`) // Due till today (inclusive)
+        .order('payment_due_date', { ascending: true });
 
       // Apply dealer filter
       if (filterDealerId) {
@@ -96,8 +99,8 @@ const TodaysReceivedOrdersCard: React.FC = () => {
       const { data: ordersData, error: ordersError } = await query;
 
       if (ordersError) {
-        console.error('Error fetching orders:', ordersError.message);
-        showError('Failed to load orders.');
+        console.error('Error fetching pending orders:', ordersError.message);
+        showError('Failed to load pending orders.');
         setOrders([]);
       } else {
         const formattedOrders: Order[] = (ordersData || []).map((order: any) => ({
@@ -106,7 +109,9 @@ const TodaysReceivedOrdersCard: React.FC = () => {
           order_date: order.order_date,
           total_amount: order.total_amount,
           dealer_name: order.dealers?.name || 'N/A',
+          dealer_phone: order.dealers?.phone || '',
           payment_due_date: order.payment_due_date,
+          payment_status: order.payment_status,
         }));
         setOrders(formattedOrders);
       }
@@ -116,34 +121,52 @@ const TodaysReceivedOrdersCard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, filterDate, filterDealerId]);
+  }, [user, filterDueDate, filterDealerId]);
 
   useEffect(() => {
     fetchOrdersAndDealers();
   }, [fetchOrdersAndDealers]);
 
   const handleClearFilters = () => {
-    setFilterDate(getTodayDate()); // Reset to today's date
+    setFilterDueDate(getTodayDate()); // Reset to today's date
     setFilterDealerId('');
+  };
+
+  const handleAddPaymentDetails = (order: Order) => {
+    setSelectedOrderForPaymentUpdate(order);
+    setIsUpdatePaymentDialogOpen(true);
+  };
+
+  const handlePaymentUpdated = () => {
+    fetchOrdersAndDealers(); // Refresh the list after a payment is updated
+  };
+
+  const isOverdue = (dueDate: string | null) => {
+    if (!dueDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate);
+    due.setHours(0, 0, 0, 0);
+    return due < today;
   };
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg mb-6">
-      <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">Today's Received Orders</CardTitle>
-        <CardDescription className="text-green-100 dark:text-green-200">
-          View orders you've received for dealers, with payment due dates.
+      <CardHeader className="bg-red-500 dark:bg-red-700 text-white rounded-t-lg p-4">
+        <CardTitle className="text-xl font-semibold">Pending Payments (Due Till Today)</CardTitle>
+        <CardDescription className="text-red-100 dark:text-red-200">
+          Orders with payments due up to and including today.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4">
         <div className="flex flex-wrap items-end gap-4 mb-6">
           <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterDate">Order Date</Label>
+            <Label htmlFor="filterDueDate">Due Date Till</Label>
             <Input
-              id="filterDate"
+              id="filterDueDate"
               type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
+              value={filterDueDate}
+              onChange={(e) => setFilterDueDate(e.target.value)}
               className="w-full"
             />
           </div>
@@ -179,7 +202,7 @@ const TodaysReceivedOrdersCard: React.FC = () => {
               <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading orders...</p>
             </div>
           ) : orders.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No orders found for the selected criteria.</p>
+            <p className="text-center text-muted-foreground py-8">No pending payments due till today found.</p>
           ) : (
             <div className="max-h-[250px] overflow-y-auto border rounded-md">
               <Table>
@@ -190,17 +213,28 @@ const TodaysReceivedOrdersCard: React.FC = () => {
                     <TableHead className="text-muted-foreground">Order Date</TableHead>
                     <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
                     <TableHead className="text-muted-foreground">Payment Due Date</TableHead>
+                    <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {orders.map((order) => (
-                    <TableRow key={order.id} className="hover:bg-accent/50">
+                    <TableRow key={order.id} className={isOverdue(order.payment_due_date) ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-accent/50"}>
                       <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
                       <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className={isOverdue(order.payment_due_date) ? "text-destructive font-semibold" : "text-muted-foreground"}>
                         {order.payment_due_date ? new Date(order.payment_due_date).toLocaleDateString() : 'N/A'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleAddPaymentDetails(order)} 
+                          title="Add Payment Details"
+                        >
+                          <DollarSign className="h-4 w-4 text-green-600" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -210,8 +244,17 @@ const TodaysReceivedOrdersCard: React.FC = () => {
           )}
         </div>
       </CardContent>
+
+      {selectedOrderForPaymentUpdate && (
+        <UpdatePaymentDialog 
+          orderToUpdate={selectedOrderForPaymentUpdate} 
+          isOpen={isUpdatePaymentDialogOpen} 
+          onOpenChange={setIsUpdatePaymentDialogOpen} 
+          onPaymentUpdated={handlePaymentUpdated} 
+        />
+      )}
     </Card>
   );
 };
 
-export default TodaysReceivedOrdersCard;
+export default PendingPaymentsCard;
