@@ -80,6 +80,15 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
     }
   }, [selectedOfferId, comboOffers, companyName, setWhatsappMessage]);
 
+  const handleSelectAll = () => {
+    const allFilteredIds = filteredDealersForMultiSelect.map(d => d.value);
+    setSelectedDealerIds(allFilteredIds);
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedDealerIds([]);
+  };
+
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-blue-600 dark:bg-blue-800 text-white rounded-t-lg p-4">
@@ -122,6 +131,26 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
               </div>
               <Button onClick={handleClearFilters} variant="outline" disabled={isSending}>
                 Clear Filters
+              </Button>
+            </div>
+
+            {/* Select All/Deselect All Buttons */}
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSelectAll}
+                variant="outline"
+                size="sm"
+                disabled={isSending || filteredDealersForMultiSelect.length === 0}
+              >
+                Select All Filtered
+              </Button>
+              <Button
+                onClick={handleDeselectAll}
+                variant="outline"
+                size="sm"
+                disabled={isSending || selectedDealerIds.length === 0}
+              >
+                Deselect All
               </Button>
             </div>
 
