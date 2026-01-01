@@ -437,7 +437,8 @@ const ComboOffersDashboard = () => {
         <div className="w-fit"></div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      {/* First Row: Three Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         {/* Card 1: Create New Combo Offer (Inline Form) */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-purple-600 dark:bg-purple-800 text-white rounded-t-lg p-4">
@@ -509,10 +510,8 @@ const ComboOffersDashboard = () => {
           filteredDealersForMultiSelect={filteredDealersForMultiSelect}
           handleClearFilters={handleClearFilters}
         />
-      </div>
 
-      {/* New Card: Selected Dealers List for WhatsApp */}
-      <div className="mb-6">
+        {/* Card 3: Selected Dealers List for WhatsApp */}
         <SelectedDealersListCard
           selectedDealerIds={selectedDealerIds}
           allRawDealers={allRawDealers}
