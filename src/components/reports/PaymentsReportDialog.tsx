@@ -91,21 +91,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         setAllDealers(dealersData.map(d => ({ value: d.id, label: d.name })));
       }
 
-      // Build the query for payments
-      let query = supabase
-        .from('orders')
-        .select(`
-          id, 
-          order_number, 
-          order_date, 
-          total_amount, 
-          payment_status, 
-          payment_due_date, 
-          dealer_id,
-          dealers (name, phone),
-          payments (id)
-        `)
-        .order('payment_due_date', { ascending: true });
+      let fetchedData: any[] | null = null;
+      let fetchError: any = null;
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -114,55 +101,132 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       endOfToday.setHours(23, 59, 59, 999);
       const endOfTodayISO = endOfToday.toISOString();
 
-      if (filterStatus === 'pending') {
-        query = query.eq('payment_status', 'pending');
-      } else if (filterStatus === 'paid') {
-        query = query.eq('payment_status', 'paid');
-      } else if (filterStatus === 'pending_approval') {
-        query = query.eq('payment_status', 'pending_approval');
-      } else if (filterStatus === 'overdue') {
-        query = query.eq('payment_status', 'pending').lte('payment_due_date', todayISO);
-      } else if (filterStatus === 'upcoming') {
-        query = query.eq('payment_status', 'pending').gte('payment_due_date', todayISO);
-      } else if (filterStatus === 'todays_due') {
-        query = query.eq('payment_status', 'pending')
-          .gte('payment_due_date', todayISO)
-          .lte('payment_due_date', endOfTodayISO);
-      }
+      if (filterStatus === 'pending_approval') {
+        // If filtering for pending approval, query payments table directly
+        let query = supabase
+          .from('payments')
+          .select(`
+            id, // This is the payment ID
+            order_id,
+            amount,
+            payment_method,
+            payment_date,
+            orders (
+              id, // This is the order ID
+              order_number, 
+              order_date, 
+              total_amount, 
+              payment_status, 
+              payment_due_date, 
+              dealer_id,
+              dealers (name, phone)
+            )
+          `)
+          .eq('status', 'pending_approval')
+          .order('payment_date', { ascending: true });
 
-      if (filterDealerId) {
-        query = query.eq('dealer_id', filterDealerId);
-      }
+        if (filterDealerId) {
+          query = query.eq('orders.dealer_id', filterDealerId);
+        }
+        // Date filters for payments would apply to payment_date, not order_date
+        if (filterFromDate) {
+          const startOfDay = `${filterFromDate}T00:00:00.000Z`;
+          query = query.gte('payment_date', startOfDay);
+        }
+        if (filterToDate) {
+          const endOfDay = `${filterToDate}T23:59:59.999Z`;
+          query = query.lte('payment_date', endOfDay);
+        }
 
-      if (filterFromDate) {
-        const startOfDay = `${filterFromDate}T00:00:00.000Z`;
-        query = query.gte('order_date', startOfDay);
-      }
+        const { data, error } = await query;
+        fetchedData = data;
+        fetchError = error;
 
-      if (filterToDate) {
-        const endOfDay = `${filterToDate}T23:59:59.999Z`;
-        query = query.lte('order_date', endOfDay);
-      }
+      } else {
+        // For other statuses, query orders table
+        let query = supabase
+          .from('orders')
+          .select(`
+            id, 
+            order_number, 
+            order_date, 
+            total_amount, 
+            payment_status, 
+            payment_due_date, 
+            dealer_id,
+            dealers (name, phone)
+          `)
+          .order('payment_due_date', { ascending: true });
 
-      const { data: paymentsData, error: paymentsError } = await query;
+        if (filterStatus === 'pending') {
+          query = query.eq('payment_status', 'pending');
+        } else if (filterStatus === 'paid') {
+          query = query.eq('payment_status', 'paid');
+        } else if (filterStatus === 'overdue') {
+          query = query.eq('payment_status', 'pending').lte('payment_due_date', todayISO);
+        } else if (filterStatus === 'upcoming') {
+          query = query.eq('payment_status', 'pending').gte('payment_due_date', todayISO);
+        } else if (filterStatus === 'todays_due') {
+          query = query.eq('payment_status', 'pending')
+            .gte('payment_due_date', todayISO)
+            .lte('payment_due_date', endOfTodayISO);
+        }
+
+        if (filterDealerId) {
+          query = query.eq('dealer_id', filterDealerId);
+        }
+
+        if (filterFromDate) {
+          const startOfDay = `${filterFromDate}T00:00:00.000Z`;
+          query = query.gte('order_date', startOfDay);
+        }
+
+        if (filterToDate) {
+          const endOfDay = `${filterToDate}T23:59:59.999Z`;
+          query = query.lte('order_date', endOfDay);
+        }
+        
+        const { data, error } = await query;
+        fetchedData = data;
+        fetchError = error;
+      }
       
-      if (paymentsError) {
-        console.error('Error fetching payments:', paymentsError.message);
+      if (fetchError) {
+        console.error('Error fetching payments:', fetchError.message);
         showError('Failed to load payment data.');
         setPayments([]);
       } else {
-        const formattedPayments: PaymentReportData[] = (paymentsData || []).map((order: any) => ({
-          id: order.id, // This is the order ID
-          order_number: order.order_number,
-          dealer_name: order.dealers?.name || 'N/A',
-          dealer_phone: order.dealers?.phone || '',
-          total_amount: order.total_amount,
-          payment_status: order.payment_status,
-          payment_due_date: order.payment_due_date,
-          order_date: order.order_date,
-          payment_id: order.payments?.[0]?.id || null, // Get the first payment ID if available
-          dealer_id: order.dealer_id,
-        }));
+        const formattedPayments: PaymentReportData[] = (fetchedData || []).map((item: any) => {
+          if (filterStatus === 'pending_approval') {
+            // When querying payments directly
+            return {
+              id: item.orders.id, // Order ID
+              order_number: item.orders.order_number,
+              dealer_name: item.orders.dealers?.name || 'N/A',
+              dealer_phone: item.orders.dealers?.phone || '',
+              total_amount: item.amount, // Payment amount from the payment record
+              payment_status: item.orders.payment_status, // Order's payment status
+              payment_due_date: item.orders.payment_due_date,
+              order_date: item.orders.order_date,
+              payment_id: item.id, // This is the payment record ID
+              dealer_id: item.orders.dealer_id,
+            };
+          } else {
+            // When querying orders directly
+            return {
+              id: item.id, // Order ID
+              order_number: item.order_number,
+              dealer_name: item.dealers?.name || 'N/A',
+              dealer_phone: item.dealers?.phone || '',
+              total_amount: item.total_amount, // Total amount from the order record
+              payment_status: item.payment_status,
+              payment_due_date: item.payment_due_date,
+              order_date: item.order_date,
+              payment_id: null, // No specific payment ID needed for these statuses in this context
+              dealer_id: item.dealer_id,
+            };
+          }
+        });
         setPayments(formattedPayments);
       }
     } catch (error: any) {
