@@ -1,0 +1,217 @@
+"use client";
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, Search, CalendarDays, Building } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { showError } from '@/utils/toast';
+import { useSession } from '@/contexts/SessionContext';
+import { Label } from '@/components/ui/label';
+
+interface Order {
+  id: string;
+  order_number: number;
+  order_date: string;
+  total_amount: number;
+  dealer_name: string;
+  payment_due_date: string | null;
+}
+
+interface DealerOption {
+  value: string;
+  label: string;
+}
+
+const TodaysReceivedOrdersCard: React.FC = () => {
+  const { user } = useSession();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
+
+  // Get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Filter states, default to today's date
+  const [filterDate, setFilterDate] = useState<string>(getTodayDate());
+  const [filterDealerId, setFilterDealerId] = useState<string>('');
+
+  const fetchOrdersAndDealers = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Fetch all dealers assigned to the current user for the filter dropdown
+      const { data: assignedDealersData, error: assignedDealersError } = await supabase
+        .from('dealer_sales_persons')
+        .select('dealers(id, name)')
+        .eq('sales_person_id', user.id);
+
+      if (assignedDealersError) {
+        console.error('Error fetching assigned dealers for filter:', assignedDealersError.message);
+        showError('Failed to load dealers for filter.');
+        setAllDealers([]);
+      } else {
+        setAllDealers((assignedDealersData || []).map((item: any) => ({ value: item.dealers.id, label: item.dealers.name })));
+      }
+
+      // Build the query for orders
+      let query = supabase
+        .from('orders')
+        .select(`
+          id,
+          order_number,
+          order_date,
+          total_amount,
+          payment_due_date,
+          dealers (name)
+        `)
+        .eq('user_id', user.id) // Filter by current sales person
+        .order('order_date', { ascending: false });
+
+      // Apply date filter
+      if (filterDate) {
+        const startOfDay = `${filterDate}T00:00:00.000Z`;
+        const endOfDay = `${filterDate}T23:59:59.999Z`;
+        query = query.gte('order_date', startOfDay).lte('order_date', endOfDay);
+      }
+
+      // Apply dealer filter
+      if (filterDealerId) {
+        query = query.eq('dealer_id', filterDealerId);
+      }
+
+      const { data: ordersData, error: ordersError } = await query;
+
+      if (ordersError) {
+        console.error('Error fetching orders:', ordersError.message);
+        showError('Failed to load orders.');
+        setOrders([]);
+      } else {
+        const formattedOrders: Order[] = (ordersData || []).map((order: any) => ({
+          id: order.id,
+          order_number: order.order_number,
+          order_date: order.order_date,
+          total_amount: order.total_amount,
+          dealer_name: order.dealers?.name || 'N/A',
+          payment_due_date: order.payment_due_date,
+        }));
+        setOrders(formattedOrders);
+      }
+    } catch (error: any) {
+      console.error('Error in fetchOrdersAndDealers:', error.message);
+      showError('An unexpected error occurred while fetching orders.');
+    } finally {
+      setLoading(false);
+    }
+  }, [user, filterDate, filterDealerId]);
+
+  useEffect(() => {
+    fetchOrdersAndDealers();
+  }, [fetchOrdersAndDealers]);
+
+  const handleClearFilters = () => {
+    setFilterDate(getTodayDate()); // Reset to today's date
+    setFilterDealerId('');
+  };
+
+  return (
+    <Card className="bg-card text-card-foreground shadow-lg mb-6">
+      <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
+        <CardTitle className="text-xl font-semibold">Today's Received Orders</CardTitle>
+        <CardDescription className="text-green-100 dark:text-green-200">
+          View orders you've received for dealers, with payment due dates.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-4">
+        <div className="flex flex-wrap items-end gap-4 mb-6">
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterDate">Order Date</Label>
+            <Input
+              id="filterDate"
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterDealer">Dealer Name</Label>
+            <Select 
+              value={filterDealerId || "all"}
+              onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}
+            >
+              <SelectTrigger id="filterDealer" className="w-full">
+                <SelectValue placeholder="Filter by dealer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Dealers</SelectItem>
+                {allDealers.map(dealer => (
+                  <SelectItem key={dealer.value} value={dealer.value}>{dealer.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={fetchOrdersAndDealers} className="flex items-center gap-2">
+            <Search className="h-4 w-4" /> Apply Filters
+          </Button>
+          <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
+            Clear Filters
+          </Button>
+        </div>
+
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading orders...</p>
+            </div>
+          ) : orders.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No orders found for the selected criteria.</p>
+          ) : (
+            <div className="max-h-[250px] overflow-y-auto border rounded-md">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="text-muted-foreground">Order No.</TableHead>
+                    <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                    <TableHead className="text-muted-foreground">Order Date</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
+                    <TableHead className="text-muted-foreground">Payment Due Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {orders.map((order) => (
+                    <TableRow key={order.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
+                      <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                      <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {order.payment_due_date ? new Date(order.payment_due_date).toLocaleDateString() : 'N/A'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default TodaysReceivedOrdersCard;

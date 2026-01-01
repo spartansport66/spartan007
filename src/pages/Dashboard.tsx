@@ -11,6 +11,7 @@ import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loa
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
+import TodaysReceivedOrdersCard from '@/components/TodaysReceivedOrdersCard'; // New import
 
 interface Product {
   id: string;
@@ -208,6 +209,9 @@ const Dashboard = () => {
       <div className="mb-6">
         <MultiItemOrderForm />
       </div>
+
+      {/* Today's Received Orders Card */}
+      <TodaysReceivedOrdersCard />
 
       {/* Recent Activities (Sales) */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
