@@ -7,11 +7,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2 } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2, Search } from 'lucide-react';
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
-import PaymentStatusCard from '@/components/PaymentStatusCard'; // Updated import
+import PaymentStatusCard from '@/components/PaymentStatusCard';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 interface Product {
   id: string;
@@ -32,11 +35,11 @@ interface Sale {
   total_price: number;
   sale_date: string;
   products: { name: string } | null;
-  orders: { // New nested structure
+  orders: {
     dealers: { name: string } | null;
-    user_id: string; // Sales person ID who created the order
-    profiles: { first_name: string; last_name: string } | null; // Sales person name
-    payment_status: string; // Added
+    user_id: string;
+    profiles: { first_name: string; last_name: string } | null;
+    payment_status: string;
   } | null;
 }
 
@@ -49,6 +52,14 @@ const Dashboard = () => {
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [loadingData, setLoadingData] = useState(true);
 
+  // Filter states for recent sales
+  const [filterDealerId, setFilterDealerId] = useState<string>('');
+  const [filterProductId, setFilterProductId] = useState<string>('');
+  const [filterFromDate, setFilterFromDate] = useState<string>('');
+  const [filterToDate, setFilterToDate] = useState<string>('');
+  const [allDealers, setAllDealers] = useState<{ id: string; name: string }[]>([]);
+  const [allProducts, setAllProducts] = useState<{ id: string; name: string }[]>([]);
+
   const fetchDashboardData = useCallback(async () => {
     if (!user) {
       setLoadingData(false);
@@ -57,7 +68,7 @@ const Dashboard = () => {
 
     setLoadingData(true);
 
-    // Fetch dealers assigned to the current user via the join table
+    // Fetch all dealers assigned to the current user for the filter dropdown
     const { data: assignedDealersData, error: assignedDealersError } = await supabase
       .from('dealer_sales_persons')
       .select('dealers(id, name)')
@@ -66,36 +77,67 @@ const Dashboard = () => {
     if (assignedDealersError) {
       console.error('Error fetching assigned dealers:', assignedDealersError);
       showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
+      setAllDealers([]);
     } else {
       const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
       setActiveDealersCount(formattedDealers.length || 0);
+      setAllDealers(formattedDealers);
+    }
+
+    // Fetch all products for the filter dropdown
+    const { data: productsData, error: productsError } = await supabase
+      .from('products')
+      .select('id, name');
+
+    if (productsError) {
+      console.error('Error fetching products for filter:', productsError);
+      showError(`Failed to load products for filter: ${productsError.message}`);
+      setAllProducts([]);
+    } else {
+      setAllProducts(productsData || []);
     }
 
     // Fetch sales (RLS handles what they can see)
-    // Now joining through 'orders' to get dealer and sales person info
-    const { data: salesData, error: salesError } = await supabase
+    let salesQuery = supabase
       .from('sales')
       .select(`
         id,
         quantity,
         total_price,
         sale_date,
-        products (name),
+        products (id, name),
         orders (
+          dealer_id,
           dealers (name),
           user_id,
           profiles (first_name, last_name),
           payment_status
         )
       `)
+      .eq('orders.user_id', user.id) // Filter by current sales person
       .order('sale_date', { ascending: false });
+
+    // Apply filters
+    if (filterDealerId) {
+      salesQuery = salesQuery.eq('orders.dealer_id', filterDealerId);
+    }
+    if (filterProductId) {
+      salesQuery = salesQuery.eq('product_id', filterProductId);
+    }
+    if (filterFromDate) {
+      salesQuery = salesQuery.gte('sale_date', `${filterFromDate}T00:00:00.000Z`);
+    }
+    if (filterToDate) {
+      salesQuery = salesQuery.lte('sale_date', `${filterToDate}T23:59:59.999Z`);
+    }
+
+    const { data: salesData, error: salesError } = await salesQuery;
 
     if (salesError) {
       console.error('Error fetching sales:', salesError);
       showError(`Failed to load sales data: ${salesError.message}`);
       setSales([]);
     } else {
-      // Explicitly map to ensure type compatibility for nested objects
       const typedSalesData: Sale[] = (salesData || []).map((sale: any) => ({
         id: sale.id,
         quantity: sale.quantity,
@@ -109,13 +151,12 @@ const Dashboard = () => {
             first_name: sale.orders.profiles.first_name,
             last_name: sale.orders.profiles.last_name
           } : null,
-          payment_status: sale.orders.payment_status, // Added
+          payment_status: sale.orders.payment_status,
         } : null,
       }));
 
       setSales(typedSalesData);
 
-      // Calculate total sales value and total orders
       const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
       const totalOrdersCount = typedSalesData.length || 0;
       setTotalSalesValue(totalValue);
@@ -123,14 +164,13 @@ const Dashboard = () => {
     }
 
     setLoadingData(false);
-  }, [user]);
+  }, [user, filterDealerId, filterProductId, filterFromDate, filterToDate]); // Added filter dependencies
 
   useEffect(() => {
     if (!sessionLoading) {
       if (!user) {
         navigate('/login');
       } else if (isAdmin) {
-        // Redirect admins to the new Admin Dashboard
         navigate('/admin-dashboard');
       } else {
         fetchDashboardData();
@@ -149,6 +189,13 @@ const Dashboard = () => {
     }
   };
 
+  const handleClearFilters = () => {
+    setFilterDealerId('');
+    setFilterProductId('');
+    setFilterFromDate('');
+    setFilterToDate('');
+  };
+
   if (sessionLoading || loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -159,14 +206,14 @@ const Dashboard = () => {
   }
 
   if (!user || isAdmin) {
-    return null; // Should be redirected by useEffect
+    return null;
   }
 
   const salesOverview = [
     {
       title: "My Total Sales",
       value: `₹${totalSalesValue.toFixed(2)}`,
-      change: "+20.1% from last month", // Placeholder, actual calculation would be more complex
+      change: "+20.1% from last month",
       icon: <DollarSign className="h-3 w-3 text-white" />,
       headerBg: "bg-green-500 dark:bg-green-700",
       valueColor: "text-green-800 dark:text-green-200"
@@ -174,7 +221,7 @@ const Dashboard = () => {
     {
       title: "My Total Orders",
       value: totalOrders.toString(),
-      change: "+180.1% from last month", // Placeholder
+      change: "+180.1% from last month",
       icon: <Package className="h-3 w-3 text-white" />,
       headerBg: "bg-indigo-500 dark:bg-indigo-700",
       valueColor: "text-indigo-800 dark:text-indigo-200"
@@ -182,15 +229,15 @@ const Dashboard = () => {
     {
       title: "My Active Dealers",
       value: activeDealersCount.toString(),
-      change: "+19% from last month", // Placeholder
+      change: "+19% from last month",
       icon: <Users className="h-3 w-3 text-white" />,
       headerBg: "bg-purple-500 dark:bg-purple-700",
       valueColor: "text-purple-800 dark:text-purple-200"
     },
     {
       title: "Pending Tasks",
-      value: "57", // Placeholder
-      change: "-5% from last month", // Placeholder
+      value: "57",
+      change: "-5% from last month",
       icon: <Activity className="h-3 w-3 text-white" />,
       headerBg: "bg-red-500 dark:bg-red-700",
       valueColor: "text-red-800 dark:text-red-200"
@@ -236,34 +283,99 @@ const Dashboard = () => {
           <CardDescription className="text-teal-100 dark:text-teal-200">A list of your recent sales transactions.</CardDescription>
         </CardHeader>
         <CardContent className="p-4">
+          <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
+            <div className="flex-1 min-w-[150px]">
+              <Label htmlFor="filterDealer">Dealer Name</Label>
+              <Select
+                value={filterDealerId || "all"}
+                onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}
+              >
+                <SelectTrigger id="filterDealer" className="w-full">
+                  <SelectValue placeholder="Filter by dealer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Dealers</SelectItem>
+                  {allDealers.map(dealer => (
+                    <SelectItem key={dealer.id} value={dealer.id}>{dealer.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 min-w-[150px]">
+              <Label htmlFor="filterProduct">Product Name</Label>
+              <Select
+                value={filterProductId || "all"}
+                onValueChange={(value) => setFilterProductId(value === "all" ? "" : value)}
+              >
+                <SelectTrigger id="filterProduct" className="w-full">
+                  <SelectValue placeholder="Filter by product" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Products</SelectItem>
+                  {allProducts.map(product => (
+                    <SelectItem key={product.id} value={product.id}>{product.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 min-w-[150px]">
+              <Label htmlFor="filterFromDate">From Date</Label>
+              <Input
+                id="filterFromDate"
+                type="date"
+                value={filterFromDate}
+                onChange={(e) => setFilterFromDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <div className="flex-1 min-w-[150px]">
+              <Label htmlFor="filterToDate">To Date</Label>
+              <Input
+                id="filterToDate"
+                type="date"
+                value={filterToDate}
+                onChange={(e) => setFilterToDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <Button onClick={fetchDashboardData} className="flex items-center gap-2">
+              <Search className="h-4 w-4" /> Apply Filters
+            </Button>
+            <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
+              Clear Filters
+            </Button>
+          </div>
+
           <div className="overflow-x-auto">
             {sales.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No sales recorded yet.</p>
+              <p className="text-center text-muted-foreground py-8">No sales recorded yet or matching your filters.</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground">Product</TableHead>
-                    <TableHead className="text-muted-foreground">Dealer</TableHead>
-                    <TableHead className="text-muted-foreground">Quantity</TableHead>
-                    <TableHead className="text-muted-foreground">Total Price</TableHead>
-                    <TableHead className="text-muted-foreground">Payment Status</TableHead>
-                    <TableHead className="text-muted-foreground">Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sales.map((sale) => (
-                    <TableRow key={sale.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{sale.products?.name || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{sale.orders?.dealers?.name || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
-                      <TableCell className="text-muted-foreground">₹{sale.total_price.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground">{sale.orders?.payment_status || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>
+              <div className="max-h-[400px] overflow-y-auto border rounded-md">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background z-10">
+                    <TableRow className="bg-muted hover:bg-muted/90">
+                      <TableHead className="text-muted-foreground">Product</TableHead>
+                      <TableHead className="text-muted-foreground">Dealer</TableHead>
+                      <TableHead className="text-muted-foreground">Quantity</TableHead>
+                      <TableHead className="text-muted-foreground">Total Price</TableHead>
+                      <TableHead className="text-muted-foreground">Payment Status</TableHead>
+                      <TableHead className="text-muted-foreground">Date</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {sales.map((sale) => (
+                      <TableRow key={sale.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{sale.products?.name || 'N/A'}</TableCell>
+                        <TableCell className="text-muted-foreground">{sale.orders?.dealers?.name || 'N/A'}</TableCell>
+                        <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
+                        <TableCell className="text-muted-foreground">₹{sale.total_price.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground">{sale.orders?.payment_status || 'N/A'}</TableCell>
+                        <TableCell className="text-muted-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </div>
         </CardContent>
