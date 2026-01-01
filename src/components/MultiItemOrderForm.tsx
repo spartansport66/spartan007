@@ -38,11 +38,11 @@ const CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.
 const MultiItemOrderForm: React.FC = () => {
   const { user } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
-  const [products, setProducts] = useState<Product[]>([]); // Fixed: Removed extra parenthesis
+  const [products, setProducts] = useState<Product[]>([]);
   const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
   const [loading, setLoading] = useState(false);
-  const [dealerBalance, setDealerBalance] = useState<number | null>(null);
+  const [dealerBalance, setDealerBalance] = useState<number | null>(null); // This will now represent consumed credit from pending orders
   const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
@@ -109,7 +109,7 @@ const MultiItemOrderForm: React.FC = () => {
     fetchData();
   }, [user]);
 
-  // Calculate dealer balance and payment due date when dealer is selected or order items change
+  // Calculate dealer balance (consumed credit from pending orders) and payment due date
   useEffect(() => {
     const calculateBalanceAndDueDate = async () => {
       if (!selectedDealer) {
@@ -132,11 +132,12 @@ const MultiItemOrderForm: React.FC = () => {
         setPaymentDueDate(today.toISOString().split('T')[0]);
       }
 
-      // Fetch total spent by this dealer from the 'orders' table
+      // Fetch total spent by this dealer from 'pending' orders only
       const { data, error } = await supabase
         .from('orders')
         .select('total_amount')
-        .eq('dealer_id', selectedDealer);
+        .eq('dealer_id', selectedDealer)
+        .eq('payment_status', 'pending'); // ONLY PENDING ORDERS
 
       if (error) {
         console.error('Error fetching dealer balance:', error);
@@ -352,7 +353,7 @@ const MultiItemOrderForm: React.FC = () => {
                   <span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>Used Credit:</span>
+                  <span>Used Credit (Pending Orders):</span> {/* Updated label */}
                   <span className="font-medium">₹{dealerBalance.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-semibold">
