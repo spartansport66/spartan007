@@ -48,10 +48,11 @@ interface Dealer {
   city: string;
   state: string;
   country: string;
-  credit_limit: number;
+  credit_limit: number; // General credit limit (fallback)
   allotted_credit_days: number;
   user_id: string;
   assigned_sales_persons: { id: string; first_name: string; last_name: string }[];
+  current_month_credit_limit: number; // New: effective credit limit for the current month
 }
 
 interface SalesPerson {
@@ -149,29 +150,60 @@ const ManageDealers = () => {
     setLoading(true);
     setError(null);
 
-    const { data, error } = await supabase
+    const { data: dealersData, error: dealersError } = await supabase
       .from('dealers')
       .select(`
         *,
         dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name))
       `);
 
-    if (error) {
-      console.error('Error fetching dealers:', error);
-      setError(`Failed to load dealers: ${error.message}`);
-      showError(`Failed to load dealers: ${error.message}`);
+    if (dealersError) {
+      console.error('Error fetching dealers:', dealersError);
+      setError(`Failed to load dealers: ${dealersError.message}`);
+      showError(`Failed to load dealers: ${dealersError.message}`);
       setDealers([]);
-    } else {
-      const formattedDealers: Dealer[] = (data || []).map((d: any) => ({
-        ...d,
-        assigned_sales_persons: d.dealer_sales_persons.map((dsp: any) => ({
-          id: dsp.profiles.id,
-          first_name: dsp.profiles.first_name,
-          last_name: dsp.profiles.last_name,
-        })),
-      }));
-      setDealers(formattedDealers);
+      setLoading(false);
+      return;
     }
+
+    // Fetch all monthly credit limits for the current month
+    const today = new Date();
+    const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0]; // YYYY-MM-01
+
+    const { data: monthlyLimitsData, error: monthlyLimitsError } = await supabase
+      .from('dealer_monthly_credit_limits')
+      .select('dealer_id, credit_limit')
+      .eq('month_year', currentMonthYear);
+
+    if (monthlyLimitsError) {
+      console.error('Error fetching monthly credit limits:', monthlyLimitsError);
+      showError(`Failed to load monthly credit limits: ${monthlyLimitsError.message}`);
+      // Continue without monthly limits if there's an error
+    }
+
+    const monthlyLimitsMap = new Map(
+      (monthlyLimitsData || []).map(limit => [limit.dealer_id, limit.credit_limit])
+    );
+
+    const formattedDealers: Dealer[] = (dealersData || []).map((d: any) => {
+      const assignedSalesPersons = d.dealer_sales_persons.map((dsp: any) => ({
+        id: dsp.profiles.id,
+        first_name: dsp.profiles.first_name,
+        last_name: dsp.profiles.last_name,
+      }));
+
+      // Determine the effective credit limit for the current month
+      const currentMonthCreditLimit = monthlyLimitsMap.has(d.id)
+        ? monthlyLimitsMap.get(d.id)!
+        : d.credit_limit; // Fallback to general credit_limit
+
+      return {
+        ...d,
+        assigned_sales_persons: assignedSalesPersons,
+        current_month_credit_limit: currentMonthCreditLimit,
+      };
+    });
+    setDealers(formattedDealers);
     setLoading(false);
   }, [user]);
 
@@ -197,7 +229,7 @@ const ManageDealers = () => {
   const handleUpdateDealer = async (values: z.infer<typeof formSchema>) => {
     if (!selectedDealer || !user) return;
 
-    const updateData: Partial<Omit<Dealer, 'assigned_sales_persons'>> = {
+    const updateData: Partial<Omit<Dealer, 'assigned_sales_persons' | 'current_month_credit_limit'>> = {
       name: values.name,
       contact_person: values.contactPerson,
       email: values.email,
@@ -206,7 +238,7 @@ const ManageDealers = () => {
       city: values.city,
       state: values.state,
       country: values.country,
-      credit_limit: values.creditLimit,
+      credit_limit: values.creditLimit, // Keep updating general credit_limit for fallback
       allotted_credit_days: values.allottedCreditDays,
     };
 
@@ -324,7 +356,7 @@ const ManageDealers = () => {
                       <TableHead className="text-muted-foreground">City</TableHead>
                       <TableHead className="text-muted-foreground">State</TableHead>
                       <TableHead className="text-muted-foreground">Country</TableHead>
-                      <TableHead className="text-muted-foreground">Credit Limit</TableHead>
+                      <TableHead className="text-muted-foreground">Monthly Credit Limit</TableHead> {/* Updated TableHead */}
                       <TableHead className="text-muted-foreground">Credit Days</TableHead>
                       <TableHead className="text-muted-foreground">Assigned To</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
@@ -341,7 +373,7 @@ const ManageDealers = () => {
                         <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
                         <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
                         <TableCell className="text-muted-foreground">{dealer.country}</TableCell>
-                        <TableCell className="text-muted-foreground">₹{dealer.credit_limit.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground">₹{dealer.current_month_credit_limit.toFixed(2)}</TableCell> {/* Display effective monthly limit */}
                         <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {dealer.assigned_sales_persons.length > 0
