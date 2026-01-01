@@ -318,13 +318,13 @@ const MultiItemOrderForm: React.FC = () => {
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
-      <CardHeader>
-        <CardTitle className="text-xl font-semibold text-primary">Place New Order</CardTitle>
-        <CardDescription className="text-muted-foreground">
+      <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
+        <CardTitle className="text-xl font-semibold text-white">Place New Order</CardTitle>
+        <CardDescription className="text-blue-100 dark:text-blue-200">
           Create an order with multiple items for a registered dealer.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <Label htmlFor="dealer">Dealer</Label>
