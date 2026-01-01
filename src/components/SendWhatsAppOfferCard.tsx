@@ -199,12 +199,13 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     if (selectedOfferId) {
       const offer = comboOffers.find(o => o.id === selectedOfferId);
       if (offer) {
-        const message = `Hello Dealer,\n\n*${companyName || 'Our Company'}* is excited to announce a new Combo Offer: *"${offer.name}"*!\n\n${offer.description ? `Details: ${offer.description}\n\n` : ''}\n\nThank you!`;
+        // Updated message template with [DEALER_NAME] placeholder
+        const message = `Hello [DEALER_NAME],\n\n*${companyName || 'Our Company'}* is excited to announce a new Combo Offer: *"${offer.name}"*!\n\n${offer.description ? `Details: ${offer.description}\n\n` : ''}\n\nThank you!`;
         setWhatsappMessage(message);
       }
     } else {
       // Only clear if the message was dynamically generated for an offer
-      if (whatsappMessage.startsWith(`Hello Dealer,\n\n*${companyName || 'Our Company'}*`)) {
+      if (whatsappMessage.startsWith(`Hello [DEALER_NAME],\n\n*${companyName || 'Our Company'}*`)) {
         setWhatsappMessage('');
       }
     }
@@ -250,7 +251,9 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       // Open WhatsApp for the single dealer
       const result = data.results.find((r: any) => r.dealerId === targetDealerId);
       if (result && result.status === 'success' && result.phone) {
-        const encodedMessage = encodeURIComponent(whatsappMessage);
+        // Personalize the message with the dealer's name before encoding
+        const personalizedMessage = whatsappMessage.replace('[DEALER_NAME]', result.dealerName);
+        const encodedMessage = encodeURIComponent(personalizedMessage);
         const whatsappUrl = `https://web.whatsapp.com/send?phone=${result.phone}&text=${encodedMessage}`;
         window.open(whatsappUrl, '_blank');
         setSentDealerIds(prev => new Set([...prev, targetDealerId])); // Mark this single dealer as sent
