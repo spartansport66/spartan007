@@ -77,12 +77,14 @@ const SalesPersonPerformanceCard: React.FC = () => {
     }
   }, [sessionLoading, user, fetchPerformanceData]);
 
-  const getMonthName = (monthNum: number) => {
-    const date = new Date(Date.UTC(2000, monthNum - 1, 1));
+  const getMonthName = (monthIndex: number) => {
+    // Create a date object for the first day of the specified month in UTC
+    const date = new Date(Date.UTC(2000, monthIndex, 1));
+    // Use toLocaleString to get the full month name, ensuring UTC timezone
     return date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
   };
 
-  const currentMonthName = getMonthName(new Date().getMonth() + 1);
+  const currentMonthName = getMonthName(new Date().getMonth());
   const currentYear = new Date().getFullYear();
 
   if (loading || sessionLoading) {
