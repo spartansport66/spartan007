@@ -22,7 +22,7 @@ interface Product {
 interface Dealer {
   id: string;
   name: string;
-  credit_limit: number;
+  credit_limit: number; // General credit limit
   allotted_credit_days: number;
 }
 
@@ -43,7 +43,7 @@ const MultiItemOrderForm: React.FC = () => {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
   const [loading, setLoading] = useState(false);
   const [dealerBalance, setDealerBalance] = useState<number | null>(null); // This will now represent consumed credit from pending orders
-  const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
+  const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0); // This will be the effective credit limit (monthly or general)
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
 
@@ -56,7 +56,7 @@ const MultiItemOrderForm: React.FC = () => {
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
   
-  // Card fields
+  // Card fields (only transaction ID)
   const [cardNumber, setCardNumber] = useState<string>('');
   const [cardHolderName, setCardHolderName] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<string>('');
@@ -123,13 +123,33 @@ const MultiItemOrderForm: React.FC = () => {
 
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
-        setDealerCreditLimit(selectedDealerData.credit_limit);
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
         
         // Calculate payment due date
         const today = new Date();
         today.setDate(today.getDate() + selectedDealerData.allotted_credit_days);
         setPaymentDueDate(today.toISOString().split('T')[0]);
+      }
+
+      // Determine the effective credit limit for the current month
+      const today = new Date();
+      const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0]; // YYYY-MM-01
+      
+      const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
+        .from('dealer_monthly_credit_limits')
+        .select('credit_limit')
+        .eq('dealer_id', selectedDealer)
+        .eq('month_year', currentMonthYear)
+        .single();
+
+      if (monthlyLimitError && monthlyLimitError.code !== 'PGRST116') { // PGRST116 means "no rows found"
+        console.error('Error fetching monthly credit limit:', monthlyLimitError.message);
+        showError(`Failed to load monthly credit limit: ${monthlyLimitError.message}`);
+        setDealerCreditLimit(selectedDealerData?.credit_limit || 0); // Fallback to general limit on error
+      } else if (monthlyLimitData) {
+        setDealerCreditLimit(monthlyLimitData.credit_limit);
+      } else {
+        setDealerCreditLimit(selectedDealerData?.credit_limit || 0); // Fallback to general limit if no monthly limit set
       }
 
       // Fetch total spent by this dealer from 'pending' orders only
@@ -349,11 +369,11 @@ const MultiItemOrderForm: React.FC = () => {
             {selectedDealer && dealerBalance !== null && (
               <div className="mt-2 p-3 bg-muted rounded-md">
                 <div className="flex justify-between text-sm">
-                  <span>Credit Limit:</span>
+                  <span>Credit Limit (Current Month):</span> {/* Updated label */}
                   <span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>Used Credit (Pending Orders):</span> {/* Updated label */}
+                  <span>Used Credit (Pending Orders):</span>
                   <span className="font-medium">₹{dealerBalance.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-semibold">

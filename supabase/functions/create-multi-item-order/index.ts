@@ -91,10 +91,10 @@ serve(async (req) => {
       });
     }
 
-    // 2. Fetch dealer credit limit and current balance
+    // 2. Fetch dealer credit limit (monthly or general) and current balance
     const { data: dealerData, error: dealerError } = await supabaseAdmin
       .from('dealers')
-      .select('credit_limit')
+      .select('credit_limit') // Fetch general credit limit
       .eq('id', dealerId)
       .single();
 
@@ -105,7 +105,27 @@ serve(async (req) => {
       throw new Error('Dealer not found.');
     }
 
-    // MODIFIED: Only sum total_amount from orders with 'pending' payment_status
+    let effectiveCreditLimit = dealerData.credit_limit;
+
+    // Check for month-wise credit limit
+    const today = new Date();
+    const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0]; // YYYY-MM-01
+    
+    const { data: monthlyLimitData, error: monthlyLimitError } = await supabaseAdmin
+      .from('dealer_monthly_credit_limits')
+      .select('credit_limit')
+      .eq('dealer_id', dealerId)
+      .eq('month_year', currentMonthYear)
+      .single();
+
+    if (monthlyLimitError && monthlyLimitError.code !== 'PGRST116') { // PGRST116 means "no rows found"
+      console.error('Error fetching monthly credit limit in Edge Function:', monthlyLimitError.message);
+      // Fallback to general limit if there's an error fetching monthly limit
+    } else if (monthlyLimitData) {
+      effectiveCreditLimit = monthlyLimitData.credit_limit;
+    }
+    // If monthlyLimitData is null (no monthly limit set), effectiveCreditLimit remains the general dealerData.credit_limit
+
     const { data: totalSpentData, error: totalSpentError } = await supabaseAdmin
       .from('orders')
       .select('total_amount')
@@ -117,7 +137,7 @@ serve(async (req) => {
     }
 
     const currentTotalSpent = totalSpentData.reduce((sum, order) => sum + order.total_amount, 0);
-    const availableCredit = dealerData.credit_limit - currentTotalSpent;
+    const availableCredit = effectiveCreditLimit - currentTotalSpent; // Use effectiveCreditLimit
 
     if (totalOrderAmount > availableCredit) {
       throw new Error(`Order exceeds dealer's credit limit. Available: ${availableCredit.toFixed(2)}, Order Total: ${totalOrderAmount.toFixed(2)}`);

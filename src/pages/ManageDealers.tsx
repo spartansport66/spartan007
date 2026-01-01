@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Edit, Trash2, Eye, Loader2 } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Eye, Loader2, CalendarDays } from 'lucide-react'; // Added CalendarDays icon
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -34,8 +34,9 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'; // Added FormField, FormItem, FormLabel
-import MultiSelect from '@/components/MultiSelect'; // Import MultiSelect
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import MultiSelect from '@/components/MultiSelect';
+import DealerMonthlyCreditManager from '@/components/DealerMonthlyCreditManager'; // Import the new component
 
 interface Dealer {
   id: string;
@@ -48,9 +49,9 @@ interface Dealer {
   state: string;
   country: string;
   credit_limit: number;
-  allotted_credit_days: number; // Added
+  allotted_credit_days: number;
   user_id: string;
-  assigned_sales_persons: { id: string; first_name: string; last_name: string }[]; // Updated to array
+  assigned_sales_persons: { id: string; first_name: string; last_name: string }[];
 }
 
 interface SalesPerson {
@@ -72,7 +73,7 @@ const formSchema = z.object({
     (val) => Number(val),
     z.number().min(0, { message: 'Credit limit cannot be negative.' })
   ),
-  allottedCreditDays: z.preprocess( // Added
+  allottedCreditDays: z.preprocess(
     (val) => Number(val),
     z.number().int().min(0, { message: 'Allotted credit days cannot be negative.' })
   ),
@@ -87,7 +88,9 @@ const ManageDealers = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
-  const [allSalesPersons, setAllSalesPersons] = useState<SalesPerson[]>([]); // All sales persons for multi-select options
+  const [allSalesPersons, setAllSalesPersons] = useState<SalesPerson[]>([]);
+  const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false); // New state for monthly credit dialog
+  const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null); // New state for selected dealer for monthly credit
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -101,7 +104,7 @@ const ManageDealers = () => {
       state: '',
       country: '',
       creditLimit: 0,
-      allottedCreditDays: 0, // Default value
+      allottedCreditDays: 0,
       assignedSalesPersonIds: [],
     },
   });
@@ -118,7 +121,7 @@ const ManageDealers = () => {
         state: selectedDealer.state,
         country: selectedDealer.country,
         creditLimit: selectedDealer.credit_limit,
-        allottedCreditDays: selectedDealer.allotted_credit_days, // Set value
+        allottedCreditDays: selectedDealer.allotted_credit_days,
         assignedSalesPersonIds: selectedDealer.assigned_sales_persons.map(sp => sp.id),
       });
     }
@@ -146,7 +149,6 @@ const ManageDealers = () => {
     setLoading(true);
     setError(null);
 
-    // Fetch dealers and their assigned sales persons
     const { data, error } = await supabase
       .from('dealers')
       .select(`
@@ -171,7 +173,7 @@ const ManageDealers = () => {
       setDealers(formattedDealers);
     }
     setLoading(false);
-  }, [user]); // Removed isAdmin from dependency array as RLS handles filtering
+  }, [user]);
 
   useEffect(() => {
     if (!sessionLoading && user) {
@@ -187,6 +189,11 @@ const ManageDealers = () => {
     setIsEditDialogOpen(true);
   };
 
+  const handleManageMonthlyCredit = (dealer: Dealer) => {
+    setSelectedDealerForMonthlyCredit(dealer);
+    setIsMonthlyCreditDialogOpen(true);
+  };
+
   const handleUpdateDealer = async (values: z.infer<typeof formSchema>) => {
     if (!selectedDealer || !user) return;
 
@@ -200,7 +207,7 @@ const ManageDealers = () => {
       state: values.state,
       country: values.country,
       credit_limit: values.creditLimit,
-      allotted_credit_days: values.allottedCreditDays, // Include in update
+      allotted_credit_days: values.allottedCreditDays,
     };
 
     const { error: dealerUpdateError } = await supabase
@@ -214,7 +221,6 @@ const ManageDealers = () => {
       return;
     }
 
-    // Update dealer_sales_persons join table
     const currentAssignedIds = selectedDealer.assigned_sales_persons.map(sp => sp.id);
     const newAssignedIds = values.assignedSalesPersonIds;
 
@@ -247,7 +253,7 @@ const ManageDealers = () => {
 
     showSuccess('Dealer updated successfully!');
     setIsEditDialogOpen(false);
-    fetchDealers(); // Refresh data
+    fetchDealers();
   };
 
   const handleDelete = async (dealerId: string) => {
@@ -319,7 +325,7 @@ const ManageDealers = () => {
                       <TableHead className="text-muted-foreground">State</TableHead>
                       <TableHead className="text-muted-foreground">Country</TableHead>
                       <TableHead className="text-muted-foreground">Credit Limit</TableHead>
-                      <TableHead className="text-muted-foreground">Credit Days</TableHead> {/* Added */}
+                      <TableHead className="text-muted-foreground">Credit Days</TableHead>
                       <TableHead className="text-muted-foreground">Assigned To</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
@@ -336,7 +342,7 @@ const ManageDealers = () => {
                         <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
                         <TableCell className="text-muted-foreground">{dealer.country}</TableCell>
                         <TableCell className="text-muted-foreground">₹{dealer.credit_limit.toFixed(2)}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell> {/* Displayed */}
+                        <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {dealer.assigned_sales_persons.length > 0
                             ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name}`).join(', ')
@@ -346,6 +352,14 @@ const ManageDealers = () => {
                           <div className="flex gap-2">
                             <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer)} title="Edit Dealer">
                               <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleManageMonthlyCredit(dealer)} 
+                              title="Manage Monthly Credit Limits"
+                            >
+                              <CalendarDays className="h-4 w-4" />
                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
@@ -458,7 +472,7 @@ const ManageDealers = () => {
                   <Input id="creditLimit" type="number" placeholder="e.g., 5000.00" {...form.register('creditLimit')} className="col-span-3" />
                   {form.formState.errors.creditLimit && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.creditLimit.message}</p>}
                 </div>
-                <div className="grid grid-cols-4 items-center gap-4"> {/* Added */}
+                <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="allottedCreditDays" className="text-right">
                     Credit Days
                   </Label>
@@ -491,6 +505,24 @@ const ManageDealers = () => {
                 </DialogFooter>
               </form>
             </Form>
+          </DialogContent>
+        </Dialog>
+      )}
+      
+      {/* Manage Monthly Credit Limit Dialog */}
+      {selectedDealerForMonthlyCredit && (
+        <Dialog open={isMonthlyCreditDialogOpen} onOpenChange={setIsMonthlyCreditDialogOpen}>
+          <DialogContent className="sm:max-w-[700px]">
+            <DialogHeader>
+              <DialogTitle>Manage Monthly Credit Limits for {selectedDealerForMonthlyCredit.name}</DialogTitle>
+              <DialogDescription>
+                Add, edit, or delete month-wise credit limits for this dealer.
+              </DialogDescription>
+            </DialogHeader>
+            <DealerMonthlyCreditManager 
+              dealer={selectedDealerForMonthlyCredit} 
+              onCreditLimitsUpdated={fetchDealers} 
+            />
           </DialogContent>
         </Dialog>
       )}
