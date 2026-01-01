@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, MessageCircle, Send, Users, Search } from 'lucide-react';
+import { Loader2, MessageCircle, Send, Users, Search, RotateCcw } from 'lucide-react'; // Added RotateCcw icon
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import MultiSelect from '@/components/MultiSelect';
@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useSession } from '@/contexts/SessionContext';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils'; // Import cn for conditional classNames
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -88,6 +89,14 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     }
     return '';
   });
+  // New state for tracking sent dealers, persisted in sessionStorage
+  const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('whatsapp_sentDealerIds');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    }
+    return new Set();
+  });
 
   const [initialLoading, setInitialLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -130,6 +139,13 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       sessionStorage.setItem('whatsapp_filterState', filterState);
     }
   }, [filterState]);
+
+  // Effect to save sentDealerIds to sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_sentDealerIds', JSON.stringify(Array.from(sentDealerIds)));
+    }
+  }, [sentDealerIds]);
 
   const fetchInitialData = useCallback(async () => {
     setInitialLoading(true);
@@ -251,13 +267,19 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
       }
 
       showSuccess('WhatsApp messages prepared. Multiple tabs may open, please ensure pop-ups are allowed.');
+      
+      const newlySentIds: string[] = [];
       data.results.forEach((result: any) => {
         if (result.status === 'success' && result.phone) {
           const encodedMessage = encodeURIComponent(whatsappMessage);
           const whatsappUrl = `https://web.whatsapp.com/send?phone=${result.phone}&text=${encodedMessage}`;
           window.open(whatsappUrl, '_blank');
+          newlySentIds.push(result.dealerId); // Collect successfully sent IDs
         }
       });
+
+      // Update sentDealerIds state with all newly sent IDs
+      setSentDealerIds(prev => new Set([...prev, ...newlySentIds]));
 
       setSelectedDealerIds([]); // Clear selected dealers after sending
       setSendToAllFilteredDealers(false); // Reset checkbox
@@ -271,7 +293,14 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
   };
 
   const handleBulkSend = () => {
-    const dealerIdsToSend = sendToAllFilteredDealers ? filteredDealersForMultiSelect.map(d => d.value) : selectedDealerIds;
+    const dealerIdsToSend = sendToAllFilteredDealers 
+      ? filteredDealersForMultiSelect.map(d => d.value).filter(id => !sentDealerIds.has(id)) // Only send to unsent filtered dealers
+      : selectedDealerIds.filter(id => !sentDealerIds.has(id)); // Only send to unsent selected dealers
+    
+    if (dealerIdsToSend.length === 0) {
+      showError('No unsent dealers selected for bulk send.');
+      return;
+    }
     handleSendWhatsApp(dealerIdsToSend);
   };
 
@@ -284,7 +313,8 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     setFilterState('');
   };
 
-  const isSendButtonDisabled = isSending || !selectedOfferId || (selectedDealerIds.length === 0 && !sendToAllFilteredDealers) || !whatsappMessage.trim();
+  const isAnySelectedDealerNotSent = selectedDealerIds.some(id => !sentDealerIds.has(id));
+  const isBulkSendButtonDisabled = isSending || !selectedOfferId || !whatsappMessage.trim() || !isAnySelectedDealerNotSent;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
@@ -401,10 +431,10 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
             <Button
               onClick={handleBulkSend}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
-              disabled={isSendButtonDisabled}
+              disabled={isBulkSendButtonDisabled}
             >
               {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {isSending ? 'Preparing Messages...' : `Send to ${selectedDealerIds.length} Selected Dealers`}
+              {isSending ? 'Preparing Messages...' : `Send to ${selectedDealerIds.filter(id => !sentDealerIds.has(id)).length} Unsent Dealers`}
             </Button>
 
             {/* Individual Send Table (Optional, for quick individual sends) */}
@@ -425,8 +455,13 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                     {selectedDealerIds.map((dealerId) => {
                       const dealer = allRawDealers.find(d => d.value === dealerId);
                       if (!dealer) return null;
+                      const isDealerSent = sentDealerIds.has(dealer.value); // Check if this dealer has been sent to
+                      
                       return (
-                        <TableRow key={dealer.value} className="hover:bg-accent/50">
+                        <TableRow 
+                          key={dealer.value} 
+                          className={cn("hover:bg-accent/50", isDealerSent && "opacity-50 cursor-not-allowed")} // Apply disabled style
+                        >
                           <TableCell className="font-medium text-foreground">{dealer.label.split('(')[0].trim()}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
@@ -436,8 +471,8 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                               variant="ghost"
                               size="icon"
                               onClick={() => handleIndividualSend(dealer.value)}
-                              title={`Send to ${dealer.label.split('(')[0].trim()}`}
-                              disabled={isSending || !dealer.phone || !selectedOfferId || !whatsappMessage.trim()}
+                              title={isDealerSent ? "Already Sent" : `Send to ${dealer.label.split('(')[0].trim()}`}
+                              disabled={isSending || !dealer.phone || !selectedOfferId || !whatsappMessage.trim() || isDealerSent} // Disable if already sent
                             >
                               <Send className="h-4 w-4 text-blue-500" />
                             </Button>
@@ -447,6 +482,20 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                     })}
                   </TableBody>
                 </Table>
+              </div>
+            )}
+
+            {/* Reset Sent Status Button */}
+            {sentDealerIds.size > 0 && (
+              <div className="flex justify-end mt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setSentDealerIds(new Set())} 
+                  disabled={isSending}
+                  className="flex items-center gap-2"
+                >
+                  <RotateCcw className="h-4 w-4" /> Reset Sent Status
+                </Button>
               </div>
             )}
           </>
