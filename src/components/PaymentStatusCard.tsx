@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, CalendarDays, DollarSign, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, Search, CalendarDays, DollarSign, Clock, CheckCircle, AlertCircle, PlusCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
@@ -209,13 +209,23 @@ const PaymentStatusCard: React.FC = () => {
   return (
     <Card className="bg-card text-card-foreground shadow-lg mb-6">
       <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">Payment Status</CardTitle>
-        <CardDescription className="text-indigo-100 dark:text-indigo-200">
-          View and manage the payment status of all orders.
-        </CardDescription>
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle className="text-xl font-semibold">Payment Status</CardTitle>
+            <CardDescription className="text-indigo-100 dark:text-indigo-200">
+              View and manage the payment status of all orders.
+            </CardDescription>
+          </div>
+          <Button 
+            onClick={() => document.getElementById('payment-filters')?.scrollIntoView({ behavior: 'smooth' })}
+            className="flex items-center gap-2 bg-white text-indigo-700 hover:bg-indigo-50"
+          >
+            <PlusCircle className="h-4 w-4" /> Add Payment
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-4">
-        <div className="flex flex-wrap items-end gap-4 mb-6">
+        <div id="payment-filters" className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterStatus">Payment Status</Label>
             <Select 
