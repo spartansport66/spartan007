@@ -1,0 +1,143 @@
+"use client";
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, Target, TrendingUp, Activity } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { showError } from '@/utils/toast';
+import { useSession } from '@/contexts/SessionContext';
+import { Separator } from '@/components/ui/separator';
+
+const SalesPersonPerformanceCard: React.FC = () => {
+  const { user, loading: sessionLoading } = useSession();
+  const [loading, setLoading] = useState(true);
+  const [targetAmount, setTargetAmount] = useState<number | null>(null);
+  const [achievedSales, setAchievedSales] = useState<number | null>(null);
+  const [pendingSales, setPendingSales] = useState<number | null>(null);
+
+  const fetchPerformanceData = useCallback(async () => {
+    if (!user) return;
+
+    setLoading(true);
+    try {
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      const currentMonth = today.getMonth(); // 0-indexed
+
+      // Format target_month to YYYY-MM-DD for the first day of the current month
+      const targetMonthFilterDate = new Date(Date.UTC(currentYear, currentMonth, 1)).toISOString().split('T')[0];
+      
+      // Fetch sales target for the current month
+      const { data: targetData, error: targetError } = await supabase
+        .from('sales_targets')
+        .select('target_amount')
+        .eq('sales_person_id', user.id)
+        .eq('target_month', targetMonthFilterDate)
+        .single();
+
+      if (targetError && targetError.code !== 'PGRST116') { // PGRST116 means "no rows found"
+        throw new Error(`Failed to fetch sales target: ${targetError.message}`);
+      }
+      const currentTarget = targetData?.target_amount || 0;
+      setTargetAmount(currentTarget);
+
+      // Fetch achieved sales for the current month
+      const startOfMonth = new Date(Date.UTC(currentYear, currentMonth, 1)).toISOString();
+      const endOfMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0, 23, 59, 59, 999)).toISOString();
+
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select('total_price, orders(user_id)')
+        .eq('orders.user_id', user.id)
+        .gte('sale_date', startOfMonth)
+        .lte('sale_date', endOfMonth);
+
+      if (salesError) {
+        throw new Error(`Failed to fetch achieved sales: ${salesError.message}`);
+      }
+      const currentAchievedSales = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
+      setAchievedSales(currentAchievedSales);
+
+      setPendingSales(currentTarget - currentAchievedSales);
+
+    } catch (error: any) {
+      console.error('Error fetching sales person performance:', error.message);
+      showError(`Failed to load performance data: ${error.message}`);
+      setTargetAmount(null);
+      setAchievedSales(null);
+      setPendingSales(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!sessionLoading && user) {
+      fetchPerformanceData();
+    }
+  }, [sessionLoading, user, fetchPerformanceData]);
+
+  const getMonthName = (monthNum: number) => {
+    const date = new Date(Date.UTC(2000, monthNum - 1, 1));
+    return date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
+  };
+
+  const currentMonthName = getMonthName(new Date().getMonth() + 1);
+  const currentYear = new Date().getFullYear();
+
+  if (loading || sessionLoading) {
+    return (
+      <Card className="bg-card text-card-foreground shadow-lg h-full">
+        <CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4">
+          <CardTitle className="text-xl font-semibold">My Monthly Performance</CardTitle>
+          <CardDescription className="text-pink-100 dark:text-pink-200">
+            Overview for {currentMonthName} {currentYear}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading performance...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="bg-card text-card-foreground shadow-lg h-full">
+      <CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4">
+        <CardTitle className="text-xl font-semibold">My Monthly Performance</CardTitle>
+        <CardDescription className="text-pink-100 dark:text-pink-200">
+          Overview for {currentMonthName} {currentYear}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Target className="h-5 w-5 text-blue-600" />
+            <span className="text-muted-foreground">Monthly Target:</span>
+          </div>
+          <span className="text-lg font-bold text-blue-600">₹{targetAmount !== null ? targetAmount.toFixed(2) : 'N/A'}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-green-600" />
+            <span className="text-muted-foreground">Achieved Sales:</span>
+          </div>
+          <span className="text-lg font-bold text-green-600">₹{achievedSales !== null ? achievedSales.toFixed(2) : 'N/A'}</span>
+        </div>
+        <Separator />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-orange-600" />
+            <span className="text-muted-foreground">Pending Sales:</span>
+          </div>
+          <span className={`text-lg font-bold ${pendingSales !== null && pendingSales > 0 ? 'text-red-600' : 'text-green-600'}`}>
+            ₹{pendingSales !== null ? pendingSales.toFixed(2) : 'N/A'}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default SalesPersonPerformanceCard;

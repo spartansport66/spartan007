@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog'; // Import OrderDetailsDialog
+import SalesPersonPerformanceCard from '@/components/SalesPersonPerformanceCard'; // Import the new component
 
 interface Product {
   id: string;
@@ -258,6 +259,11 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Sales Person Performance Card */}
+      <div className="mb-6">
+        <SalesPersonPerformanceCard />
       </div>
 
       {/* Multi-Item Order Form - Full Width */}
