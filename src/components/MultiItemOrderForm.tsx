@@ -207,14 +207,13 @@ const MultiItemOrderForm: React.FC = () => {
         setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
       }
 
-      // Fetch total spent by this dealer from 'pending' orders (excluding future due dates)
-      const todayISOString = new Date().toISOString();
+      // Fetch total spent by this dealer from BOTH 'pending' AND 'pending_approval' orders
+      // This includes ALL unpaid orders, including those with future due dates (post-dated cheques)
       const { data, error } = await supabase
         .from('orders')
         .select('total_amount')
         .eq('dealer_id', selectedDealer)
-        .eq('payment_status', 'pending')
-        .lte('payment_due_date', todayISOString); // Only include payments due today or earlier
+        .in('payment_status', ['pending', 'pending_approval']);
 
       if (error) {
         console.error('Error fetching dealer balance:', error);
