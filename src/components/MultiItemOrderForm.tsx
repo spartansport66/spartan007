@@ -38,6 +38,7 @@ interface PendingPayment {
   order_number: number;
   total_amount: number;
   payment_status: string;
+  payment_due_date: string | null;
 }
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
@@ -129,12 +130,16 @@ const MultiItemOrderForm: React.FC = () => {
       }
 
       try {
-        // Fetch pending payments for the selected dealer (both pending and pending_approval)
+        const todayISOString = new Date().toISOString();
+        
+        // Fetch pending payments for the selected dealer (only pending, not pending_approval)
+        // Exclude payments with future due dates (post-dated cheques)
         const { data, error } = await supabase
           .from('orders')
-          .select('order_number, total_amount, payment_status')
+          .select('order_number, total_amount, payment_status, payment_due_date')
           .eq('dealer_id', selectedDealer)
-          .in('payment_status', ['pending', 'pending_approval']);
+          .eq('payment_status', 'pending')
+          .lte('payment_due_date', todayISOString); // Only include payments due today or earlier
 
         if (error) {
           console.error('Error fetching pending payments:', error);
@@ -176,14 +181,14 @@ const MultiItemOrderForm: React.FC = () => {
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
         
         // Calculate payment due date
-        const today = new Date();
-        today.setDate(today.getDate() + selectedDealerData.allotted_credit_days);
-        setPaymentDueDate(today.toISOString().split('T')[0]);
+        const currentDate = new Date();
+        currentDate.setDate(currentDate.getDate() + selectedDealerData.allotted_credit_days);
+        setPaymentDueDate(currentDate.toISOString().split('T')[0]);
       }
 
       // Determine the effective credit limit for the current month
-      const today = new Date();
-      const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0];
+      const currentMonthDate = new Date();
+      const currentMonthYear = new Date(Date.UTC(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1)).toISOString().split('T')[0];
       
       const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
         .from('dealer_monthly_credit_limits')
@@ -202,12 +207,14 @@ const MultiItemOrderForm: React.FC = () => {
         setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
       }
 
-      // Fetch total spent by this dealer from 'pending' AND 'pending_approval' orders
+      // Fetch total spent by this dealer from 'pending' orders (excluding future due dates)
+      const todayISOString = new Date().toISOString();
       const { data, error } = await supabase
         .from('orders')
         .select('total_amount')
         .eq('dealer_id', selectedDealer)
-        .in('payment_status', ['pending', 'pending_approval']);
+        .eq('payment_status', 'pending')
+        .lte('payment_due_date', todayISOString); // Only include payments due today or earlier
 
       if (error) {
         console.error('Error fetching dealer balance:', error);
@@ -269,9 +276,9 @@ const MultiItemOrderForm: React.FC = () => {
       return;
     }
     
-    // Check if dealer has any pending payments (including pending_approval)
+    // Check if dealer has any overdue pending payments
     if (totalPendingAmount > 0) {
-      showError(`Cannot place order. Dealer has pending payments of ₹${totalPendingAmount.toFixed(2)}. Please clear all pending payments first.`);
+      showError(`Cannot place order. Dealer has overdue payments of ₹${totalPendingAmount.toFixed(2)}. Please clear all overdue payments first.`);
       return;
     }
     
@@ -427,16 +434,16 @@ const MultiItemOrderForm: React.FC = () => {
             {selectedDealer && totalPendingAmount > 0 && (
               <Alert variant="destructive" className="mt-2">
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Pending Payments</AlertTitle>
+                <AlertTitle>Overdue Payments</AlertTitle>
                 <AlertDescription>
-                  This dealer has pending payments totaling ₹{totalPendingAmount.toFixed(2)}. 
-                  Please clear all pending payments before placing a new order.
+                  This dealer has overdue payments totaling ₹{totalPendingAmount.toFixed(2)}. 
+                  Please clear all overdue payments before placing a new order.
                   <div className="mt-2 max-h-32 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
                           <th className="text-left">Order #</th>
-                          <th className="text-left">Status</th>
+                          <th className="text-left">Due Date</th>
                           <th className="text-right">Amount</th>
                         </tr>
                       </thead>
@@ -444,7 +451,7 @@ const MultiItemOrderForm: React.FC = () => {
                         {pendingPayments.map((payment, index) => (
                           <tr key={index} className="border-b">
                             <td>#{payment.order_number}</td>
-                            <td className="capitalize">{payment.payment_status.replace('_', ' ')}</td>
+                            <td>{payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A'}</td>
                             <td className="text-right">₹{payment.total_amount.toFixed(2)}</td>
                           </tr>
                         ))}
