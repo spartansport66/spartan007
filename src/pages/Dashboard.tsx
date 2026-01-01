@@ -60,11 +60,9 @@ const Dashboard = () => {
 
   // Filter states for recent sales
   const [filterDealerId, setFilterDealerId] = useState<string>('');
-  const [filterProductId, setFilterProductId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
   const [allDealers, setAllDealers] = useState<{ id: string; name: string }[]>([]);
-  const [allProducts, setAllProducts] = useState<{ id: string; name: string }[]>([]);
 
   // Dialog states for order details
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
@@ -92,19 +90,6 @@ const Dashboard = () => {
       const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
       setActiveDealersCount(formattedDealers.length || 0);
       setAllDealers(formattedDealers);
-    }
-
-    // Fetch all products for the filter dropdown
-    const { data: productsData, error: productsError } = await supabase
-      .from('products')
-      .select('id, name');
-
-    if (productsError) {
-      console.error('Error fetching products for filter:', productsError);
-      showError(`Failed to load products for filter: ${productsError.message}`);
-      setAllProducts([]);
-    } else {
-      setAllProducts(productsData || []);
     }
 
     // Fetch orders and their associated sales items
@@ -160,13 +145,6 @@ const Dashboard = () => {
         })),
       }));
 
-      // Client-side filter for product ID
-      if (filterProductId) {
-        processedOrders = processedOrders.filter(order =>
-          order.items.some(item => item.product_id === filterProductId)
-        );
-      }
-
       setOrders(processedOrders);
 
       const totalValue = processedOrders.reduce((sum, order) => sum + order.total_amount, 0) || 0;
@@ -176,7 +154,7 @@ const Dashboard = () => {
     }
 
     setLoadingData(false);
-  }, [user, filterDealerId, filterProductId, filterFromDate, filterToDate]);
+  }, [user, filterDealerId, filterFromDate, filterToDate]);
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -203,7 +181,6 @@ const Dashboard = () => {
 
   const handleClearFilters = () => {
     setFilterDealerId('');
-    setFilterProductId('');
     setFilterFromDate('');
     setFilterToDate('');
   };
@@ -314,23 +291,6 @@ const Dashboard = () => {
                   <SelectItem value="all">All Dealers</SelectItem>
                   {allDealers.map(dealer => (
                     <SelectItem key={dealer.id} value={dealer.id}>{dealer.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1 min-w-[150px]">
-              <Label htmlFor="filterProduct">Product Name</Label>
-              <Select
-                value={filterProductId || "all"}
-                onValueChange={(value) => setFilterProductId(value === "all" ? "" : value)}
-              >
-                <SelectTrigger id="filterProduct" className="w-full">
-                  <SelectValue placeholder="Filter by product" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Products</SelectItem>
-                  {allProducts.map(product => (
-                    <SelectItem key={product.id} value={product.id}>{product.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
