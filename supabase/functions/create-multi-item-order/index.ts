@@ -105,10 +105,12 @@ serve(async (req) => {
       throw new Error('Dealer not found.');
     }
 
+    // MODIFIED: Only sum total_amount from orders with 'pending' payment_status
     const { data: totalSpentData, error: totalSpentError } = await supabaseAdmin
       .from('orders')
       .select('total_amount')
-      .eq('dealer_id', dealerId);
+      .eq('dealer_id', dealerId)
+      .eq('payment_status', 'pending'); // ONLY PENDING ORDERS should count against credit limit
 
     if (totalSpentError) {
       throw new Error(`Failed to calculate dealer balance: ${totalSpentError.message}`);
