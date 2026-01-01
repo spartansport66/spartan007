@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, MessageCircle, Send, Users, Search, Link as LinkIcon } from 'lucide-react'; // Added LinkIcon
+import { Loader2, MessageCircle, Send, Users, Search } from 'lucide-react'; // Removed LinkIcon
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import MultiSelect from '@/components/MultiSelect';
@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useSession } from '@/contexts/SessionContext';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'; // Added Dialog components
+// Removed Dialog components import
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -62,9 +62,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
   const [filterState, setFilterState] = useState<string>('');
   const [filteredDealersForMultiSelect, setFilteredDealersForMultiSelect] = useState<DealerOption[]>([]);
 
-  // New states for the WhatsApp links dialog
-  const [isLinksDialogOpen, setIsLinksDialogOpen] = useState(false);
-  const [whatsappLinks, setWhatsappLinks] = useState<{ dealerName: string; url: string }[]>([]);
+  // Removed states for the WhatsApp links dialog
 
   const fetchInitialData = useCallback(async () => {
     setInitialLoading(true);
@@ -179,19 +177,14 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
         throw new Error(data.error || 'Failed to send WhatsApp messages');
       }
 
-      showSuccess('WhatsApp messages prepared. Please open the links in the dialog to send them manually.');
-      
-      // Prepare links for the dialog
-      const generatedLinks: { dealerName: string; url: string }[] = [];
+      showSuccess('WhatsApp messages prepared. Multiple tabs may open, please ensure pop-ups are allowed.');
       data.results.forEach((result: any) => {
         if (result.status === 'success' && result.phone) {
           const encodedMessage = encodeURIComponent(whatsappMessage);
           const whatsappUrl = `https://web.whatsapp.com/send?phone=${result.phone}&text=${encodedMessage}`;
-          generatedLinks.push({ dealerName: result.dealerName, url: whatsappUrl });
+          window.open(whatsappUrl, '_blank');
         }
       });
-      setWhatsappLinks(generatedLinks);
-      setIsLinksDialogOpen(true); // Open the dialog
 
       setSelectedDealerIds([]); // Clear selected dealers after sending
       setSendToAllFilteredDealers(false); // Reset checkbox
@@ -386,40 +379,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
           </>
         )}
       </CardContent>
-
-      {/* WhatsApp Links Dialog */}
-      <Dialog open={isLinksDialogOpen} onOpenChange={setIsLinksDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>WhatsApp Messages Ready</DialogTitle>
-            <DialogDescription>
-              Click each link below to open WhatsApp Web and send the message to the respective dealer.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 max-h-[400px] overflow-y-auto">
-            {whatsappLinks.length === 0 ? (
-              <p className="text-muted-foreground">No links generated. Ensure dealers have valid phone numbers.</p>
-            ) : (
-              whatsappLinks.map((link, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <LinkIcon className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                  <a 
-                    href={link.url} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-blue-600 hover:underline truncate"
-                  >
-                    {link.dealerName}
-                  </a>
-                </div>
-              ))
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setIsLinksDialogOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </Card>
   );
 };
