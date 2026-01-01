@@ -177,8 +177,8 @@ serve(async (req) => {
       throw new Error(`Failed to insert sales items: ${salesInsertError.message}`);
     }
 
-    // 5. If payment was made at order time, insert into payments table
-    if (paymentDetails && paymentStatus === 'paid') {
+    // 5. If payment details are provided, insert into payments table
+    if (paymentDetails) { // Changed condition from paymentStatus === 'paid'
       const { error: paymentInsertError } = await supabaseAdmin
         .from('payments')
         .insert({
@@ -196,7 +196,7 @@ serve(async (req) => {
           ifsc_code: paymentDetails.ifsc_code,
           upi_id: paymentDetails.upi_id,
           transaction_id: paymentDetails.transaction_id,
-          status: 'completed', // Payment made at order time is considered completed
+          status: paymentStatus === 'paid' ? 'completed' : 'pending_approval', // Set status based on order's paymentStatus
         });
 
       if (paymentInsertError) {
