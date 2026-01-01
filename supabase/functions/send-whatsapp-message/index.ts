@@ -42,7 +42,7 @@ serve(async (req) => {
       throw new Error(`Failed to fetch dealer phone numbers: ${dealersError.message}`);
     }
 
-    const messagesSent: { dealerId: string; dealerName: string; phone: string; status: string; url?: string; error?: string }[] = [];
+    const messagesSent: { dealerId: string; dealerName: string; phone: string; status: string; error?: string }[] = []; // Removed 'url' field
     const logsToInsert: { combo_offer_id: string; dealer_id: string; message_content: string; sent_by: string }[] = [];
 
     for (const dealer of dealers) {
@@ -52,7 +52,6 @@ serve(async (req) => {
           dealerName: dealer.name,
           phone: dealer.phone,
           status: 'success',
-          url: `https://web.whatsapp.com/send?phone=${dealer.phone}&text=${encodeURIComponent(message)}`,
         });
         logsToInsert.push({
           combo_offer_id: comboOfferId,
