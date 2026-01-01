@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2, Search } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2, Search, Eye } from 'lucide-react';
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
@@ -15,6 +15,7 @@ import PaymentStatusCard from '@/components/PaymentStatusCard';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import OrderDetailsDialog from '@/components/OrderDetailsDialog'; // Import OrderDetailsDialog
 
 interface Product {
   id: string;
@@ -29,26 +30,31 @@ interface Dealer {
   name: string;
 }
 
-interface Sale {
-  id: string;
+// New interfaces for order-wise display
+interface OrderItemDisplay {
+  product_id: string; // Added for client-side filtering
+  product_name: string;
   quantity: number;
+  unit_price: number;
   total_price: number;
-  sale_date: string;
-  products: { name: string } | null;
-  orders: {
-    dealers: { name: string } | null;
-    user_id: string;
-    profiles: { first_name: string; last_name: string } | null;
-    payment_status: string;
-  } | null;
+}
+
+interface OrderDisplay {
+  id: string;
+  order_number: number;
+  order_date: string;
+  total_amount: number;
+  dealer_name: string;
+  payment_status: string;
+  items: OrderItemDisplay[];
 }
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
-  const [sales, setSales] = useState<Sale[]>([]);
+  const [orders, setOrders] = useState<OrderDisplay[]>([]); // Changed from sales to orders
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
-  const [totalOrders, setTotalOrders] = useState<number>(0);
+  const [totalOrdersCount, setTotalOrdersCount] = useState<number>(0); // Renamed to avoid conflict
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -59,6 +65,10 @@ const Dashboard = () => {
   const [filterToDate, setFilterToDate] = useState<string>('');
   const [allDealers, setAllDealers] = useState<{ id: string; name: string }[]>([]);
   const [allProducts, setAllProducts] = useState<{ id: string; name: string }[]>([]);
+
+  // Dialog states for order details
+  const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
+  const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     if (!user) {
@@ -97,74 +107,76 @@ const Dashboard = () => {
       setAllProducts(productsData || []);
     }
 
-    // Fetch sales (RLS handles what they can see)
-    let salesQuery = supabase
-      .from('sales')
+    // Fetch orders and their associated sales items
+    let ordersQuery = supabase
+      .from('orders')
       .select(`
         id,
-        quantity,
-        total_price,
-        sale_date,
-        products (id, name),
-        orders (
-          dealer_id,
-          dealers (name),
-          user_id,
-          profiles (first_name, last_name),
-          payment_status
+        order_number,
+        order_date,
+        total_amount,
+        payment_status,
+        dealers (name),
+        sales (
+          quantity,
+          total_price,
+          products (id, name, price)
         )
       `)
-      .eq('orders.user_id', user.id) // Filter by current sales person
-      .order('sale_date', { ascending: false });
+      .eq('user_id', user.id) // Filter by current sales person
+      .order('order_date', { ascending: false });
 
     // Apply filters
     if (filterDealerId) {
-      salesQuery = salesQuery.eq('orders.dealer_id', filterDealerId);
-    }
-    if (filterProductId) {
-      salesQuery = salesQuery.eq('product_id', filterProductId);
+      ordersQuery = ordersQuery.eq('dealer_id', filterDealerId);
     }
     if (filterFromDate) {
-      salesQuery = salesQuery.gte('sale_date', `${filterFromDate}T00:00:00.000Z`);
+      ordersQuery = ordersQuery.gte('order_date', `${filterFromDate}T00:00:00.000Z`);
     }
     if (filterToDate) {
-      salesQuery = salesQuery.lte('sale_date', `${filterToDate}T23:59:59.999Z`);
+      ordersQuery = ordersQuery.lte('order_date', `${filterToDate}T23:59:59.999Z`);
     }
 
-    const { data: salesData, error: salesError } = await salesQuery;
+    const { data: ordersData, error: ordersError } = await ordersQuery;
 
-    if (salesError) {
-      console.error('Error fetching sales:', salesError);
-      showError(`Failed to load sales data: ${salesError.message}`);
-      setSales([]);
+    if (ordersError) {
+      console.error('Error fetching orders:', ordersError);
+      showError(`Failed to load orders data: ${ordersError.message}`);
+      setOrders([]);
     } else {
-      const typedSalesData: Sale[] = (salesData || []).map((sale: any) => ({
-        id: sale.id,
-        quantity: sale.quantity,
-        total_price: sale.total_price,
-        sale_date: sale.sale_date,
-        products: sale.products ? { name: sale.products.name } : null,
-        orders: sale.orders ? {
-          dealers: sale.orders.dealers ? { name: sale.orders.dealers.name } : null,
-          user_id: sale.orders.user_id,
-          profiles: sale.orders.profiles ? {
-            first_name: sale.orders.profiles.first_name,
-            last_name: sale.orders.profiles.last_name
-          } : null,
-          payment_status: sale.orders.payment_status,
-        } : null,
+      let processedOrders: OrderDisplay[] = (ordersData || []).map((order: any) => ({
+        id: order.id,
+        order_number: order.order_number,
+        order_date: order.order_date,
+        total_amount: order.total_amount,
+        dealer_name: order.dealers?.name || 'N/A',
+        payment_status: order.payment_status,
+        items: (order.sales || []).map((sale: any) => ({
+          product_id: sale.products?.id || '', // Added product_id for client-side filtering
+          product_name: sale.products?.name || 'N/A',
+          quantity: sale.quantity,
+          unit_price: sale.products?.price || 0,
+          total_price: sale.total_price,
+        })),
       }));
 
-      setSales(typedSalesData);
+      // Client-side filter for product ID
+      if (filterProductId) {
+        processedOrders = processedOrders.filter(order =>
+          order.items.some(item => item.product_id === filterProductId)
+        );
+      }
 
-      const totalValue = typedSalesData.reduce((sum, sale) => sum + sale.total_price, 0) || 0;
-      const totalOrdersCount = typedSalesData.length || 0;
+      setOrders(processedOrders);
+
+      const totalValue = processedOrders.reduce((sum, order) => sum + order.total_amount, 0) || 0;
+      const totalOrdersCountValue = processedOrders.length || 0;
       setTotalSalesValue(totalValue);
-      setTotalOrders(totalOrdersCount);
+      setTotalOrdersCount(totalOrdersCountValue);
     }
 
     setLoadingData(false);
-  }, [user, filterDealerId, filterProductId, filterFromDate, filterToDate]); // Added filter dependencies
+  }, [user, filterDealerId, filterProductId, filterFromDate, filterToDate]);
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -196,6 +208,11 @@ const Dashboard = () => {
     setFilterToDate('');
   };
 
+  const handleViewOrderDetails = (orderId: string) => {
+    setSelectedOrderIdForDetails(orderId);
+    setIsOrderDetailsDialogOpen(true);
+  };
+
   if (sessionLoading || loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -220,7 +237,7 @@ const Dashboard = () => {
     },
     {
       title: "My Total Orders",
-      value: totalOrders.toString(),
+      value: totalOrdersCount.toString(), // Use totalOrdersCount
       change: "+180.1% from last month",
       icon: <Package className="h-3 w-3 text-white" />,
       headerBg: "bg-indigo-500 dark:bg-indigo-700",
@@ -276,11 +293,11 @@ const Dashboard = () => {
         <PaymentStatusCard />
       </div>
 
-      {/* Recent Activities (Sales) */}
+      {/* Recent Activities (Orders) */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
         <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
-          <CardTitle className="text-xl font-semibold">My Recent Sales</CardTitle>
-          <CardDescription className="text-teal-100 dark:text-teal-200">A list of your recent sales transactions.</CardDescription>
+          <CardTitle className="text-xl font-semibold">My Recent Orders</CardTitle> {/* Changed title */}
+          <CardDescription className="text-teal-100 dark:text-teal-200">A list of your recent orders.</CardDescription>
         </CardHeader>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
@@ -347,30 +364,39 @@ const Dashboard = () => {
           </div>
 
           <div className="overflow-x-auto">
-            {sales.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No sales recorded yet or matching your filters.</p>
+            {orders.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No orders recorded yet or matching your filters.</p>
             ) : (
               <div className="max-h-[400px] overflow-y-auto border rounded-md">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="bg-muted hover:bg-muted/90">
-                      <TableHead className="text-muted-foreground">Product</TableHead>
+                      <TableHead className="text-muted-foreground">Order No.</TableHead> {/* Changed header */}
                       <TableHead className="text-muted-foreground">Dealer</TableHead>
-                      <TableHead className="text-muted-foreground">Quantity</TableHead>
-                      <TableHead className="text-muted-foreground">Total Price</TableHead>
+                      <TableHead className="text-muted-foreground">Order Date</TableHead> {/* Changed header */}
+                      <TableHead className="text-muted-foreground">Total Amount</TableHead>
                       <TableHead className="text-muted-foreground">Payment Status</TableHead>
-                      <TableHead className="text-muted-foreground">Date</TableHead>
+                      <TableHead className="text-muted-foreground text-center">Actions</TableHead> {/* Added Actions header */}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sales.map((sale) => (
-                      <TableRow key={sale.id} className="hover:bg-accent/50">
-                        <TableCell className="font-medium text-foreground">{sale.products?.name || 'N/A'}</TableCell>
-                        <TableCell className="text-muted-foreground">{sale.orders?.dealers?.name || 'N/A'}</TableCell>
-                        <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
-                        <TableCell className="text-muted-foreground">₹{sale.total_price.toFixed(2)}</TableCell>
-                        <TableCell className="text-muted-foreground">{sale.orders?.payment_status || 'N/A'}</TableCell>
-                        <TableCell className="text-muted-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>
+                    {orders.map((order) => (
+                      <TableRow key={order.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell> {/* Display order_number */}
+                        <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-muted-foreground">₹{order.total_amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.payment_status || 'N/A'}</TableCell>
+                        <TableCell className="text-center">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleViewOrderDetails(order.id)} 
+                            title="View Order Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -415,6 +441,13 @@ const Dashboard = () => {
         </CardContent>
       </Card>
       <MadeWithDyad />
+
+      {/* Order Details Dialog */}
+      <OrderDetailsDialog
+        orderId={selectedOrderIdForDetails}
+        isOpen={isOrderDetailsDialogOpen}
+        onOpenChange={setIsOrderDetailsDialogOpen}
+      />
     </div>
   );
 };
