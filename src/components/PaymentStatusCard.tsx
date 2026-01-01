@@ -5,12 +5,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, CalendarDays, DollarSign, Clock, CheckCircle, AlertCircle, PlusCircle } from 'lucide-react';
+import { Loader2, Search, CalendarDays, DollarSign, Clock, CheckCircle, AlertCircle, PlusCircle, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
 import { Label } from '@/components/ui/label';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 interface Order {
   id: string;
@@ -21,6 +22,20 @@ interface Order {
   dealer_phone: string;
   payment_due_date: string | null;
   payment_status: string;
+  // Payment details
+  payment_method: string | null;
+  payment_amount: number | null;
+  payment_date: string | null;
+  cheque_dd_no: string | null;
+  cheque_dd_date: string | null;
+  card_number: string | null;
+  card_holder_name: string | null;
+  expiry_date: string | null;
+  bank_name: string | null;
+  account_number: string | null;
+  ifsc_code: string | null;
+  upi_id: string | null;
+  transaction_id: string | null;
 }
 
 interface DealerOption {
@@ -35,7 +50,7 @@ const PaymentStatusCard: React.FC = () => {
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
 
   // Filter states
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'pending_approval' | 'todays_due'>('pending');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'pending_approval' | 'todays_due'>('all');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
@@ -43,6 +58,8 @@ const PaymentStatusCard: React.FC = () => {
   // Dialog states
   const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<Order | null>(null);
+  const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
+  const [selectedOrderForPaymentDetails, setSelectedOrderForPaymentDetails] = useState<Order | null>(null);
 
   const getTodayDateISO = () => {
     const today = new Date();
@@ -91,7 +108,22 @@ const PaymentStatusCard: React.FC = () => {
           total_amount,
           payment_due_date,
           payment_status,
-          dealers (name, phone)
+          dealers (name, phone),
+          payments (
+            amount,
+            payment_method,
+            payment_date,
+            cheque_dd_no,
+            cheque_dd_date,
+            card_number,
+            card_holder_name,
+            expiry_date,
+            bank_name,
+            account_number,
+            ifsc_code,
+            upi_id,
+            transaction_id
+          )
         `)
         .eq('user_id', user.id) // Filter by current sales person
         .order('payment_due_date', { ascending: true });
@@ -114,8 +146,6 @@ const PaymentStatusCard: React.FC = () => {
           .gte('payment_due_date', todayISO)
           .lte('payment_due_date', endOfTodayISO);
       }
-
-      // If filterStatus is 'all', no payment_status filter is applied here.
 
       // Apply dealer filter
       if (filterDealerId) {
@@ -140,16 +170,34 @@ const PaymentStatusCard: React.FC = () => {
         showError('Failed to load orders.');
         setOrders([]);
       } else {
-        const formattedOrders: Order[] = (ordersData || []).map((order: any) => ({
-          id: order.id,
-          order_number: order.order_number,
-          order_date: order.order_date,
-          total_amount: order.total_amount,
-          dealer_name: order.dealers?.name || 'N/A',
-          dealer_phone: order.dealers?.phone || '',
-          payment_due_date: order.payment_due_date,
-          payment_status: order.payment_status,
-        }));
+        const formattedOrders: Order[] = (ordersData || []).map((order: any) => {
+          const paymentInfo = order.payments && order.payments.length > 0 ? order.payments[0] : null;
+          
+          return {
+            id: order.id,
+            order_number: order.order_number,
+            order_date: order.order_date,
+            total_amount: order.total_amount,
+            dealer_name: order.dealers?.name || 'N/A',
+            dealer_phone: order.dealers?.phone || '',
+            payment_due_date: order.payment_due_date,
+            payment_status: order.payment_status,
+            // Payment details
+            payment_method: paymentInfo?.payment_method || null,
+            payment_amount: paymentInfo?.amount || null,
+            payment_date: paymentInfo?.payment_date || null,
+            cheque_dd_no: paymentInfo?.cheque_dd_no || null,
+            cheque_dd_date: paymentInfo?.cheque_dd_date || null,
+            card_number: paymentInfo?.card_number || null,
+            card_holder_name: paymentInfo?.card_holder_name || null,
+            expiry_date: paymentInfo?.expiry_date || null,
+            bank_name: paymentInfo?.bank_name || null,
+            account_number: paymentInfo?.account_number || null,
+            ifsc_code: paymentInfo?.ifsc_code || null,
+            upi_id: paymentInfo?.upi_id || null,
+            transaction_id: paymentInfo?.transaction_id || null,
+          };
+        });
 
         setOrders(formattedOrders);
       }
@@ -166,7 +214,7 @@ const PaymentStatusCard: React.FC = () => {
   }, [fetchOrdersAndDealers]);
 
   const handleClearFilters = () => {
-    setFilterStatus('pending'); // Reset to default pending
+    setFilterStatus('all'); // Reset to default all
     setFilterDealerId('');
     setFilterFromDate('');
     setFilterToDate('');
@@ -175,6 +223,11 @@ const PaymentStatusCard: React.FC = () => {
   const handleAddPaymentDetails = (order: Order) => {
     setSelectedOrderForPaymentUpdate(order);
     setIsUpdatePaymentDialogOpen(true);
+  };
+
+  const handleViewPaymentDetails = (order: Order) => {
+    setSelectedOrderForPaymentDetails(order);
+    setIsPaymentDetailsDialogOpen(true);
   };
 
   const handlePaymentUpdated = () => {
@@ -206,6 +259,58 @@ const PaymentStatusCard: React.FC = () => {
     return <Clock className="h-4 w-4 text-gray-600" />;
   };
 
+  const renderPaymentDetails = (order: Order) => {
+    if (!order.payment_method) return null;
+
+    return (
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold">Payment Details for Order #{order.order_number}</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div>
+            <p><strong>Payment Method:</strong> {order.payment_method}</p>
+            <p><strong>Amount:</strong> ₹{order.payment_amount?.toFixed(2) || 'N/A'}</p>
+            <p><strong>Payment Date:</strong> {order.payment_date ? new Date(order.payment_date).toLocaleDateString() : 'N/A'}</p>
+          </div>
+          
+          {order.payment_method === 'Cheque/DD' && (
+            <div>
+              <p><strong>Cheque/DD No:</strong> {order.cheque_dd_no || 'N/A'}</p>
+              <p><strong>Cheque/DD Date:</strong> {order.cheque_dd_date ? new Date(order.cheque_dd_date).toLocaleDateString() : 'N/A'}</p>
+            </div>
+          )}
+          
+          {order.payment_method === 'Card' && (
+            <div>
+              <p><strong>Card Number:</strong> {order.card_number ? `**** **** **** ${order.card_number.slice(-4)}` : 'N/A'}</p>
+              <p><strong>Card Holder:</strong> {order.card_holder_name || 'N/A'}</p>
+              <p><strong>Expiry Date:</strong> {order.expiry_date || 'N/A'}</p>
+            </div>
+          )}
+          
+          {order.payment_method === 'Bank Transfer' && (
+            <div>
+              <p><strong>Bank Name:</strong> {order.bank_name || 'N/A'}</p>
+              <p><strong>Account Number:</strong> {order.account_number ? `****${order.account_number.slice(-4)}` : 'N/A'}</p>
+              <p><strong>IFSC Code:</strong> {order.ifsc_code || 'N/A'}</p>
+            </div>
+          )}
+          
+          {order.payment_method === 'UPI' && (
+            <div>
+              <p><strong>UPI ID:</strong> {order.upi_id || 'N/A'}</p>
+            </div>
+          )}
+          
+          {(order.payment_method === 'Card' || order.payment_method === 'Bank Transfer' || order.payment_method === 'UPI' || order.payment_method === 'Cash') && (
+            <div>
+              <p><strong>Transaction ID:</strong> {order.transaction_id || 'N/A'}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Card className="bg-card text-card-foreground shadow-lg mb-6">
       <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
@@ -216,12 +321,6 @@ const PaymentStatusCard: React.FC = () => {
               View and manage the payment status of all orders.
             </CardDescription>
           </div>
-          <Button 
-            onClick={() => document.getElementById('payment-filters')?.scrollIntoView({ behavior: 'smooth' })}
-            className="flex items-center gap-2 bg-white text-indigo-700 hover:bg-indigo-50"
-          >
-            <PlusCircle className="h-4 w-4" /> Add Payment
-          </Button>
         </div>
       </CardHeader>
       <CardContent className="p-4">
@@ -304,7 +403,7 @@ const PaymentStatusCard: React.FC = () => {
           ) : orders.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No orders found for the selected criteria.</p>
           ) : (
-            <div className="max-h-[250px] overflow-y-auto border rounded-md">
+            <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted hover:bg-muted/90">
@@ -323,7 +422,7 @@ const PaymentStatusCard: React.FC = () => {
                       key={order.id} 
                       className={isOverdue(order.payment_due_date, order.payment_status) ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-accent/50"}
                     >
-                      <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
+                      <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
                       <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
@@ -337,21 +436,52 @@ const PaymentStatusCard: React.FC = () => {
                         {order.payment_due_date ? new Date(order.payment_due_date).toLocaleDateString() : 'N/A'}
                       </TableCell>
                       <TableCell className="text-center">
-                        {order.payment_status === 'pending' && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleAddPaymentDetails(order)}
-                            title="Add Payment Details"
-                          >
-                            <DollarSign className="h-4 w-4 text-green-600" />
-                          </Button>
-                        )}
+                        <div className="flex justify-center gap-2">
+                          {order.payment_status === 'pending' && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleAddPaymentDetails(order)}
+                              title="Add Payment Details"
+                            >
+                              <DollarSign className="h-4 w-4 text-green-600" />
+                            </Button>
+                          )}
+                          {(order.payment_status === 'paid' || order.payment_status === 'pending_approval') && order.payment_method && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleViewPaymentDetails(order)}
+                              title="View Payment Details"
+                            >
+                              <Eye className="h-4 w-4 text-blue-600" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+        </div>
+        
+        {/* Payment Details Section - Always visible below the table */}
+        <div className="mt-6 p-4 bg-muted rounded-lg">
+          <h3 className="text-lg font-semibold mb-3">Payment Details</h3>
+          {orders.filter(order => order.payment_status === 'paid' || order.payment_status === 'pending_approval').length === 0 ? (
+            <p className="text-muted-foreground">No paid orders with payment details available.</p>
+          ) : (
+            <div className="space-y-4 max-h-60 overflow-y-auto">
+              {orders
+                .filter(order => order.payment_status === 'paid' || order.payment_status === 'pending_approval')
+                .map(order => (
+                  <div key={`payment-${order.id}`} className="p-3 bg-background rounded-md border">
+                    {renderPaymentDetails(order)}
+                  </div>
+                ))
+              }
             </div>
           )}
         </div>
@@ -365,6 +495,23 @@ const PaymentStatusCard: React.FC = () => {
           onPaymentUpdated={handlePaymentUpdated} 
         />
       )}
+      
+      {/* Payment Details Dialog */}
+      <Dialog open={isPaymentDetailsDialogOpen} onOpenChange={setIsPaymentDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Payment Details</DialogTitle>
+            <DialogDescription>
+              Detailed information about the payment for this order.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedOrderForPaymentDetails && (
+            <div className="py-4">
+              {renderPaymentDetails(selectedOrderForPaymentDetails)}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
