@@ -106,13 +106,13 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         let query = supabase
           .from('payments')
           .select(`
-            id, // This is the payment ID
+            id, // This is the payment ID from the payments table
             order_id,
             amount,
             payment_method,
             payment_date,
             orders (
-              id, // This is the order ID
+              id, // This is the order ID from the orders table
               order_number, 
               order_date, 
               total_amount, 
@@ -198,7 +198,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       } else {
         const formattedPayments: PaymentReportData[] = (fetchedData || []).map((item: any) => {
           if (filterStatus === 'pending_approval') {
-            // When querying payments directly
+            console.log("DEBUG: Mapping pending_approval item. Payment ID from payments table (item.id):", item.id, "Order ID from orders table (item.orders.id):", item.orders.id);
             return {
               id: item.orders.id, // Order ID
               order_number: item.orders.order_number,
@@ -212,7 +212,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
               dealer_id: item.orders.dealer_id,
             };
           } else {
-            // When querying orders directly
+            console.log("DEBUG: Mapping non-pending_approval item. Order ID (item.id):", item.id);
             return {
               id: item.id, // Order ID
               order_number: item.order_number,
@@ -283,7 +283,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
 
   const handleApproveRejectPayment = async (payment: PaymentReportData, action: 'approve' | 'reject') => {
     if (!payment.payment_id) {
-      console.error("ERROR: payment.payment_id is missing for this record:", payment); // DEBUG LOG
+      console.error("ERROR: payment.payment_id is missing for this record in handleApproveRejectPayment:", payment); // DEBUG LOG
       showError('Payment ID is missing for this record.');
       return;
     }
