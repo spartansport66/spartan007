@@ -106,13 +106,13 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         let query = supabase
           .from('payments')
           .select(`
-            id, // This is the payment ID from the payments table
+            id, 
             order_id,
             amount,
             payment_method,
             payment_date,
             orders (
-              id, // This is the order ID from the orders table
+              id, 
               order_number, 
               order_date, 
               total_amount, 
@@ -200,7 +200,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
           if (filterStatus === 'pending_approval') {
             // When querying payments directly
             console.log("DEBUG: Mapping pending_approval item. Raw item:", item); // Log the entire raw item
-            console.log("DEBUG: Extracted payment_id (item.id):", item.id, "Extracted order_id (item.orders.id):", item.orders.id);
+            console.log("DEBUG: item.id (payment ID from payments table):", item.id, "item.orders.id (order ID from orders table):", item.orders.id); // NEW LOG
             return {
               id: item.orders.id, // Order ID
               order_number: item.orders.order_number,
@@ -216,7 +216,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
           } else {
             // When querying orders directly
             console.log("DEBUG: Mapping non-pending_approval item. Raw item:", item); // Log the entire raw item
-            console.log("DEBUG: Extracted order_id (item.id):", item.id);
+            console.log("DEBUG: item.id (order ID):", item.id); // NEW LOG
             return {
               id: item.id, // Order ID
               order_number: item.order_number,
@@ -286,7 +286,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
   };
 
   const handleApproveRejectPayment = async (payment: PaymentReportData, action: 'approve' | 'reject') => {
-    console.log("DEBUG: handleApproveRejectPayment called with payment:", payment); // Log the payment object received
+    console.log("DEBUG: handleApproveRejectPayment received payment object:", payment); // NEW LOG
     if (!payment.payment_id) {
       console.error("ERROR: payment.payment_id is missing for this record in handleApproveRejectPayment:", payment); // DEBUG LOG
       showError('Payment ID is missing for this record.');
