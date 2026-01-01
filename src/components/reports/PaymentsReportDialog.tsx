@@ -106,13 +106,13 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         let query = supabase
           .from('payments')
           .select(`
-            id, // This is the payment ID from the payments table
+            id, 
             order_id,
             amount,
             payment_method,
             payment_date,
             orders (
-              id, // This is the order ID from the orders table
+              id, 
               order_number, 
               order_date, 
               total_amount, 
@@ -198,6 +198,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       } else {
         const formattedPayments: PaymentReportData[] = (fetchedData || []).map((item: any) => {
           if (filterStatus === 'pending_approval') {
+            // When querying payments directly
             console.log("DEBUG: Mapping pending_approval item. Payment ID from payments table (item.id):", item.id, "Order ID from orders table (item.orders.id):", item.orders.id);
             return {
               id: item.orders.id, // Order ID
@@ -212,6 +213,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
               dealer_id: item.orders.dealer_id,
             };
           } else {
+            // When querying orders directly
             console.log("DEBUG: Mapping non-pending_approval item. Order ID (item.id):", item.id);
             return {
               id: item.id, // Order ID
@@ -561,10 +563,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction 
-                                      onClick={() => {
-                                        console.log("DEBUG: Approving payment:", payment); // DEBUG LOG
-                                        handleApproveRejectPayment(payment, 'approve');
-                                      }} 
+                                      onClick={() => handleApproveRejectPayment(payment, 'approve')} 
                                       disabled={isSubmittingAction}
                                     >
                                       {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
@@ -589,10 +588,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction 
-                                      onClick={() => {
-                                        console.log("DEBUG: Rejecting payment:", payment); // DEBUG LOG
-                                        handleApproveRejectPayment(payment, 'reject');
-                                      }} 
+                                      onClick={() => handleApproveRejectPayment(payment, 'reject')} 
                                       disabled={isSubmittingAction}
                                     >
                                       {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reject'}
