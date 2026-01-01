@@ -150,46 +150,54 @@ const Dashboard = () => {
   const salesOverview = [
     {
       title: "My Total Sales",
-      value: `$${totalSalesValue.toFixed(2)}`,
+      value: `₹${totalSalesValue.toFixed(2)}`,
       change: "+20.1% from last month", // Placeholder, actual calculation would be more complex
-      icon: <DollarSign className="h-3 w-3 text-primary" />
+      icon: <DollarSign className="h-3 w-3 text-white" />,
+      headerBg: "bg-green-500 dark:bg-green-700",
+      valueColor: "text-green-800 dark:text-green-200"
     },
     {
       title: "My Total Orders",
       value: totalOrders.toString(),
       change: "+180.1% from last month", // Placeholder
-      icon: <Package className="h-3 w-3 text-accent" />
+      icon: <Package className="h-3 w-3 text-white" />,
+      headerBg: "bg-indigo-500 dark:bg-indigo-700",
+      valueColor: "text-indigo-800 dark:text-indigo-200"
     },
     {
       title: "My Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month", // Placeholder
-      icon: <Users className="h-3 w-3 text-secondary" />
+      icon: <Users className="h-3 w-3 text-white" />,
+      headerBg: "bg-purple-500 dark:bg-purple-700",
+      valueColor: "text-purple-800 dark:text-purple-200"
     },
     {
       title: "Pending Tasks",
       value: "57", // Placeholder
       change: "-5% from last month", // Placeholder
-      icon: <Activity className="h-3 w-3 text-destructive" />
+      icon: <Activity className="h-3 w-3 text-white" />,
+      headerBg: "bg-red-500 dark:bg-red-700",
+      valueColor: "text-red-800 dark:text-red-200"
     },
   ];
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-primary">Sales Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">Sales Dashboard</h1>
       </div>
 
       {/* Sales Overview Cards */}
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2">
-              <CardTitle className="text-[0.5rem] font-medium text-muted-foreground">{item.title}</CardTitle>
+            <CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-0 p-2 ${item.headerBg} text-white rounded-t-lg`}>
+              <CardTitle className="text-[0.5rem] font-medium text-white">{item.title}</CardTitle>
               {item.icon}
             </CardHeader>
             <CardContent className="p-2 pt-0">
-              <div className="text-sm font-bold text-foreground">{item.value}</div>
+              <div className={`text-sm font-bold ${item.valueColor}`}>{item.value}</div>
               <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
             </CardContent>
           </Card>
@@ -203,11 +211,11 @@ const Dashboard = () => {
 
       {/* Recent Activities (Sales) */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold text-primary">My Recent Sales</CardTitle>
-          <CardDescription className="text-muted-foreground">A list of your recent sales transactions.</CardDescription>
+        <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
+          <CardTitle className="text-xl font-semibold">My Recent Sales</CardTitle>
+          <CardDescription className="text-teal-100 dark:text-teal-200">A list of your recent sales transactions.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4">
           <div className="overflow-x-auto">
             {sales.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No sales recorded yet.</p>
@@ -219,7 +227,7 @@ const Dashboard = () => {
                     <TableHead className="text-muted-foreground">Dealer</TableHead>
                     <TableHead className="text-muted-foreground">Quantity</TableHead>
                     <TableHead className="text-muted-foreground">Total Price</TableHead>
-                    <TableHead className="text-muted-foreground">Payment Status</TableHead> {/* Added */}
+                    <TableHead className="text-muted-foreground">Payment Status</TableHead>
                     <TableHead className="text-muted-foreground">Date</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -230,7 +238,7 @@ const Dashboard = () => {
                       <TableCell className="text-muted-foreground">{sale.orders?.dealers?.name || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{sale.quantity}</TableCell>
                       <TableCell className="text-muted-foreground">₹{sale.total_price.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground">{sale.orders?.payment_status || 'N/A'}</TableCell> {/* Displayed */}
+                      <TableCell className="text-muted-foreground">{sale.orders?.payment_status || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>
                     </TableRow>
                   ))}
@@ -243,11 +251,11 @@ const Dashboard = () => {
 
       {/* Quick Actions */}
       <Card className="bg-card text-card-foreground shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold text-primary">Quick Actions</CardTitle>
-          <CardDescription className="text-muted-foreground">Perform common tasks quickly.</CardDescription>
+        <CardHeader className="bg-orange-500 dark:bg-orange-700 text-white rounded-t-lg p-4">
+          <CardTitle className="text-xl font-semibold">Quick Actions</CardTitle>
+          <CardDescription className="text-orange-100 dark:text-orange-200">Perform common tasks quickly.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
+        <CardContent className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4 p-4">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => navigate('/manage-dealers')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
