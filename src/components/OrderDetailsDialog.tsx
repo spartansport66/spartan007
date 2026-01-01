@@ -1,15 +1,14 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, Download, Printer } from 'lucide-react';
+import { Loader2, Download, Printer, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable'; // Import jspdf-autotable for autoTable functionality
+import 'jspdf-autotable';
 
 interface OrderItemDetail {
   product_name: string;
@@ -55,6 +54,7 @@ interface OrderDetail {
   ifsc_code: string | null;
   upi_id: string | null;
   transaction_id: string | null;
+  payment_date: string | null; // New
 }
 
 interface OrderDetailsDialogProps {
@@ -73,16 +73,25 @@ interface FetchedOrderData {
   status: string;
   payment_status: string; // New
   payment_due_date: string | null; // New
-  dealers: { id: string; name: string; credit_limit: number; address: string; phone: string; city: string; state: string; country: string } | null; // Added city, state, country
+  dealers: {
+    id: string;
+    name: string;
+    credit_limit: number;
+    address: string;
+    phone: string;
+    city: string;
+    state: string;
+    country: string;
+  } | null; // Added city, state, country
   user_id: string;
   bill_no: string | null; // New
   dispatch_date: string | null; // New
   dispatch_number: number | null; // New
   dispatched: boolean; // New
-  payments: { 
-    amount: number; 
-    payment_method: string; 
-    cheque_dd_no: string | null; 
+  payments: {
+    amount: number;
+    payment_method: string;
+    cheque_dd_no: string | null;
     cheque_dd_date: string | null;
     card_number: string | null;
     card_holder_name: string | null;
@@ -93,12 +102,14 @@ interface FetchedOrderData {
     ifsc_code: string | null;
     upi_id: string | null;
     transaction_id: string | null;
+    payment_date: string | null;
   }[] | null; // New
 }
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen, onOpenChange, shouldPrintOnLoad = false }) => {
   const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
 
   const fetchOrderDetails = useCallback(async (id: string) => {
     setLoading(true);
@@ -119,11 +130,20 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           dispatch_date,
           dispatch_number,
           dispatched,
-          dealers (id, name, credit_limit, address, phone, city, state, country),
+          dealers (
+            id,
+            name,
+            credit_limit,
+            address,
+            phone,
+            city,
+            state,
+            country
+          ),
           payments (
-            amount, 
-            payment_method, 
-            cheque_dd_no, 
+            amount,
+            payment_method,
+            cheque_dd_no,
             cheque_dd_date,
             card_number,
             card_holder_name,
@@ -133,13 +153,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
             account_number,
             ifsc_code,
             upi_id,
-            transaction_id
+            transaction_id,
+            payment_date
           )
         `)
         .eq('id', id)
         .single() as { data: FetchedOrderData | null; error: any }; // Explicitly type data
 
       if (orderError) throw orderError;
+
       if (!orderData) {
         showError('Order not found.');
         setOrderDetails(null);
@@ -198,7 +220,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
 
       setOrderDetails({
         id: orderData.id,
-        order_number: orderData.order_number, // Added
+        order_number: orderData.order_number,
         order_date: orderData.order_date,
         total_amount: orderData.total_amount,
         status: orderData.status,
@@ -232,8 +254,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         ifsc_code: paymentInfo?.ifsc_code || null,
         upi_id: paymentInfo?.upi_id || null,
         transaction_id: paymentInfo?.transaction_id || null,
+        payment_date: paymentInfo?.payment_date || null, // New
       });
-
     } catch (error: any) {
       console.error('Error fetching order details:', error.message);
       showError(`Failed to load order details: ${error.message}`);
@@ -248,6 +270,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
       fetchOrderDetails(orderId);
     } else if (!isOpen) {
       setOrderDetails(null); // Clear details when dialog closes
+      setShowPaymentDetails(false); // Reset payment details view
     }
   }, [isOpen, orderId, fetchOrderDetails]);
 
@@ -260,34 +283,65 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
 
   const renderPaymentDetails = (details: OrderDetail) => {
     if (details.payment_status !== 'paid' && details.payment_status !== 'pending_approval' || !details.payment_method) return null;
-
+    
     return (
-      <>
-        <p><strong>Payment Method:</strong> {details.payment_method || 'N/A'}</p>
-        <p><strong>Amount:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
-        {details.payment_method === 'Cheque/DD' && (
-          <>
-            <p><strong>Cheque/DD No:</strong> {details.cheque_dd_no || 'N/A'}</p>
-            <p><strong>Cheque/DD Date:</strong> {details.cheque_dd_date ? new Date(details.cheque_dd_date).toLocaleDateString() : 'N/A'}</p>
-          </>
-        )}
-        {(details.payment_method === 'Card' || details.payment_method === 'Bank Transfer' || details.payment_method === 'UPI') && (
-          <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
-        )}
-        {/* Add other specific payment details if needed, e.g., card number, bank name, UPI ID */}
-      </>
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold">Payment Details</h3>
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <p><strong>Payment Method:</strong> {details.payment_method || 'N/A'}</p>
+          <p><strong>Amount:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
+          <p><strong>Payment Date:</strong> {details.payment_date ? new Date(details.payment_date).toLocaleDateString() : 'N/A'}</p>
+          
+          {details.payment_method === 'Cheque/DD' && (
+            <>
+              <p><strong>Cheque/DD No:</strong> {details.cheque_dd_no || 'N/A'}</p>
+              <p><strong>Cheque/DD Date:</strong> {details.cheque_dd_date ? new Date(details.cheque_dd_date).toLocaleDateString() : 'N/A'}</p>
+            </>
+          )}
+          
+          {details.payment_method === 'Card' && (
+            <>
+              <p><strong>Card Number:</strong> {details.card_number ? `**** **** **** ${details.card_number.slice(-4)}` : 'N/A'}</p>
+              <p><strong>Card Holder:</strong> {details.card_holder_name || 'N/A'}</p>
+              <p><strong>Expiry Date:</strong> {details.expiry_date || 'N/A'}</p>
+              <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
+            </>
+          )}
+          
+          {details.payment_method === 'Bank Transfer' && (
+            <>
+              <p><strong>Bank Name:</strong> {details.bank_name || 'N/A'}</p>
+              <p><strong>Account Number:</strong> {details.account_number ? `****${details.account_number.slice(-4)}` : 'N/A'}</p>
+              <p><strong>IFSC Code:</strong> {details.ifsc_code || 'N/A'}</p>
+              <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
+            </>
+          )}
+          
+          {details.payment_method === 'UPI' && (
+            <>
+              <p><strong>UPI ID:</strong> {details.upi_id || 'N/A'}</p>
+              <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
+            </>
+          )}
+          
+          {details.payment_method === 'Cash' && (
+            <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
+          )}
+        </div>
+      </div>
     );
   };
 
   const handlePrint = () => {
     if (!orderDetails) return;
-
+    
     let paymentDetailsHtml = '';
     if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
       paymentDetailsHtml = `
         <h2>Payment Details</h2>
         <p><strong>Payment Method:</strong> ${orderDetails.payment_method || 'N/A'}</p>
         <p><strong>Amount:</strong> ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}</p>
+        <p><strong>Payment Date:</strong> ${orderDetails.payment_date ? new Date(orderDetails.payment_date).toLocaleDateString() : 'N/A'}</p>
         ${orderDetails.payment_method === 'Cheque/DD' ? `
           <p><strong>Cheque/DD No:</strong> ${orderDetails.cheque_dd_no || 'N/A'}</p>
           <p><strong>Cheque/DD Date:</strong> ${orderDetails.cheque_dd_date ? new Date(orderDetails.cheque_dd_date).toLocaleDateString() : 'N/A'}</p>
@@ -324,12 +378,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         <p><strong>Dispatch Date:</strong> ${orderDetails.dispatch_date ? new Date(orderDetails.dispatch_date).toLocaleDateString() : 'N/A'}</p>
         <p><strong>Bill Number:</strong> ${orderDetails.bill_no || 'N/A'}</p>
       ` : ''}
-
       <h2>Dealer Information</h2>
       <p><strong>Name:</strong> ${orderDetails.dealer_name}</p>
       <p><strong>Address:</strong> ${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}</p>
       <p><strong>Phone:</strong> ${orderDetails.dealer_phone}</p>
-
       <h2>Order Items</h2>
       <table>
         <thead>
@@ -351,13 +403,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
           `).join('')}
         </tbody>
       </table>
-
       <div class="summary">
         <p><strong>Total Order Amount:</strong> <span class="text-right">₹${orderDetails.total_amount.toFixed(2)}</span></p>
       </div>
-
       ${paymentDetailsHtml}
-
       <h2>Dealer Credit Information</h2>
       <p><strong>Credit Limit:</strong> <span class="text-right">₹${orderDetails.dealer_credit_limit.toFixed(2)}</span></p>
       <p><strong>Consumed Credit (Pending Orders):</strong> <span class="text-right">₹${orderDetails.dealer_consumed_credit.toFixed(2)}</span></p>
@@ -420,19 +469,32 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 </p>
               </div>
             </div>
-
+            
             {(orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') && orderDetails.payment_method && (
               <>
                 <Separator />
-                <h3 className="text-lg font-semibold">Payment Details</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  {renderPaymentDetails(orderDetails)}
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold">Payment Details</h3>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setShowPaymentDetails(!showPaymentDetails)}
+                    className="flex items-center gap-1"
+                  >
+                    <Eye className="h-4 w-4" />
+                    {showPaymentDetails ? 'Hide Details' : 'View Details'}
+                  </Button>
                 </div>
+                
+                {showPaymentDetails && (
+                  <div className="p-3 bg-muted rounded-md">
+                    {renderPaymentDetails(orderDetails)}
+                  </div>
+                )}
               </>
             )}
-
+            
             <Separator />
-
             <h3 className="text-lg font-semibold">Order Items</h3>
             {orderDetails.items.length === 0 ? (
               <p className="text-muted-foreground">No items found for this order.</p>
@@ -460,7 +522,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 </Table>
               </div>
             )}
-
             <div className="text-right text-lg font-bold mt-4">
               Total Order Amount: ₹{orderDetails.total_amount.toFixed(2)}
             </div>
