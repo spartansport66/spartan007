@@ -62,8 +62,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
   const [filterState, setFilterState] = useState<string>('');
   const [filteredDealersForMultiSelect, setFilteredDealersForMultiSelect] = useState<DealerOption[]>([]);
 
-  // Removed states for the WhatsApp links dialog
-
   const fetchInitialData = useCallback(async () => {
     setInitialLoading(true);
     try {
@@ -202,10 +200,6 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     handleSendWhatsApp(dealerIdsToSend);
   };
 
-  const handleIndividualSend = (dealerId: string) => {
-    handleSendWhatsApp([dealerId]);
-  };
-
   const handleClearFilters = () => {
     setFilterCity('');
     setFilterState('');
@@ -337,7 +331,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
             {/* Individual Send Table (Optional, for quick individual sends) */}
             {selectedDealerIds.length > 0 && (
               <div className="overflow-x-auto max-h-[300px] overflow-y-auto border rounded-md mt-4">
-                <h3 className="text-lg font-semibold p-2 bg-muted/50 sticky top-0 z-10">Selected Dealers for Individual Send</h3>
+                <h3 className="text-lg font-semibold p-2 bg-muted/50 sticky top-0 z-10">Selected Dealers</h3>
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="bg-muted hover:bg-muted/90">
@@ -345,7 +339,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                       <TableHead className="text-muted-foreground">Phone</TableHead>
                       <TableHead className="text-muted-foreground">City</TableHead>
                       <TableHead className="text-muted-foreground">State</TableHead>
-                      <TableHead className="text-muted-foreground text-center">Action</TableHead>
+                      {/* Removed Action TableHead */}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -358,17 +352,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                           <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
-                          <TableCell className="text-center">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleIndividualSend(dealer.value)}
-                              title={`Send to ${dealer.label.split('(')[0].trim()}`}
-                              disabled={isSending || !dealer.phone || !selectedOfferId || !whatsappMessage.trim()}
-                            >
-                              <Send className="h-4 w-4 text-blue-500" />
-                            </Button>
-                          </TableCell>
+                          {/* Removed Action TableCell */}
                         </TableRow>
                       );
                     })}
