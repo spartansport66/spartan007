@@ -34,10 +34,10 @@ interface OrderItem {
   quantity: number;
 }
 
-interface OverduePayment {
+interface PendingPayment {
   order_number: number;
   total_amount: number;
-  payment_due_date: string;
+  payment_status: string;
 }
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
@@ -54,8 +54,8 @@ const MultiItemOrderForm: React.FC = () => {
   const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
-  const [overduePayments, setOverduePayments] = useState<OverduePayment[]>([]);
-  const [totalOverdueAmount, setTotalOverdueAmount] = useState<number>(0);
+  const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
+  const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
 
   // Payment at order time states
   const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
@@ -119,47 +119,44 @@ const MultiItemOrderForm: React.FC = () => {
     fetchData();
   }, [user]);
 
-  // Check for overdue payments when dealer is selected
+  // Check for pending payments when dealer is selected
   useEffect(() => {
-    const checkOverduePayments = async () => {
+    const checkPendingPayments = async () => {
       if (!selectedDealer) {
-        setOverduePayments([]);
-        setTotalOverdueAmount(0);
+        setPendingPayments([]);
+        setTotalPendingAmount(0);
         return;
       }
 
       try {
-        const today = new Date().toISOString();
-        
-        // Fetch overdue payments for the selected dealer
+        // Fetch pending payments for the selected dealer (both pending and pending_approval)
         const { data, error } = await supabase
           .from('orders')
-          .select('order_number, total_amount, payment_due_date')
+          .select('order_number, total_amount, payment_status')
           .eq('dealer_id', selectedDealer)
-          .eq('payment_status', 'pending')
-          .lte('payment_due_date', today);
+          .in('payment_status', ['pending', 'pending_approval']);
 
         if (error) {
-          console.error('Error fetching overdue payments:', error);
-          showError(`Failed to check overdue payments: ${error.message}`);
-          setOverduePayments([]);
-          setTotalOverdueAmount(0);
+          console.error('Error fetching pending payments:', error);
+          showError(`Failed to check pending payments: ${error.message}`);
+          setPendingPayments([]);
+          setTotalPendingAmount(0);
           return;
         }
 
-        const overdueData = data || [];
-        setOverduePayments(overdueData);
-        const total = overdueData.reduce((sum, order) => sum + order.total_amount, 0);
-        setTotalOverdueAmount(total);
+        const pendingData = data || [];
+        setPendingPayments(pendingData);
+        const total = pendingData.reduce((sum, order) => sum + order.total_amount, 0);
+        setTotalPendingAmount(total);
       } catch (error: any) {
-        console.error('Error checking overdue payments:', error);
-        showError(`Failed to check overdue payments: ${error.message}`);
-        setOverduePayments([]);
-        setTotalOverdueAmount(0);
+        console.error('Error checking pending payments:', error);
+        showError(`Failed to check pending payments: ${error.message}`);
+        setPendingPayments([]);
+        setTotalPendingAmount(0);
       }
     };
 
-    checkOverduePayments();
+    checkPendingPayments();
   }, [selectedDealer]);
 
   // Calculate dealer balance and payment due date
@@ -272,9 +269,9 @@ const MultiItemOrderForm: React.FC = () => {
       return;
     }
     
-    // Check if dealer has overdue payments
-    if (totalOverdueAmount > 0) {
-      showError(`Cannot place order. Dealer has overdue payments of ₹${totalOverdueAmount.toFixed(2)}. Please clear overdue payments first.`);
+    // Check if dealer has any pending payments (including pending_approval)
+    if (totalPendingAmount > 0) {
+      showError(`Cannot place order. Dealer has pending payments of ₹${totalPendingAmount.toFixed(2)}. Please clear all pending payments first.`);
       return;
     }
     
@@ -388,8 +385,8 @@ const MultiItemOrderForm: React.FC = () => {
       setUpiId('');
       setTransactionId('');
       setPaymentDueDate(null);
-      setOverduePayments([]);
-      setTotalOverdueAmount(0);
+      setPendingPayments([]);
+      setTotalPendingAmount(0);
     } catch (error: any) {
       console.error('Error placing order:', error);
       showError(`Failed to place order: ${error.message}`);
@@ -427,27 +424,27 @@ const MultiItemOrderForm: React.FC = () => {
               </SelectContent>
             </Select>
             
-            {selectedDealer && totalOverdueAmount > 0 && (
+            {selectedDealer && totalPendingAmount > 0 && (
               <Alert variant="destructive" className="mt-2">
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Overdue Payments</AlertTitle>
+                <AlertTitle>Pending Payments</AlertTitle>
                 <AlertDescription>
-                  This dealer has overdue payments totaling ₹{totalOverdueAmount.toFixed(2)}. 
-                  Please clear these payments before placing a new order.
+                  This dealer has pending payments totaling ₹{totalPendingAmount.toFixed(2)}. 
+                  Please clear all pending payments before placing a new order.
                   <div className="mt-2 max-h-32 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
                           <th className="text-left">Order #</th>
-                          <th className="text-left">Due Date</th>
+                          <th className="text-left">Status</th>
                           <th className="text-right">Amount</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {overduePayments.map((payment, index) => (
+                        {pendingPayments.map((payment, index) => (
                           <tr key={index} className="border-b">
                             <td>#{payment.order_number}</td>
-                            <td>{new Date(payment.payment_due_date).toLocaleDateString()}</td>
+                            <td className="capitalize">{payment.payment_status.replace('_', ' ')}</td>
                             <td className="text-right">₹{payment.total_amount.toFixed(2)}</td>
                           </tr>
                         ))}
@@ -791,7 +788,7 @@ const MultiItemOrderForm: React.FC = () => {
           <Button 
             type="submit" 
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-            disabled={loading || !selectedDealer || (remainingCredit !== null && remainingCredit < 0) || totalOverdueAmount > 0}
+            disabled={loading || !selectedDealer || (remainingCredit !== null && remainingCredit < 0) || totalPendingAmount > 0}
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}
           </Button>
