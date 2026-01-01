@@ -54,31 +54,11 @@ serve(async (req) => {
         throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
       }
 
-      // 3. Increase dealer's credit_limit
-      const { data: dealer, error: dealerFetchError } = await supabaseAdmin
-        .from('dealers')
-        .select('credit_limit')
-        .eq('id', dealerId)
-        .single();
+      // REMOVED: The logic to increase dealer's credit_limit.
+      // The credit is freed up implicitly by changing the order's payment_status to 'paid',
+      // as the credit calculation only considers 'pending' orders.
 
-      if (dealerFetchError) {
-        throw new Error(`Failed to fetch dealer credit limit: ${dealerFetchError.message}`);
-      }
-      if (!dealer) {
-        throw new Error('Dealer not found.');
-      }
-
-      const newCreditLimit = dealer.credit_limit + amount;
-      const { error: dealerUpdateError } = await supabaseAdmin
-        .from('dealers')
-        .update({ credit_limit: newCreditLimit })
-        .eq('id', dealerId);
-
-      if (dealerUpdateError) {
-        throw new Error(`Failed to update dealer credit limit: ${dealerUpdateError.message}`);
-      }
-
-      return new Response(JSON.stringify({ message: 'Payment approved and credit limit updated successfully.' }), {
+      return new Response(JSON.stringify({ message: 'Payment approved and credit freed up successfully.' }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
