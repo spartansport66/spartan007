@@ -11,7 +11,7 @@ import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loa
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
-import PendingPaymentsCard from '@/components/PendingPaymentsCard'; // Updated import
+import PaymentStatusCard from '@/components/PaymentStatusCard'; // Updated import
 
 interface Product {
   id: string;
@@ -210,8 +210,8 @@ const Dashboard = () => {
         <MultiItemOrderForm />
       </div>
 
-      {/* Pending Payments Card */}
-      <PendingPaymentsCard />
+      {/* Payment Status Card */}
+      <PaymentStatusCard />
 
       {/* Recent Activities (Sales) */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
