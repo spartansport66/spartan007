@@ -130,7 +130,7 @@ serve(async (req) => {
       .from('orders')
       .select('total_amount')
       .eq('dealer_id', dealerId)
-      .eq('payment_status', 'pending'); // ONLY PENDING ORDERS should count against credit limit
+      .in('payment_status', ['pending', 'pending_approval']); // Include pending_approval orders in consumed credit
 
     if (totalSpentError) {
       throw new Error(`Failed to calculate dealer balance: ${totalSpentError.message}`);

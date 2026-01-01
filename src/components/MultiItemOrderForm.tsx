@@ -59,7 +59,7 @@ const MultiItemOrderForm: React.FC = () => {
   // Card fields (only transaction ID)
   const [cardNumber, setCardNumber] = useState<string>('');
   const [cardHolderName, setCardHolderName] = useState<string>('');
-  const [expiryDate, setExpiryDate] = useState<string>('');
+  const [expiryDate, setExpiryDate, setCvv] = useState<string>('');
   const [cvv, setCvv] = useState<string>('');
   
   // Bank Transfer fields
@@ -152,12 +152,12 @@ const MultiItemOrderForm: React.FC = () => {
         setDealerCreditLimit(selectedDealerData?.credit_limit || 0); // Fallback to general limit if no monthly limit set
       }
 
-      // Fetch total spent by this dealer from 'pending' orders only
+      // Fetch total spent by this dealer from 'pending' AND 'pending_approval' orders
       const { data, error } = await supabase
         .from('orders')
         .select('total_amount')
         .eq('dealer_id', selectedDealer)
-        .eq('payment_status', 'pending'); // ONLY PENDING ORDERS
+        .in('payment_status', ['pending', 'pending_approval']); // Include pending_approval orders
 
       if (error) {
         console.error('Error fetching dealer balance:', error);
