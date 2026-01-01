@@ -195,19 +195,21 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
     }
   };
 
-  // Removed handleBulkSend as the button is being removed.
-  // const handleBulkSend = () => {
-  //   const dealerIdsToSend = sendToAllFilteredDealers ? filteredDealersForMultiSelect.map(d => d.value) : selectedDealerIds;
-  //   handleSendWhatsApp(dealerIdsToSend);
-  // };
+  const handleBulkSend = () => {
+    const dealerIdsToSend = sendToAllFilteredDealers ? filteredDealersForMultiSelect.map(d => d.value) : selectedDealerIds;
+    handleSendWhatsApp(dealerIdsToSend);
+  };
+
+  const handleIndividualSend = (dealerId: string) => {
+    handleSendWhatsApp([dealerId]);
+  };
 
   const handleClearFilters = () => {
     setFilterCity('');
     setFilterState('');
   };
 
-  // Removed isSendButtonDisabled as the button is being removed.
-  // const isSendButtonDisabled = isSending || !selectedOfferId || (selectedDealerIds.length === 0 && !sendToAllFilteredDealers) || !whatsappMessage.trim();
+  const isSendButtonDisabled = isSending || !selectedOfferId || (selectedDealerIds.length === 0 && !sendToAllFilteredDealers) || !whatsappMessage.trim();
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
@@ -320,7 +322,15 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
               />
             </div>
 
-            {/* Removed Send Button */}
+            {/* Send Button */}
+            <Button
+              onClick={handleBulkSend}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+              disabled={isSendButtonDisabled}
+            >
+              {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {isSending ? 'Preparing Messages...' : `Send to ${selectedDealerIds.length} Selected Dealers`}
+            </Button>
 
             {/* Individual Send Table (Optional, for quick individual sends) */}
             {selectedDealerIds.length > 0 && (
@@ -333,6 +343,7 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                       <TableHead className="text-muted-foreground">Phone</TableHead>
                       <TableHead className="text-muted-foreground">City</TableHead>
                       <TableHead className="text-muted-foreground">State</TableHead>
+                      <TableHead className="text-muted-foreground text-center">Action</TableHead> {/* Re-added Action TableHead */}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -345,6 +356,17 @@ const SendWhatsAppOfferCard: React.FC<SendWhatsAppOfferCardProps> = ({ onMessage
                           <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleIndividualSend(dealer.value)}
+                              title={`Send to ${dealer.label.split('(')[0].trim()}`}
+                              disabled={isSending || !dealer.phone || !selectedOfferId || !whatsappMessage.trim()}
+                            >
+                              <Send className="h-4 w-4 text-blue-500" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
