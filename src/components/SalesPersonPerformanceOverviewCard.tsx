@@ -3,19 +3,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, TrendingUp, Target, Activity, Users } from 'lucide-react'; // Added Users icon
+import { Loader2, TrendingUp, Target, Activity, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
+import { User } from '@supabase/supabase-js'; // Import User type
 
-// Define a custom type for the user with banned_until
-interface AuthUserWithBannedUntil {
-  id: string;
+// Extend the User type to include banned_until
+interface UserWithBannedUntil extends User {
   banned_until: string | null;
-  // Add other properties as needed
 }
 
 interface SalesPersonPerformanceOverviewCardProps {
-  onViewDetails: () => void; // Function to open the detailed report dialog
+  onViewDetails: () => void;
 }
 
 const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOverviewCardProps> = ({ onViewDetails }) => {
@@ -60,23 +59,32 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       // 2. Fetch auth.users data for these sales persons to check banned status
       let activeSalesmenCount = 0;
       for (const profile of salesProfiles) {
-        const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(profile.id);
+        const { data: authUserResponse, error: authError } = await supabase.auth.admin.getUserById(profile.id);
         
         if (authError) {
           console.error(`Error fetching auth user ${profile.id}:`, authError.message);
           continue;
         }
         
-        // Properly cast the User type to access banned_until
-        const userWithBanned = authUser.user as unknown as AuthUserWithBannedUntil;
+        // Type assertion to access banned_until
+        const user = authUserResponse.user as UserWithBannedUntil;
+        console.log(`User ${user.id} data:`, user);
         
-        // Check if user is not banned (banned_until is null or in the past)
-        if (!userWithBanned.banned_until || new Date(userWithBanned.banned_until) < new Date()) {
+        // Check if user is active:
+        // - email_confirmed_at should exist (email confirmed)
+        // - banned_until should be null or in the past
+        const isEmailConfirmed = !!user.email_confirmed_at;
+        const isNotBanned = !user.banned_until || new Date(user.banned_until) < new Date();
+        
+        console.log(`User ${user.id} - Email confirmed: ${isEmailConfirmed}, Not banned: ${isNotBanned}`);
+        
+        if (isEmailConfirmed && isNotBanned) {
           activeSalesmenCount++;
         }
       }
       
       setActiveSalesmenCount(activeSalesmenCount);
+      console.log('Final active salesmen count:', activeSalesmenCount);
 
       // 3. Fetch total sales for the current month across all sales persons
       const { data: salesData, error: salesError } = await supabase
