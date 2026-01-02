@@ -45,6 +45,8 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       const endOfMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0, 23, 59, 59, 999)).toISOString();
       const targetMonthFilterDate = new Date(Date.UTC(currentYear, currentMonth, 1)).toISOString().split('T')[0];
 
+      console.log('Fetching performance overview for:', { currentMonth, currentYear, startOfMonth, endOfMonth, targetMonthFilterDate });
+
       // Fetch active sales persons count
       const { data: salesProfiles, error: profilesError } = await supabase
         .from('profiles')
@@ -54,8 +56,10 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       if (profilesError) {
         throw new Error(`Failed to fetch sales profiles: ${profilesError.message}`);
       }
+      console.log('Raw sales profiles:', salesProfiles);
 
       const salesPersonIds = salesProfiles.map(p => p.id);
+      console.log('Sales person IDs:', salesPersonIds);
 
       const { data: authUsers, error: authUsersError } = await supabase
         .from('users') // This is the auth.users table
@@ -65,9 +69,11 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       if (authUsersError) {
         throw new Error(`Failed to fetch auth users: ${authUsersError.message}`);
       }
+      console.log('Raw auth users:', authUsers);
 
       const activeSalesmen = authUsers.filter(u => !u.banned_until);
       setActiveSalesmenCount(activeSalesmen.length);
+      console.log('Active salesmen count:', activeSalesmen.length);
 
       // Fetch total sales for the current month across all sales persons
       const { data: salesData, error: salesError } = await supabase
@@ -79,9 +85,11 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       if (salesError) {
         throw new Error(`Failed to fetch sales data: ${salesError.message}`);
       }
+      console.log('Raw sales data:', salesData);
 
       const achievedSales = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
       setCombinedAchievedSales(achievedSales);
+      console.log('Combined achieved sales:', achievedSales);
 
       // Fetch total targets for the current month across all sales persons
       const { data: targetsData, error: targetsError } = await supabase
@@ -92,15 +100,18 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       if (targetsError) {
         throw new Error(`Failed to fetch targets data: ${targetsError.message}`);
       }
+      console.log('Raw targets data:', targetsData);
 
       const targetAmount = (targetsData || []).reduce((sum, target) => sum + target.target_amount, 0);
       setCombinedTargetAmount(targetAmount);
+      console.log('Combined target amount:', targetAmount);
 
+      let calculatedPerformancePercentage = 0;
       if (targetAmount > 0) {
-        setCombinedPerformancePercentage((achievedSales / targetAmount) * 100);
-      } else {
-        setCombinedPerformancePercentage(0); // Avoid division by zero
+        calculatedPerformancePercentage = (achievedSales / targetAmount) * 100;
       }
+      setCombinedPerformancePercentage(calculatedPerformancePercentage);
+      console.log('Combined performance percentage:', calculatedPerformancePercentage);
 
     } catch (error: any) {
       console.error('Error fetching sales person performance overview:', error.message);
