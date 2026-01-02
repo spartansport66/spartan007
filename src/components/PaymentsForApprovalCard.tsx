@@ -8,7 +8,7 @@ import { Loader2, CheckCircle, XCircle, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import OrderDetailsDialog from '@/components/OrderDetailsDialog';
+import PaymentDetailsDialog from '@/components/PaymentDetailsDialog';
 
 interface PaymentForApproval {
   id: string; // Payment ID
@@ -32,8 +32,8 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
   const [payments, setPayments] = useState<PaymentForApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
-  const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
+  const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
+  const [selectedPaymentIdForDetails, setSelectedPaymentIdForDetails] = useState<string | null>(null);
 
   const fetchPaymentsForApproval = useCallback(async () => {
     setLoading(true);
@@ -114,9 +114,9 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
     }
   };
 
-  const handleViewOrderDetails = (orderId: string) => {
-    setSelectedOrderIdForDetails(orderId);
-    setIsOrderDetailsDialogOpen(true);
+  const handleViewPaymentDetails = (paymentId: string) => {
+    setSelectedPaymentIdForDetails(paymentId);
+    setIsPaymentDetailsDialogOpen(true);
   };
 
   return (
@@ -162,7 +162,7 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            onClick={() => handleViewOrderDetails(payment.order_id)}
+                            onClick={() => handleViewPaymentDetails(payment.id)}
                             title="View Payment Details"
                           >
                             <Eye className="h-4 w-4 text-blue-500" />
@@ -225,10 +225,10 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
           )}
         </div>
       </CardContent>
-      <OrderDetailsDialog
-        orderId={selectedOrderIdForDetails}
-        isOpen={isOrderDetailsDialogOpen}
-        onOpenChange={setIsOrderDetailsDialogOpen}
+      <PaymentDetailsDialog
+        paymentId={selectedPaymentIdForDetails}
+        isOpen={isPaymentDetailsDialogOpen}
+        onOpenChange={setIsPaymentDetailsDialogOpen}
       />
     </Card>
   );
