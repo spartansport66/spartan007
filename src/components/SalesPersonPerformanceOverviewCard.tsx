@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, TrendingUp, Target, Activity } from 'lucide-react';
+import { Loader2, TrendingUp, Target, Activity, Users } from 'lucide-react'; // Added Users icon
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 
@@ -13,9 +13,26 @@ interface SalesPersonPerformanceOverviewCardProps {
 
 const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOverviewCardProps> = ({ onViewDetails }) => {
   const [loading, setLoading] = useState(true);
-  const [totalAchievedSales, setTotalAchievedSales] = useState<number>(0);
-  const [totalTargetAmount, setTotalTargetAmount] = useState<number>(0);
-  const [performancePercentage, setPerformancePercentage] = useState<number>(0);
+  const [activeSalesmenCount, setActiveSalesmenCount] = useState<number>(0); // New state
+  const [combinedAchievedSales, setCombinedAchievedSales] = useState<number>(0); // Renamed
+  const [combinedTargetAmount, setCombinedTargetAmount] = useState<number>(0); // Renamed
+  const [combinedPerformancePercentage, setCombinedPerformancePercentage] = useState<number>(0); // Renamed
+
+  const getStartOfUTCDayISO = () => {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const day = now.getUTCDate();
+    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
+  };
+
+  const getEndOfUTCDayISO = () => {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const day = now.getUTCDate();
+    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
+  };
 
   const fetchPerformanceOverview = useCallback(async () => {
     setLoading(true);
@@ -27,6 +44,30 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       const startOfMonth = new Date(Date.UTC(currentYear, currentMonth, 1)).toISOString();
       const endOfMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0, 23, 59, 59, 999)).toISOString();
       const targetMonthFilterDate = new Date(Date.UTC(currentYear, currentMonth, 1)).toISOString().split('T')[0];
+
+      // Fetch active sales persons count
+      const { data: salesProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('user_type', 'sales_person');
+
+      if (profilesError) {
+        throw new Error(`Failed to fetch sales profiles: ${profilesError.message}`);
+      }
+
+      const salesPersonIds = salesProfiles.map(p => p.id);
+
+      const { data: authUsers, error: authUsersError } = await supabase
+        .from('users') // This is the auth.users table
+        .select('id, banned_until')
+        .in('id', salesPersonIds);
+
+      if (authUsersError) {
+        throw new Error(`Failed to fetch auth users: ${authUsersError.message}`);
+      }
+
+      const activeSalesmen = authUsers.filter(u => !u.banned_until);
+      setActiveSalesmenCount(activeSalesmen.length);
 
       // Fetch total sales for the current month across all sales persons
       const { data: salesData, error: salesError } = await supabase
@@ -40,7 +81,7 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       }
 
       const achievedSales = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
-      setTotalAchievedSales(achievedSales);
+      setCombinedAchievedSales(achievedSales);
 
       // Fetch total targets for the current month across all sales persons
       const { data: targetsData, error: targetsError } = await supabase
@@ -53,20 +94,21 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       }
 
       const targetAmount = (targetsData || []).reduce((sum, target) => sum + target.target_amount, 0);
-      setTotalTargetAmount(targetAmount);
+      setCombinedTargetAmount(targetAmount);
 
       if (targetAmount > 0) {
-        setPerformancePercentage((achievedSales / targetAmount) * 100);
+        setCombinedPerformancePercentage((achievedSales / targetAmount) * 100);
       } else {
-        setPerformancePercentage(0); // Avoid division by zero
+        setCombinedPerformancePercentage(0); // Avoid division by zero
       }
 
     } catch (error: any) {
       console.error('Error fetching sales person performance overview:', error.message);
       showError('Failed to load sales person performance overview.');
-      setTotalAchievedSales(0);
-      setTotalTargetAmount(0);
-      setPerformancePercentage(0);
+      setActiveSalesmenCount(0);
+      setCombinedAchievedSales(0);
+      setCombinedTargetAmount(0);
+      setCombinedPerformancePercentage(0);
     } finally {
       setLoading(false);
     }
@@ -102,25 +144,32 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-                <span className="text-muted-foreground">Achieved Sales:</span>
+                <Users className="h-5 w-5 text-gray-600" />
+                <span className="text-muted-foreground">Total Active Salesmen:</span>
               </div>
-              <span className="text-lg font-bold text-green-600">₹{totalAchievedSales.toFixed(2)}</span>
+              <span className="text-lg font-bold text-gray-600">{activeSalesmenCount}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-blue-600" />
-                <span className="text-muted-foreground">Total Target:</span>
+                <span className="text-muted-foreground">Total Combined Target:</span>
               </div>
-              <span className="text-lg font-bold text-blue-600">₹{totalTargetAmount.toFixed(2)}</span>
+              <span className="text-lg font-bold text-blue-600">₹{combinedTargetAmount.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-green-600" />
+                <span className="text-muted-foreground">Total Combined Achieved Sales:</span>
+              </div>
+              <span className="text-lg font-bold text-green-600">₹{combinedAchievedSales.toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-orange-600" />
-                <span className="text-muted-foreground">Performance:</span>
+                <span className="text-muted-foreground">Total Combined Performance:</span>
               </div>
-              <span className={`text-lg font-bold ${performancePercentage >= 100 ? 'text-green-600' : 'text-orange-600'}`}>
-                {performancePercentage.toFixed(2)}%
+              <span className={`text-lg font-bold ${combinedPerformancePercentage >= 100 ? 'text-green-600' : 'text-orange-600'}`}>
+                {combinedPerformancePercentage.toFixed(2)}%
               </span>
             </div>
             <Button onClick={onViewDetails} className="w-full mt-4 bg-purple-600 hover:bg-purple-700 text-white">
