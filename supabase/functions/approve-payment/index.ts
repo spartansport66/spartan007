@@ -1,6 +1,5 @@
 // @ts-ignore
 /// <reference lib="deno.ns" />
-
 // @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 // @ts-ignore
@@ -33,6 +32,32 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Fetch payment details to check for post-dated payments
+    const { data: paymentData, error: paymentError } = await supabaseAdmin
+      .from('payments')
+      .select('payment_method, cheque_dd_date')
+      .eq('id', paymentId)
+      .single();
+
+    if (paymentError) {
+      throw new Error(`Failed to fetch payment details: ${paymentError.message}`);
+    }
+
+    // Check if payment is post-dated and if it's due
+    if (paymentData.payment_method === 'Cheque/DD' && paymentData.cheque_dd_date) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dueDate = new Date(paymentData.cheque_dd_date);
+      dueDate.setHours(0, 0, 0, 0);
+
+      if (dueDate > today && action === 'approve') {
+        return new Response(JSON.stringify({ error: 'Post-dated payment cannot be approved before the due date.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     if (action === 'approve') {
       // 1. Update payment status to 'completed'
       const { error: paymentUpdateError } = await supabaseAdmin
@@ -62,7 +87,6 @@ serve(async (req) => {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-
     } else if (action === 'reject') {
       // 1. Revert order payment status to 'pending'
       const { error: orderUpdateError } = await supabaseAdmin
@@ -94,7 +118,6 @@ serve(async (req) => {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-
   } catch (error: any) {
     console.error('Edge Function error:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {

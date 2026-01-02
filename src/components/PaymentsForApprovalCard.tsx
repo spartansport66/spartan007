@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle, XCircle, Eye } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Eye, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -17,8 +17,10 @@ interface PaymentForApproval {
   amount: number;
   payment_method: string;
   payment_date: string;
+  cheque_dd_date: string | null; // Added for post-dated checks
   dealer_name: string;
   dealer_id: string;
+  status: string;
 }
 
 interface PaymentsForApprovalCardProps {
@@ -46,6 +48,8 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
           amount,
           payment_method,
           payment_date,
+          cheque_dd_date,
+          status,
           orders (
             order_number,
             dealers (id, name)
@@ -63,8 +67,10 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
         amount: payment.amount,
         payment_method: payment.payment_method,
         payment_date: payment.payment_date,
+        cheque_dd_date: payment.cheque_dd_date,
         dealer_name: payment.orders?.dealers?.name || 'N/A',
         dealer_id: payment.orders?.dealers?.id || '',
+        status: payment.status,
       }));
 
       setPayments(formattedPayments);
@@ -80,6 +86,19 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
   useEffect(() => {
     fetchPaymentsForApproval();
   }, [fetchPaymentsForApproval]);
+
+  // Check if payment is post-dated and not yet due
+  const isPaymentDue = (payment: PaymentForApproval): boolean => {
+    // Only apply to Cheque/DD payments with a future date
+    if (payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dueDate = new Date(payment.cheque_dd_date);
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate <= today;
+    }
+    return true; // Non post-dated payments are always due
+  };
 
   const handlePaymentAction = async (paymentId: string, orderId: string, dealerId: string, amount: number, action: 'approve' | 'reject') => {
     setIsSubmitting(true);
@@ -146,79 +165,114 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
                     <TableHead className="text-muted-foreground text-right">Amount</TableHead>
                     <TableHead className="text-muted-foreground">Method</TableHead>
                     <TableHead className="text-muted-foreground">Date Submitted</TableHead>
+                    <TableHead className="text-muted-foreground">Due Date</TableHead>
                     <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {payments.map((payment) => (
-                    <TableRow key={payment.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">#{payment.order_number}</TableCell>
-                      <TableCell className="text-muted-foreground">{payment.dealer_name}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{payment.amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground">{payment.payment_method}</TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center gap-2">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleViewPaymentDetails(payment.id)}
-                            title="View Payment Details"
-                          >
-                            <Eye className="h-4 w-4 text-blue-500" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" title="Approve Payment" disabled={isSubmitting}>
-                                <CheckCircle className="h-4 w-4 text-green-600" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to approve the payment of ₹{payment.amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will mark the order as paid and update the dealer's credit.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction 
-                                  onClick={() => handlePaymentAction(payment.id, payment.order_id, payment.dealer_id, payment.amount, 'approve')} 
-                                  disabled={isSubmitting}
+                  {payments.map((payment) => {
+                    const isDue = isPaymentDue(payment);
+                    const isPostDated = payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date;
+                    
+                    return (
+                      <TableRow key={payment.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">#{payment.order_number}</TableCell>
+                        <TableCell className="text-muted-foreground">{payment.dealer_name}</TableCell>
+                        <TableCell className="text-muted-foreground text-right">₹{payment.amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground">{payment.payment_method}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(payment.payment_date).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {isPostDated ? (
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-4 w-4" />
+                              {new Date(payment.cheque_dd_date!).toLocaleDateString()}
+                              {!isDue && (
+                                <span className="text-xs bg-yellow-100 text-yellow-800 px-1 py-0.5 rounded">
+                                  Post-dated
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            "N/A"
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-2">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleViewPaymentDetails(payment.id)}
+                              title="View Payment Details"
+                            >
+                              <Eye className="h-4 w-4 text-blue-500" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  title={isDue ? "Approve Payment" : "Payment not yet due"}
+                                  disabled={isSubmitting || !isDue}
                                 >
-                                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" title="Reject Payment" disabled={isSubmitting}>
-                                <XCircle className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Reject Payment?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to reject the payment of ₹{payment.amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will revert the order to pending status.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction 
-                                  onClick={() => handlePaymentAction(payment.id, payment.order_id, payment.dealer_id, payment.amount, 'reject')} 
-                                  disabled={isSubmitting}
-                                >
-                                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reject'}
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    {isPostDated && !isDue ? (
+                                      <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
+                                        <p className="font-medium">Post-dated Payment</p>
+                                        <p>This payment is scheduled for {new Date(payment.cheque_dd_date!).toLocaleDateString()}.</p>
+                                        <p>It can only be approved on or after that date.</p>
+                                      </div>
+                                    ) : null}
+                                    Are you sure you want to approve the payment of ₹{payment.amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will mark the order as paid and update the dealer's credit.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => handlePaymentAction(payment.id, payment.order_id, payment.dealer_id, payment.amount, 'approve')} 
+                                    disabled={isSubmitting || !isDue}
+                                  >
+                                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" title="Reject Payment" disabled={isSubmitting}>
+                                  <XCircle className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Reject Payment?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to reject the payment of ₹{payment.amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will revert the order to pending status.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => handlePaymentAction(payment.id, payment.order_id, payment.dealer_id, payment.amount, 'reject')} 
+                                    disabled={isSubmitting}
+                                  >
+                                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reject'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
