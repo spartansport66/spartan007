@@ -73,14 +73,14 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       const todayReceived = (todayPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       setTodayReceivedAmountOverview(todayReceived);
 
-      // 4. Fetch Pending Approval Payments (new)
+      // 4. Fetch Pending Approval Payments (new) - NOW FETCHING FROM PAYMENTS TABLE
       const { data: pendingApprovalPayments, error: pendingApprovalError } = await supabase
-        .from('orders')
-        .select('total_amount')
-        .eq('payment_status', 'pending_approval');
+        .from('payments')
+        .select('amount')
+        .eq('status', 'pending_approval');
 
       if (pendingApprovalError) throw pendingApprovalError;
-      const totalPendingApproval = (pendingApprovalPayments || []).reduce((sum, order) => sum + order.total_amount, 0);
+      const totalPendingApproval = (pendingApprovalPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       setPendingApprovalAmountOverview(totalPendingApproval);
 
     } catch (error: any) {

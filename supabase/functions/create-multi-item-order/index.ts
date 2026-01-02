@@ -183,7 +183,7 @@ serve(async (req) => {
         .from('payments')
         .insert({
           order_id: newOrder.id,
-          amount: paymentDetails.amount,
+          amount: totalOrderAmount, // IMPORTANT: Use totalOrderAmount for consistency
           payment_method: paymentDetails.payment_method,
           cheque_dd_no: paymentDetails.cheque_dd_no,
           cheque_dd_date: paymentDetails.cheque_dd_date,
