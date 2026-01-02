@@ -61,16 +61,15 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       const todaysDue = (todaysDueOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
       setTodaysDueAmountOverview(todaysDue);
 
-      // 3. Fetch Today Received Payments (completed payments today)
-      const { data: todayPayments, error: todayPaymentsError } = await supabase
+      // 3. Fetch Today Received Payments (completed payments today, either by payment_date or approved_at)
+      const { data: todayReceivedPayments, error: todayReceivedError } = await supabase
         .from('payments')
         .select('amount')
-        .eq('status', 'completed') // Only count completed payments
-        .gte('payment_date', todayISO)
-        .lte('payment_date', new Date().toISOString());
+        .eq('status', 'completed')
+        .or(`and(payment_date.gte.${todayISO},payment_date.lte.${endOfTodayISO}),and(approved_at.gte.${todayISO},approved_at.lte.${endOfTodayISO})`);
 
-      if (todayPaymentsError) throw todayPaymentsError;
-      const todayReceived = (todayPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+      if (todayReceivedError) throw todayReceivedError;
+      const todayReceived = (todayReceivedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       setTodayReceivedAmountOverview(todayReceived);
 
       // 4. Fetch Pending Approval Payments (new) - NOW FETCHING FROM PAYMENTS TABLE

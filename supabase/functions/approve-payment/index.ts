@@ -59,10 +59,10 @@ serve(async (req) => {
     }
 
     if (action === 'approve') {
-      // 1. Update payment status to 'completed'
+      // 1. Update payment status to 'completed' and set approved_at timestamp
       const { error: paymentUpdateError } = await supabaseAdmin
         .from('payments')
-        .update({ status: 'completed' })
+        .update({ status: 'completed', approved_at: new Date().toISOString() }) // Set approved_at here
         .eq('id', paymentId);
 
       if (paymentUpdateError) {
@@ -78,10 +78,6 @@ serve(async (req) => {
       if (orderUpdateError) {
         throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
       }
-
-      // REMOVED: The logic to increase dealer's credit_limit.
-      // The credit is freed up implicitly by changing the order's payment_status to 'paid',
-      // as the credit calculation only considers 'pending' orders.
 
       return new Response(JSON.stringify({ message: 'Payment approved and credit freed up successfully.' }), {
         status: 200,
