@@ -4,10 +4,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle, XCircle, DollarSign } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 
 interface PaymentForApproval {
   id: string; // Payment ID
@@ -31,6 +32,8 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
   const [payments, setPayments] = useState<PaymentForApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
+  const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
 
   const fetchPaymentsForApproval = useCallback(async () => {
     setLoading(true);
@@ -43,7 +46,10 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
           amount,
           payment_method,
           payment_date,
-          orders (order_number, dealers (id, name))
+          orders (
+            order_number,
+            dealers (id, name)
+          )
         `)
         .eq('status', 'pending_approval')
         .order('payment_date', { ascending: true });
@@ -60,6 +66,7 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
         dealer_name: payment.orders?.dealers?.name || 'N/A',
         dealer_id: payment.orders?.dealers?.id || '',
       }));
+
       setPayments(formattedPayments);
     } catch (error: any) {
       console.error('Error fetching payments for approval:', error.message);
@@ -92,7 +99,6 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || `Failed to ${action} payment`);
       }
@@ -106,6 +112,11 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleViewOrderDetails = (orderId: string) => {
+    setSelectedOrderIdForDetails(orderId);
+    setIsOrderDetailsDialogOpen(true);
   };
 
   return (
@@ -148,6 +159,14 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
                       <TableCell className="text-muted-foreground">{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleViewOrderDetails(payment.order_id)}
+                            title="View Payment Details"
+                          >
+                            <Eye className="h-4 w-4 text-blue-500" />
+                          </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button variant="ghost" size="icon" title="Approve Payment" disabled={isSubmitting}>
@@ -172,7 +191,6 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
-
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button variant="ghost" size="icon" title="Reject Payment" disabled={isSubmitting}>
@@ -207,6 +225,11 @@ const PaymentsForApprovalCard: React.FC<PaymentsForApprovalCardProps> = ({ onPay
           )}
         </div>
       </CardContent>
+      <OrderDetailsDialog
+        orderId={selectedOrderIdForDetails}
+        isOpen={isOrderDetailsDialogOpen}
+        onOpenChange={setIsOrderDetailsDialogOpen}
+      />
     </Card>
   );
 };
