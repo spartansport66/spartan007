@@ -7,6 +7,13 @@ import { Loader2, TrendingUp, Target, Activity, Users } from 'lucide-react'; // 
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 
+// Define a custom type for the user with banned_until
+interface AuthUserWithBannedUntil {
+  id: string;
+  banned_until: string | null;
+  // Add other properties as needed
+}
+
 interface SalesPersonPerformanceOverviewCardProps {
   onViewDetails: () => void; // Function to open the detailed report dialog
 }
@@ -29,8 +36,6 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       const endOfMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0, 23, 59, 59, 999)).toISOString();
       const targetMonthFilterDate = new Date(Date.UTC(currentYear, currentMonth, 1)).toISOString().split('T')[0];
 
-      console.log('Fetching performance overview for:', { currentMonth, currentYear, startOfMonth, endOfMonth, targetMonthFilterDate });
-
       // 1. Fetch all sales persons (from public.profiles)
       const { data: salesProfiles, error: profilesError } = await supabase
         .from('profiles')
@@ -40,13 +45,10 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       if (profilesError) {
         throw new Error(`Failed to fetch sales profiles: ${profilesError.message}`);
       }
-      console.log('Raw sales profiles:', salesProfiles);
 
       const salesPersonIds = salesProfiles.map(p => p.id);
-      console.log('Sales person IDs:', salesPersonIds);
 
       if (salesPersonIds.length === 0) {
-        console.log('No sales persons found, setting all values to 0');
         setActiveSalesmenCount(0);
         setCombinedAchievedSales(0);
         setCombinedTargetAmount(0);
@@ -56,25 +58,25 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       }
 
       // 2. Fetch auth.users data for these sales persons to check banned status
-      // We need to check each user individually as we can't directly query auth.users by ID list
       let activeSalesmenCount = 0;
       for (const profile of salesProfiles) {
         const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(profile.id);
         
         if (authError) {
           console.error(`Error fetching auth user ${profile.id}:`, authError.message);
-          // Continue checking other users
           continue;
         }
         
+        // Properly cast the User type to access banned_until
+        const userWithBanned = authUser.user as unknown as AuthUserWithBannedUntil;
+        
         // Check if user is not banned (banned_until is null or in the past)
-        if (!authUser.user.banned_until || new Date(authUser.user.banned_until) < new Date()) {
+        if (!userWithBanned.banned_until || new Date(userWithBanned.banned_until) < new Date()) {
           activeSalesmenCount++;
         }
       }
       
       setActiveSalesmenCount(activeSalesmenCount);
-      console.log('Active salesmen count (calculated):', activeSalesmenCount);
 
       // 3. Fetch total sales for the current month across all sales persons
       const { data: salesData, error: salesError } = await supabase
@@ -86,11 +88,9 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       if (salesError) {
         throw new Error(`Failed to fetch sales data: ${salesError.message}`);
       }
-      console.log('Raw sales data:', salesData);
 
       const achievedSales = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
       setCombinedAchievedSales(achievedSales);
-      console.log('Combined achieved sales:', achievedSales);
 
       // 4. Fetch total targets for the current month across all sales persons
       const { data: targetsData, error: targetsError } = await supabase
@@ -101,18 +101,15 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       if (targetsError) {
         throw new Error(`Failed to fetch targets data: ${targetsError.message}`);
       }
-      console.log('Raw targets data:', targetsData);
 
       const targetAmount = (targetsData || []).reduce((sum, target) => sum + target.target_amount, 0);
       setCombinedTargetAmount(targetAmount);
-      console.log('Combined target amount:', targetAmount);
 
       let calculatedPerformancePercentage = 0;
       if (targetAmount > 0) {
         calculatedPerformancePercentage = (achievedSales / targetAmount) * 100;
       }
       setCombinedPerformancePercentage(calculatedPerformancePercentage);
-      console.log('Combined performance percentage:', calculatedPerformancePercentage);
 
     } catch (error: any) {
       console.error('Error fetching sales person performance overview:', error.message);
