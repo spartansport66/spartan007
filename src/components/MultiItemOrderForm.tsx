@@ -408,12 +408,18 @@ const MultiItemOrderForm: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   
-  // Filter products based on search value
+  // Filter products based on search value - improved matching
   const filteredProducts = useMemo(() => {
     if (!searchValue) return products;
-    return products.filter(product => 
-      product.name.toLowerCase().includes(searchValue.toLowerCase())
-    );
+    
+    const searchTerms = searchValue.toLowerCase().split(' ').filter(term => term.length > 0);
+    
+    return products.filter(product => {
+      const productName = product.name.toLowerCase();
+      
+      // Match if all search terms are found in the product name
+      return searchTerms.every(term => productName.includes(term));
+    });
   }, [products, searchValue]);
 
   return (
@@ -533,7 +539,7 @@ const MultiItemOrderForm: React.FC = () => {
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                       <Command>
                         <CommandInput 
-                          placeholder="Search product..." 
+                          placeholder="Search product (e.g. 'VOLLEY' or 'CD 334')..." 
                           value={searchValue}
                           onValueChange={setSearchValue}
                         />
