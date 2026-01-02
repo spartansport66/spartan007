@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +14,9 @@ import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 interface Product {
   id: string;
@@ -57,7 +61,7 @@ const MultiItemOrderForm: React.FC = () => {
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
-
+  
   // Payment at order time states
   const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
@@ -81,20 +85,20 @@ const MultiItemOrderForm: React.FC = () => {
   // UPI fields
   const [upiId, setUpiId] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
-
+  
   const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
-
+  
   // Fetch dealers and products
   useEffect(() => {
     const fetchData = async () => {
       if (!user) return;
-
+      
       // Fetch dealers assigned to the current user
       const { data: assignedDealersData, error: assignedDealersError } = await supabase
         .from('dealer_sales_persons')
         .select('dealers(id, name, credit_limit, allotted_credit_days)')
         .eq('sales_person_id', user.id);
-
+      
       if (assignedDealersError) {
         console.error('Error fetching assigned dealers:', assignedDealersError);
         showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
@@ -103,12 +107,12 @@ const MultiItemOrderForm: React.FC = () => {
         const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
         setDealers(formattedDealers);
       }
-
+      
       // Fetch all products
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('id, name, price, stock');
-
+      
       if (productsError) {
         console.error('Error fetching products:', productsError);
         showError(`Failed to load products: ${productsError.message}`);
@@ -116,10 +120,10 @@ const MultiItemOrderForm: React.FC = () => {
         setProducts(productsData || []);
       }
     };
-
+    
     fetchData();
   }, [user]);
-
+  
   // Check for pending payments when dealer is selected
   useEffect(() => {
     const checkPendingPayments = async () => {
@@ -128,7 +132,7 @@ const MultiItemOrderForm: React.FC = () => {
         setTotalPendingAmount(0);
         return;
       }
-
+      
       try {
         const todayISOString = new Date().toISOString();
         
@@ -140,7 +144,7 @@ const MultiItemOrderForm: React.FC = () => {
           .eq('dealer_id', selectedDealer)
           .eq('payment_status', 'pending')
           .lte('payment_due_date', todayISOString); // Only include payments due today or earlier
-
+        
         if (error) {
           console.error('Error fetching pending payments:', error);
           showError(`Failed to check pending payments: ${error.message}`);
@@ -148,7 +152,7 @@ const MultiItemOrderForm: React.FC = () => {
           setTotalPendingAmount(0);
           return;
         }
-
+        
         const pendingData = data || [];
         setPendingPayments(pendingData);
         const total = pendingData.reduce((sum, order) => sum + order.total_amount, 0);
@@ -160,10 +164,10 @@ const MultiItemOrderForm: React.FC = () => {
         setTotalPendingAmount(0);
       }
     };
-
+    
     checkPendingPayments();
   }, [selectedDealer]);
-
+  
   // Calculate dealer balance and payment due date
   useEffect(() => {
     const calculateBalanceAndDueDate = async () => {
@@ -175,7 +179,7 @@ const MultiItemOrderForm: React.FC = () => {
         setPaymentAmount(0);
         return;
       }
-
+      
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
@@ -185,18 +189,17 @@ const MultiItemOrderForm: React.FC = () => {
         currentDate.setDate(currentDate.getDate() + selectedDealerData.allotted_credit_days);
         setPaymentDueDate(currentDate.toISOString().split('T')[0]);
       }
-
+      
       // Determine the effective credit limit for the current month
       const currentMonthDate = new Date();
       const currentMonthYear = new Date(Date.UTC(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1)).toISOString().split('T')[0];
-      
       const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
         .from('dealer_monthly_credit_limits')
         .select('credit_limit')
         .eq('dealer_id', selectedDealer)
         .eq('month_year', currentMonthYear)
         .single();
-
+      
       if (monthlyLimitError && monthlyLimitError.code !== 'PGRST116') {
         console.error('Error fetching monthly credit limit:', monthlyLimitError.message);
         showError(`Failed to load monthly credit limit: ${monthlyLimitError.message}`);
@@ -206,7 +209,7 @@ const MultiItemOrderForm: React.FC = () => {
       } else {
         setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
       }
-
+      
       // Fetch total spent by this dealer from BOTH 'pending' AND 'pending_approval' orders
       // This includes ALL unpaid orders, including those with future due dates (post-dated cheques)
       const { data, error } = await supabase
@@ -214,7 +217,7 @@ const MultiItemOrderForm: React.FC = () => {
         .select('total_amount')
         .eq('dealer_id', selectedDealer)
         .in('payment_status', ['pending', 'pending_approval']);
-
+      
       if (error) {
         console.error('Error fetching dealer balance:', error);
         showError(`Failed to calculate dealer balance: ${error.message}`);
@@ -223,45 +226,45 @@ const MultiItemOrderForm: React.FC = () => {
         const totalSpent = data.reduce((sum, order) => sum + order.total_amount, 0);
         setDealerBalance(totalSpent);
       }
-
+      
       // Set payment amount to total order value if paid at order time
       if (isPaidAtOrderTime) {
         setPaymentAmount(calculateTotalOrderValue());
       }
     };
-
+    
     calculateBalanceAndDueDate();
   }, [selectedDealer, dealers, isPaidAtOrderTime, orderItems]);
-
+  
   const addOrderItem = () => {
     setOrderItems([...orderItems, { id: Date.now().toString(), product_id: '', quantity: 1 }]);
   };
-
+  
   const removeOrderItem = (id: string) => {
     if (orderItems.length > 1) {
       setOrderItems(orderItems.filter(item => item.id !== id));
     }
   };
-
+  
   const updateOrderItem = (id: string, field: keyof OrderItem, value: string | number) => {
     setOrderItems(orderItems.map(item => 
       item.id === id ? { ...item, [field]: value } : item
     ));
   };
-
+  
   const calculateItemTotal = (item: OrderItem) => {
     const product = products.find(p => p.id === item.product_id);
     return product ? item.quantity * product.price : 0;
   };
-
+  
   const calculateTotalOrderValue = () => {
     return orderItems.reduce((total, item) => total + calculateItemTotal(item), 0);
   };
-
+  
   const availableCredit = dealerBalance !== null ? dealerCreditLimit - dealerBalance : null;
   const totalOrderValue = calculateTotalOrderValue();
   const remainingCredit = availableCredit !== null ? availableCredit - totalOrderValue : null;
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -323,7 +326,7 @@ const MultiItemOrderForm: React.FC = () => {
         return;
       }
     }
-
+    
     setLoading(true);
     
     try {
@@ -337,7 +340,7 @@ const MultiItemOrderForm: React.FC = () => {
         paymentStatus: isPaidAtOrderTime ? 'pending_approval' : 'pending',
         paymentDueDate: paymentDueDate,
       };
-
+      
       if (isPaidAtOrderTime) {
         payload.paymentDetails = {
           amount: paymentAmount,
@@ -355,7 +358,7 @@ const MultiItemOrderForm: React.FC = () => {
           transaction_id: (paymentMethod === 'Bank Transfer' || paymentMethod === 'UPI') ? transactionId : null,
         };
       }
-
+      
       const response = await fetch(CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
@@ -363,13 +366,13 @@ const MultiItemOrderForm: React.FC = () => {
         },
         body: JSON.stringify(payload),
       });
-
+      
       const data = await response.json();
       
       if (!response.ok) {
         throw new Error(data.error || 'Failed to place order');
       }
-
+      
       showSuccess('Order placed successfully!');
       
       // Reset form
@@ -400,6 +403,18 @@ const MultiItemOrderForm: React.FC = () => {
       setLoading(false);
     }
   };
+  
+  // State for searchable product dropdown
+  const [open, setOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  
+  // Filter products based on search value
+  const filteredProducts = useMemo(() => {
+    if (!searchValue) return products;
+    return products.filter(product => 
+      product.name.toLowerCase().includes(searchValue.toLowerCase())
+    );
+  }, [products, searchValue]);
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -435,8 +450,7 @@ const MultiItemOrderForm: React.FC = () => {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Overdue Payments</AlertTitle>
                 <AlertDescription>
-                  This dealer has overdue payments totaling ₹{totalPendingAmount.toFixed(2)}. 
-                  Please clear all overdue payments before placing a new order.
+                  This dealer has overdue payments totaling ₹{totalPendingAmount.toFixed(2)}. Please clear all overdue payments before placing a new order.
                   <div className="mt-2 max-h-32 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -490,7 +504,7 @@ const MultiItemOrderForm: React.FC = () => {
               </div>
             )}
           </div>
-
+          
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <Label>Order Items</Label>
@@ -503,30 +517,60 @@ const MultiItemOrderForm: React.FC = () => {
               <div key={item.id} className="grid grid-cols-12 gap-2 items-end">
                 <div className="col-span-5">
                   <Label htmlFor={`product-${item.id}`}>Product</Label>
-                  <Select 
-                    value={item.product_id} 
-                    onValueChange={(value) => updateOrderItem(item.id, 'product_id', value)}
-                    disabled={products.length === 0}
-                  >
-                    <SelectTrigger id={`product-${item.id}`} className="w-full">
-                      <SelectValue placeholder={products.length === 0 ? "No products available" : "Select a product"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.map((product) => (
-                        <SelectItem key={product.id} value={product.id}>
-                          {product.name} (₹{product.price.toFixed(2)}) - Stock: {product.stock}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={open} onOpenChange={setOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={open}
+                        className="w-full justify-between"
+                      >
+                        {item.product_id
+                          ? products.find((product) => product.id === item.product_id)?.name
+                          : "Select product..."}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                      <Command>
+                        <CommandInput 
+                          placeholder="Search product..." 
+                          value={searchValue}
+                          onValueChange={setSearchValue}
+                        />
+                        <CommandList>
+                          <CommandEmpty>No product found.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredProducts.map((product) => (
+                              <CommandItem
+                                key={product.id}
+                                value={product.id}
+                                onSelect={(currentValue) => {
+                                  updateOrderItem(item.id, 'product_id', currentValue === item.product_id ? '' : currentValue);
+                                  setOpen(false);
+                                  setSearchValue(""); // Clear search after selection
+                                }}
+                              >
+                                <div>
+                                  <div>{product.name}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    ₹{product.price.toFixed(2)} - Stock: {product.stock}
+                                  </div>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 
                 <div className="col-span-3">
                   <Label htmlFor={`quantity-${item.id}`}>Quantity</Label>
-                  <Input 
-                    id="quantity-${item.id}" 
-                    type="number" 
-                    value={item.quantity} 
+                  <Input
+                    id={`quantity-${item.id}`}
+                    type="number"
+                    value={item.quantity}
                     onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
                     min="1"
                     className="w-full"
@@ -540,10 +584,10 @@ const MultiItemOrderForm: React.FC = () => {
                 
                 <div className="col-span-1">
                   {orderItems.length > 1 && (
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => removeOrderItem(item.id)}
                       className="h-9 w-9"
                     >
@@ -554,7 +598,7 @@ const MultiItemOrderForm: React.FC = () => {
               </div>
             ))}
           </div>
-
+          
           {orderItems.length > 0 && (
             <div className="p-4 bg-muted rounded-md">
               <div className="flex justify-between text-lg font-semibold">
@@ -575,12 +619,12 @@ const MultiItemOrderForm: React.FC = () => {
               )}
             </div>
           )}
-
+          
           {/* Payment at Order Time Section */}
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="paidAtOrderTime" 
+              <Checkbox
+                id="paidAtOrderTime"
                 checked={isPaidAtOrderTime}
                 onCheckedChange={(checked) => {
                   setIsPaidAtOrderTime(!!checked);
@@ -628,11 +672,11 @@ const MultiItemOrderForm: React.FC = () => {
                 
                 <div>
                   <Label htmlFor="paymentAmount">Amount Paid</Label>
-                  <Input 
-                    id="paymentAmount" 
-                    type="number" 
+                  <Input
+                    id="paymentAmount"
+                    type="number"
                     step="0.01"
-                    value={paymentAmount} 
+                    value={paymentAmount}
                     onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
                     className="w-full"
                   />
@@ -642,20 +686,20 @@ const MultiItemOrderForm: React.FC = () => {
                   <>
                     <div>
                       <Label htmlFor="chequeDdNo">Cheque/DD Number</Label>
-                      <Input 
-                        id="chequeDdNo" 
-                        type="text" 
-                        value={chequeDdNo} 
+                      <Input
+                        id="chequeDdNo"
+                        type="text"
+                        value={chequeDdNo}
                         onChange={(e) => setChequeDdNo(e.target.value)}
                         className="w-full"
                       />
                     </div>
                     <div>
                       <Label htmlFor="chequeDdDate">Cheque/DD Date</Label>
-                      <Input 
-                        id="chequeDdDate" 
-                        type="date" 
-                        value={chequeDdDate} 
+                      <Input
+                        id="chequeDdDate"
+                        type="date"
+                        value={chequeDdDate}
                         onChange={(e) => setChequeDdDate(e.target.value)}
                         className="w-full"
                       />
@@ -667,10 +711,10 @@ const MultiItemOrderForm: React.FC = () => {
                   <>
                     <div>
                       <Label htmlFor="cardNumber">Card Number</Label>
-                      <Input 
-                        id="cardNumber" 
-                        type="text" 
-                        value={cardNumber} 
+                      <Input
+                        id="cardNumber"
+                        type="text"
+                        value={cardNumber}
                         onChange={(e) => setCardNumber(e.target.value)}
                         className="w-full"
                         placeholder="XXXX XXXX XXXX 1234"
@@ -678,10 +722,10 @@ const MultiItemOrderForm: React.FC = () => {
                     </div>
                     <div>
                       <Label htmlFor="cardHolderName">Card Holder Name</Label>
-                      <Input 
-                        id="cardHolderName" 
-                        type="text" 
-                        value={cardHolderName} 
+                      <Input
+                        id="cardHolderName"
+                        type="text"
+                        value={cardHolderName}
                         onChange={(e) => setCardHolderName(e.target.value)}
                         className="w-full"
                         placeholder="John Doe"
@@ -689,10 +733,10 @@ const MultiItemOrderForm: React.FC = () => {
                     </div>
                     <div>
                       <Label htmlFor="expiryDate">Expiry Date (MM/YY)</Label>
-                      <Input 
-                        id="expiryDate" 
-                        type="text" 
-                        value={expiryDate} 
+                      <Input
+                        id="expiryDate"
+                        type="text"
+                        value={expiryDate}
                         onChange={(e) => setExpiryDate(e.target.value)}
                         className="w-full"
                         placeholder="MM/YY"
@@ -700,10 +744,10 @@ const MultiItemOrderForm: React.FC = () => {
                     </div>
                     <div>
                       <Label htmlFor="cvv">CVV</Label>
-                      <Input 
-                        id="cvv" 
-                        type="text" 
-                        value={cvv} 
+                      <Input
+                        id="cvv"
+                        type="text"
+                        value={cvv}
                         onChange={(e) => setCvv(e.target.value)}
                         className="w-full"
                         placeholder="XXX"
@@ -716,10 +760,10 @@ const MultiItemOrderForm: React.FC = () => {
                   <>
                     <div>
                       <Label htmlFor="bankName">Bank Name</Label>
-                      <Input 
-                        id="bankName" 
-                        type="text" 
-                        value={bankName} 
+                      <Input
+                        id="bankName"
+                        type="text"
+                        value={bankName}
                         onChange={(e) => setBankName(e.target.value)}
                         className="w-full"
                         placeholder="State Bank of India"
@@ -727,10 +771,10 @@ const MultiItemOrderForm: React.FC = () => {
                     </div>
                     <div>
                       <Label htmlFor="accountNumber">Account Number</Label>
-                      <Input 
-                        id="accountNumber" 
-                        type="text" 
-                        value={accountNumber} 
+                      <Input
+                        id="accountNumber"
+                        type="text"
+                        value={accountNumber}
                         onChange={(e) => setAccountNumber(e.target.value)}
                         className="w-full"
                         placeholder="123456789012"
@@ -738,10 +782,10 @@ const MultiItemOrderForm: React.FC = () => {
                     </div>
                     <div>
                       <Label htmlFor="ifscCode">IFSC Code</Label>
-                      <Input 
-                        id="ifscCode" 
-                        type="text" 
-                        value={ifscCode} 
+                      <Input
+                        id="ifscCode"
+                        type="text"
+                        value={ifscCode}
                         onChange={(e) => setIfscCode(e.target.value)}
                         className="w-full"
                         placeholder="SBIN0000001"
@@ -749,10 +793,10 @@ const MultiItemOrderForm: React.FC = () => {
                     </div>
                     <div>
                       <Label htmlFor="transactionId">Transaction ID</Label>
-                      <Input 
-                        id="transactionId" 
-                        type="text" 
-                        value={transactionId} 
+                      <Input
+                        id="transactionId"
+                        type="text"
+                        value={transactionId}
                         onChange={(e) => setTransactionId(e.target.value)}
                         className="w-full"
                         placeholder="TXN123456789"
@@ -765,10 +809,10 @@ const MultiItemOrderForm: React.FC = () => {
                   <>
                     <div>
                       <Label htmlFor="upiId">UPI ID</Label>
-                      <Input 
-                        id="upiId" 
-                        type="text" 
-                        value={upiId} 
+                      <Input
+                        id="upiId"
+                        type="text"
+                        value={upiId}
                         onChange={(e) => setUpiId(e.target.value)}
                         className="w-full"
                         placeholder="user@bank"
@@ -776,10 +820,10 @@ const MultiItemOrderForm: React.FC = () => {
                     </div>
                     <div>
                       <Label htmlFor="transactionId">Transaction ID</Label>
-                      <Input 
-                        id="transactionId" 
-                        type="text" 
-                        value={transactionId} 
+                      <Input
+                        id="transactionId"
+                        type="text"
+                        value={transactionId}
                         onChange={(e) => setTransactionId(e.target.value)}
                         className="w-full"
                         placeholder="UPI123456789"
@@ -790,11 +834,16 @@ const MultiItemOrderForm: React.FC = () => {
               </div>
             )}
           </div>
-
-          <Button 
-            type="submit" 
+          
+          <Button
+            type="submit"
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-            disabled={loading || !selectedDealer || (remainingCredit !== null && remainingCredit < 0) || totalPendingAmount > 0}
+            disabled={
+              loading || 
+              !selectedDealer || 
+              (remainingCredit !== null && remainingCredit < 0) || 
+              totalPendingAmount > 0
+            }
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}
           </Button>
