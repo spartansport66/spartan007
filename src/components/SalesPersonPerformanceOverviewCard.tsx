@@ -13,26 +13,10 @@ interface SalesPersonPerformanceOverviewCardProps {
 
 const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOverviewCardProps> = ({ onViewDetails }) => {
   const [loading, setLoading] = useState(true);
-  const [activeSalesmenCount, setActiveSalesmenCount] = useState<number>(0); // New state
-  const [combinedAchievedSales, setCombinedAchievedSales] = useState<number>(0); // Renamed
-  const [combinedTargetAmount, setCombinedTargetAmount] = useState<number>(0); // Renamed
-  const [combinedPerformancePercentage, setCombinedPerformancePercentage] = useState<number>(0); // Renamed
-
-  const getStartOfUTCDayISO = () => {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const day = now.getUTCDate();
-    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
-  };
-
-  const getEndOfUTCDayISO = () => {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const day = now.getUTCDate();
-    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
-  };
+  const [activeSalesmenCount, setActiveSalesmenCount] = useState<number>(0);
+  const [combinedAchievedSales, setCombinedAchievedSales] = useState<number>(0);
+  const [combinedTargetAmount, setCombinedTargetAmount] = useState<number>(0);
+  const [combinedPerformancePercentage, setCombinedPerformancePercentage] = useState<number>(0);
 
   const fetchPerformanceOverview = useCallback(async () => {
     setLoading(true);
@@ -47,7 +31,7 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
 
       console.log('Fetching performance overview for:', { currentMonth, currentYear, startOfMonth, endOfMonth, targetMonthFilterDate });
 
-      // Fetch active sales persons count
+      // 1. Fetch all sales persons (from public.profiles)
       const { data: salesProfiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id')
@@ -61,24 +45,41 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       const salesPersonIds = salesProfiles.map(p => p.id);
       console.log('Sales person IDs:', salesPersonIds);
 
-      const { data: authUsers, error: authUsersError } = await supabase
-        .from('users') // This is the auth.users table
-        .select('id, banned_until')
-        .in('id', salesPersonIds);
-
-      if (authUsersError) {
-        throw new Error(`Failed to fetch auth users: ${authUsersError.message}`);
+      if (salesPersonIds.length === 0) {
+        console.log('No sales persons found, setting all values to 0');
+        setActiveSalesmenCount(0);
+        setCombinedAchievedSales(0);
+        setCombinedTargetAmount(0);
+        setCombinedPerformancePercentage(0);
+        setLoading(false);
+        return;
       }
-      console.log('Raw auth users:', authUsers);
 
-      const activeSalesmen = authUsers.filter(u => !u.banned_until);
-      setActiveSalesmenCount(activeSalesmen.length);
-      console.log('Active salesmen count:', activeSalesmen.length);
+      // 2. Fetch auth.users data for these sales persons to check banned status
+      // We need to check each user individually as we can't directly query auth.users by ID list
+      let activeSalesmenCount = 0;
+      for (const profile of salesProfiles) {
+        const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(profile.id);
+        
+        if (authError) {
+          console.error(`Error fetching auth user ${profile.id}:`, authError.message);
+          // Continue checking other users
+          continue;
+        }
+        
+        // Check if user is not banned (banned_until is null or in the past)
+        if (!authUser.user.banned_until || new Date(authUser.user.banned_until) < new Date()) {
+          activeSalesmenCount++;
+        }
+      }
+      
+      setActiveSalesmenCount(activeSalesmenCount);
+      console.log('Active salesmen count (calculated):', activeSalesmenCount);
 
-      // Fetch total sales for the current month across all sales persons
+      // 3. Fetch total sales for the current month across all sales persons
       const { data: salesData, error: salesError } = await supabase
         .from('sales')
-        .select('total_price, orders(user_id)')
+        .select('total_price')
         .gte('sale_date', startOfMonth)
         .lte('sale_date', endOfMonth);
 
@@ -91,7 +92,7 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       setCombinedAchievedSales(achievedSales);
       console.log('Combined achieved sales:', achievedSales);
 
-      // Fetch total targets for the current month across all sales persons
+      // 4. Fetch total targets for the current month across all sales persons
       const { data: targetsData, error: targetsError } = await supabase
         .from('sales_targets')
         .select('target_amount')
