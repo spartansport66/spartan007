@@ -21,23 +21,29 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
   const [todayReceivedAmountOverview, setTodayReceivedAmountOverview] = useState<number>(0);
   const [pendingApprovalAmountOverview, setPendingApprovalAmountOverview] = useState<number>(0); // New state
 
-  const getTodayDateISO = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today.toISOString();
+  // Helper to get start of current UTC day
+  const getStartOfUTCDayISO = () => {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const day = now.getUTCDate();
+    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
   };
 
-  const getEndOfTodayDateISO = () => {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-    return today.toISOString();
+  // Helper to get end of current UTC day
+  const getEndOfUTCDayISO = () => {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const day = now.getUTCDate();
+    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
   };
 
   const fetchPaymentOverviewData = useCallback(async () => {
     setOverviewLoading(true);
     try {
-      const todayISO = getTodayDateISO();
-      const endOfTodayISO = getEndOfTodayDateISO();
+      const startOfUTCTodayISO = getStartOfUTCDayISO();
+      const endOfUTCTodayISO = getEndOfUTCDayISO();
 
       // 1. Fetch Total Pending Amount (all pending orders)
       const { data: allPendingOrders, error: allPendingError } = await supabase
@@ -54,8 +60,8 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .from('orders')
         .select('total_amount')
         .eq('payment_status', 'pending')
-        .gte('payment_due_date', todayISO)
-        .lte('payment_due_date', endOfTodayISO);
+        .gte('payment_due_date', startOfUTCTodayISO)
+        .lte('payment_due_date', endOfUTCTodayISO);
 
       if (todaysDueError) throw todaysDueError;
       const todaysDue = (todaysDueOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
@@ -66,7 +72,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .from('payments')
         .select('amount')
         .eq('status', 'completed')
-        .or(`and(payment_date.gte.${todayISO},payment_date.lte.${endOfTodayISO}),and(approved_at.gte.${todayISO},approved_at.lte.${endOfTodayISO})`);
+        .or(`and(payment_date.gte.${startOfUTCTodayISO},payment_date.lte.${endOfUTCTodayISO}),and(approved_at.gte.${startOfUTCTodayISO},approved_at.lte.${endOfUTCTodayISO})`);
 
       if (todayReceivedError) throw todayReceivedError;
       const todayReceived = (todayReceivedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);

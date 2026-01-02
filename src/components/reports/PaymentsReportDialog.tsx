@@ -56,6 +56,24 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
 
+  // Helper to get start of current UTC day
+  const getStartOfUTCDayISO = () => {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const day = now.getUTCDate();
+    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
+  };
+
+  // Helper to get end of current UTC day
+  const getEndOfUTCDayISO = () => {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = now.getUTCMonth();
+    const day = now.getUTCDate();
+    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
+  };
+
   const fetchCompanyInfo = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -94,12 +112,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       let fetchedData: any[] | null = null;
       let fetchError: any = null;
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayISO = today.toISOString();
-      const endOfToday = new Date();
-      endOfToday.setHours(23, 59, 59, 999);
-      const endOfTodayISO = endOfToday.toISOString();
+      const startOfUTCTodayISO = getStartOfUTCDayISO();
+      const endOfUTCTodayISO = getEndOfUTCDayISO();
 
       if (filterStatus === 'pending_approval') {
         // If filtering for pending approval, query payments table directly
@@ -163,13 +177,13 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         } else if (filterStatus === 'paid') {
           query = query.eq('payment_status', 'paid');
         } else if (filterStatus === 'overdue') {
-          query = query.eq('payment_status', 'pending').lte('payment_due_date', todayISO);
+          query = query.eq('payment_status', 'pending').lte('payment_due_date', startOfUTCTodayISO);
         } else if (filterStatus === 'upcoming') {
-          query = query.eq('payment_status', 'pending').gte('payment_due_date', todayISO);
+          query = query.eq('payment_status', 'pending').gte('payment_due_date', endOfUTCTodayISO);
         } else if (filterStatus === 'todays_due') {
           query = query.eq('payment_status', 'pending')
-            .gte('payment_due_date', todayISO)
-            .lte('payment_due_date', endOfTodayISO);
+            .gte('payment_due_date', startOfUTCTodayISO)
+            .lte('payment_due_date', endOfUTCTodayISO);
         }
 
         if (filterDealerId) {
