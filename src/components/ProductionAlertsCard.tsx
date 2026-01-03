@@ -105,8 +105,8 @@ const ProductionAlertsCard: React.FC = () => {
         required_quantity: alert.required_quantity,
         created_at: alert.created_at,
         resolved: alert.resolved,
-        sales_person_name: alert.created_by ? salesPersonMap.get(alert.created_by) || 'Unknown Salesperson' : null,
-        dealer_name: alert.dealer_id ? dealerMap.get(alert.dealer_id) || 'Unknown Dealer' : null,
+        sales_person_name: alert.created_by ? (salesPersonMap.get(alert.created_by) || 'Unknown Salesperson') : 'Not specified',
+        dealer_name: alert.dealer_id ? (dealerMap.get(alert.dealer_id) || 'Unknown Dealer') : 'Not specified',
       }));
 
       setAlerts(formattedAlerts);
@@ -173,8 +173,8 @@ const ProductionAlertsCard: React.FC = () => {
       const tableRows = alerts.map(alert => [
         alert.product_name,
         alert.required_quantity.toString(),
-        alert.sales_person_name || 'N/A',
-        alert.dealer_name || 'N/A',
+        alert.sales_person_name || 'Not specified',
+        alert.dealer_name || 'Not specified',
         new Date(alert.created_at).toLocaleString(),
       ]);
 
@@ -267,10 +267,10 @@ const ProductionAlertsCard: React.FC = () => {
                       <TableCell className="font-medium text-foreground">{alert.product_name}</TableCell>
                       <TableCell className="text-muted-foreground text-right">{alert.required_quantity}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {alert.sales_person_name || 'N/A'}
+                        {alert.sales_person_name}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {alert.dealer_name || 'N/A'}
+                        {alert.dealer_name}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {new Date(alert.created_at).toLocaleString()}
