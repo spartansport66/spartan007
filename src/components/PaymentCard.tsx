@@ -45,9 +45,6 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO(); // Correct variable name
 
-      console.log("DEBUG: Calculated Start of UTC Today:", startOfUTCTodayISO);
-      console.log("DEBUG: Calculated End of UTC Today:", endOfUTCTodayISO);
-
       // 1. Fetch Total Pending Amount (all pending orders)
       const { data: allPendingOrders, error: allPendingError } = await supabase
         .from('orders')
@@ -59,23 +56,21 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       const totalPending = (allPendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
       setTotalPendingAmountOverview(totalPending);
 
-      // 2. Fetch Today's Due Payments (orders where payment_due_date is *today*, regardless of payment_status)
-      console.log("DEBUG: Fetching orders due today...");
+      // 2. Fetch Today's Due Payments
+      // This includes orders with:
+      // - payment_status = 'pending' AND payment_due_date is *today*
+      // - payment_status = 'pending_approval' AND payment_due_date is *today*
+      // We can achieve this with an OR condition on the status combined with the date range.
       const { data: todaysDueOrders, error: todaysDueError } = await supabase
         .from('orders')
-        .select('id, order_number, total_amount, payment_due_date, payment_status') // Select more fields for debugging
+        .select('total_amount')
         .gte('payment_due_date', startOfUTCTodayISO) // Due *today* or later
-        .lte('payment_due_date', endOfUTCTodayISO); // AND due *today* or earlier (to ensure it's *exactly* today)
+        .lte('payment_due_date', endOfUTCTodayISO) // AND due *today* or earlier (to ensure it's *exactly* today)
+        .in('payment_status', ['pending', 'pending_approval']); // Only these two statuses
 
-      console.log("DEBUG: Todays Due Query - Start:", startOfUTCTodayISO, "End:", endOfUTCTodayISO);
-      if (todaysDueError) {
-        console.error("DEBUG: Error fetching today's due orders:", todaysDueError.message);
-        throw todaysDueError;
-      }
-      console.log("DEBUG: Raw data for today's due orders:", todaysDueOrders);
+      if (todaysDueError) throw todaysDueError;
 
       const todaysDue = (todaysDueOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
-      console.log("DEBUG: Calculated Today's Due Amount:", todaysDue);
       setTodaysDueAmountOverview(todaysDue);
 
       // 3. Fetch Today Received Payments
@@ -89,7 +84,6 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .from('payments')
         .select('amount')
         .eq('status', 'completed')
-        // Fix: Correct variable names in the template string
         .or(`and(payment_date.gte.${startOfUTCTodayISO},payment_date.lte.${endOfUTCTodayISO}),and(approved_at.gte.${startOfUTCTodayISO},approved_at.lte.${endOfUTCTodayISO})`);
 
       if (todayReceivedCompletedError) throw todayReceivedCompletedError;
@@ -101,7 +95,6 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .select('amount')
         .eq('status', 'pending_approval')
         .gte('approved_at', startOfUTCTodayISO)
-        // Fix: Correct variable name
         .lte('approved_at', endOfUTCTodayISO);
 
       if (todayReceivedApprovedError) throw todayReceivedApprovedError;
