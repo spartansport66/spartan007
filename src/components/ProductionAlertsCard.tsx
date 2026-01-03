@@ -16,6 +16,8 @@ interface ProductionAlert {
   required_quantity: number;
   created_at: string;
   resolved: boolean;
+  sales_person_name: string | null;
+  dealer_name: string | null;
 }
 
 const ProductionAlertsCard: React.FC = () => {
@@ -32,7 +34,9 @@ const ProductionAlertsCard: React.FC = () => {
           required_quantity,
           created_at,
           resolved,
-          products (name)
+          products (name),
+          profiles (first_name, last_name), -- Join with profiles for salesperson name
+          dealers (name) -- Join with dealers for dealer name
         `)
         .eq('resolved', false) // Only fetch unresolved alerts
         .order('created_at', { ascending: false });
@@ -45,6 +49,10 @@ const ProductionAlertsCard: React.FC = () => {
         required_quantity: alert.required_quantity,
         created_at: alert.created_at,
         resolved: alert.resolved,
+        sales_person_name: alert.profiles 
+          ? `${alert.profiles.first_name || ''} ${alert.profiles.last_name || ''}`.trim() 
+          : null,
+        dealer_name: alert.dealers?.name || null,
       }));
 
       setAlerts(formattedAlerts);
@@ -98,7 +106,7 @@ const ProductionAlertsCard: React.FC = () => {
   const handlePrint = () => {
     try {
       const doc = new jsPDF({
-        orientation: 'portrait'
+        orientation: 'landscape' // Use landscape for more columns
       });
       
       doc.setFontSize(18);
@@ -107,10 +115,12 @@ const ProductionAlertsCard: React.FC = () => {
       doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
 
-      const tableColumn = ["Product Name", "Required Quantity", "Alerted At"];
+      const tableColumn = ["Product Name", "Required Quantity", "Requested By", "For Dealer", "Alerted At"];
       const tableRows = alerts.map(alert => [
         alert.product_name,
         alert.required_quantity.toString(),
+        alert.sales_person_name || 'Unknown',
+        alert.dealer_name || 'Unknown',
         new Date(alert.created_at).toLocaleString(),
       ]);
 
@@ -119,7 +129,7 @@ const ProductionAlertsCard: React.FC = () => {
         body: tableRows,
         startY: 40,
         styles: {
-          fontSize: 10
+          fontSize: 8
         },
         headStyles: {
           fillColor: [249, 115, 22], // Orange color to match the card header
@@ -127,9 +137,11 @@ const ProductionAlertsCard: React.FC = () => {
         },
         margin: { top: 25, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 'auto' }, // Product Name
-          1: { cellWidth: 40, halign: 'right' }, // Required Quantity
-          2: { cellWidth: 'auto' }, // Alerted At
+          0: { cellWidth: 40 }, // Product Name
+          1: { cellWidth: 30, halign: 'right' }, // Required Quantity
+          2: { cellWidth: 40 }, // Requested By
+          3: { cellWidth: 40 }, // For Dealer
+          4: { cellWidth: 40 }, // Alerted At
         }
       });
 
@@ -190,6 +202,8 @@ const ProductionAlertsCard: React.FC = () => {
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground">Product</TableHead>
                     <TableHead className="text-muted-foreground text-right">Required Quantity</TableHead>
+                    <TableHead className="text-muted-foreground">Requested By</TableHead>
+                    <TableHead className="text-muted-foreground">For Dealer</TableHead>
                     <TableHead className="text-muted-foreground">Alerted At</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -198,6 +212,12 @@ const ProductionAlertsCard: React.FC = () => {
                     <TableRow key={alert.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{alert.product_name}</TableCell>
                       <TableCell className="text-muted-foreground text-right">{alert.required_quantity}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {alert.sales_person_name || 'Unknown'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {alert.dealer_name || 'Unknown'}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {new Date(alert.created_at).toLocaleString()}
                       </TableCell>
