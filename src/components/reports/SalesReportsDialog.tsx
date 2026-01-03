@@ -62,30 +62,32 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
       setAllSalesPersons((profilesData || []).map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name}` })));
 
       // Fetch dealers dynamically based on selected sales person
-      let dealersQuery = supabase
-        .from('dealers')
-        .select('id, name');
+      let dealersData: { id: string; name: string }[] | null = null;
+      let dealersError: any = null;
 
       if (filterSalesPersonId) {
-        // If a sales person is selected, only show dealers assigned to them
-        dealersQuery = supabase
+        // If a sales person is selected, fetch only dealers assigned to them
+        const { data, error } = await supabase
           .from('dealer_sales_persons')
           .select('dealers(id, name)')
           .eq('sales_person_id', filterSalesPersonId);
+        dealersData = data?.map((item: any) => item.dealers) || [];
+        dealersError = error;
+      } else {
+        // If no sales person is selected, fetch all dealers
+        const { data, error } = await supabase
+          .from('dealers')
+          .select('id, name');
+        dealersData = data;
+        dealersError = error;
       }
-
-      const { data: dealersData, error: dealersError } = await dealersQuery;
 
       if (dealersError) {
         console.error('Error fetching dealers for filter:', dealersError.message);
         showError('Failed to load dealers for filter.');
         setAllDealers([]);
       } else {
-        // Map data correctly based on whether it came from 'dealers' or 'dealer_sales_persons'
-        const formattedDealers = filterSalesPersonId
-          ? (dealersData || []).map((item: any) => ({ value: item.dealers.id, label: item.dealers.name }))
-          : (dealersData || []).map((d: any) => ({ value: d.id, label: d.name }));
-        setAllDealers(formattedDealers);
+        setAllDealers((dealersData || []).map(d => ({ value: d.id, label: d.name })));
       }
 
       // Fetch products
