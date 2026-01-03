@@ -27,32 +27,86 @@ const ProductionAlertsCard: React.FC = () => {
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // First, let's fetch alerts without joins to see if that works
+      const { data: alertsData, error: alertsError } = await supabase
         .from('production_alerts')
         .select(`
           id,
+          product_id,
           required_quantity,
           created_at,
           resolved,
-          products (name),
-          profiles (first_name, last_name), -- Join with profiles for salesperson name
-          dealers (name) -- Join with dealers for dealer name
+          created_by,
+          dealer_id
         `)
-        .eq('resolved', false) // Only fetch unresolved alerts
+        .eq('resolved', false)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (alertsError) {
+        console.error('Error fetching alerts data:', alertsError.message);
+        throw alertsError;
+      }
 
-      const formattedAlerts: ProductionAlert[] = (data || []).map((alert: any) => ({
+      // If we successfully fetched alerts, now get product names
+      const productIds = [...new Set(alertsData.map(alert => alert.product_id).filter(id => id))];
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, name')
+        .in('id', productIds);
+
+      if (productsError) {
+        console.error('Error fetching products data:', productsError.message);
+        throw productsError;
+      }
+
+      // Get salesperson names if created_by exists
+      const salesPersonIds = [...new Set(alertsData.map(alert => alert.created_by).filter(id => id))];
+      let salesPersonsData: any[] = [];
+      if (salesPersonIds.length > 0) {
+        const { data, error: salesPersonsError } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', salesPersonIds);
+
+        if (salesPersonsError) {
+          console.error('Error fetching sales persons data:', salesPersonsError.message);
+          // We won't throw here as this is supplementary data
+        } else {
+          salesPersonsData = data || [];
+        }
+      }
+
+      // Get dealer names if dealer_id exists
+      const dealerIds = [...new Set(alertsData.map(alert => alert.dealer_id).filter(id => id))];
+      let dealersData: any[] = [];
+      if (dealerIds.length > 0) {
+        const { data, error: dealersError } = await supabase
+          .from('dealers')
+          .select('id, name')
+          .in('id', dealerIds);
+
+        if (dealersError) {
+          console.error('Error fetching dealers data:', dealersError.message);
+          // We won't throw here as this is supplementary data
+        } else {
+          dealersData = data || [];
+        }
+      }
+
+      // Create maps for quick lookups
+      const productMap = new Map(productsData?.map(p => [p.id, p.name]) || []);
+      const salesPersonMap = new Map(salesPersonsData?.map(sp => [sp.id, `${sp.first_name || ''} ${sp.last_name || ''}`.trim()]) || []);
+      const dealerMap = new Map(dealersData?.map(d => [d.id, d.name]) || []);
+
+      // Format the alerts with all the information
+      const formattedAlerts: ProductionAlert[] = (alertsData || []).map((alert: any) => ({
         id: alert.id,
-        product_name: alert.products?.name || 'Unknown Product',
+        product_name: productMap.get(alert.product_id) || 'Unknown Product',
         required_quantity: alert.required_quantity,
         created_at: alert.created_at,
         resolved: alert.resolved,
-        sales_person_name: alert.profiles 
-          ? `${alert.profiles.first_name || ''} ${alert.profiles.last_name || ''}`.trim() 
-          : null,
-        dealer_name: alert.dealers?.name || null,
+        sales_person_name: alert.created_by ? salesPersonMap.get(alert.created_by) || 'Unknown Salesperson' : null,
+        dealer_name: alert.dealer_id ? dealerMap.get(alert.dealer_id) || 'Unknown Dealer' : null,
       }));
 
       setAlerts(formattedAlerts);
@@ -119,8 +173,8 @@ const ProductionAlertsCard: React.FC = () => {
       const tableRows = alerts.map(alert => [
         alert.product_name,
         alert.required_quantity.toString(),
-        alert.sales_person_name || 'Unknown',
-        alert.dealer_name || 'Unknown',
+        alert.sales_person_name || 'N/A',
+        alert.dealer_name || 'N/A',
         new Date(alert.created_at).toLocaleString(),
       ]);
 
@@ -213,10 +267,10 @@ const ProductionAlertsCard: React.FC = () => {
                       <TableCell className="font-medium text-foreground">{alert.product_name}</TableCell>
                       <TableCell className="text-muted-foreground text-right">{alert.required_quantity}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {alert.sales_person_name || 'Unknown'}
+                        {alert.sales_person_name || 'N/A'}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {alert.dealer_name || 'Unknown'}
+                        {alert.dealer_name || 'N/A'}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {new Date(alert.created_at).toLocaleString()}
