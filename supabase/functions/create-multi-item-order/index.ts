@@ -18,6 +18,13 @@ interface Product {
   stock: number;
 }
 
+// Define interface for stock update objects
+interface ProductStockUpdate {
+  id: string;
+  stock: number; // The new calculated stock
+  previous_stock: number; // The stock before this order
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -58,8 +65,9 @@ serve(async (req) => {
     const productMap = new Map(products.map(p => [p.id, p]));
     let totalOrderAmount = 0;
     const salesToInsert = [];
+    const productsToUpdateStock: ProductStockUpdate[] = []; // Explicitly type the array
 
-    // First, calculate total order amount and prepare sales items
+    // First, calculate total order amount and prepare sales items and stock updates
     for (const item of orderItems) {
       const product = productMap.get(item.product_id) as Product;
       if (!product) {
@@ -74,6 +82,13 @@ serve(async (req) => {
         product_id: item.product_id,
         quantity: item.quantity,
         total_price: itemTotalPrice,
+      });
+
+      // Prepare stock update for this product
+      productsToUpdateStock.push({
+        id: product.id,
+        stock: product.stock - item.quantity, // Calculate new stock level
+        previous_stock: product.stock // Store previous stock for alert logic
       });
     }
 
@@ -199,61 +214,81 @@ serve(async (req) => {
     const productionAlertsToUpsert = [];
     const productionAlertsToResolve = [];
 
-    for (const item of orderItems) {
-      const productBeforeUpdate = productMap.get(item.product_id) as Product; // Stock before this order
-      const quantitySold = item.quantity;
+    // Perform all stock updates first, and get the *final* stock levels
+    const { data: updatedProductsData, error: bulkStockUpdateError } = await supabaseAdmin
+      .from('products')
+      .upsert(productsToUpdateStock.map(p => ({ id: p.id, stock: p.stock })), { onConflict: 'id' })
+      .select('id, stock'); // Select the *final* stock after all updates
 
-      // Atomically update stock and get the *new* stock value
-      const { data: updatedProduct, error: stockUpdateError } = await supabaseAdmin
-        .from('products')
-        .update({ stock: productBeforeUpdate.stock - quantitySold })
-        .eq('id', item.product_id)
-        .select('id, stock') // Select the new stock value
-        .single();
-
-      if (stockUpdateError) {
-        console.error(`Failed to update stock for product ${item.product_id}: ${stockUpdateError.message}`);
-        throw new Error(`Failed to update stock for product ${item.product_id}: ${stockUpdateError.message}`);
-      }
-
-      const newStockLevel = updatedProduct.stock; // This is the *actual* new stock level
-
-      if (newStockLevel < 0) {
-        productionAlertsToUpsert.push({
-          product_id: updatedProduct.id,
-          required_quantity: Math.abs(newStockLevel), // Use the actual new negative stock
-          created_by: userId,
-          dealer_id: dealerId,
-          resolved: false,
-          created_at: new Date().toISOString(),
-        });
-      } else if (newStockLevel >= 0 && productBeforeUpdate.stock < 0) {
-        // If stock was negative before this order and is now non-negative
-        productionAlertsToResolve.push(updatedProduct.id);
-      }
+    if (bulkStockUpdateError) {
+      console.error('Failed to bulk update product stock:', bulkStockUpdateError.message);
+      throw new Error(`Failed to update product stock: ${bulkStockUpdateError.message}`);
     }
 
-    // 7. Insert/Update Production Alerts
-    if (productionAlertsToUpsert.length > 0) {
-      const { error: upsertAlertsError } = await supabaseAdmin
-        .from('production_alerts')
-        .upsert(productionAlertsToUpsert, { onConflict: 'product_id, resolved' });
+    const finalStockMap = new Map(updatedProductsData.map(p => [p.id, p.stock]));
 
-      if (upsertAlertsError) {
-        console.error('Failed to upsert production alerts:', upsertAlertsError.message);
-      }
-    }
+    // Now, manage production alerts based on the *final* stock levels
+    for (const productUpdate of productsToUpdateStock) {
+      const productId = productUpdate.id;
+      // Ensure finalStockLevel is treated as a number
+      const finalStockLevel = (finalStockMap.get(productId) || 0) as number; 
 
-    // 8. Resolve Production Alerts
-    if (productionAlertsToResolve.length > 0) {
-      const { error: resolveAlertsError } = await supabaseAdmin
-        .from('production_alerts')
-        .update({ resolved: true })
-        .in('product_id', productionAlertsToResolve)
-        .eq('resolved', false);
+      if (finalStockLevel < 0) {
+        // If final stock is negative, ensure an alert exists and reflects the total deficit
+        const { data: existingAlert, error: fetchAlertError } = await supabaseAdmin
+          .from('production_alerts')
+          .select('id')
+          .eq('product_id', productId)
+          .eq('resolved', false)
+          .single();
 
-      if (resolveAlertsError) {
-        console.error('Failed to resolve production alerts:', resolveAlertsError.message);
+        if (fetchAlertError && fetchAlertError.code !== 'PGRST116') { // PGRST116 means "no rows found"
+          console.error(`Error fetching existing alert for product ${productId}:`, fetchAlertError.message);
+          // Continue, but log the error
+        }
+
+        if (existingAlert) {
+          // Update existing alert with the new total required quantity
+          const { error: updateAlertError } = await supabaseAdmin
+            .from('production_alerts')
+            .update({
+              required_quantity: Math.abs(finalStockLevel),
+              created_by: userId, // Update with latest requester
+              dealer_id: dealerId, // Update with latest dealer
+              created_at: new Date().toISOString(), // Update timestamp
+            })
+            .eq('id', existingAlert.id);
+
+          if (updateAlertError) {
+            console.error(`Failed to update production alert for product ${productId}:`, updateAlertError.message);
+          }
+        } else {
+          // Insert new alert
+          const { error: insertAlertError } = await supabaseAdmin
+            .from('production_alerts')
+            .insert({
+              product_id: productId,
+              required_quantity: Math.abs(finalStockLevel),
+              created_by: userId,
+              dealer_id: dealerId,
+              resolved: false,
+            });
+
+          if (insertAlertError) {
+            console.error(`Failed to insert new production alert for product ${productId}:`, insertAlertError.message);
+          }
+        }
+      } else if (productUpdate.previous_stock < 0 && finalStockLevel >= 0) {
+        // If stock was negative and is now non-negative, resolve existing alerts
+        const { error: resolveAlertsError } = await supabaseAdmin
+          .from('production_alerts')
+          .update({ resolved: true })
+          .eq('product_id', productId)
+          .eq('resolved', false);
+
+        if (resolveAlertsError) {
+          console.error(`Failed to resolve production alerts for product ${productId}:`, resolveAlertsError.message);
+        }
       }
     }
 
