@@ -40,7 +40,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Fetch product details (no stock check here anymore)
+    // 1. Fetch product details (stock *before* this order)
     const productIds = orderItems.map((item: any) => item.product_id);
     const { data: products, error: productsError } = await supabaseAdmin
       .from('products')
@@ -58,56 +58,23 @@ serve(async (req) => {
     const productMap = new Map(products.map(p => [p.id, p]));
     let totalOrderAmount = 0;
     const salesToInsert = [];
-    const stockUpdates = [];
-    const productionAlertsToUpsert = []; // New array for alerts
-    const productionAlertsToResolve = []; // New array for resolving alerts
 
+    // First, calculate total order amount and prepare sales items
     for (const item of orderItems) {
-      const product = productMap.get(item.product_id) as Product; // Type assertion
+      const product = productMap.get(item.product_id) as Product;
       if (!product) {
         throw new Error(`Product with ID ${item.product_id} not found.`);
       }
-
       if (item.quantity <= 0) {
         throw new Error(`Invalid quantity for product ${product.name}.`);
       }
-
-      // --- Key Change: Remove stock availability check ---
-      // The system now allows orders even if stock is insufficient.
-      // Stock will be updated, potentially going negative, which signifies a production commitment/backorder.
-      // A database trigger will handle creating production alerts for negative stock.
-
       const itemTotalPrice = item.quantity * product.price;
       totalOrderAmount += itemTotalPrice;
-
       salesToInsert.push({
         product_id: item.product_id,
         quantity: item.quantity,
         total_price: itemTotalPrice,
       });
-
-      // Calculate the new stock level after this item's quantity is deducted
-      const newStockLevel = product.stock - item.quantity;
-      stockUpdates.push({
-        id: product.id,
-        new_stock: newStockLevel, // This can be negative
-      });
-
-      // --- NEW PRODUCTION ALERT LOGIC ---
-      if (newStockLevel < 0) {
-        // If stock goes negative, prepare to create/update an alert
-        productionAlertsToUpsert.push({
-          product_id: product.id,
-          required_quantity: Math.abs(newStockLevel),
-          created_by: userId, // Direct from order context
-          dealer_id: dealerId, // Direct from order context
-          resolved: false,
-          created_at: new Date().toISOString(), // Ensure timestamp is set
-        });
-      } else if (newStockLevel >= 0 && product.stock < 0) { // If stock was negative and now is non-negative
-        // Prepare to resolve existing alerts for this product
-        productionAlertsToResolve.push(product.id);
-      }
     }
 
     // 2. Fetch dealer credit limit (monthly or general) and current balance
@@ -201,12 +168,12 @@ serve(async (req) => {
     }
 
     // 5. If payment details are provided, insert into payments table
-    if (paymentDetails) { // Changed condition from paymentStatus === 'paid'
+    if (paymentDetails) {
       const { error: paymentInsertError } = await supabaseAdmin
         .from('payments')
         .insert({
           order_id: newOrder.id,
-          amount: totalOrderAmount, // IMPORTANT: Use totalOrderAmount for consistency
+          amount: totalOrderAmount,
           payment_method: paymentDetails.payment_method,
           cheque_dd_no: paymentDetails.cheque_dd_no,
           cheque_dd_date: paymentDetails.cheque_dd_date,
@@ -219,58 +186,74 @@ serve(async (req) => {
           ifsc_code: paymentDetails.ifsc_code,
           upi_id: paymentDetails.upi_id,
           transaction_id: paymentDetails.transaction_id,
-          status: paymentStatus === 'paid' ? 'completed' : 'pending_approval', // Set status based on order's paymentStatus
+          status: paymentStatus === 'paid' ? 'completed' : 'pending_approval',
         });
 
       if (paymentInsertError) {
         console.error('Failed to insert payment details:', paymentInsertError.message);
-        // Decide if this should roll back the entire order or just log.
-        // For now, we'll throw an error to indicate a partial failure.
         throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
       }
     }
 
-    // 6. Update product stock levels (this can now result in negative stock)
-    // The database trigger `trigger_check_stock_and_alert` will automatically
-    // create or update production alerts based on the new stock levels.
-    for (const update of stockUpdates) {
-      const { error: stockUpdateError } = await supabaseAdmin
+    // 6. Update product stock levels and manage production alerts
+    const productionAlertsToUpsert = [];
+    const productionAlertsToResolve = [];
+
+    for (const item of orderItems) {
+      const productBeforeUpdate = productMap.get(item.product_id) as Product; // Stock before this order
+      const quantitySold = item.quantity;
+
+      // Atomically update stock and get the *new* stock value
+      const { data: updatedProduct, error: stockUpdateError } = await supabaseAdmin
         .from('products')
-        .update({ stock: update.new_stock })
-        .eq('id', update.id);
+        .update({ stock: productBeforeUpdate.stock - quantitySold })
+        .eq('id', item.product_id)
+        .select('id, stock') // Select the new stock value
+        .single();
 
       if (stockUpdateError) {
-        // In a real transaction, we would roll back everything here.
-        console.error(`Failed to update stock for product ${update.id}: ${stockUpdateError.message}`);
-        // We will still throw an error, but the order and sales items are already created.
-        // Stock might be partially updated. This is a limitation of not having true DB transactions here.
-        throw new Error(`Failed to update stock for product ${update.id}: ${stockUpdateError.message}`);
+        console.error(`Failed to update stock for product ${item.product_id}: ${stockUpdateError.message}`);
+        throw new Error(`Failed to update stock for product ${item.product_id}: ${stockUpdateError.message}`);
+      }
+
+      const newStockLevel = updatedProduct.stock; // This is the *actual* new stock level
+
+      if (newStockLevel < 0) {
+        productionAlertsToUpsert.push({
+          product_id: updatedProduct.id,
+          required_quantity: Math.abs(newStockLevel), // Use the actual new negative stock
+          created_by: userId,
+          dealer_id: dealerId,
+          resolved: false,
+          created_at: new Date().toISOString(),
+        });
+      } else if (newStockLevel >= 0 && productBeforeUpdate.stock < 0) {
+        // If stock was negative before this order and is now non-negative
+        productionAlertsToResolve.push(updatedProduct.id);
       }
     }
 
-    // 7. Insert/Update Production Alerts directly from Edge Function
+    // 7. Insert/Update Production Alerts
     if (productionAlertsToUpsert.length > 0) {
       const { error: upsertAlertsError } = await supabaseAdmin
         .from('production_alerts')
-        .upsert(productionAlertsToUpsert, { onConflict: 'product_id, resolved' }); // Upsert based on product_id and resolved status
+        .upsert(productionAlertsToUpsert, { onConflict: 'product_id, resolved' });
 
       if (upsertAlertsError) {
         console.error('Failed to upsert production alerts:', upsertAlertsError.message);
-        // This is a non-critical error, but we should log it.
       }
     }
 
-    // 8. Resolve Production Alerts directly from Edge Function
+    // 8. Resolve Production Alerts
     if (productionAlertsToResolve.length > 0) {
       const { error: resolveAlertsError } = await supabaseAdmin
         .from('production_alerts')
         .update({ resolved: true })
         .in('product_id', productionAlertsToResolve)
-        .eq('resolved', false); // Only resolve currently unresolved alerts
+        .eq('resolved', false);
 
       if (resolveAlertsError) {
         console.error('Failed to resolve production alerts:', resolveAlertsError.message);
-        // This is a non-critical error, but we should log it.
       }
     }
 
