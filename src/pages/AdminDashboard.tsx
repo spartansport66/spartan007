@@ -24,6 +24,7 @@ import CompanyInfoDialog from '@/components/CompanyInfoDialog';
 import PaymentsForApprovalCard from '@/components/PaymentsForApprovalCard';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"; // Import Sheet components
 import AdminSidebar from '@/components/AdminSidebar'; // Import the new sidebar component
+import SalesReportsDialog from '@/components/reports/SalesReportsDialog'; // Import the new SalesReportsDialog
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -37,6 +38,7 @@ const AdminDashboard = () => {
   const [isSalesPersonPerformanceReportOpen, setIsSalesPersonPerformanceReportOpen] = useState(false);
   const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
   const [isPaymentsReportOpen, setIsPaymentsReportOpen] = useState(false);
+  const [isSalesReportsDialogOpen, setIsSalesReportsDialogOpen] = useState(false); // New state for Sales Report
   const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0); // Key to force re-fetch in child components
@@ -236,6 +238,7 @@ const AdminDashboard = () => {
               setIsSalesPersonPerformanceReportOpen={setIsSalesPersonPerformanceReportOpen}
               setIsDealerReportOpen={setIsDealerReportOpen}
               setIsPaymentsReportOpen={setIsPaymentsReportOpen}
+              setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen} // Pass new state setter
               setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen}
             />
           </SheetContent>
@@ -298,6 +301,10 @@ const AdminDashboard = () => {
       <PaymentsReportDialog
         isOpen={isPaymentsReportOpen}
         onOpenChange={setIsPaymentsReportOpen}
+      />
+      <SalesReportsDialog // Render the new SalesReportsDialog
+        isOpen={isSalesReportsDialogOpen}
+        onOpenChange={setIsSalesReportsDialogOpen}
       />
       <CompanyInfoDialog
         isOpen={isCompanyInfoDialogOpen}
