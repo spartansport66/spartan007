@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, TrendingUp, Target, Activity, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
+import { Separator } from '@/components/ui/separator'; // Added Separator for better visual separation
 
 interface SalesPersonPerformanceOverviewCardProps {
   onViewDetails: () => void;
@@ -16,6 +17,7 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
   const [activeSalesmenCount, setActiveSalesmenCount] = useState<number>(0);
   const [combinedAchievedSales, setCombinedAchievedSales] = useState<number>(0);
   const [combinedTargetAmount, setCombinedTargetAmount] = useState<number>(0);
+  const [combinedPendingSales, setCombinedPendingSales] = useState<number>(0); // New state for pending sales
   const [combinedPerformancePercentage, setCombinedPerformancePercentage] = useState<number>(0);
 
   const fetchPerformanceOverview = useCallback(async () => {
@@ -40,11 +42,12 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       }
 
       const salesPersonIds = salesProfiles.map(p => p.id);
-      setActiveSalesmenCount(salesPersonIds.length); // Count all sales_person profiles as active for overview
+      setActiveSalesmenCount(salesPersonIds.length);
 
       if (salesPersonIds.length === 0) {
         setCombinedAchievedSales(0);
         setCombinedTargetAmount(0);
+        setCombinedPendingSales(0); // Reset pending sales
         setCombinedPerformancePercentage(0);
         setLoading(false);
         return;
@@ -56,7 +59,7 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
         .select('total_price, orders(user_id)')
         .gte('sale_date', startOfMonth)
         .lte('sale_date', endOfMonth)
-        .in('orders.user_id', salesPersonIds); // Filter sales to only include those by actual sales persons
+        .in('orders.user_id', salesPersonIds);
 
       if (salesError) {
         throw new Error(`Failed to fetch sales data: ${salesError.message}`);
@@ -70,7 +73,7 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
         .from('sales_targets')
         .select('target_amount')
         .eq('target_month', targetMonthFilterDate)
-        .in('sales_person_id', salesPersonIds); // Filter targets to only include those for actual sales persons
+        .in('sales_person_id', salesPersonIds);
 
       if (targetsError) {
         throw new Error(`Failed to fetch targets data: ${targetsError.message}`);
@@ -78,6 +81,9 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
 
       const targetAmount = (targetsData || []).reduce((sum, target) => sum + target.target_amount, 0);
       setCombinedTargetAmount(targetAmount);
+
+      const pendingSales = targetAmount - achievedSales; // Calculate pending sales
+      setCombinedPendingSales(pendingSales);
 
       let calculatedPerformancePercentage = 0;
       if (targetAmount > 0) {
@@ -91,6 +97,7 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       setActiveSalesmenCount(0);
       setCombinedAchievedSales(0);
       setCombinedTargetAmount(0);
+      setCombinedPendingSales(0); // Reset pending sales on error
       setCombinedPerformancePercentage(0);
     } finally {
       setLoading(false);
@@ -132,6 +139,7 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
               </div>
               <span className="text-lg font-bold text-gray-600">{activeSalesmenCount}</span>
             </div>
+            <Separator /> {/* Added separator */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Target className="h-5 w-5 text-blue-600" />
@@ -149,7 +157,17 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-orange-600" />
-                <span className="text-muted-foreground">Total Combined Performance:</span>
+                <span className="text-muted-foreground">Total Combined Pending:</span>
+              </div>
+              <span className={`text-lg font-bold ${combinedPendingSales > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                ₹{combinedPendingSales.toFixed(2)}
+              </span>
+            </div>
+            <Separator /> {/* Added separator */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-purple-600" />
+                <span className="text-muted-foreground">Overall Performance:</span>
               </div>
               <span className={`text-lg font-bold ${combinedPerformancePercentage >= 100 ? 'text-green-600' : 'text-orange-600'}`}>
                 {combinedPerformancePercentage.toFixed(2)}%
