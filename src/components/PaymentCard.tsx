@@ -43,7 +43,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
     setOverviewLoading(true);
     try {
       const startOfUTCTodayISO = getStartOfUTCDayISO();
-      const endOfUTCTodayISO = getEndOfUTCDayISO();
+      const endOfUTCTodayISO = getEndOfUTCDayISO(); // Correct variable name
 
       // 1. Fetch Total Pending Amount (all pending orders)
       const { data: allPendingOrders, error: allPendingError } = await supabase
@@ -56,33 +56,67 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       const totalPending = (allPendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
       setTotalPendingAmountOverview(totalPending);
 
-      // 2. Fetch Today's Due Payments (payments due today or earlier for pending orders)
-      // This now correctly excludes future-dated pending payments
-      const { data: todaysDueOrders, error: todaysDueError } = await supabase
+      // 2. Fetch Today's Due Payments
+      // This includes:
+      // a) Orders with payment_status = 'pending' AND payment_due_date <= today
+      // b) Payments with status = 'pending_approval' AND their order's payment_due_date <= today
+      let todaysDue = 0;
+
+      // a) Orders with payment_status = 'pending' AND payment_due_date <= today
+      const { data: todaysDuePendingOrders, error: todaysDuePendingError } = await supabase
         .from('orders')
         .select('total_amount')
         .eq('payment_status', 'pending')
-        .lte('payment_due_date', endOfUTCTodayISO); // Due today or earlier
+        .lte('payment_due_date', endOfUTCTodayISO); // Correct variable name
 
-      if (todaysDueError) throw todaysDueError;
+      if (todaysDuePendingError) throw todaysDuePendingError;
+      todaysDue += (todaysDuePendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
 
-      const todaysDue = (todaysDueOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
+      // b) Payments with status = 'pending_approval' AND their order's payment_due_date <= today
+      // We need to join payments with orders to get the payment_due_date
+      const { data: todaysDuePendingApprovalPayments, error: todaysDuePendingApprovalError } = await supabase
+        .from('payments')
+        .select('amount, orders(payment_due_date)')
+        .eq('status', 'pending_approval')
+        .lte('orders.payment_due_date', endOfUTCTodayISO); // Correct variable name
+
+      if (todaysDuePendingApprovalError) throw todaysDuePendingApprovalError;
+      todaysDue += (todaysDuePendingApprovalPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+
       setTodaysDueAmountOverview(todaysDue);
 
-      // 3. Fetch Today Received Payments (completed payments today, either by payment_date or approved_at)
-      // AND payments approved today (from pending_approval status)
-      const { data: todayReceivedPayments, error: todayReceivedError } = await supabase
+      // 3. Fetch Today Received Payments
+      // This includes:
+      // a) Payments with status = 'completed' AND (payment_date is today OR approved_at is today)
+      // b) Payments with status = 'pending_approval' AND approved_at is today (approved today)
+      let todayReceived = 0;
+
+      // a) Completed payments (paid today or approved today)
+      const { data: todayReceivedCompletedPayments, error: todayReceivedCompletedError } = await supabase
         .from('payments')
         .select('amount')
         .eq('status', 'completed')
+        // Fix: Correct variable names in the template string
         .or(`and(payment_date.gte.${startOfUTCTodayISO},payment_date.lte.${endOfUTCTodayISO}),and(approved_at.gte.${startOfUTCTodayISO},approved_at.lte.${endOfUTCTodayISO})`);
 
-      if (todayReceivedError) throw todayReceivedError;
+      if (todayReceivedCompletedError) throw todayReceivedCompletedError;
+      todayReceived += (todayReceivedCompletedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
 
-      const todayReceived = (todayReceivedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+      // b) Pending approval payments that were approved today
+      const { data: todayReceivedApprovedPayments, error: todayReceivedApprovedError } = await supabase
+        .from('payments')
+        .select('amount')
+        .eq('status', 'pending_approval')
+        .gte('approved_at', startOfUTCTodayISO)
+        // Fix: Correct variable name
+        .lte('approved_at', endOfUTCTodayISO);
+
+      if (todayReceivedApprovedError) throw todayReceivedApprovedError;
+      todayReceived += (todayReceivedApprovedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+
       setTodayReceivedAmountOverview(todayReceived);
 
-      // 4. Fetch Pending Approval Payments (new) - NOW FETCHING FROM PAYMENTS TABLE
+      // 4. Fetch Pending Approval Payments (total amount)
       const { data: pendingApprovalPayments, error: pendingApprovalError } = await supabase
         .from('payments')
         .select('amount')
