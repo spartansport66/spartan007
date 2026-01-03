@@ -52,22 +52,25 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .eq('payment_status', 'pending');
 
       if (allPendingError) throw allPendingError;
+
       const totalPending = (allPendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
       setTotalPendingAmountOverview(totalPending);
 
-      // 2. Fetch Today's Due Payments (payments due today)
+      // 2. Fetch Today's Due Payments (payments due today or earlier for pending orders)
+      // This now correctly excludes future-dated pending payments
       const { data: todaysDueOrders, error: todaysDueError } = await supabase
         .from('orders')
         .select('total_amount')
         .eq('payment_status', 'pending')
-        .gte('payment_due_date', startOfUTCTodayISO)
-        .lte('payment_due_date', endOfUTCTodayISO);
+        .lte('payment_due_date', endOfUTCTodayISO); // Due today or earlier
 
       if (todaysDueError) throw todaysDueError;
+
       const todaysDue = (todaysDueOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
       setTodaysDueAmountOverview(todaysDue);
 
       // 3. Fetch Today Received Payments (completed payments today, either by payment_date or approved_at)
+      // AND payments approved today (from pending_approval status)
       const { data: todayReceivedPayments, error: todayReceivedError } = await supabase
         .from('payments')
         .select('amount')
@@ -75,6 +78,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .or(`and(payment_date.gte.${startOfUTCTodayISO},payment_date.lte.${endOfUTCTodayISO}),and(approved_at.gte.${startOfUTCTodayISO},approved_at.lte.${endOfUTCTodayISO})`);
 
       if (todayReceivedError) throw todayReceivedError;
+
       const todayReceived = (todayReceivedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       setTodayReceivedAmountOverview(todayReceived);
 
@@ -85,6 +89,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .eq('status', 'pending_approval');
 
       if (pendingApprovalError) throw pendingApprovalError;
+
       const totalPendingApproval = (pendingApprovalPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       setPendingApprovalAmountOverview(totalPendingApproval);
 
@@ -94,7 +99,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       setTotalPendingAmountOverview(0);
       setTodaysDueAmountOverview(0);
       setTodayReceivedAmountOverview(0);
-      setPendingApprovalAmountOverview(0);
+      setPendingApprovalAmountOverview(0); // Reset new state on error
     } finally {
       setOverviewLoading(false);
     }
