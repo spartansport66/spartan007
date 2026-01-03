@@ -42,6 +42,7 @@ interface Product {
   price: number;
   stock: number;
   user_id: string;
+  has_sales: boolean; // Add this field
 }
 
 interface ProductTableManagerProps {
@@ -60,6 +61,9 @@ const formSchema = z.object({
     z.number().int().min(0, { message: 'Stock cannot be negative.' })
   ),
 });
+
+// IMPORTANT: Replace with the actual URL of your deployed Edge Function
+const UPDATE_PRODUCT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/update-product";
 
 const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductAction }) => {
   const { user, loading: sessionLoading, isAdmin } = useSession();
@@ -97,9 +101,19 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
     }
     setLoading(true);
     setError(null);
+
+    // Fetch products and check for sales count for each
     const { data, error } = await supabase
       .from('products')
-      .select('*');
+      .select(`
+        id,
+        name,
+        description,
+        price,
+        stock,
+        user_id,
+        sales(count) // Fetch count of sales for each product
+      `);
 
     if (error) {
       console.error('Error fetching products:', error);
@@ -107,7 +121,11 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
       showError(`Failed to load products: ${error.message}`);
       setProducts([]);
     } else {
-      setProducts(data || []);
+      const productsWithSalesStatus: Product[] = (data || []).map((p: any) => ({
+        ...p,
+        has_sales: (p.sales?.[0]?.count || 0) > 0, // Determine has_sales based on count
+      }));
+      setProducts(productsWithSalesStatus);
     }
     setLoading(false);
   }, [user]);
@@ -126,24 +144,38 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
   const handleUpdateProduct = async (values: z.infer<typeof formSchema>) => {
     if (!selectedProduct || !user) return;
 
-    const { error } = await supabase
-      .from('products')
-      .update({
+    try {
+      const payload = {
+        productId: selectedProduct.id,
         name: values.name,
         description: values.description,
         price: values.price,
         stock: values.stock,
-      })
-      .eq('id', selectedProduct.id);
+        userId: user.id, // Pass user ID for potential admin check in Edge Function
+      };
 
-    if (error) {
-      console.error('Error updating product:', error);
-      showError(`Failed to update product: ${error.message}`);
-    } else {
+      const response = await fetch(UPDATE_PRODUCT_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // No Authorization header needed here as Edge Function uses service_role_key
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update product');
+      }
+
       showSuccess('Product updated successfully!');
       setIsEditDialogOpen(false);
       fetchProducts();
       onProductAction?.(); // Notify parent
+    } catch (error: any) {
+      console.error('Error updating product:', error);
+      showError(`Failed to update product: ${error.message}`);
     }
   };
 
@@ -216,7 +248,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" title="Delete Product">
+                              <Button variant="ghost" size="icon" title="Delete Product" disabled={product.has_sales}>
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             </AlertDialogTrigger>
@@ -252,7 +284,11 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
               <DialogTitle>Edit Product</DialogTitle>
               <DialogDescription>
                 Make changes to the product here. Click save when you're done.
-                Note: Products with associated sales cannot be altered.
+                {selectedProduct.has_sales && (
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-2">
+                    Note: This product has associated sales. Only 'Stock' can be updated.
+                  </p>
+                )}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={form.handleSubmit(handleUpdateProduct)} className="grid gap-4 py-4">
@@ -260,28 +296,28 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <Label htmlFor="name" className="text-right">
                   Name
                 </Label>
-                <Input id="name" {...form.register('name')} className="col-span-3" />
+                <Input id="name" {...form.register('name')} className="col-span-3" disabled={selectedProduct.has_sales} />
                 {form.formState.errors.name && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.name.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="description" className="text-right">
                   Description
                 </Label>
-                <Textarea id="description" {...form.register('description')} className="col-span-3" />
+                <Textarea id="description" {...form.register('description')} className="col-span-3" disabled={selectedProduct.has_sales} />
                 {form.formState.errors.description && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.description.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="price" className="text-right">
                   Price
                 </Label>
-                <Input id="price" type="number" step="0.01" {...form.register('price')} className="col-span-3" />
+                <Input id="price" type="number" step="0.01" {...form.register('price')} className="col-span-3" disabled={selectedProduct.has_sales} />
                 {form.formState.errors.price && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.price.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="stock" className="text-right">
                   Stock
                 </Label>
-                <Input id="stock" type="number" {...form.register('stock')} className="col-span-3" />
+                <Input id="stock" type="number" {...form.register('stock')} className="col-span-3" /> {/* Stock is always editable */}
                 {form.formState.errors.stock && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.stock.message}</p>}
               </div>
               <DialogFooter>
