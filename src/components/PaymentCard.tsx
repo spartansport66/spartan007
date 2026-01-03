@@ -45,6 +45,9 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO(); // Correct variable name
 
+      console.log("DEBUG: Calculated Start of UTC Today:", startOfUTCTodayISO);
+      console.log("DEBUG: Calculated End of UTC Today:", endOfUTCTodayISO);
+
       // 1. Fetch Total Pending Amount (all pending orders)
       const { data: allPendingOrders, error: allPendingError } = await supabase
         .from('orders')
@@ -56,17 +59,23 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       const totalPending = (allPendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
       setTotalPendingAmountOverview(totalPending);
 
-      // 2. Fetch Today's Due Payments (orders where payment_status is 'pending_approval' AND payment_due_date is *today*)
+      // 2. Fetch Today's Due Payments (orders where payment_due_date is *today*, regardless of payment_status)
+      console.log("DEBUG: Fetching orders due today...");
       const { data: todaysDueOrders, error: todaysDueError } = await supabase
         .from('orders')
-        .select('total_amount')
-        .eq('payment_status', 'pending_approval')
+        .select('id, order_number, total_amount, payment_due_date, payment_status') // Select more fields for debugging
         .gte('payment_due_date', startOfUTCTodayISO) // Due *today* or later
         .lte('payment_due_date', endOfUTCTodayISO); // AND due *today* or earlier (to ensure it's *exactly* today)
 
-      if (todaysDueError) throw todaysDueError;
+      console.log("DEBUG: Todays Due Query - Start:", startOfUTCTodayISO, "End:", endOfUTCTodayISO);
+      if (todaysDueError) {
+        console.error("DEBUG: Error fetching today's due orders:", todaysDueError.message);
+        throw todaysDueError;
+      }
+      console.log("DEBUG: Raw data for today's due orders:", todaysDueOrders);
 
       const todaysDue = (todaysDueOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
+      console.log("DEBUG: Calculated Today's Due Amount:", todaysDue);
       setTodaysDueAmountOverview(todaysDue);
 
       // 3. Fetch Today Received Payments
@@ -153,7 +162,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-orange-600" />
-                <span className="text-muted-foreground">Today's Due (Pending Approval):</span> {/* Clarified label */}
+                <span className="text-muted-foreground">Today's Due:</span>
               </div>
               <span className="text-lg font-bold text-orange-600">₹{todaysDueAmountOverview.toFixed(2)}</span>
             </div>
@@ -167,7 +176,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
             <div className="flex items-center justify-between"> {/* New: Pending Approval */}
               <div className="flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-yellow-600" />
-                <span className="text-muted-foreground">Total Pending Approval:</span> {/* Clarified label */}
+                <span className="text-muted-foreground">Pending Approval:</span>
               </div>
               <span className="text-lg font-bold text-yellow-600">₹{pendingApprovalAmountOverview.toFixed(2)}</span>
             </div>
