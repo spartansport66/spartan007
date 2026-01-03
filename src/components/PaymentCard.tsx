@@ -74,7 +74,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .from('orders')
         .select('id, order_number, total_amount, payment_due_date, payment_status')
         .gte('payment_due_date', startOfUTCTodayISO)
-        .lte('payment_due_date', endOfUTCDayISO);
+        .lte('payment_due_date', endOfUTCTodayISO);
 
       if (allOrdersDueTodayError) {
         console.error("DEBUG: Error fetching ALL orders due today:", allOrdersDueTodayError.message);
@@ -95,7 +95,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .from('orders')
         .select('id, order_number, total_amount, payment_due_date, payment_status') // Include more fields for debugging
         .gte('payment_due_date', startOfUTCTodayISO)
-        .lte('payment_due_date', endOfUTCDayISO)
+        .lte('payment_due_date', endOfUTCTodayISO)
         .in('payment_status', ['pending', 'pending_approval']);
 
       if (todaysDueError) {
@@ -116,7 +116,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .from('payments')
         .select('amount')
         .eq('status', 'completed')
-        .or(`and(payment_date.gte.${startOfUTCTodayISO},payment_date.lte.${endOfUTCDayISO}),and(approved_at.gte.${startOfUTCTodayISO},approved_at.lte.${endOfUTCDayISO})`);
+        .or(`and(payment_date.gte.${startOfUTCTodayISO},payment_date.lte.${endOfUTCTodayISO}),and(approved_at.gte.${startOfUTCTodayISO},approved_at.lte.${endOfUTCTodayISO})`);
 
       if (todayReceivedCompletedError) {
         console.error("DEBUG: Error fetching Today Received Payments (completed):", todayReceivedCompletedError.message);
@@ -130,7 +130,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .select('amount')
         .eq('status', 'pending_approval')
         .gte('approved_at', startOfUTCTodayISO)
-        .lte('approved_at', endOfUTCDayISO);
+        .lte('approved_at', endOfUTCTodayISO);
 
       if (todayReceivedApprovedError) {
         console.error("DEBUG: Error fetching Today Received Payments (approved):", todayReceivedApprovedError.message);
