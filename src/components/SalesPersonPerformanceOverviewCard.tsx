@@ -6,12 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Loader2, TrendingUp, Target, Activity, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
-import { User } from '@supabase/supabase-js'; // Import User type
-
-// Extend the User type to include banned_until
-interface UserWithBannedUntil extends User {
-  banned_until: string | null;
-}
 
 interface SalesPersonPerformanceOverviewCardProps {
   onViewDetails: () => void;
@@ -46,9 +40,9 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       }
 
       const salesPersonIds = salesProfiles.map(p => p.id);
+      setActiveSalesmenCount(salesPersonIds.length); // Count all sales_person profiles as active for overview
 
       if (salesPersonIds.length === 0) {
-        setActiveSalesmenCount(0);
         setCombinedAchievedSales(0);
         setCombinedTargetAmount(0);
         setCombinedPerformancePercentage(0);
@@ -56,42 +50,13 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
         return;
       }
 
-      // 2. Fetch auth.users data for these sales persons to check banned status
-      let activeSalesmenCount = 0;
-      for (const profile of salesProfiles) {
-        const { data: authUserResponse, error: authError } = await supabase.auth.admin.getUserById(profile.id);
-        
-        if (authError) {
-          console.error(`Error fetching auth user ${profile.id}:`, authError.message);
-          continue;
-        }
-        
-        // Type assertion to access banned_until
-        const user = authUserResponse.user as UserWithBannedUntil;
-        console.log(`User ${user.id} data:`, user);
-        
-        // Check if user is active:
-        // - email_confirmed_at should exist (email confirmed)
-        // - banned_until should be null or in the past
-        const isEmailConfirmed = !!user.email_confirmed_at;
-        const isNotBanned = !user.banned_until || new Date(user.banned_until) < new Date();
-        
-        console.log(`User ${user.id} - Email confirmed: ${isEmailConfirmed}, Not banned: ${isNotBanned}`);
-        
-        if (isEmailConfirmed && isNotBanned) {
-          activeSalesmenCount++;
-        }
-      }
-      
-      setActiveSalesmenCount(activeSalesmenCount);
-      console.log('Final active salesmen count:', activeSalesmenCount);
-
-      // 3. Fetch total sales for the current month across all sales persons
+      // 2. Fetch total sales for the current month across all sales persons
       const { data: salesData, error: salesError } = await supabase
         .from('sales')
-        .select('total_price')
+        .select('total_price, orders(user_id)')
         .gte('sale_date', startOfMonth)
-        .lte('sale_date', endOfMonth);
+        .lte('sale_date', endOfMonth)
+        .in('orders.user_id', salesPersonIds); // Filter sales to only include those by actual sales persons
 
       if (salesError) {
         throw new Error(`Failed to fetch sales data: ${salesError.message}`);
@@ -100,11 +65,12 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       const achievedSales = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
       setCombinedAchievedSales(achievedSales);
 
-      // 4. Fetch total targets for the current month across all sales persons
+      // 3. Fetch total targets for the current month across all sales persons
       const { data: targetsData, error: targetsError } = await supabase
         .from('sales_targets')
         .select('target_amount')
-        .eq('target_month', targetMonthFilterDate);
+        .eq('target_month', targetMonthFilterDate)
+        .in('sales_person_id', salesPersonIds); // Filter targets to only include those for actual sales persons
 
       if (targetsError) {
         throw new Error(`Failed to fetch targets data: ${targetsError.message}`);
@@ -135,20 +101,20 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
     fetchPerformanceOverview();
   }, [fetchPerformanceOverview]);
 
-  const getMonthName = (monthNum: number) => {
-    const date = new Date(Date.UTC(2000, monthNum - 1, 1));
+  const getMonthName = (monthIndex: number) => {
+    const date = new Date(Date.UTC(2000, monthIndex, 1));
     return date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
   };
 
-  const currentMonthName = getMonthName(new Date().getMonth() + 1);
+  const currentMonthName = getMonthName(new Date().getMonth());
   const currentYear = new Date().getFullYear();
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-purple-500 dark:bg-purple-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">Sales Person Performance</CardTitle>
+        <CardTitle className="text-xl font-semibold">Sales Person Performance Overview</CardTitle>
         <CardDescription className="text-purple-100 dark:text-purple-200">
-          Overview for {currentMonthName} {currentYear}
+          Combined performance for {currentMonthName} {currentYear}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4">
