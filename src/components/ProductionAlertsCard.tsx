@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 interface ProductionAlert {
   id: string;
@@ -114,7 +114,7 @@ const ProductionAlertsCard: React.FC = () => {
         new Date(alert.created_at).toLocaleString(),
       ]);
 
-      (doc as any).autoTable({
+      autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
         startY: 40,
