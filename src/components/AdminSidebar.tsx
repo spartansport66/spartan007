@@ -33,11 +33,18 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
     icon: React.ReactNode;
     label: string;
     onClick: () => void;
-    variant?: "default" | "secondary" | "outline" | "ghost" | "link" | "destructive";
-    className?: string;
-  }> = ({ icon, label, onClick, variant = "ghost", className }) => (
+    className?: string; // Removed variant prop
+  }> = ({ icon, label, onClick, className }) => (
     <SheetClose asChild>
-      <Button variant={variant} onClick={onClick} className={cn("w-full justify-start gap-2", className)}>
+      <Button
+        onClick={onClick}
+        className={cn(
+          "w-full justify-start gap-2",
+          "bg-white text-black hover:bg-gray-100", // Enforce white background, black text, and subtle hover
+          "dark:bg-white dark:text-black dark:hover:bg-gray-100", // Dark mode override for fixed colors
+          className // Merge any additional custom classes
+        )}
+      >
         {icon}
         {label}
       </Button>
@@ -55,8 +62,6 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         icon={<Gift className="h-4 w-4" />}
         label="Manage Combo Offers"
         onClick={() => navigate('/combo-offers-dashboard')}
-        variant="default"
-        className="bg-purple-600 hover:bg-purple-700 text-white"
       />
       <NavButton
         icon={<Boxes className="h-4 w-4" />}
@@ -67,19 +72,22 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         icon={<Building className="h-4 w-4" />}
         label="Manage Dealers"
         onClick={() => navigate('/manage-dealers')}
-        variant="secondary"
       />
       <NavButton
         icon={<UserCog className="h-4 w-4" />}
         label="Manage Users"
         onClick={() => navigate('/manage-users')}
-        variant="outline"
-        className="text-purple-600 dark:text-purple-400"
       />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-full justify-start gap-2 text-blue-600 dark:text-blue-400">
+          <Button
+            className={cn(
+              "w-full justify-start gap-2",
+              "bg-white text-black hover:bg-gray-100", // Apply fixed styles to dropdown trigger
+              "dark:bg-white dark:text-black dark:hover:bg-gray-100"
+            )}
+          >
             <FileText className="h-4 w-4" />
             Reports
           </Button>
@@ -119,14 +127,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         icon={<Info className="h-4 w-4" />}
         label="Company Information"
         onClick={() => setIsCompanyInfoDialogOpen(true)}
-        variant="outline"
-        className="text-green-600 dark:text-green-400"
       />
       <NavButton
         icon={<LogOut className="h-4 w-4" />}
         label="Logout"
         onClick={handleLogout}
-        variant="destructive"
       />
     </div>
   );
