@@ -92,8 +92,10 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
           total_price,
           sale_date,
           products (name, price),
-          orders (
+          orders!inner ( // Use !inner to ensure the join is always performed and filter applies
             order_number,
+            dealer_id, // Select dealer_id for filtering
+            user_id, // Select user_id for filtering
             dealers (name),
             profiles (first_name, last_name)
           )
@@ -102,10 +104,11 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
 
       // Apply filters
       if (filterSalesPersonId) {
-        query = query.eq('orders.user_id', filterSalesPersonId);
+        // Apply filter directly on the orders relation
+        query = query.filter('orders.user_id', 'eq', filterSalesPersonId);
       }
       if (filterDealerId) {
-        query = query.eq('orders.dealer_id', filterDealerId);
+        query = query.filter('orders.dealer_id', 'eq', filterDealerId);
       }
       if (filterProductId) {
         query = query.eq('product_id', filterProductId);
