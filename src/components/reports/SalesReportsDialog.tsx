@@ -61,12 +61,32 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
       if (profilesError) throw profilesError;
       setAllSalesPersons((profilesData || []).map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name}` })));
 
-      // Fetch dealers
-      const { data: dealersData, error: dealersError } = await supabase
+      // Fetch dealers dynamically based on selected sales person
+      let dealersQuery = supabase
         .from('dealers')
         .select('id, name');
-      if (dealersError) throw dealersError;
-      setAllDealers((dealersData || []).map(d => ({ value: d.id, label: d.name })));
+
+      if (filterSalesPersonId) {
+        // If a sales person is selected, only show dealers assigned to them
+        dealersQuery = supabase
+          .from('dealer_sales_persons')
+          .select('dealers(id, name)')
+          .eq('sales_person_id', filterSalesPersonId);
+      }
+
+      const { data: dealersData, error: dealersError } = await dealersQuery;
+
+      if (dealersError) {
+        console.error('Error fetching dealers for filter:', dealersError.message);
+        showError('Failed to load dealers for filter.');
+        setAllDealers([]);
+      } else {
+        // Map data correctly based on whether it came from 'dealers' or 'dealer_sales_persons'
+        const formattedDealers = filterSalesPersonId
+          ? (dealersData || []).map((item: any) => ({ value: item.dealers.id, label: item.dealers.name }))
+          : (dealersData || []).map((d: any) => ({ value: d.id, label: d.name }));
+        setAllDealers(formattedDealers);
+      }
 
       // Fetch products
       const { data: productsData, error: productsError } = await supabase
@@ -79,7 +99,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
       console.error('Error fetching filter options:', error.message);
       showError('Failed to load filter options.');
     }
-  }, []);
+  }, [filterSalesPersonId]); // Re-run when filterSalesPersonId changes
 
   const fetchSalesData = useCallback(async () => {
     setLoading(true);
@@ -223,7 +243,10 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
         <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterSalesPerson" className="text-foreground font-medium">Sales Person</Label>
-            <Select value={filterSalesPersonId || "all"} onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}>
+            <Select value={filterSalesPersonId || "all"} onValueChange={(value) => {
+              setFilterSalesPersonId(value === "all" ? "" : value);
+              setFilterDealerId(""); // Reset dealer filter when sales person changes
+            }}>
               <SelectTrigger id="filterSalesPerson" className="w-full">
                 <SelectValue placeholder="All Sales Persons" />
               </SelectTrigger>
