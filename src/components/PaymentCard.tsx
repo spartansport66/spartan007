@@ -56,29 +56,31 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       const totalPending = (allPendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
       setTotalPendingAmountOverview(totalPending);
 
-      // 2. Fetch Today's Due Payments
+      // 2. Fetch Today's Due Payments (only payments due *today*)
       // This includes:
-      // a) Orders with payment_status = 'pending' AND payment_due_date <= today
-      // b) Payments with status = 'pending_approval' AND their order's payment_due_date <= today
+      // a) Orders with payment_status = 'pending' AND payment_due_date is *today*
+      // b) Payments with status = 'pending_approval' AND their order's payment_due_date is *today*
       let todaysDue = 0;
 
-      // a) Orders with payment_status = 'pending' AND payment_due_date <= today
+      // a) Orders with payment_status = 'pending' AND payment_due_date is *today*
       const { data: todaysDuePendingOrders, error: todaysDuePendingError } = await supabase
         .from('orders')
         .select('total_amount')
         .eq('payment_status', 'pending')
-        .lte('payment_due_date', endOfUTCTodayISO); // Correct variable name
+        .gte('payment_due_date', startOfUTCTodayISO) // Due *today* or later
+        .lte('payment_due_date', endOfUTCTodayISO); // AND due *today* or earlier (to ensure it's *exactly* today)
 
       if (todaysDuePendingError) throw todaysDuePendingError;
       todaysDue += (todaysDuePendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
 
-      // b) Payments with status = 'pending_approval' AND their order's payment_due_date <= today
+      // b) Payments with status = 'pending_approval' AND their order's payment_due_date is *today*
       // We need to join payments with orders to get the payment_due_date
       const { data: todaysDuePendingApprovalPayments, error: todaysDuePendingApprovalError } = await supabase
         .from('payments')
         .select('amount, orders(payment_due_date)')
         .eq('status', 'pending_approval')
-        .lte('orders.payment_due_date', endOfUTCTodayISO); // Correct variable name
+        .gte('orders.payment_due_date', startOfUTCTodayISO) // Due *today* or later
+        .lte('orders.payment_due_date', endOfUTCTodayISO); // AND due *today* or earlier (to ensure it's *exactly* today)
 
       if (todaysDuePendingApprovalError) throw todaysDuePendingApprovalError;
       todaysDue += (todaysDuePendingApprovalPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
@@ -116,7 +118,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
 
       setTodayReceivedAmountOverview(todayReceived);
 
-      // 4. Fetch Pending Approval Payments (total amount)
+      // 4. Fetch Pending Approval Payments (total amount, regardless of due date)
       const { data: pendingApprovalPayments, error: pendingApprovalError } = await supabase
         .from('payments')
         .select('amount')
