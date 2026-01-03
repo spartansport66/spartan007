@@ -4,9 +4,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { showError } from '@/utils/toast';
+import { showError, showSuccess } from '@/utils/toast';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 interface ProductionAlert {
   id: string;
@@ -93,6 +95,52 @@ const ProductionAlertsCard: React.FC = () => {
     };
   }, [fetchAlerts]);
 
+  const handlePrint = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait'
+      });
+      
+      doc.setFontSize(18);
+      doc.text("Production Alerts Report", 14, 22);
+      doc.setFontSize(11);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
+
+      const tableColumn = ["Product Name", "Required Quantity", "Alerted At"];
+      const tableRows = alerts.map(alert => [
+        alert.product_name,
+        alert.required_quantity.toString(),
+        new Date(alert.created_at).toLocaleString(),
+      ]);
+
+      (doc as any).autoTable({
+        head: [tableColumn],
+        body: tableRows,
+        startY: 40,
+        styles: {
+          fontSize: 10
+        },
+        headStyles: {
+          fillColor: [249, 115, 22], // Orange color to match the card header
+          textColor: [255, 255, 255]
+        },
+        margin: { top: 25, left: 10, right: 10 },
+        columnStyles: {
+          0: { cellWidth: 'auto' }, // Product Name
+          1: { cellWidth: 40, halign: 'right' }, // Required Quantity
+          2: { cellWidth: 'auto' }, // Alerted At
+        }
+      });
+
+      doc.save('production_alerts_report.pdf');
+      showSuccess('Production alerts report generated successfully!');
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      showError(`Failed to generate production alerts report: ${error.message || 'An unknown error occurred.'}`);
+    }
+  };
+
   if (loading) {
     return (
       <Card className="bg-card text-card-foreground shadow-lg h-full">
@@ -113,10 +161,23 @@ const ProductionAlertsCard: React.FC = () => {
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-orange-500 dark:bg-orange-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">Production Alerts</CardTitle>
-        <CardDescription className="text-orange-100 dark:text-orange-200">
-          Urgent material requirements from sales orders. ({alerts.length} pending)
-        </CardDescription>
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle className="text-xl font-semibold">Production Alerts</CardTitle>
+            <CardDescription className="text-orange-100 dark:text-orange-200">
+              Urgent material requirements from sales orders. ({alerts.length} pending)
+            </CardDescription>
+          </div>
+          <Button 
+            variant="secondary" 
+            size="sm" 
+            onClick={handlePrint}
+            disabled={alerts.length === 0}
+            className="flex items-center gap-1"
+          >
+            <Printer className="h-4 w-4" /> Print
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-4">
         <div className="overflow-x-auto">
