@@ -18,13 +18,6 @@ interface Product {
   stock: number;
 }
 
-// Define interface for stock update objects
-interface ProductStockUpdate {
-  id: string;
-  stock: number; // The new calculated stock
-  previous_stock: number; // The stock before this order
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -65,9 +58,8 @@ serve(async (req) => {
     const productMap = new Map(products.map(p => [p.id, p]));
     let totalOrderAmount = 0;
     const salesToInsert = [];
-    const productsToUpdateStock: ProductStockUpdate[] = []; // Explicitly type the array
 
-    // First, calculate total order amount and prepare sales items and stock updates
+    // First, calculate total order amount and prepare sales items
     for (const item of orderItems) {
       const product = productMap.get(item.product_id) as Product;
       if (!product) {
@@ -82,13 +74,6 @@ serve(async (req) => {
         product_id: item.product_id,
         quantity: item.quantity,
         total_price: itemTotalPrice,
-      });
-
-      // Prepare stock update for this product
-      productsToUpdateStock.push({
-        id: product.id,
-        stock: product.stock - item.quantity, // Calculate new stock level
-        previous_stock: product.stock // Store previous stock for alert logic
       });
     }
 
@@ -176,8 +161,6 @@ serve(async (req) => {
       .insert(salesWithOrderId);
 
     if (salesInsertError) {
-      // In a real transaction, we would roll back the order here.
-      // For now, we'll just log and return an error.
       console.error('Failed to insert sales items, order might be partially created:', salesInsertError.message);
       throw new Error(`Failed to insert sales items: ${salesInsertError.message}`);
     }
@@ -214,26 +197,40 @@ serve(async (req) => {
     const productionAlertsToUpsert = [];
     const productionAlertsToResolve = [];
 
-    // Perform all stock updates first, and get the *final* stock levels
-    const { data: updatedProductsData, error: bulkStockUpdateError } = await supabaseAdmin
-      .from('products')
-      .upsert(productsToUpdateStock.map(p => ({ id: p.id, stock: p.stock })), { onConflict: 'id' })
-      .select('id, stock'); // Select the *final* stock after all updates
+    for (const item of orderItems) {
+      const productId = item.product_id;
+      const quantitySold = item.quantity;
 
-    if (bulkStockUpdateError) {
-      console.error('Failed to bulk update product stock:', bulkStockUpdateError.message);
-      throw new Error(`Failed to update product stock: ${bulkStockUpdateError.message}`);
-    }
+      // Atomically update stock and get the *new* stock value
+      // Use a transaction-like approach to ensure we get the latest stock before updating
+      const { data: currentProduct, error: fetchProductError } = await supabaseAdmin
+        .from('products')
+        .select('stock')
+        .eq('id', productId)
+        .single();
 
-    const finalStockMap = new Map(updatedProductsData.map(p => [p.id, p.stock]));
+      if (fetchProductError) {
+        console.error(`Failed to fetch current stock for product ${productId}: ${fetchProductError.message}`);
+        throw new Error(`Failed to fetch current stock for product ${productId}: ${fetchProductError.message}`);
+      }
 
-    // Now, manage production alerts based on the *final* stock levels
-    for (const productUpdate of productsToUpdateStock) {
-      const productId = productUpdate.id;
-      // Ensure finalStockLevel is treated as a number
-      const finalStockLevel = (finalStockMap.get(productId) || 0) as number; 
+      const previousStock = currentProduct.stock;
+      const newStockLevel = previousStock - quantitySold;
 
-      if (finalStockLevel < 0) {
+      const { data: updatedProduct, error: stockUpdateError } = await supabaseAdmin
+        .from('products')
+        .update({ stock: newStockLevel })
+        .eq('id', productId)
+        .select('id, stock') // Select the new stock value
+        .single();
+
+      if (stockUpdateError) {
+        console.error(`Failed to update stock for product ${productId}: ${stockUpdateError.message}`);
+        throw new Error(`Failed to update stock for product ${productId}: ${stockUpdateError.message}`);
+      }
+
+      // Now, manage production alerts based on the *actual* new stock level
+      if (updatedProduct.stock < 0) {
         // If final stock is negative, ensure an alert exists and reflects the total deficit
         const { data: existingAlert, error: fetchAlertError } = await supabaseAdmin
           .from('production_alerts')
@@ -247,12 +244,13 @@ serve(async (req) => {
           // Continue, but log the error
         }
 
+        const newRequiredQuantity = Math.abs(updatedProduct.stock);
         if (existingAlert) {
           // Update existing alert with the new total required quantity
           const { error: updateAlertError } = await supabaseAdmin
             .from('production_alerts')
             .update({
-              required_quantity: Math.abs(finalStockLevel),
+              required_quantity: newRequiredQuantity,
               created_by: userId, // Update with latest requester
               dealer_id: dealerId, // Update with latest dealer
               created_at: new Date().toISOString(), // Update timestamp
@@ -268,7 +266,7 @@ serve(async (req) => {
             .from('production_alerts')
             .insert({
               product_id: productId,
-              required_quantity: Math.abs(finalStockLevel),
+              required_quantity: newRequiredQuantity,
               created_by: userId,
               dealer_id: dealerId,
               resolved: false,
@@ -278,8 +276,8 @@ serve(async (req) => {
             console.error(`Failed to insert new production alert for product ${productId}:`, insertAlertError.message);
           }
         }
-      } else if (productUpdate.previous_stock < 0 && finalStockLevel >= 0) {
-        // If stock was negative and is now non-negative, resolve existing alerts
+      } else if (previousStock < 0 && updatedProduct.stock >= 0) {
+        // If stock was negative before this order and is now non-negative, resolve existing alerts
         const { error: resolveAlertsError } = await supabaseAdmin
           .from('production_alerts')
           .update({ resolved: true })
