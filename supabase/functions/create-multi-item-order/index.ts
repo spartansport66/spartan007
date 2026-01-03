@@ -59,6 +59,8 @@ serve(async (req) => {
     let totalOrderAmount = 0;
     const salesToInsert = [];
     const stockUpdates = [];
+    const productionAlertsToUpsert = []; // New array for alerts
+    const productionAlertsToResolve = []; // New array for resolving alerts
 
     for (const item of orderItems) {
       const product = productMap.get(item.product_id) as Product; // Type assertion
@@ -90,6 +92,22 @@ serve(async (req) => {
         id: product.id,
         new_stock: newStockLevel, // This can be negative
       });
+
+      // --- NEW PRODUCTION ALERT LOGIC ---
+      if (newStockLevel < 0) {
+        // If stock goes negative, prepare to create/update an alert
+        productionAlertsToUpsert.push({
+          product_id: product.id,
+          required_quantity: Math.abs(newStockLevel),
+          created_by: userId, // Direct from order context
+          dealer_id: dealerId, // Direct from order context
+          resolved: false,
+          created_at: new Date().toISOString(), // Ensure timestamp is set
+        });
+      } else if (newStockLevel >= 0 && product.stock < 0) { // If stock was negative and now is non-negative
+        // Prepare to resolve existing alerts for this product
+        productionAlertsToResolve.push(product.id);
+      }
     }
 
     // 2. Fetch dealer credit limit (monthly or general) and current balance
@@ -227,6 +245,32 @@ serve(async (req) => {
         // We will still throw an error, but the order and sales items are already created.
         // Stock might be partially updated. This is a limitation of not having true DB transactions here.
         throw new Error(`Failed to update stock for product ${update.id}: ${stockUpdateError.message}`);
+      }
+    }
+
+    // 7. Insert/Update Production Alerts directly from Edge Function
+    if (productionAlertsToUpsert.length > 0) {
+      const { error: upsertAlertsError } = await supabaseAdmin
+        .from('production_alerts')
+        .upsert(productionAlertsToUpsert, { onConflict: 'product_id, resolved' }); // Upsert based on product_id and resolved status
+
+      if (upsertAlertsError) {
+        console.error('Failed to upsert production alerts:', upsertAlertsError.message);
+        // This is a non-critical error, but we should log it.
+      }
+    }
+
+    // 8. Resolve Production Alerts directly from Edge Function
+    if (productionAlertsToResolve.length > 0) {
+      const { error: resolveAlertsError } = await supabaseAdmin
+        .from('production_alerts')
+        .update({ resolved: true })
+        .in('product_id', productionAlertsToResolve)
+        .eq('resolved', false); // Only resolve currently unresolved alerts
+
+      if (resolveAlertsError) {
+        console.error('Failed to resolve production alerts:', resolveAlertsError.message);
+        // This is a non-critical error, but we should log it.
       }
     }
 
