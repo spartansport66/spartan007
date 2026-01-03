@@ -42,23 +42,29 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
   };
 
   const fetchPaymentOverviewData = useCallback(async () => {
+    console.log("DEBUG: fetchPaymentOverviewData called");
     setOverviewLoading(true);
     try {
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO();
 
-      console.log("DEBUG: Calculated Start of UTC Today (ISO):", startOfUTCTodayISO);
-      console.log("DEBUG: Calculated End of UTC Today (ISO):", endOfUTCTodayISO);
+      console.log("DEBUG: Start of UTC Today:", startOfUTCTodayISO);
+      console.log("DEBUG: End of UTC Today:", endOfUTCTodayISO);
 
       // 1. Fetch Total Pending Amount (all pending orders)
+      console.log("DEBUG: Fetching Total Pending Amount...");
       const { data: allPendingOrders, error: allPendingError } = await supabase
         .from('orders')
         .select('total_amount')
         .eq('payment_status', 'pending');
 
-      if (allPendingError) throw allPendingError;
+      if (allPendingError) {
+        console.error("DEBUG: Error fetching Total Pending Amount:", allPendingError.message);
+        throw allPendingError;
+      }
 
       const totalPending = (allPendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
+      console.log("DEBUG: Total Pending Amount:", totalPending);
       setTotalPendingAmountOverview(totalPending);
 
       // --- Enhanced Debugging for Today's Due ---
@@ -68,7 +74,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .from('orders')
         .select('id, order_number, total_amount, payment_due_date, payment_status')
         .gte('payment_due_date', startOfUTCTodayISO)
-        .lte('payment_due_date', endOfUTCTodayISO);
+        .lte('payment_due_date', endOfUTCDayISO);
 
       if (allOrdersDueTodayError) {
         console.error("DEBUG: Error fetching ALL orders due today:", allOrdersDueTodayError.message);
@@ -77,6 +83,8 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         if (allOrdersDueToday && allOrdersDueToday.length > 0) {
            console.log("DEBUG: Sample order payment_due_date:", allOrdersDueToday[0].payment_due_date);
            console.log("DEBUG: Sample order payment_status:", allOrdersDueToday[0].payment_status);
+        } else {
+            console.log("DEBUG: No orders found due today at all.");
         }
       }
       // --- End Enhanced Debugging ---
@@ -87,7 +95,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
         .from('orders')
         .select('id, order_number, total_amount, payment_due_date, payment_status') // Include more fields for debugging
         .gte('payment_due_date', startOfUTCTodayISO)
-        .lte('payment_due_date', endOfUTCTodayISO)
+        .lte('payment_due_date', endOfUTCDayISO)
         .in('payment_status', ['pending', 'pending_approval']);
 
       if (todaysDueError) {
@@ -101,38 +109,51 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       setTodaysDueAmountOverview(todaysDue);
 
       // 3. Fetch Today Received Payments
+      console.log("DEBUG: Fetching Today Received Payments...");
       let todayReceived = 0;
 
       const { data: todayReceivedCompletedPayments, error: todayReceivedCompletedError } = await supabase
         .from('payments')
         .select('amount')
         .eq('status', 'completed')
-        .or(`and(payment_date.gte.${startOfUTCTodayISO},payment_date.lte.${endOfUTCTodayISO}),and(approved_at.gte.${startOfUTCTodayISO},approved_at.lte.${endOfUTCTodayISO})`);
+        .or(`and(payment_date.gte.${startOfUTCTodayISO},payment_date.lte.${endOfUTCDayISO}),and(approved_at.gte.${startOfUTCTodayISO},approved_at.lte.${endOfUTCDayISO})`);
 
-      if (todayReceivedCompletedError) throw todayReceivedCompletedError;
+      if (todayReceivedCompletedError) {
+        console.error("DEBUG: Error fetching Today Received Payments (completed):", todayReceivedCompletedError.message);
+        throw todayReceivedCompletedError;
+      }
       todayReceived += (todayReceivedCompletedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+      console.log("DEBUG: Today Received from completed payments:", todayReceived);
 
       const { data: todayReceivedApprovedPayments, error: todayReceivedApprovedError } = await supabase
         .from('payments')
         .select('amount')
         .eq('status', 'pending_approval')
         .gte('approved_at', startOfUTCTodayISO)
-        .lte('approved_at', endOfUTCTodayISO);
+        .lte('approved_at', endOfUTCDayISO);
 
-      if (todayReceivedApprovedError) throw todayReceivedApprovedError;
+      if (todayReceivedApprovedError) {
+        console.error("DEBUG: Error fetching Today Received Payments (approved):", todayReceivedApprovedError.message);
+        throw todayReceivedApprovedError;
+      }
       todayReceived += (todayReceivedApprovedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
-
+      console.log("DEBUG: Today Received total:", todayReceived);
       setTodayReceivedAmountOverview(todayReceived);
 
       // 4. Fetch Pending Approval Payments (total amount, regardless of due date)
+      console.log("DEBUG: Fetching Pending Approval Payments...");
       const { data: pendingApprovalPayments, error: pendingApprovalError } = await supabase
         .from('payments')
         .select('amount')
         .eq('status', 'pending_approval');
 
-      if (pendingApprovalError) throw pendingApprovalError;
+      if (pendingApprovalError) {
+        console.error("DEBUG: Error fetching Pending Approval Payments:", pendingApprovalError.message);
+        throw pendingApprovalError;
+      }
 
       const totalPendingApproval = (pendingApprovalPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+      console.log("DEBUG: Pending Approval Amount:", totalPendingApproval);
       setPendingApprovalAmountOverview(totalPendingApproval);
 
     } catch (error: any) {
@@ -143,11 +164,13 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       setTodayReceivedAmountOverview(0);
       setPendingApprovalAmountOverview(0);
     } finally {
+      console.log("DEBUG: Finished fetching payment overview data.");
       setOverviewLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    console.log("DEBUG: PaymentCard useEffect triggered");
     fetchPaymentOverviewData();
   }, [fetchPaymentOverviewData]);
 
