@@ -1,6 +1,5 @@
 // @ts-ignore
 /// <reference lib="deno.ns" />
-
 // @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 // @ts-ignore
@@ -41,11 +40,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Start a transaction (Supabase client doesn't directly support transactions in Edge Functions,
-    // so we'll simulate it by performing checks and then inserts/updates, relying on RLS and database constraints).
-    // For true atomicity, a stored procedure would be ideal, but this is a common pattern for simple cases.
-
-    // 1. Fetch product details and check stock
+    // 1. Fetch product details (no stock check here anymore)
     const productIds = orderItems.map((item: any) => item.product_id);
     const { data: products, error: productsError } = await supabaseAdmin
       .from('products')
@@ -55,6 +50,7 @@ serve(async (req) => {
     if (productsError) {
       throw new Error(`Failed to fetch product details: ${productsError.message}`);
     }
+
     if (!products || products.length !== productIds.length) {
       throw new Error('One or more products not found.');
     }
@@ -69,12 +65,15 @@ serve(async (req) => {
       if (!product) {
         throw new Error(`Product with ID ${item.product_id} not found.`);
       }
+
       if (item.quantity <= 0) {
         throw new Error(`Invalid quantity for product ${product.name}.`);
       }
-      if (item.quantity > product.stock) {
-        throw new Error(`Not enough stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}`);
-      }
+
+      // --- Key Change: Remove stock availability check ---
+      // The system now allows orders even if stock is insufficient.
+      // Stock will be updated, potentially going negative, which signifies a production commitment/backorder.
+      // A database trigger will handle creating production alerts for negative stock.
 
       const itemTotalPrice = item.quantity * product.price;
       totalOrderAmount += itemTotalPrice;
@@ -85,9 +84,11 @@ serve(async (req) => {
         total_price: itemTotalPrice,
       });
 
+      // Calculate the new stock level after this item's quantity is deducted
+      const newStockLevel = product.stock - item.quantity;
       stockUpdates.push({
         id: product.id,
-        new_stock: product.stock - item.quantity,
+        new_stock: newStockLevel, // This can be negative
       });
     }
 
@@ -101,16 +102,15 @@ serve(async (req) => {
     if (dealerError) {
       throw new Error(`Failed to fetch dealer credit limit: ${dealerError.message}`);
     }
+
     if (!dealerData) {
       throw new Error('Dealer not found.');
     }
 
     let effectiveCreditLimit = dealerData.credit_limit;
-
     // Check for month-wise credit limit
     const today = new Date();
     const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0]; // YYYY-MM-01
-    
     const { data: monthlyLimitData, error: monthlyLimitError } = await supabaseAdmin
       .from('dealer_monthly_credit_limits')
       .select('credit_limit')
@@ -160,12 +160,17 @@ serve(async (req) => {
     if (orderError) {
       throw new Error(`Failed to create order: ${orderError.message}`);
     }
+
     if (!newOrder) {
       throw new Error('Order creation failed, no order ID returned.');
     }
 
     // 4. Insert sales items linked to the new order
-    const salesWithOrderId = salesToInsert.map(sale => ({ ...sale, order_id: newOrder.id }));
+    const salesWithOrderId = salesToInsert.map(sale => ({
+      ...sale,
+      order_id: newOrder.id
+    }));
+
     const { error: salesInsertError } = await supabaseAdmin
       .from('sales')
       .insert(salesWithOrderId);
@@ -207,7 +212,9 @@ serve(async (req) => {
       }
     }
 
-    // 6. Update product stock
+    // 6. Update product stock levels (this can now result in negative stock)
+    // The database trigger `trigger_check_stock_and_alert` will automatically
+    // create or update production alerts based on the new stock levels.
     for (const update of stockUpdates) {
       const { error: stockUpdateError } = await supabaseAdmin
         .from('products')
@@ -217,11 +224,17 @@ serve(async (req) => {
       if (stockUpdateError) {
         // In a real transaction, we would roll back everything here.
         console.error(`Failed to update stock for product ${update.id}: ${stockUpdateError.message}`);
+        // We will still throw an error, but the order and sales items are already created.
+        // Stock might be partially updated. This is a limitation of not having true DB transactions here.
         throw new Error(`Failed to update stock for product ${update.id}: ${stockUpdateError.message}`);
       }
     }
 
-    return new Response(JSON.stringify({ message: 'Order placed successfully', orderId: newOrder.id, orderNumber: newOrder.order_number }), {
+    return new Response(JSON.stringify({
+      message: 'Order placed successfully',
+      orderId: newOrder.id,
+      orderNumber: newOrder.order_number
+    }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

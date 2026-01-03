@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
@@ -22,9 +23,10 @@ import SalesPersonPerformanceOverviewCard from '@/components/SalesPersonPerforma
 import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog';
 import CompanyInfoDialog from '@/components/CompanyInfoDialog';
 import PaymentsForApprovalCard from '@/components/PaymentsForApprovalCard';
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"; // Import Sheet components
-import AdminSidebar from '@/components/AdminSidebar'; // Import the new sidebar component
-import SalesReportsDialog from '@/components/reports/SalesReportsDialog'; // Import the new SalesReportsDialog
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import AdminSidebar from '@/components/AdminSidebar';
+import SalesReportsDialog from '@/components/reports/SalesReportsDialog';
+import ProductionAlertsCard from '@/components/ProductionAlertsCard'; // Import the new component
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -38,7 +40,7 @@ const AdminDashboard = () => {
   const [isSalesPersonPerformanceReportOpen, setIsSalesPersonPerformanceReportOpen] = useState(false);
   const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
   const [isPaymentsReportOpen, setIsPaymentsReportOpen] = useState(false);
-  const [isSalesReportsDialogOpen, setIsSalesReportsDialogOpen] = useState(false); // New state for Sales Report
+  const [isSalesReportsDialogOpen, setIsSalesReportsDialogOpen] = useState(false);
   const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0); // Key to force re-fetch in child components
@@ -69,13 +71,12 @@ const AdminDashboard = () => {
 
   const fetchDashboardData = useCallback(async () => {
     if (!user) return;
-    
     try {
       // Fetch products count
       const { count: productsCount, error: productsError } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true });
-      
+
       if (!productsError) {
         setProductsCount(productsCount || 0);
       }
@@ -84,7 +85,7 @@ const AdminDashboard = () => {
       const { count: dealersCount, error: dealersError } = await supabase
         .from('dealers')
         .select('*', { count: 'exact', head: true });
-      
+
       if (!dealersError) {
         setActiveDealersCount(dealersCount || 0);
       }
@@ -93,13 +94,14 @@ const AdminDashboard = () => {
       const { count: ordersCount, error: ordersError } = await supabase
         .from('orders')
         .select('*', { count: 'exact', head: true });
-      
+
       if (!ordersError) {
         setTotalOrders(ordersCount || 0);
       }
 
       // Set a dummy sales value for now
       setTotalSalesValue(125000);
+
     } catch (error: any) {
       console.error('AdminDashboard: Error fetching dashboard data:', error);
     } finally {
@@ -113,7 +115,7 @@ const AdminDashboard = () => {
     console.log('user:', user);
     console.log('userType:', userType);
     console.log('isAdmin:', isAdmin);
-    
+
     if (!sessionLoading) {
       if (!user) {
         console.log('No user, redirecting to login');
@@ -238,7 +240,7 @@ const AdminDashboard = () => {
               setIsSalesPersonPerformanceReportOpen={setIsSalesPersonPerformanceReportOpen}
               setIsDealerReportOpen={setIsDealerReportOpen}
               setIsPaymentsReportOpen={setIsPaymentsReportOpen}
-              setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen} // Pass new state setter
+              setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen}
               setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen}
             />
           </SheetContent>
@@ -264,18 +266,21 @@ const AdminDashboard = () => {
         <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
         <DispatchedOrdersCard />
       </div>
-
+      
+      {/* New row for Production Alerts and Sales Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <ProductionAlertsCard />
         <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
-        <PaymentCard onViewDetails={() => setIsPaymentsReportOpen(true)} key={`payment-card-${refreshKey}`} />
       </div>
 
-      {/* New: Payments Pending Approval Card */}
-      <div className="mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <PaymentCard onViewDetails={() => setIsPaymentsReportOpen(true)} key={`payment-card-${refreshKey}`} />
+        {/* New: Payments Pending Approval Card */}
         <PaymentsForApprovalCard onPaymentAction={handlePaymentAction} key={`payments-for-approval-${refreshKey}`} />
       </div>
 
       <MadeWithDyad />
+
       <OrderDetailsDialog
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}
@@ -302,7 +307,7 @@ const AdminDashboard = () => {
         isOpen={isPaymentsReportOpen}
         onOpenChange={setIsPaymentsReportOpen}
       />
-      <SalesReportsDialog // Render the new SalesReportsDialog
+      <SalesReportsDialog
         isOpen={isSalesReportsDialogOpen}
         onOpenChange={setIsSalesReportsDialogOpen}
       />
