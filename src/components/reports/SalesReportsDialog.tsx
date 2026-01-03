@@ -104,11 +104,12 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
 
       // Apply filters
       if (filterSalesPersonId) {
-        // Apply filter directly on the orders relation
-        query = query.filter('orders.user_id', 'eq', filterSalesPersonId);
+        // Apply filter directly on the orders relation using .eq()
+        query = query.eq('orders.user_id', filterSalesPersonId);
       }
       if (filterDealerId) {
-        query = query.filter('orders.dealer_id', 'eq', filterDealerId);
+        // Apply filter directly on the orders relation using .eq()
+        query = query.eq('orders.dealer_id', filterDealerId);
       }
       if (filterProductId) {
         query = query.eq('product_id', filterProductId);
@@ -126,7 +127,9 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
 
       if (error) {
         console.error('Error fetching sales data:', error.message);
-        showError('Failed to load sales data.');
+        if (error.details) console.error('Error details:', error.details);
+        if (error.hint) console.error('Error hint:', error.hint);
+        showError(`Failed to load sales data: ${error.message}`);
         setSales([]);
       } else {
         const formattedSales: SaleReportData[] = (data || []).map((sale: any) => ({
