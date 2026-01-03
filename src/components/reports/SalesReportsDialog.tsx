@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Search, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 interface SaleReportData {
   id: string; // Sale ID
@@ -189,7 +189,9 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
   };
 
   const handlePrint = () => {
-    const doc = new jsPDF({ orientation: 'landscape' });
+    const doc = new jsPDF({
+      orientation: 'landscape'
+    });
     doc.setFontSize(18);
     doc.text("Sales Report", 14, 22);
     doc.setFontSize(11);
@@ -209,12 +211,17 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
       sale.sales_person_name,
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 30,
-      styles: { fontSize: 7 },
-      headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
+      styles: {
+        fontSize: 7
+      },
+      headStyles: {
+        fillColor: [200, 200, 200],
+        textColor: [0, 0, 0]
+      },
       margin: { top: 25, left: 10, right: 10 },
       columnStyles: {
         0: { cellWidth: 20 }, // Order No.

@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Search, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 interface SalesPersonPerformance {
   id: string; // Sales person ID
@@ -52,7 +52,6 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
   const [performanceData, setPerformanceData] = useState<SalesPersonPerformance[]>([]);
   const [loading, setLoading] = useState(true);
   const [allSalesPersons, setAllSalesPersons] = useState<SalesPersonOption[]>([]);
-
   const today = new Date();
   const [filterMonth, setFilterMonth] = useState<string>((today.getMonth() + 1).toString());
   const [filterYear, setFilterYear] = useState<string>(today.getFullYear().toString());
@@ -66,7 +65,6 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         .from('profiles')
         .select('id, first_name, last_name')
         .eq('user_type', 'sales_person');
-
       if (profilesError) {
         console.error('Error fetching sales persons:', profilesError.message);
         showError('Failed to load sales persons for report.');
@@ -80,9 +78,9 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
 
       const salesPersonMap = new Map(profilesData.map(p => [p.id, `${p.first_name} ${p.last_name}`]));
       const salesPersonIds = profilesData.map(p => p.id);
-
       const yearNum = parseInt(filterYear);
       const reportData: SalesPersonPerformance[] = [];
+
       const personsToReport = filterSalesPersonId ? profilesData.filter(p => p.id === filterSalesPersonId) : profilesData;
 
       if (filterMonth === "all") {
@@ -94,8 +92,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         const { data: yearlySalesData, error: yearlySalesError } = await supabase
           .from('sales')
           .select(`
-            total_price,
-            sale_date,
+            total_price, sale_date,
             orders (user_id)
           `)
           .gte('sale_date', startOfYear)
@@ -122,7 +119,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
           const userId = sale.orders?.user_id;
           if (userId) {
             const saleDate = new Date(sale.sale_date);
-            const monthKey = new Date(Date.UTC(saleDate.getFullYear(), saleDate.getMonth(), 1)).toISOString().split('T')[0];
+            const monthKey = new Date(Date.UTC(saleDate.getFullYear(), saleDate.getMonth(), 1)).toISOString().split('T')[0]; // YYYY-MM-DD for 1st of month
             const key = `${userId}-${monthKey}`;
             monthlySalesByPersonAndMonth.set(key, (monthlySalesByPersonAndMonth.get(key) || 0) + sale.total_price);
           }
@@ -141,7 +138,6 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
             const monthKey = monthDate.toISOString().split('T')[0]; // YYYY-MM-DD for 1st of month
             const displayMonthName = getMonthName((monthIndex + 1).toString());
             const key = `${person.id}-${monthKey}`;
-
             const achievedSales = monthlySalesByPersonAndMonth.get(key) || 0;
             const targetAmount = monthlyTargetsByPersonAndMonth.get(key) || 0;
             const pendingSales = targetAmount - achievedSales;
@@ -179,7 +175,6 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         }
 
         const { data: salesData, error: salesError } = await salesQuery;
-
         if (salesError) {
           throw new Error(`Failed to fetch sales data: ${salesError.message}`);
         }
@@ -204,7 +199,6 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         }
 
         const { data: targetsData, error: targetsError } = await targetsQuery;
-
         if (targetsError) {
           throw new Error(`Failed to fetch targets data: ${targetsError.message}`);
         }
@@ -235,7 +229,6 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       reportData.sort((a, b) => {
         const nameCompare = a.salesPersonName.localeCompare(b.salesPersonName);
         if (nameCompare !== 0) return nameCompare;
-
         if (filterMonth === "all") {
           // Sort by month index if "All Months" is selected
           const monthOrder = [
@@ -269,7 +262,9 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
   };
 
   const handlePrint = () => {
-    const doc = new jsPDF({ orientation: 'landscape' }); // Use landscape for more columns
+    const doc = new jsPDF({
+      orientation: 'landscape'
+    }); // Use landscape for more columns
     const reportPeriod = filterMonth === "all" ? `Year ${filterYear} - Monthly Breakdown` : `${getMonthName(filterMonth)} ${filterYear}`;
     doc.setFontSize(18);
     doc.text(`Sales Person Performance Report - ${reportPeriod}`, 14, 22);
@@ -286,12 +281,17 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       `₹${item.pendingSales.toFixed(2)}`,
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 30,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
+      styles: {
+        fontSize: 8
+      },
+      headStyles: {
+        fillColor: [200, 200, 200],
+        textColor: [0, 0, 0]
+      },
       margin: { top: 25, left: 10, right: 10 },
       columnStyles: {
         0: { cellWidth: 40 }, // Sales Person
@@ -308,13 +308,14 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto"> {/* Increased max-width */}
+      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Sales Person Performance Report</DialogTitle>
           <DialogDescription>
             Generate a report on sales person performance, targets, and achievements for a selected month or year.
           </DialogDescription>
         </DialogHeader>
+
         <div className="flex flex-wrap items-end gap-4 mb-6">
           <div className="flex-1 min-w-[120px]">
             <Label htmlFor="filterMonth">Month</Label>
@@ -323,7 +324,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
                 <SelectValue placeholder="Select month" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Months</SelectItem> {/* Added 'All Months' option */}
+                <SelectItem value="all">All Months</SelectItem>
                 {Array.from({ length: 12 }, (_, i) => (i + 1).toString()).map((monthNum) => (
                   <SelectItem key={monthNum} value={monthNum}>
                     {getMonthName(monthNum)}
@@ -349,10 +350,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
           </div>
           <div className="flex-1 min-w-[180px]">
             <Label htmlFor="filterSalesPerson">Sales Person</Label>
-            <Select 
-              value={filterSalesPersonId || "all"}
-              onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}
-            >
+            <Select value={filterSalesPersonId || "all"} onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}>
               <SelectTrigger id="filterSalesPerson" className="w-full">
                 <SelectValue placeholder="All Sales Persons" />
               </SelectTrigger>
@@ -409,6 +407,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
             </div>
           )}
         </div>
+
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
           <Button variant="outline" onClick={handlePrint} disabled={performanceData.length === 0}>
             <Printer className="mr-2 h-4 w-4" /> Print Report

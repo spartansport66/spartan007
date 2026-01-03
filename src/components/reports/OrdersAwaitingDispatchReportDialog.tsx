@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Search, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 interface OrderToDispatch {
   id: string;
@@ -35,7 +35,6 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
   const [orders, setOrders] = useState<OrderToDispatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
-
   // Filter states
   const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
@@ -49,7 +48,6 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name');
-
       if (dealersError) {
         console.error('Error fetching dealers for filter:', dealersError.message);
         showError('Failed to load dealers for filter.');
@@ -62,10 +60,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
       let query = supabase
         .from('orders')
         .select(`
-          id,
-          order_number,
-          order_date,
-          total_amount,
+          id, order_number, order_date, total_amount,
           dealers (id, name)
         `)
         .eq('dispatched', false)
@@ -88,7 +83,6 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
       }
 
       const { data: ordersData, error: ordersError } = await query;
-
       if (ordersError) {
         console.error('Error fetching orders to dispatch:', ordersError.message);
         showError('Failed to load orders to dispatch.');
@@ -139,12 +133,17 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
       `₹${order.total_amount.toFixed(2)}`,
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 30,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
+      styles: {
+        fontSize: 8
+      },
+      headStyles: {
+        fillColor: [200, 200, 200],
+        textColor: [0, 0, 0]
+      },
       margin: { top: 25 },
     });
 
@@ -160,6 +159,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
             Generate a report of all orders that are awaiting dispatch.
           </DialogDescription>
         </DialogHeader>
+
         <div className="flex flex-wrap items-end gap-4 mb-6">
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterOrderNumber">Order Number</Label>
@@ -174,10 +174,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
           </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterDealer">Dealer Name</Label>
-            <Select 
-              value={filterDealerId || "all"}
-              onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}
-            >
+            <Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}>
               <SelectTrigger id="filterDealer" className="w-full">
                 <SelectValue placeholder="Filter by dealer" />
               </SelectTrigger>
@@ -250,6 +247,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
             </div>
           )}
         </div>
+
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
           <Button variant="outline" onClick={handlePrint} disabled={orders.length === 0}>
             <Printer className="mr-2 h-4 w-4" /> Print Report

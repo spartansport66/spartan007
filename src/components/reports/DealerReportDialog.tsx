@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Search, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 interface DealerReportData {
   id: string;
@@ -35,7 +35,6 @@ interface DealerReportDialogProps {
 const DealerReportDialog: React.FC<DealerReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const [dealers, setDealers] = useState<DealerReportData[]>([]);
   const [loading, setLoading] = useState(true);
-
   // Filter states
   const [filterDealerName, setFilterDealerName] = useState<string>('');
   const [filterCity, setFilterCity] = useState<string>('');
@@ -48,16 +47,7 @@ const DealerReportDialog: React.FC<DealerReportDialogProps> = ({ isOpen, onOpenC
       let query = supabase
         .from('dealers')
         .select(`
-          id,
-          name,
-          contact_person,
-          email,
-          phone,
-          address,
-          city,
-          state,
-          country,
-          credit_limit,
+          id, name, contact_person, email, phone, address, city, state, country, credit_limit,
           dealer_sales_persons (profiles (first_name, last_name))
         `)
         .order('name', { ascending: true });
@@ -77,7 +67,6 @@ const DealerReportDialog: React.FC<DealerReportDialogProps> = ({ isOpen, onOpenC
       }
 
       const { data, error } = await query;
-
       if (error) {
         console.error('Error fetching dealers for report:', error.message);
         showError('Failed to load dealer data.');
@@ -122,7 +111,9 @@ const DealerReportDialog: React.FC<DealerReportDialogProps> = ({ isOpen, onOpenC
   };
 
   const handlePrint = () => {
-    const doc = new jsPDF({ orientation: 'landscape' }); // Landscape for more columns
+    const doc = new jsPDF({
+      orientation: 'landscape'
+    });
     doc.setFontSize(18);
     doc.text("Dealer Report", 14, 22);
     doc.setFontSize(11);
@@ -144,24 +135,29 @@ const DealerReportDialog: React.FC<DealerReportDialogProps> = ({ isOpen, onOpenC
       dealer.assigned_sales_persons,
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 30,
-      styles: { fontSize: 7 }, // Smaller font for more columns
-      headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
+      styles: {
+        fontSize: 7
+      },
+      headStyles: {
+        fillColor: [200, 200, 200],
+        textColor: [0, 0, 0]
+      },
       margin: { top: 25, left: 10, right: 10 },
       columnStyles: {
-        0: { cellWidth: 25 }, // Name
-        1: { cellWidth: 25 }, // Contact Person
-        2: { cellWidth: 35 }, // Email
-        3: { cellWidth: 25 }, // Phone
-        4: { cellWidth: 35 }, // Address
-        5: { cellWidth: 20 }, // City
-        6: { cellWidth: 20 }, // State
-        7: { cellWidth: 20 }, // Country
-        8: { cellWidth: 25 }, // Credit Limit
-        9: { cellWidth: 40 }, // Assigned Sales Persons
+        0: { cellWidth: 25 },  // Name
+        1: { cellWidth: 25 },  // Contact Person
+        2: { cellWidth: 35 },  // Email
+        3: { cellWidth: 25 },  // Phone
+        4: { cellWidth: 35 },  // Address
+        5: { cellWidth: 20 },  // City
+        6: { cellWidth: 20 },  // State
+        7: { cellWidth: 20 },  // Country
+        8: { cellWidth: 25 },  // Credit Limit
+        9: { cellWidth: 40 },  // Assigned Sales Persons
       }
     });
 
@@ -170,13 +166,14 @@ const DealerReportDialog: React.FC<DealerReportDialogProps> = ({ isOpen, onOpenC
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto"> {/* Wider dialog */}
+      <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Dealer Report</DialogTitle>
           <DialogDescription>
             Generate a comprehensive report of all registered dealers.
           </DialogDescription>
         </DialogHeader>
+
         <div className="flex flex-wrap items-end gap-4 mb-6">
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterDealerName">Dealer Name</Label>
@@ -271,6 +268,7 @@ const DealerReportDialog: React.FC<DealerReportDialogProps> = ({ isOpen, onOpenC
             </div>
           )}
         </div>
+
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
           <Button variant="outline" onClick={handlePrint} disabled={dealers.length === 0}>
             <Printer className="mr-2 h-4 w-4" /> Print Report

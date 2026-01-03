@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Search, Printer, MessageCircle, DollarSign, Calendar, Clock, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
-import { jsPDF } from 'jspdf';
+import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -49,7 +49,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
   const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PaymentReportData | null>(null);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false); // For approve/reject actions
-  
+
   // Filter states
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('pending');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
@@ -81,7 +81,6 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         .select('company_name')
         .limit(1)
         .single();
-      
       if (error && error.code !== 'PGRST116') {
         throw error;
       }
@@ -100,7 +99,6 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name');
-      
       if (dealersError) {
         console.error('Error fetching dealers for filter:', dealersError.message);
         showError('Failed to load dealers for filter.');
@@ -111,7 +109,6 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
 
       let fetchedData: any[] | null = null;
       let fetchError: any = null;
-
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO();
 
@@ -120,19 +117,9 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         let query = supabase
           .from('payments')
           .select(`
-            id, 
-            order_id,
-            amount,
-            payment_method,
-            payment_date,
+            id, order_id, amount, payment_method, payment_date,
             orders (
-              id, 
-              order_number, 
-              order_date, 
-              total_amount, 
-              payment_status, 
-              payment_due_date, 
-              dealer_id,
+              id, order_number, order_date, total_amount, payment_status, payment_due_date, dealer_id,
               dealers (name, phone)
             )
           `)
@@ -161,13 +148,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         let query = supabase
           .from('orders')
           .select(`
-            id, 
-            order_number, 
-            order_date, 
-            total_amount, 
-            payment_status, 
-            payment_due_date, 
-            dealer_id,
+            id, order_number, order_date, total_amount, payment_status, payment_due_date, dealer_id,
             dealers (name, phone)
           `)
           .order('payment_due_date', { ascending: true });
@@ -189,22 +170,20 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         if (filterDealerId) {
           query = query.eq('dealer_id', filterDealerId);
         }
-
         if (filterFromDate) {
           const startOfDay = `${filterFromDate}T00:00:00.000Z`;
           query = query.gte('order_date', startOfDay);
         }
-
         if (filterToDate) {
           const endOfDay = `${filterToDate}T23:59:59.999Z`;
           query = query.lte('order_date', endOfDay);
         }
-        
+
         const { data, error } = await query;
         fetchedData = data;
         fetchError = error;
       }
-      
+
       if (fetchError) {
         console.error('Error fetching payments:', fetchError.message);
         showError('Failed to load payment data.');
@@ -275,16 +254,13 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       showError('Dealer phone number is not available.');
       return;
     }
-    
     if (!companyName) {
       showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
       return;
     }
-
     const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
     const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
     const encodedMessage = encodeURIComponent(message);
-    
     // Open WhatsApp Web in a new tab
     window.open(`https://web.whatsapp.com/send?phone=${dealerPhone}&text=${encodedMessage}`, '_blank');
     showSuccess('WhatsApp message drafted. Please check the new tab.');
@@ -321,13 +297,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
           action: action,
         }),
       });
-
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || `Failed to ${action} payment`);
       }
-
       showSuccess(`Payment ${action === 'approve' ? 'approved' : 'rejected'} successfully!`);
       fetchPaymentsAndDealers(); // Refresh the list
     } catch (error: any) {
@@ -340,7 +313,9 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
 
   const handlePrint = () => {
     try {
-      const doc = new jsPDF({ orientation: 'landscape' });
+      const doc = new jsPDF({
+        orientation: 'landscape'
+      });
       doc.setFontSize(18);
       doc.text("Payments Report", 14, 22);
       doc.setFontSize(11);
@@ -359,24 +334,25 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       console.log('Payments Report - Table Columns:', tableColumn);
       console.log('Payments Report - Table Rows:', tableRows);
 
-      // Explicitly call autoTable as a function on the doc instance
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
         startY: 30,
-        styles: { fontSize: 8 },
+        styles: {
+          fontSize: 8
+        },
         headStyles: {
           fillColor: [200, 200, 200],
           textColor: [0, 0, 0]
         },
         margin: { top: 25, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 25 },  // Order No.
-          1: { cellWidth: 40 },  // Dealer Name
-          2: { cellWidth: 30, halign: 'right' },  // Amount
-          3: { cellWidth: 25 },  // Status
-          4: { cellWidth: 30 },  // Due Date
-          5: { cellWidth: 30 },  // Order Date
+          0: { cellWidth: 25 }, // Order No.
+          1: { cellWidth: 40 }, // Dealer Name
+          2: { cellWidth: 30, halign: 'right' }, // Amount
+          3: { cellWidth: 25 }, // Status
+          4: { cellWidth: 30 }, // Due Date
+          5: { cellWidth: 30 }, // Order Date
         }
       });
 
@@ -429,7 +405,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
             Generate a report of all orders with their payment status.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterStatus" className="text-foreground font-medium">Payment Status</Label>
@@ -448,7 +424,6 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
               </SelectContent>
             </Select>
           </div>
-          
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterDealer" className="text-foreground font-medium">Dealer Name</Label>
             <Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}>
@@ -463,29 +438,26 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
               </SelectContent>
             </Select>
           </div>
-          
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterFromDate" className="text-foreground font-medium">From Order Date</Label>
-            <Input 
-              id="filterFromDate" 
-              type="date" 
-              value={filterFromDate} 
-              onChange={(e) => setFilterFromDate(e.target.value)} 
-              className="w-full" 
+            <Input
+              id="filterFromDate"
+              type="date"
+              value={filterFromDate}
+              onChange={(e) => setFilterFromDate(e.target.value)}
+              className="w-full"
             />
           </div>
-          
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterToDate" className="text-foreground font-medium">To Order Date</Label>
-            <Input 
-              id="filterToDate" 
-              type="date" 
-              value={filterToDate} 
-              onChange={(e) => setFilterToDate(e.target.value)} 
-              className="w-full" 
+            <Input
+              id="filterToDate"
+              type="date"
+              value={filterToDate}
+              onChange={(e) => setFilterToDate(e.target.value)}
+              className="w-full"
             />
           </div>
-          
           <Button onClick={fetchPaymentsAndDealers} className="flex items-center gap-2 bg-primary hover:bg-primary/90">
             <Search className="h-4 w-4" /> Apply Filters
           </Button>
@@ -493,7 +465,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
             Clear Filters
           </Button>
         </div>
-        
+
         <div className="overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -535,30 +507,18 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
                           {payment.payment_status === 'pending' && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              onClick={() => handleUpdatePaymentClick(payment)} 
-                              title="Update Payment"
-                              className="hover:bg-green-100"
-                            >
+                            <Button variant="ghost" size="icon" onClick={() => handleUpdatePaymentClick(payment)} title="Update Payment" className="hover:bg-green-100">
                               <DollarSign className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
                           {payment.payment_status === 'pending' && payment.dealer_phone && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              onClick={() => handleSendWhatsApp(
-                                payment.dealer_phone, 
-                                payment.dealer_name, 
-                                payment.order_number, 
-                                payment.total_amount, 
-                                payment.payment_due_date
-                              )} 
-                              title="Send WhatsApp Reminder"
-                              className="hover:bg-blue-100"
-                            >
+                            <Button variant="ghost" size="icon" onClick={() => handleSendWhatsApp(
+                              payment.dealer_phone,
+                              payment.dealer_name,
+                              payment.order_number,
+                              payment.total_amount,
+                              payment.payment_due_date
+                            )} title="Send WhatsApp Reminder" className="hover:bg-blue-100">
                               <MessageCircle className="h-4 w-4 text-blue-500" />
                             </Button>
                           )}
@@ -579,16 +539,12 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction 
-                                      onClick={() => handleApproveRejectPayment(payment, 'approve')} 
-                                      disabled={isSubmittingAction}
-                                    >
+                                    <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'approve')} disabled={isSubmittingAction}>
                                       {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
                                     </AlertDialogAction>
                                   </AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>
-
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button variant="ghost" size="icon" title="Reject Payment" disabled={isSubmittingAction}>
@@ -604,10 +560,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction 
-                                      onClick={() => handleApproveRejectPayment(payment, 'reject')} 
-                                      disabled={isSubmittingAction}
-                                    >
+                                    <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'reject')} disabled={isSubmittingAction}>
                                       {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reject'}
                                     </AlertDialogAction>
                                   </AlertDialogFooter>
@@ -624,7 +577,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
             </div>
           )}
         </div>
-        
+
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
           <Button variant="outline" onClick={handlePrint} disabled={payments.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground">
             <Printer className="mr-2 h-4 w-4" /> Print Report
@@ -632,13 +585,12 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
           <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
         </DialogFooter>
       </DialogContent>
-      
       {selectedOrderForPaymentUpdate && (
-        <UpdatePaymentDialog 
-          orderToUpdate={selectedOrderForPaymentUpdate} 
-          isOpen={isUpdatePaymentDialogOpen} 
-          onOpenChange={setIsUpdatePaymentDialogOpen} 
-          onPaymentUpdated={handlePaymentUpdated} 
+        <UpdatePaymentDialog
+          orderToUpdate={selectedOrderForPaymentUpdate}
+          isOpen={isUpdatePaymentDialogOpen}
+          onOpenChange={setIsUpdatePaymentDialogOpen}
+          onPaymentUpdated={handlePaymentUpdated}
         />
       )}
     </Dialog>
