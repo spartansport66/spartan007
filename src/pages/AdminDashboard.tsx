@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
@@ -21,7 +21,9 @@ import DealerReportDialog from '@/components/reports/DealerReportDialog';
 import SalesPersonPerformanceOverviewCard from '@/components/SalesPersonPerformanceOverviewCard';
 import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog';
 import CompanyInfoDialog from '@/components/CompanyInfoDialog';
-import PaymentsForApprovalCard from '@/components/PaymentsForApprovalCard'; // New import
+import PaymentsForApprovalCard from '@/components/PaymentsForApprovalCard';
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"; // Import Sheet components
+import AdminSidebar from '@/components/AdminSidebar'; // Import the new sidebar component
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -205,7 +207,7 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
-      <div className="grid grid-cols-3 items-center mb-6">
+      <div className="flex justify-between items-center mb-6">
         {/* Left: Company Name */}
         <div className="text-left">
           {companyName && (
@@ -216,88 +218,28 @@ const AdminDashboard = () => {
         </div>
         {/* Center: Admin Dashboard Title */}
         <h1 className="text-center text-2xl sm:text-3xl font-bold text-primary">Admin Dashboard</h1>
-        {/* Right: Buttons */}
-        <div className="flex justify-end gap-2 sm:gap-4">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/combo-offers-dashboard')} size="icon" variant="default" className="bg-purple-600 hover:bg-purple-700 text-white">
-                <Gift className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Manage Combo Offers</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/product-management-console')} size="icon" variant="default">
-                <Boxes className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Manage Products</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/manage-dealers')} size="icon" variant="secondary">
-                <Building className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Manage Dealers</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/manage-users')} size="icon" variant="outline" className="text-purple-600 dark:text-purple-400">
-                <UserCog className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Manage Users</TooltipContent>
-          </Tooltip>
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="text-blue-600 dark:text-blue-400">
-                    <FileText className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent>Reports</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent className="w-56">
-              <DropdownMenuLabel>Select a Report</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsOrdersAwaitingDispatchReportOpen(true)}>
-                Orders Awaiting Dispatch
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsDispatchedOrdersReportOpen(true)}>
-                Dispatched Orders
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsSalesPersonPerformanceReportOpen(true)}>
-                Sales Person Performance
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsDealerReportOpen(true)}>
-                Dealer Report
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsPaymentsReportOpen(true)}>
-                Payments Report
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => setIsCompanyInfoDialogOpen(true)} size="icon" variant="outline" className="text-green-600 dark:text-green-400">
-                <Info className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Company Information</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={handleLogout} variant="destructive" size="icon">
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Logout</TooltipContent>
-          </Tooltip>
-        </div>
+        {/* Right: Sidebar Trigger */}
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400">
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[250px] sm:w-[300px]">
+            <SheetHeader>
+              <SheetTitle>Admin Navigation</SheetTitle>
+            </SheetHeader>
+            <AdminSidebar
+              handleLogout={handleLogout}
+              setIsOrdersAwaitingDispatchReportOpen={setIsOrdersAwaitingDispatchReportOpen}
+              setIsDispatchedOrdersReportOpen={setIsDispatchedOrdersReportOpen}
+              setIsSalesPersonPerformanceReportOpen={setIsSalesPersonPerformanceReportOpen}
+              setIsDealerReportOpen={setIsDealerReportOpen}
+              setIsPaymentsReportOpen={setIsPaymentsReportOpen}
+              setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen}
+            />
+          </SheetContent>
+        </Sheet>
       </div>
 
       <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
@@ -322,12 +264,12 @@ const AdminDashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
-        <PaymentCard onViewDetails={() => setIsPaymentsReportOpen(true)} key={`payment-card-${refreshKey}`} /> {/* Added key for refresh */}
+        <PaymentCard onViewDetails={() => setIsPaymentsReportOpen(true)} key={`payment-card-${refreshKey}`} />
       </div>
 
       {/* New: Payments Pending Approval Card */}
       <div className="mb-6">
-        <PaymentsForApprovalCard onPaymentAction={handlePaymentAction} key={`payments-for-approval-${refreshKey}`} /> {/* Added key for refresh */}
+        <PaymentsForApprovalCard onPaymentAction={handlePaymentAction} key={`payments-for-approval-${refreshKey}`} />
       </div>
 
       <MadeWithDyad />
