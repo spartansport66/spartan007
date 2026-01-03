@@ -27,6 +27,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
     const year = now.getUTCFullYear();
     const month = now.getUTCMonth();
     const day = now.getUTCDate();
+    // Ensure the string ends with 'Z' for UTC
     return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
   };
 
@@ -36,6 +37,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
     const year = now.getUTCFullYear();
     const month = now.getUTCMonth();
     const day = now.getUTCDate();
+    // Ensure the string ends with 'Z' for UTC
     return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
   };
 
@@ -43,7 +45,10 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
     setOverviewLoading(true);
     try {
       const startOfUTCTodayISO = getStartOfUTCDayISO();
-      const endOfUTCTodayISO = getEndOfUTCDayISO(); // Correct variable name
+      const endOfUTCTodayISO = getEndOfUTCDayISO();
+
+      console.log("DEBUG: Calculated Start of UTC Today (ISO):", startOfUTCTodayISO);
+      console.log("DEBUG: Calculated End of UTC Today (ISO):", endOfUTCTodayISO);
 
       // 1. Fetch Total Pending Amount (all pending orders)
       const { data: allPendingOrders, error: allPendingError } = await supabase
@@ -56,30 +61,48 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       const totalPending = (allPendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
       setTotalPendingAmountOverview(totalPending);
 
-      // 2. Fetch Today's Due Payments
-      // This includes orders with:
-      // - payment_status = 'pending' AND payment_due_date is *today*
-      // - payment_status = 'pending_approval' AND payment_due_date is *today*
-      // We can achieve this with an OR condition on the status combined with the date range.
+      // --- Enhanced Debugging for Today's Due ---
+      // First, fetch ALL orders due today to see what's there
+      console.log("DEBUG: Fetching ALL orders due today (regardless of status)...");
+      const { data: allOrdersDueToday, error: allOrdersDueTodayError } = await supabase
+        .from('orders')
+        .select('id, order_number, total_amount, payment_due_date, payment_status')
+        .gte('payment_due_date', startOfUTCTodayISO)
+        .lte('payment_due_date', endOfUTCTodayISO);
+
+      if (allOrdersDueTodayError) {
+        console.error("DEBUG: Error fetching ALL orders due today:", allOrdersDueTodayError.message);
+      } else {
+        console.log("DEBUG: ALL orders due today (raw data):", allOrdersDueToday);
+        if (allOrdersDueToday && allOrdersDueToday.length > 0) {
+           console.log("DEBUG: Sample order payment_due_date:", allOrdersDueToday[0].payment_due_date);
+           console.log("DEBUG: Sample order payment_status:", allOrdersDueToday[0].payment_status);
+        }
+      }
+      // --- End Enhanced Debugging ---
+
+      // 2. Fetch Today's Due Payments (orders with specific statuses and due date today)
+      console.log("DEBUG: Fetching Today's Due Payments (pending OR pending_approval)...");
       const { data: todaysDueOrders, error: todaysDueError } = await supabase
         .from('orders')
-        .select('total_amount')
-        .gte('payment_due_date', startOfUTCTodayISO) // Due *today* or later
-        .lte('payment_due_date', endOfUTCTodayISO) // AND due *today* or earlier (to ensure it's *exactly* today)
-        .in('payment_status', ['pending', 'pending_approval']); // Only these two statuses
+        .select('id, order_number, total_amount, payment_due_date, payment_status') // Include more fields for debugging
+        .gte('payment_due_date', startOfUTCTodayISO)
+        .lte('payment_due_date', endOfUTCTodayISO)
+        .in('payment_status', ['pending', 'pending_approval']);
 
-      if (todaysDueError) throw todaysDueError;
+      if (todaysDueError) {
+        console.error("DEBUG: Error fetching Today's Due Payments:", todaysDueError.message);
+        throw todaysDueError;
+      }
 
+      console.log("DEBUG: Raw data for Today's Due Payments:", todaysDueOrders);
       const todaysDue = (todaysDueOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
+      console.log("DEBUG: Calculated Today's Due Amount:", todaysDue);
       setTodaysDueAmountOverview(todaysDue);
 
       // 3. Fetch Today Received Payments
-      // This includes:
-      // a) Payments with status = 'completed' AND (payment_date is today OR approved_at is today)
-      // b) Payments with status = 'pending_approval' AND approved_at is today (approved today)
       let todayReceived = 0;
 
-      // a) Completed payments (paid today or approved today)
       const { data: todayReceivedCompletedPayments, error: todayReceivedCompletedError } = await supabase
         .from('payments')
         .select('amount')
@@ -89,7 +112,6 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       if (todayReceivedCompletedError) throw todayReceivedCompletedError;
       todayReceived += (todayReceivedCompletedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
 
-      // b) Pending approval payments that were approved today
       const { data: todayReceivedApprovedPayments, error: todayReceivedApprovedError } = await supabase
         .from('payments')
         .select('amount')
@@ -119,7 +141,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       setTotalPendingAmountOverview(0);
       setTodaysDueAmountOverview(0);
       setTodayReceivedAmountOverview(0);
-      setPendingApprovalAmountOverview(0); // Reset new state on error
+      setPendingApprovalAmountOverview(0);
     } finally {
       setOverviewLoading(false);
     }
@@ -166,7 +188,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
               </div>
               <span className="text-lg font-bold text-green-600">₹{todayReceivedAmountOverview.toFixed(2)}</span>
             </div>
-            <div className="flex items-center justify-between"> {/* New: Pending Approval */}
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-yellow-600" />
                 <span className="text-muted-foreground">Pending Approval:</span>
