@@ -32,7 +32,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Fetch payment details to check for post-dated payments
+    // Fetch payment details (payment_method, cheque_dd_date)
     const { data: paymentData, error: paymentError } = await supabaseAdmin
       .from('payments')
       .select('payment_method, cheque_dd_date')
@@ -43,19 +43,39 @@ serve(async (req) => {
       throw new Error(`Failed to fetch payment details: ${paymentError.message}`);
     }
 
-    // Check if payment is post-dated and if it's due
-    if (paymentData.payment_method === 'Cheque/DD' && paymentData.cheque_dd_date) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const dueDate = new Date(paymentData.cheque_dd_date);
-      dueDate.setHours(0, 0, 0, 0);
+    // Fetch order details (payment_due_date)
+    const { data: orderData, error: orderFetchError } = await supabaseAdmin
+      .from('orders')
+      .select('payment_due_date')
+      .eq('id', orderId)
+      .single();
 
-      if (dueDate > today && action === 'approve') {
-        return new Response(JSON.stringify({ error: 'Post-dated payment cannot be approved before the due date.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+    if (orderFetchError) {
+      throw new Error(`Failed to fetch order details: ${orderFetchError.message}`);
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize today to start of day UTC
+
+    let effectiveDueDate: Date | null = null;
+
+    // Determine the effective due date for approval
+    if (paymentData.payment_method === 'Cheque/DD' && paymentData.cheque_dd_date) {
+      // For Cheque/DD, prioritize the cheque_dd_date
+      effectiveDueDate = new Date(paymentData.cheque_dd_date);
+      effectiveDueDate.setHours(0, 0, 0, 0); // Normalize to start of day UTC
+    } else if (orderData.payment_due_date) {
+      // For other payment methods, use the order's payment_due_date
+      effectiveDueDate = new Date(orderData.payment_due_date);
+      effectiveDueDate.setHours(0, 0, 0, 0); // Normalize to start of day UTC
+    }
+
+    // Apply the due date check if an effective due date exists and action is 'approve'
+    if (action === 'approve' && effectiveDueDate && effectiveDueDate > today) {
+      return new Response(JSON.stringify({ error: 'Payment cannot be approved before its due date.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     if (action === 'approve') {
