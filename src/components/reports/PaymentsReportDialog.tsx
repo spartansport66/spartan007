@@ -26,6 +26,8 @@ interface PaymentReportData {
   order_date: string;
   payment_id: string | null; // New: to store the actual payment record ID for approval actions
   dealer_id: string; // New: to pass to the approve-payment edge function
+  payment_method: string | null; // Added
+  cheque_dd_date: string | null; // Added
 }
 
 interface DealerOption {
@@ -137,7 +139,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
         let query = supabase
           .from('payments')
           .select(`
-            id, order_id, amount, payment_method, payment_date, approved_at, status,
+            id, order_id, amount, payment_method, payment_date, approved_at, status, cheque_dd_date,
             orders (
               id, order_number, order_date, total_amount, payment_status, payment_due_date, dealer_id,
               dealers (name, phone)
@@ -220,6 +222,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
           let currentOrderDate: string;
           let currentPaymentId: string | null;
           let currentDealerId: string;
+          let currentPaymentMethod: string | null;
+          let currentChequeDdDate: string | null;
 
           if (filterStatus === 'pending_approval' || filterStatus === 'paid') {
             // When querying payments directly
@@ -228,11 +232,13 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
             currentOrderNumber = item.orders.order_number;
             currentDealerName = item.orders.dealers?.name || 'N/A';
             currentDealerPhone = item.orders.dealers?.phone || '';
-            currentTotalAmount = item.amount;
+            currentTotalAmount = item.amount; // Payment amount from the payment record
             currentPaymentDueDate = item.orders.payment_due_date;
             currentOrderDate = item.orders.order_date;
-            currentPaymentId = item.id;
+            currentPaymentId = item.id; // This is the payment record ID
             currentDealerId = item.orders.dealer_id;
+            currentPaymentMethod = item.payment_method;
+            currentChequeDdDate = item.cheque_dd_date;
           } else {
             // When querying orders directly
             currentPaymentStatus = item.payment_status;
@@ -240,11 +246,13 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
             currentOrderNumber = item.order_number;
             currentDealerName = item.dealers?.name || 'N/A';
             currentDealerPhone = item.dealers?.phone || '';
-            currentTotalAmount = item.total_amount;
+            currentTotalAmount = item.total_amount; // Total amount from the order record
             currentPaymentDueDate = item.payment_due_date;
             currentOrderDate = item.order_date;
-            currentPaymentId = item.payments?.[0]?.id || null;
+            currentPaymentId = item.payments?.[0]?.id || null; // Get payment ID if available
             currentDealerId = item.dealer_id;
+            currentPaymentMethod = item.payments?.[0]?.payment_method || null;
+            currentChequeDdDate = item.payments?.[0]?.cheque_dd_date || null;
           }
 
           console.log(`DEBUG: Processing item:`, item, `Mapped payment_status: ${currentPaymentStatus}`);
@@ -260,6 +268,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
             order_date: currentOrderDate,
             payment_id: currentPaymentId,
             dealer_id: currentDealerId,
+            payment_method: currentPaymentMethod,
+            cheque_dd_date: currentChequeDdDate,
           };
         });
         setPayments(formattedPayments);
@@ -310,6 +320,23 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
 
   const handlePaymentUpdated = () => {
     fetchPaymentsAndDealers();
+  };
+
+  const isPaymentDue = (payment: PaymentReportData) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let effectiveDueDate: Date | null = null;
+
+    if (payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date) {
+      effectiveDueDate = new Date(payment.cheque_dd_date);
+    } else if (payment.payment_due_date) {
+      effectiveDueDate = new Date(payment.payment_due_date);
+    }
+
+    if (!effectiveDueDate) return true; // If no due date, assume it's due (or can be approved)
+    effectiveDueDate.setHours(0, 0, 0, 0);
+    return effectiveDueDate <= today;
   };
 
   const handleApproveRejectPayment = async (payment: PaymentReportData, action: 'approve' | 'reject') => {
@@ -524,6 +551,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                   {payments.map((payment) => {
                     console.log("DEBUG: Rendering payment row:", payment); // Log the payment object before rendering
                     const displayStatus = payment.payment_status ?? 'unknown'; // Ensure it's a string
+                    const paymentIsDue = isPaymentDue(payment); // Determine if payment is due
+
                     return (
                       <TableRow key={payment.id} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">#{payment.order_number}</TableCell>
@@ -532,7 +561,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                         <TableCell>
                           <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(displayStatus)}`}>
                             {getStatusIcon(displayStatus)}
-                            <span className="capitalize">{displayStatus.replace('_', ' ')}</span>
+                            <span className="capitalize">{(displayStatus).replace('_', ' ')}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-foreground">
@@ -561,7 +590,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                               <>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" title="Approve Payment" disabled={isSubmittingAction}>
+                                    <Button variant="ghost" size="icon" title={paymentIsDue ? "Approve Payment" : "Payment not yet due"} disabled={isSubmittingAction || !paymentIsDue}>
                                       <CheckCircle className="h-4 w-4 text-green-600" />
                                     </Button>
                                   </AlertDialogTrigger>
@@ -569,12 +598,26 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
                                       <AlertDialogDescription>
+                                        {!paymentIsDue && payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date ? (
+                                          <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
+                                            <p className="font-medium">Post-dated Payment</p>
+                                            <p>This payment is scheduled for {new Date(payment.cheque_dd_date).toLocaleDateString()}.</p>
+                                            <p>It can only be approved on or after that date.</p>
+                                          </div>
+                                        ) : null}
+                                        {!paymentIsDue && payment.payment_method !== 'Cheque/DD' && payment.payment_due_date ? (
+                                          <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
+                                            <p className="font-medium">Payment Not Yet Due</p>
+                                            <p>This payment is due on {new Date(payment.payment_due_date).toLocaleDateString()}.</p>
+                                            <p>It can only be approved on or after that date.</p>
+                                          </div>
+                                        ) : null}
                                         Are you sure you want to approve the payment of ₹{payment.total_amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will mark the order as paid and update the dealer's credit.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'approve')} disabled={isSubmittingAction}>
+                                      <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'approve')} disabled={isSubmittingAction || !paymentIsDue}>
                                         {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
                                       </AlertDialogAction>
                                     </AlertDialogFooter>
