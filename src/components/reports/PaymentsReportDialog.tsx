@@ -596,16 +596,18 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                                 <MessageCircle className="h-4 w-4 text-blue-500" />
                               </Button>
                             )}
+                            {(payment.payment_status === 'paid' || payment.payment_status === 'pending_approval') && payment.payment_id && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleViewPaymentDetails(payment.payment_id!)} // Pass payment_id
+                                title="View Payment Details"
+                              >
+                                <Eye className="h-4 w-4 text-blue-500" />
+                              </Button>
+                            )}
                             {payment.payment_status === 'pending_approval' && (
                               <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleViewPaymentDetails(payment.payment_id!)} // Pass payment_id
-                                  title="View Payment Details"
-                                >
-                                  <Eye className="h-4 w-4 text-blue-500" />
-                                </Button>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button variant="ghost" size="icon" title={paymentIsDue ? "Approve Payment" : "Payment not yet due"} disabled={isSubmittingAction || !paymentIsDue}>
