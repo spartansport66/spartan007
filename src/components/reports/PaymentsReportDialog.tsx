@@ -21,7 +21,7 @@ interface PaymentReportData {
   dealer_name: string;
   dealer_phone: string;
   total_amount: number;
-  payment_status: string; // New: to store the actual payment record ID for approval actions
+  payment_status: string;
   payment_due_date: string | null;
   order_date: string;
   payment_id: string | null; // New: to store the actual payment record ID for approval actions
@@ -137,7 +137,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
         let query = supabase
           .from('payments')
           .select(`
-            id, order_id, amount, payment_method, payment_date, approved_at,
+            id, order_id, amount, payment_method, payment_date, approved_at, status,
             orders (
               id, order_number, order_date, total_amount, payment_status, payment_due_date, dealer_id,
               dealers (name, phone)
@@ -202,41 +202,65 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
         fetchError = error;
       }
 
+      console.log("DEBUG: Raw fetched data for payments:", fetchedData);
+
       if (fetchError) {
         console.error('Error fetching payments:', fetchError.message);
         showError('Failed to load payment data.');
         setPayments([]);
       } else {
         const formattedPayments: PaymentReportData[] = (fetchedData || []).map((item: any) => {
+          let currentPaymentStatus: string;
+          let currentOrderId: string;
+          let currentOrderNumber: number;
+          let currentDealerName: string;
+          let currentDealerPhone: string;
+          let currentTotalAmount: number;
+          let currentPaymentDueDate: string | null;
+          let currentOrderDate: string;
+          let currentPaymentId: string | null;
+          let currentDealerId: string;
+
           if (filterStatus === 'pending_approval' || filterStatus === 'paid') {
             // When querying payments directly
-            return {
-              id: item.orders.id, // Order ID
-              order_number: item.orders.order_number,
-              dealer_name: item.orders.dealers?.name || 'N/A',
-              dealer_phone: item.orders.dealers?.phone || '',
-              total_amount: item.amount, // Payment amount from the payment record
-              payment_status: item.status === 'completed' ? 'paid' : item.status, // Payment's status
-              payment_due_date: item.orders.payment_due_date,
-              order_date: item.orders.order_date,
-              payment_id: item.id, // This is the payment record ID
-              dealer_id: item.orders.dealer_id,
-            };
+            currentPaymentStatus = item.status === 'completed' ? 'paid' : item.status;
+            currentOrderId = item.orders.id;
+            currentOrderNumber = item.orders.order_number;
+            currentDealerName = item.orders.dealers?.name || 'N/A';
+            currentDealerPhone = item.orders.dealers?.phone || '';
+            currentTotalAmount = item.amount;
+            currentPaymentDueDate = item.orders.payment_due_date;
+            currentOrderDate = item.orders.order_date;
+            currentPaymentId = item.id;
+            currentDealerId = item.orders.dealer_id;
           } else {
             // When querying orders directly
-            return {
-              id: item.id, // Order ID
-              order_number: item.order_number,
-              dealer_name: item.dealers?.name || 'N/A',
-              dealer_phone: item.dealers?.phone || '',
-              total_amount: item.total_amount, // Total amount from the order record
-              payment_status: item.payment_status,
-              payment_due_date: item.payment_due_date,
-              order_date: item.order_date,
-              payment_id: item.payments?.[0]?.id || null, // Get payment ID if available
-              dealer_id: item.dealer_id,
-            };
+            currentPaymentStatus = item.payment_status;
+            currentOrderId = item.id;
+            currentOrderNumber = item.order_number;
+            currentDealerName = item.dealers?.name || 'N/A';
+            currentDealerPhone = item.dealers?.phone || '';
+            currentTotalAmount = item.total_amount;
+            currentPaymentDueDate = item.payment_due_date;
+            currentOrderDate = item.order_date;
+            currentPaymentId = item.payments?.[0]?.id || null;
+            currentDealerId = item.dealer_id;
           }
+
+          console.log(`DEBUG: Processing item:`, item, `Mapped payment_status: ${currentPaymentStatus}`);
+
+          return {
+            id: currentOrderId,
+            order_number: currentOrderNumber,
+            dealer_name: currentDealerName,
+            dealer_phone: currentDealerPhone,
+            total_amount: currentTotalAmount,
+            payment_status: currentPaymentStatus,
+            payment_due_date: currentPaymentDueDate,
+            order_date: currentOrderDate,
+            payment_id: currentPaymentId,
+            dealer_id: currentDealerId,
+          };
         });
         setPayments(formattedPayments);
       }
@@ -497,89 +521,93 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {payments.map((payment) => (
-                    <TableRow key={payment.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">#{payment.order_number}</TableCell>
-                      <TableCell className="text-foreground">{payment.dealer_name}</TableCell>
-                      <TableCell className="text-foreground text-right font-medium">₹{payment.total_amount.toFixed(2)}</TableCell>
-                      <TableCell>
-                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(payment.payment_status ?? 'unknown')}`}>
-                          {getStatusIcon(payment.payment_status ?? 'unknown')}
-                          <span className="capitalize">{(payment.payment_status ?? 'unknown').replace('_', ' ')}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A'}
-                      </TableCell>
-                      <TableCell className="text-foreground">{new Date(payment.order_date).toLocaleDateString()}</TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center gap-2">
-                          {payment.payment_status === 'pending' && (
-                            <Button variant="ghost" size="icon" onClick={() => handleUpdatePaymentClick(payment)} title="Add Payment" className="hover:bg-green-100">
-                              <DollarSign className="h-4 w-4 text-green-600" />
-                            </Button>
-                          )}
-                          {payment.payment_status === 'pending' && payment.dealer_phone && (
-                            <Button variant="ghost" size="icon" onClick={() => handleSendWhatsApp(
-                              payment.dealer_phone,
-                              payment.dealer_name,
-                              payment.order_number,
-                              payment.total_amount,
-                              payment.payment_due_date
-                            )} title="Send WhatsApp Reminder" className="hover:bg-blue-100">
-                              <MessageCircle className="h-4 w-4 text-blue-500" />
-                            </Button>
-                          )}
-                          {payment.payment_status === 'pending_approval' && (
-                            <>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" title="Approve Payment" disabled={isSubmittingAction}>
-                                    <CheckCircle className="h-4 w-4 text-green-600" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to approve the payment of ₹{payment.total_amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will mark the order as paid and update the dealer's credit.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'approve')} disabled={isSubmittingAction}>
-                                      {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" title="Reject Payment" disabled={isSubmittingAction}>
-                                    <XCircle className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Reject Payment?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to reject the payment of ₹{payment.total_amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will revert the order to pending status.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'reject')} disabled={isSubmittingAction}>
-                                      {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reject'}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {payments.map((payment) => {
+                    console.log("DEBUG: Rendering payment row:", payment); // Log the payment object before rendering
+                    const displayStatus = payment.payment_status ?? 'unknown'; // Ensure it's a string
+                    return (
+                      <TableRow key={payment.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">#{payment.order_number}</TableCell>
+                        <TableCell className="text-foreground">{payment.dealer_name}</TableCell>
+                        <TableCell className="text-foreground text-right font-medium">₹{payment.total_amount.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(displayStatus)}`}>
+                            {getStatusIcon(displayStatus)}
+                            <span className="capitalize">{displayStatus.replace('_', ' ')}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-foreground">
+                          {payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-foreground">{new Date(payment.order_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-2">
+                            {payment.payment_status === 'pending' && (
+                              <Button variant="ghost" size="icon" onClick={() => handleUpdatePaymentClick(payment)} title="Add Payment" className="hover:bg-green-100">
+                                <DollarSign className="h-4 w-4 text-green-600" />
+                              </Button>
+                            )}
+                            {payment.payment_status === 'pending' && payment.dealer_phone && (
+                              <Button variant="ghost" size="icon" onClick={() => handleSendWhatsApp(
+                                payment.dealer_phone,
+                                payment.dealer_name,
+                                payment.order_number,
+                                payment.total_amount,
+                                payment.payment_due_date
+                              )} title="Send WhatsApp Reminder" className="hover:bg-blue-100">
+                                <MessageCircle className="h-4 w-4 text-blue-500" />
+                              </Button>
+                            )}
+                            {payment.payment_status === 'pending_approval' && (
+                              <>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" title="Approve Payment" disabled={isSubmittingAction}>
+                                      <CheckCircle className="h-4 w-4 text-green-600" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to approve the payment of ₹{payment.total_amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will mark the order as paid and update the dealer's credit.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'approve')} disabled={isSubmittingAction}>
+                                        {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" title="Reject Payment" disabled={isSubmittingAction}>
+                                      <XCircle className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Reject Payment?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to reject the payment of ₹{payment.total_amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will revert the order to pending status.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'reject')} disabled={isSubmittingAction}>
+                                        {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reject'}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
