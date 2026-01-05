@@ -12,7 +12,7 @@ import PaymentDetailsDialog from '@/components/PaymentDetailsDialog';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog'; // Import UpdatePaymentDialog
 
 interface PendingPaymentItem {
-  type: 'order_due_today' | 'payment_pending_approval_today' | 'payment_paid_today';
+  type: 'order_due_today' | 'payment_pending_approval_today'; // Removed 'payment_paid_today'
   id: string; // Order ID for 'order_due_today', Payment ID for others
   order_id: string; // Always the order ID
   order_number: number;
@@ -50,19 +50,15 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   // Helper to get start of current UTC day
   const getStartOfUTCDayISO = () => {
     const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const day = now.getUTCDate();
-    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
+    now.setUTCHours(0, 0, 0, 0); // Use setUTCHours for consistency with Supabase timestamps
+    return now.toISOString();
   };
 
   // Helper to get end of current UTC day
   const getEndOfUTCDayISO = () => {
     const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const day = now.getUTCDate();
-    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
+    now.setUTCHours(23, 59, 59, 999); // Use setUTCHours for consistency with Supabase timestamps
+    return now.toISOString();
   };
 
   const fetchCompanyInfo = useCallback(async () => {
@@ -86,10 +82,10 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   const fetchTodayPaymentActivities = useCallback(async () => {
     setLoading(true);
     try {
-      const startOfUTCTodayISO = getStartOfUTCDayISO();
-      const endOfUTCTodayISO = getEndOfUTCDayISO();
+      const startOfUTCToday = new Date(getStartOfUTCDayISO());
+      const endOfUTCToday = new Date(getEndOfUTCDayISO());
 
-      // 1. Fetch orders with payment_status = 'pending' and payment_due_date is today
+      // 1. Fetch orders with payment_status = 'pending' and payment_due_date is today or earlier
       const { data: ordersDueToday, error: ordersDueTodayError } = await supabase
         .from('orders')
         .select(`
@@ -101,8 +97,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
           dealers (name, phone)
         `)
         .eq('payment_status', 'pending')
-        .gte('payment_due_date', startOfUTCTodayISO)
-        .lte('payment_due_date', endOfUTCTodayISO)
+        .lte('payment_due_date', endOfUTCToday.toISOString()) // Due today or earlier
         .order('payment_due_date', { ascending: true });
 
       if (ordersDueTodayError) throw ordersDueTodayError;
@@ -124,8 +119,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         dealer_id: order.dealer_id,
       }));
 
-      // 2. Fetch payments with status = 'pending_approval' and payment_date is today
-      const { data: paymentsPendingApprovalToday, error: paymentsPendingApprovalTodayError } = await supabase
+      // 2. Fetch payments with status = 'pending_approval'
+      // We need to fetch all pending_approval payments and then filter by their effective due date
+      const { data: paymentsPendingApproval, error: paymentsPendingApprovalError } = await supabase
         .from('payments')
         .select(`
           id,
@@ -144,81 +140,50 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
           )
         `)
         .eq('status', 'pending_approval')
-        .gte('payment_date', startOfUTCTodayISO)
-        .lte('payment_date', endOfUTCTodayISO)
-        .order('payment_date', { ascending: true });
+        .order('payment_date', { ascending: true }); // Order by payment_date for consistency
 
-      if (paymentsPendingApprovalTodayError) throw paymentsPendingApprovalTodayError;
+      if (paymentsPendingApprovalError) throw paymentsPendingApprovalError;
 
-      const formattedPaymentsPendingApprovalToday: PendingPaymentItem[] = (paymentsPendingApprovalToday || []).map((payment: any) => ({
-        type: 'payment_pending_approval_today',
-        id: payment.id, // Payment ID
-        order_id: payment.order_id,
-        order_number: payment.orders?.order_number || 'N/A',
-        dealer_name: payment.orders?.dealers?.name || 'N/A',
-        dealer_phone: payment.orders?.dealers?.phone || '',
-        amount: payment.amount,
-        payment_status: payment.status, // 'pending_approval'
-        payment_due_date: payment.orders?.payment_due_date || null,
-        payment_method: payment.payment_method,
-        payment_date: payment.payment_date,
-        cheque_dd_date: payment.cheque_dd_date,
-        approved_at: null,
-        dealer_id: payment.orders?.dealer_id || '',
-      }));
+      const formattedPaymentsPendingApprovalToday: PendingPaymentItem[] = (paymentsPendingApproval || [])
+        .filter((payment: any) => {
+          let effectiveDueDate: Date | null = null;
+          if (payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date) {
+            effectiveDueDate = new Date(payment.cheque_dd_date);
+          } else if (payment.orders?.payment_due_date) {
+            effectiveDueDate = new Date(payment.orders.payment_due_date);
+          }
 
-      // 3. Fetch payments with status = 'completed' and approved_at is today
-      const { data: paymentsPaidToday, error: paymentsPaidTodayError } = await supabase
-        .from('payments')
-        .select(`
-          id,
-          order_id,
-          amount,
-          payment_method,
-          payment_date,
-          cheque_dd_date,
-          status,
-          approved_at,
-          orders (
-            order_number,
-            payment_status,
-            payment_due_date,
-            dealer_id,
-            dealers (name, phone)
-          )
-        `)
-        .eq('status', 'completed')
-        .gte('approved_at', startOfUTCTodayISO)
-        .lte('approved_at', endOfUTCTodayISO)
-        .order('approved_at', { ascending: true });
+          if (!effectiveDueDate) return false; // If no due date, don't show it as "due"
+          effectiveDueDate.setUTCHours(0, 0, 0, 0); // Normalize to start of day UTC
 
-      if (paymentsPaidTodayError) throw paymentsPaidTodayError;
+          // Show if effective due date is today or earlier
+          return effectiveDueDate <= endOfUTCToday;
+        })
+        .map((payment: any) => ({
+          type: 'payment_pending_approval_today',
+          id: payment.id, // Payment ID
+          order_id: payment.order_id,
+          order_number: payment.orders?.order_number || 'N/A',
+          dealer_name: payment.orders?.dealers?.name || 'N/A',
+          dealer_phone: payment.orders?.dealers?.phone || '',
+          amount: payment.amount,
+          payment_status: payment.status, // 'pending_approval'
+          payment_due_date: payment.orders?.payment_due_date || null,
+          payment_method: payment.payment_method,
+          payment_date: payment.payment_date,
+          cheque_dd_date: payment.cheque_dd_date,
+          approved_at: null,
+          dealer_id: payment.orders?.dealer_id || '',
+        }));
 
-      const formattedPaymentsPaidToday: PendingPaymentItem[] = (paymentsPaidToday || []).map((payment: any) => ({
-        type: 'payment_paid_today',
-        id: payment.id, // Payment ID
-        order_id: payment.order_id,
-        order_number: payment.orders?.order_number || 'N/A',
-        dealer_name: payment.orders?.dealers?.name || 'N/A',
-        dealer_phone: payment.orders?.dealers?.phone || '',
-        amount: payment.amount,
-        payment_status: 'paid', // 'paid'
-        payment_due_date: payment.orders?.payment_due_date || null,
-        payment_method: payment.payment_method,
-        payment_date: payment.payment_date,
-        cheque_dd_date: payment.cheque_dd_date,
-        approved_at: payment.approved_at,
-        dealer_id: payment.orders?.dealer_id || '',
-      }));
-
-      // Combine all three arrays and sort by relevant date (due date, payment date, approved date)
+      // Combine only orders due today and pending approval payments due today/earlier
       const combinedPayments = [
         ...formattedOrdersDueToday,
         ...formattedPaymentsPendingApprovalToday,
-        ...formattedPaymentsPaidToday,
       ].sort((a, b) => {
-        const dateA = a.payment_due_date ? new Date(a.payment_due_date).getTime() : 0;
-        const dateB = b.payment_due_date ? new Date(b.payment_due_date).getTime() : 0;
+        // Sort by effective due date, prioritizing earlier dates
+        const dateA = a.cheque_dd_date ? new Date(a.cheque_dd_date).getTime() : (a.payment_due_date ? new Date(a.payment_due_date).getTime() : 0);
+        const dateB = b.cheque_dd_date ? new Date(b.cheque_dd_date).getTime() : (b.payment_due_date ? new Date(b.payment_due_date).getTime() : 0);
         return dateA - dateB;
       });
 
@@ -373,9 +338,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">Today's Payment Activities</CardTitle>
+        <CardTitle className="text-xl font-semibold">Today's Due Payments</CardTitle>
         <CardDescription className="text-indigo-100 dark:text-indigo-200">
-          Overview of all payments due, pending approval, or paid today.
+          Orders due today or earlier, and payments pending approval with due dates today or earlier.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4">
@@ -386,7 +351,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
               <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading today's payments...</p>
             </div>
           ) : paymentsToday.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No payment activities found for today.</p>
+            <p className="text-center text-muted-foreground py-8">No payments due today or earlier.</p>
           ) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
@@ -457,18 +422,16 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
                                 )}
                               </>
                             )}
-                            {(payment.type === 'payment_pending_approval_today' || payment.type === 'payment_paid_today') && payment.id && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleViewPaymentDetails(payment.id)} // Pass payment_id
-                                title="View Payment Details"
-                              >
-                                <Eye className="h-4 w-4 text-blue-500" />
-                              </Button>
-                            )}
-                            {payment.type === 'payment_pending_approval_today' && (
+                            {payment.type === 'payment_pending_approval_today' && payment.id && (
                               <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleViewPaymentDetails(payment.id)} // Pass payment_id
+                                  title="View Payment Details"
+                                >
+                                  <Eye className="h-4 w-4 text-blue-500" />
+                                </Button>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button
