@@ -271,7 +271,7 @@ const AdminDashboard = () => {
               {item.icon}
             </CardHeader>
             <CardContent className="p-2 pt-0">
-              <div className={`text-4xl font-bold ${item.valueColor}`}>{item.value}</div>
+              <div className={`text-2xl font-bold ${item.valueColor}`}>{item.value}</div>
               <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
             </CardContent>
           </Card>
