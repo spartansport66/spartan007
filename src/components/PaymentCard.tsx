@@ -17,7 +17,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
 
   // Overview metrics states
   const [totalPendingAmountOverview, setTotalPendingAmountOverview] = useState<number>(0);
-  const [todaysDueAmountOverview, setTodaysDueAmountOverview] = useState<number>(0);
+  // const [todaysDueAmountOverview, setTodaysDueAmountOverview] = useState<number>(0); // Removed
   const [todayReceivedAmountOverview, setTodayReceivedAmountOverview] = useState<number>(0);
   const [pendingApprovalAmountOverview, setPendingApprovalAmountOverview] = useState<number>(0); // New state
 
@@ -67,46 +67,9 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       console.log("DEBUG: Total Pending Amount:", totalPending);
       setTotalPendingAmountOverview(totalPending);
 
-      // --- Enhanced Debugging for Today's Due ---
-      // First, fetch ALL orders due today to see what's there
-      console.log("DEBUG: Fetching ALL orders due today (regardless of status)...");
-      const { data: allOrdersDueToday, error: allOrdersDueTodayError } = await supabase
-        .from('orders')
-        .select('id, order_number, total_amount, payment_due_date, payment_status')
-        .gte('payment_due_date', startOfUTCTodayISO)
-        .lte('payment_due_date', endOfUTCTodayISO);
-
-      if (allOrdersDueTodayError) {
-        console.error("DEBUG: Error fetching ALL orders due today:", allOrdersDueTodayError.message);
-      } else {
-        console.log("DEBUG: ALL orders due today (raw data):", allOrdersDueToday);
-        if (allOrdersDueToday && allOrdersDueToday.length > 0) {
-           console.log("DEBUG: Sample order payment_due_date:", allOrdersDueToday[0].payment_due_date);
-           console.log("DEBUG: Sample order payment_status:", allOrdersDueToday[0].payment_status);
-        } else {
-            console.log("DEBUG: No orders found due today at all.");
-        }
-      }
-      // --- End Enhanced Debugging ---
-
-      // 2. Fetch Today's Due Payments (orders with specific statuses and due date today)
-      console.log("DEBUG: Fetching Today's Due Payments (pending OR pending_approval)...");
-      const { data: todaysDueOrders, error: todaysDueError } = await supabase
-        .from('orders')
-        .select('id, order_number, total_amount, payment_due_date, payment_status') // Include more fields for debugging
-        .gte('payment_due_date', startOfUTCTodayISO)
-        .lte('payment_due_date', endOfUTCTodayISO)
-        .in('payment_status', ['pending', 'pending_approval']);
-
-      if (todaysDueError) {
-        console.error("DEBUG: Error fetching Today's Due Payments:", todaysDueError.message);
-        throw todaysDueError;
-      }
-
-      console.log("DEBUG: Raw data for Today's Due Payments:", todaysDueOrders);
-      const todaysDue = (todaysDueOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
-      console.log("DEBUG: Calculated Today's Due Amount:", todaysDue);
-      setTodaysDueAmountOverview(todaysDue);
+      // 2. Today's Due Payments - NO FETCHING EXACT DATA
+      // Setting to 0 as per user request
+      // setTodaysDueAmountOverview(0); // Removed this line, will be handled by initial state
 
       // 3. Fetch Today Received Payments
       console.log("DEBUG: Fetching Today Received Payments...");
@@ -160,7 +123,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
       console.error('Error fetching payment overview:', error.message);
       showError('Failed to load payment overview data.');
       setTotalPendingAmountOverview(0);
-      setTodaysDueAmountOverview(0);
+      // setTodaysDueAmountOverview(0); // Removed
       setTodayReceivedAmountOverview(0);
       setPendingApprovalAmountOverview(0);
     } finally {
@@ -202,7 +165,7 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
                 <CalendarDays className="h-5 w-5 text-orange-600" />
                 <span className="text-muted-foreground">Today's Due:</span>
               </div>
-              <span className="text-lg font-bold text-orange-600">₹{todaysDueAmountOverview.toFixed(2)}</span>
+              <span className="text-lg font-bold text-orange-600">₹0.00</span> {/* Hardcoded to 0.00 as per request */}
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

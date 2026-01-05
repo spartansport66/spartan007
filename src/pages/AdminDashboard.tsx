@@ -11,7 +11,7 @@ import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog,
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
-import PaymentCard from '@/components/PaymentCard';
+// import PaymentCard from '@/components/PaymentCard'; // Removed import
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -274,7 +274,7 @@ const AdminDashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <PaymentCard onViewDetails={() => setIsPaymentsReportOpen(true)} key={`payment-card-${refreshKey}`} />
+        {/* PaymentCard removed from here */}
         {/* New: Payments Pending Approval Card */}
         <PaymentsForApprovalCard onPaymentAction={handlePaymentAction} key={`payments-for-approval-${refreshKey}`} />
       </div>
