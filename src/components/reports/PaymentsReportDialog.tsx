@@ -388,40 +388,88 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
       const doc = new jsPDF({
         orientation: 'landscape'
       });
-      doc.setFontSize(18);
-      doc.text("Payments Report", 14, 22);
-      doc.setFontSize(11);
-      doc.setTextColor(100);
 
-      const tableColumn = ["Order No.", "Dealer Name", "Amount", "Status", "Due Date", "Order Date"];
+      const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+      doc.setFontSize(22);
+      doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
+      doc.setFontSize(18);
+      doc.text("Payments Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
+
+      let filterDetails = [];
+      if (filterStatus !== 'all') filterDetails.push(`Status: ${filterStatus.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}`);
+      if (filterDealerId) {
+        const dealerLabel = allDealers.find(d => d.value === filterDealerId)?.label;
+        if (dealerLabel) filterDetails.push(`Dealer: ${dealerLabel}`);
+      }
+      if (filterFromDate) filterDetails.push(`From Order Date: ${new Date(filterFromDate).toLocaleDateString()}`);
+      if (filterToDate) filterDetails.push(`To Order Date: ${new Date(filterToDate).toLocaleDateString()}`);
+
+      if (filterDetails.length > 0) {
+        doc.setFontSize(9);
+        doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
+      }
+
+      const tableColumn = [
+        "Order No.",
+        "Dealer Name",
+        "Phone",
+        "Order Date",
+        "Payment Method",
+        "Status",
+        "Due Date",
+        "Amount"
+      ];
+
       const tableRows = payments.map(payment => [
-        payment.order_number,
+        `#${payment.order_number}`,
         payment.dealer_name,
-        `₹${payment.total_amount.toFixed(2)}`,
-        payment.payment_status,
-        payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A',
+        payment.dealer_phone || 'N/A',
         new Date(payment.order_date).toLocaleDateString(),
+        payment.payment_method ? payment.payment_method.replace(/_/g, ' ') : 'N/A',
+        payment.payment_status.replace(/_/g, ' ').toUpperCase(),
+        payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A',
+        `₹${payment.total_amount.toFixed(2)}`,
       ]);
+
+      const totalSum = payments.reduce((sum, payment) => sum + payment.total_amount, 0);
 
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        startY: 30,
+        foot: [[{ content: 'Total', colSpan: 7, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalSum.toFixed(2)}`]],
+        startY: 45, // Adjust startY to accommodate the new header
         styles: {
-          fontSize: 8
+          fontSize: 7,
+          cellPadding: 2,
+          valign: 'middle',
         },
         headStyles: {
-          fillColor: [200, 200, 200],
-          textColor: [0, 0, 0]
+          fillColor: [30, 58, 138], // Dark blue (similar to indigo-800)
+          textColor: [255, 255, 255], // White
+          fontStyle: 'bold',
+          halign: 'center',
         },
-        margin: { top: 25, left: 10, right: 10 },
+        bodyStyles: {
+          textColor: [0, 0, 0],
+        },
+        footStyles: {
+          fillColor: [220, 220, 220], // Light gray
+          textColor: [0, 0, 0],
+          fontStyle: 'bold',
+          fontSize: 8,
+        },
+        margin: { top: 10, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 25 }, // Order No.
-          1: { cellWidth: 40 }, // Dealer Name
-          2: { cellWidth: 30, halign: 'right' }, // Amount
-          3: { cellWidth: 25 }, // Status
-          4: { cellWidth: 30 }, // Due Date
-          5: { cellWidth: 30 }, // Order Date
+          0: { cellWidth: 20, halign: 'center' }, // Order No.
+          1: { cellWidth: 35 }, // Dealer Name
+          2: { cellWidth: 25 }, // Phone
+          3: { cellWidth: 25, halign: 'center' }, // Order Date
+          4: { cellWidth: 30, halign: 'center' }, // Payment Method
+          5: { cellWidth: 25, halign: 'center' }, // Status
+          6: { cellWidth: 25, halign: 'center' }, // Due Date
+          7: { cellWidth: 25, halign: 'right' }, // Amount
         }
       });
 
@@ -571,7 +619,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                         <TableCell>
                           <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(displayStatus)}`}>
                             {getStatusIcon(displayStatus)}
-                            <span className="capitalize">{(displayStatus).replace('_', ' ')}</span>
+                            <span className="capitalize">{(displayStatus).replace(/_/g, ' ')}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-foreground">
