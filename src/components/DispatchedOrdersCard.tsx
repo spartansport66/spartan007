@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -32,6 +31,15 @@ const DispatchedOrdersCard: React.FC = () => {
   const [orders, setOrders] = useState<DispatchedOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
+
+  // Format date as dd/mm/yyyy
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
 
   // Get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
@@ -91,9 +99,11 @@ const DispatchedOrdersCard: React.FC = () => {
           activeFilters.push(`order_number.eq.${orderNum}`);
         }
       }
+
       if (filterDealerId) {
         activeFilters.push(`dealer_id.eq.${filterDealerId}`);
       }
+
       if (filterDispatchDate) {
         const startOfDay = `${filterDispatchDate}T00:00:00.000Z`;
         const endOfDay = `${filterDispatchDate}T23:59:59.999Z`;
@@ -104,9 +114,6 @@ const DispatchedOrdersCard: React.FC = () => {
       if (activeFilters.length > 0) {
         // Combine all active filters with OR logic
         query = query.or(activeFilters.join(','));
-        console.log('Applying OR filters:', activeFilters.join(',')); // Add log
-      } else {
-        console.log('No additional filters applied, showing all dispatched orders.'); // Add log
       }
 
       const { data: ordersData, error: ordersError } = await query;
@@ -174,7 +181,7 @@ const DispatchedOrdersCard: React.FC = () => {
           </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterDealer">Dealer Name</Label>
-            <Select 
+            <Select
               value={filterDealerId || "all"}
               onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}
             >
@@ -206,7 +213,6 @@ const DispatchedOrdersCard: React.FC = () => {
             Clear Filters
           </Button>
         </div>
-
         <div className="overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -216,9 +222,9 @@ const DispatchedOrdersCard: React.FC = () => {
           ) : orders.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No dispatched orders found matching your criteria.</p>
           ) : (
-            <div className="max-h-[250px] overflow-y-auto border rounded-md"> {/* Added max-h and overflow */}
+            <div className="max-h-[250px] overflow-y-auto border rounded-md">
               <Table>
-                <TableHeader className="sticky top-0 bg-background z-10"> {/* Made header sticky */}
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground">Order No.</TableHead>
                     <TableHead className="text-muted-foreground">Dispatch No.</TableHead>
@@ -236,11 +242,16 @@ const DispatchedOrdersCard: React.FC = () => {
                       <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
                       <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(order.dispatch_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(order.dispatch_date)}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Order Details">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleViewOrderDetails(order.id)}
+                            title="View Order Details"
+                          >
                             <Eye className="h-4 w-4" />
                           </Button>
                         </div>
@@ -253,7 +264,6 @@ const DispatchedOrdersCard: React.FC = () => {
           )}
         </div>
       </CardContent>
-
       <OrderDetailsDialog
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}

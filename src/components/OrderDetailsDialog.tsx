@@ -106,7 +106,22 @@ interface FetchedOrderData {
   }[] | null; // New
 }
 
-const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen, onOpenChange, shouldPrintOnLoad = false }) => {
+// Format date as dd/mm/yyyy
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
+  orderId,
+  isOpen,
+  onOpenChange,
+  shouldPrintOnLoad = false
+}) => {
   const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
@@ -290,15 +305,13 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         <div className="grid grid-cols-2 gap-2 text-sm">
           <p><strong>Payment Method:</strong> {details.payment_method || 'N/A'}</p>
           <p><strong>Amount:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
-          <p><strong>Payment Date:</strong> {details.payment_date ? new Date(details.payment_date).toLocaleDateString() : 'N/A'}</p>
-          
+          <p><strong>Payment Date:</strong> {formatDate(details.payment_date)}</p>
           {details.payment_method === 'Cheque/DD' && (
             <>
               <p><strong>Cheque/DD No:</strong> {details.cheque_dd_no || 'N/A'}</p>
-              <p><strong>Cheque/DD Date:</strong> {details.cheque_dd_date ? new Date(details.cheque_dd_date).toLocaleDateString() : 'N/A'}</p>
+              <p><strong>Cheque/DD Date:</strong> {formatDate(details.cheque_dd_date)}</p>
             </>
           )}
-          
           {details.payment_method === 'Card' && (
             <>
               <p><strong>Card Number:</strong> {details.card_number ? `**** **** **** ${details.card_number.slice(-4)}` : 'N/A'}</p>
@@ -307,7 +320,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
               <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
             </>
           )}
-          
           {details.payment_method === 'Bank Transfer' && (
             <>
               <p><strong>Bank Name:</strong> {details.bank_name || 'N/A'}</p>
@@ -316,14 +328,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
               <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
             </>
           )}
-          
           {details.payment_method === 'UPI' && (
             <>
               <p><strong>UPI ID:</strong> {details.upi_id || 'N/A'}</p>
               <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
             </>
           )}
-          
           {details.payment_method === 'Cash' && (
             <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
           )}
@@ -341,10 +351,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
         <h2>Payment Details</h2>
         <p><strong>Payment Method:</strong> ${orderDetails.payment_method || 'N/A'}</p>
         <p><strong>Amount:</strong> ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}</p>
-        <p><strong>Payment Date:</strong> ${orderDetails.payment_date ? new Date(orderDetails.payment_date).toLocaleDateString() : 'N/A'}</p>
+        <p><strong>Payment Date:</strong> ${formatDate(orderDetails.payment_date)}</p>
         ${orderDetails.payment_method === 'Cheque/DD' ? `
           <p><strong>Cheque/DD No:</strong> ${orderDetails.cheque_dd_no || 'N/A'}</p>
-          <p><strong>Cheque/DD Date:</strong> ${orderDetails.cheque_dd_date ? new Date(orderDetails.cheque_dd_date).toLocaleDateString() : 'N/A'}</p>
+          <p><strong>Cheque/DD Date:</strong> ${formatDate(orderDetails.cheque_dd_date)}</p>
         ` : ''}
         ${(orderDetails.payment_method === 'Card' || orderDetails.payment_method === 'Bank Transfer' || orderDetails.payment_method === 'UPI') ? `
           <p><strong>Transaction ID:</strong> ${orderDetails.transaction_id || 'N/A'}</p>
@@ -397,15 +407,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
       </style>
       <h1>Order Details</h1>
       <p><strong>Order Number:</strong> ${orderDetails.order_number}</p>
-      <p><strong>Order Date:</strong> ${new Date(orderDetails.order_date).toLocaleDateString()}</p>
+      <p><strong>Order Date:</strong> ${formatDate(orderDetails.order_date)}</p>
       <p><strong>Order Status:</strong> ${orderDetails.status}</p>
       <p><strong>Payment Status:</strong> ${orderDetails.payment_status}</p>
-      <p><strong>Payment Due Date:</strong> ${orderDetails.payment_due_date ? new Date(orderDetails.payment_due_date).toLocaleDateString() : 'N/A'}</p>
+      <p><strong>Payment Due Date:</strong> ${formatDate(orderDetails.payment_due_date)}</p>
       <p><strong>Sales Person:</strong> ${orderDetails.sales_person_name}</p>
       ${orderDetails.dispatched ? `
         <h2>Dispatch Information</h2>
         <p><strong>Dispatch Number:</strong> ${orderDetails.dispatch_number || 'N/A'}</p>
-        <p><strong>Dispatch Date:</strong> ${orderDetails.dispatch_date ? new Date(orderDetails.dispatch_date).toLocaleDateString() : 'N/A'}</p>
+        <p><strong>Dispatch Date:</strong> ${formatDate(orderDetails.dispatch_date)}</p>
         <p><strong>Bill Number:</strong> ${orderDetails.bill_no || 'N/A'}</p>
       ` : ''}
       <h2>Dealer Information</h2>
@@ -472,15 +482,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p><span className="font-semibold">Order Number:</span> {orderDetails.order_number}</p>
-                <p><span className="font-semibold">Order Date:</span> {new Date(orderDetails.order_date).toLocaleDateString()}</p>
+                <p><span className="font-semibold">Order Date:</span> {formatDate(orderDetails.order_date)}</p>
                 <p><span className="font-semibold">Order Status:</span> {orderDetails.status}</p>
                 <p><span className="font-semibold">Payment Status:</span> {orderDetails.payment_status}</p>
-                <p><span className="font-semibold">Payment Due Date:</span> {orderDetails.payment_due_date ? new Date(orderDetails.payment_due_date).toLocaleDateString() : 'N/A'}</p>
+                <p><span className="font-semibold">Payment Due Date:</span> {formatDate(orderDetails.payment_due_date)}</p>
                 <p><span className="font-semibold">Sales Person:</span> {orderDetails.sales_person_name}</p>
                 {orderDetails.dispatched && (
                   <>
                     <p><span className="font-semibold">Dispatch Number:</span> {orderDetails.dispatch_number || 'N/A'}</p>
-                    <p><span className="font-semibold">Dispatch Date:</span> {orderDetails.dispatch_date ? new Date(orderDetails.dispatch_date).toLocaleDateString() : 'N/A'}</p>
+                    <p><span className="font-semibold">Dispatch Date:</span> {formatDate(orderDetails.dispatch_date)}</p>
                     <p><span className="font-semibold">Bill Number:</span> {orderDetails.bill_no || 'N/A'}</p>
                   </>
                 )}
@@ -499,15 +509,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 </p>
               </div>
             </div>
-
             {(orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') && orderDetails.payment_method && (
               <>
                 <Separator />
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-semibold">Payment Details</h3>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setShowPaymentDetails(!showPaymentDetails)}
                     className="flex items-center gap-1"
                   >
@@ -522,7 +531,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ orderId, isOpen
                 )}
               </>
             )}
-
             <Separator />
             <h3 className="text-lg font-semibold">Order Items</h3>
             {orderDetails.items.length === 0 ? (

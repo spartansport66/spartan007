@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,6 +18,15 @@ interface ProductionAlert {
   sales_person_name: string | null;
   dealer_name: string | null;
 }
+
+// Format date as dd/mm/yyyy
+const formatDate = (dateString: string) => {
+  const date = new Date(dateString);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 const ProductionAlertsCard: React.FC = () => {
   const [alerts, setAlerts] = useState<ProductionAlert[]>([]);
@@ -121,7 +129,7 @@ const ProductionAlertsCard: React.FC = () => {
 
   useEffect(() => {
     fetchAlerts();
-    
+
     // Subscribe to changes in the production_alerts table
     const channel = supabase
       .channel('production_alerts_changes')
@@ -162,7 +170,7 @@ const ProductionAlertsCard: React.FC = () => {
       const doc = new jsPDF({
         orientation: 'landscape' // Use landscape for more columns
       });
-      
+
       doc.setFontSize(18);
       doc.text("Production Alerts Report", 14, 22);
       doc.setFontSize(11);
@@ -175,7 +183,7 @@ const ProductionAlertsCard: React.FC = () => {
         alert.required_quantity.toString(),
         alert.sales_person_name || 'Not specified',
         alert.dealer_name || 'Not specified',
-        new Date(alert.created_at).toLocaleString(),
+        formatDate(alert.created_at),
       ]);
 
       autoTable(doc, {
@@ -189,7 +197,11 @@ const ProductionAlertsCard: React.FC = () => {
           fillColor: [249, 115, 22], // Orange color to match the card header
           textColor: [255, 255, 255]
         },
-        margin: { top: 25, left: 10, right: 10 },
+        margin: {
+          top: 25,
+          left: 10,
+          right: 10
+        },
         columnStyles: {
           0: { cellWidth: 40 }, // Product Name
           1: { cellWidth: 30, halign: 'right' }, // Required Quantity
@@ -234,9 +246,9 @@ const ProductionAlertsCard: React.FC = () => {
               Urgent material requirements from sales orders. ({alerts.length} pending)
             </CardDescription>
           </div>
-          <Button 
-            variant="secondary" 
-            size="sm" 
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handlePrint}
             disabled={alerts.length === 0}
             className="flex items-center gap-1"
@@ -273,7 +285,7 @@ const ProductionAlertsCard: React.FC = () => {
                         {alert.dealer_name}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {new Date(alert.created_at).toLocaleString()}
+                        {formatDate(alert.created_at)}
                       </TableCell>
                     </TableRow>
                   ))}

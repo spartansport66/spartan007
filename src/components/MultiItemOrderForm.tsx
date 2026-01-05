@@ -79,20 +79,29 @@ const MultiItemOrderForm: React.FC = () => {
   // UPI fields
   const [upiId, setUpiId] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
-  
+
   const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
+
+  // Format date as dd/mm/yyyy
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
 
   // Fetch dealers and products
   useEffect(() => {
     const fetchData = async () => {
       if (!user) return;
-      
+
       // Fetch dealers assigned to the current user
       const { data: assignedDealersData, error: assignedDealersError } = await supabase
         .from('dealer_sales_persons')
         .select('dealers(id, name, credit_limit, allotted_credit_days)')
         .eq('sales_person_id', user.id);
-      
+
       if (assignedDealersError) {
         console.error('Error fetching assigned dealers:', assignedDealersError);
         showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
@@ -101,12 +110,12 @@ const MultiItemOrderForm: React.FC = () => {
         const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
         setDealers(formattedDealers);
       }
-      
+
       // Fetch all products
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('id, name, price, stock');
-      
+
       if (productsError) {
         console.error('Error fetching products:', productsError);
         showError(`Failed to load products: ${productsError.message}`);
@@ -114,7 +123,7 @@ const MultiItemOrderForm: React.FC = () => {
         setProducts(productsData || []);
       }
     };
-    
+
     fetchData();
   }, [user]);
 
@@ -126,7 +135,7 @@ const MultiItemOrderForm: React.FC = () => {
         setTotalPendingAmount(0);
         return;
       }
-      
+
       try {
         const todayISOString = new Date().toISOString();
         // Fetch pending payments for the selected dealer (only pending, not pending_approval)
@@ -137,7 +146,7 @@ const MultiItemOrderForm: React.FC = () => {
           .eq('dealer_id', selectedDealer)
           .eq('payment_status', 'pending')
           .lte('payment_due_date', todayISOString); // Only include payments due today or earlier
-        
+
         if (error) {
           console.error('Error fetching pending payments:', error);
           showError(`Failed to check pending payments: ${error.message}`);
@@ -145,7 +154,7 @@ const MultiItemOrderForm: React.FC = () => {
           setTotalPendingAmount(0);
           return;
         }
-        
+
         const pendingData = data || [];
         setPendingPayments(pendingData);
         const total = pendingData.reduce((sum, order) => sum + order.total_amount, 0);
@@ -157,7 +166,7 @@ const MultiItemOrderForm: React.FC = () => {
         setTotalPendingAmount(0);
       }
     };
-    
+
     checkPendingPayments();
   }, [selectedDealer]);
 
@@ -172,7 +181,7 @@ const MultiItemOrderForm: React.FC = () => {
         setPaymentAmount(0);
         return;
       }
-      
+
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
@@ -181,7 +190,7 @@ const MultiItemOrderForm: React.FC = () => {
         currentDate.setDate(currentDate.getDate() + selectedDealerData.allotted_credit_days);
         setPaymentDueDate(currentDate.toISOString().split('T')[0]);
       }
-      
+
       // Determine the effective credit limit for the current month
       const currentMonthDate = new Date();
       const currentMonthYear = new Date(Date.UTC(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1)).toISOString().split('T')[0];
@@ -191,7 +200,7 @@ const MultiItemOrderForm: React.FC = () => {
         .eq('dealer_id', selectedDealer)
         .eq('month_year', currentMonthYear)
         .single();
-      
+
       if (monthlyLimitError && monthlyLimitError.code !== 'PGRST116') {
         console.error('Error fetching monthly credit limit:', monthlyLimitError.message);
         showError(`Failed to load monthly credit limit: ${monthlyLimitError.message}`);
@@ -201,7 +210,7 @@ const MultiItemOrderForm: React.FC = () => {
       } else {
         setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
       }
-      
+
       // Fetch total spent by this dealer from BOTH 'pending' AND 'pending_approval' orders
       // This includes ALL unpaid orders, including those with future due dates (post-dated cheques)
       const { data, error } = await supabase
@@ -209,7 +218,7 @@ const MultiItemOrderForm: React.FC = () => {
         .select('total_amount')
         .eq('dealer_id', selectedDealer)
         .in('payment_status', ['pending', 'pending_approval']);
-      
+
       if (error) {
         console.error('Error fetching dealer balance:', error);
         showError(`Failed to calculate dealer balance: ${error.message}`);
@@ -218,13 +227,13 @@ const MultiItemOrderForm: React.FC = () => {
         const totalSpent = data.reduce((sum, order) => sum + order.total_amount, 0);
         setDealerBalance(totalSpent);
       }
-      
+
       // Set payment amount to total order value if paid at order time
       if (isPaidAtOrderTime) {
         setPaymentAmount(calculateTotalOrderValue());
       }
     };
-    
+
     calculateBalanceAndDueDate();
   }, [selectedDealer, dealers, isPaidAtOrderTime, orderItems]);
 
@@ -259,73 +268,74 @@ const MultiItemOrderForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user) {
       showError('You must be logged in to place an order.');
       return;
     }
-    
+
     if (!selectedDealer) {
       showError('Please select a dealer.');
       return;
     }
-    
+
     // Check if dealer has any overdue pending payments
     if (totalPendingAmount > 0) {
       showError(`Cannot place order. Dealer has overdue payments of ₹${totalPendingAmount.toFixed(2)}. Please clear all overdue payments first.`);
       return;
     }
-    
+
     if (orderItems.some(item => !item.product_id || item.quantity <= 0)) {
       showError('Please fill in all product fields and ensure quantities are positive.');
       return;
     }
-    
+
     if (remainingCredit !== null && remainingCredit < 0) {
       showError('Order exceeds dealer\'s available credit limit.');
       return;
     }
-    
+
     // Require payment option - either paid at order time or credit
     if (!isPaidAtOrderTime) {
       showError('Please select a payment option. Either pay at order time or use credit.');
       return;
     }
-    
+
     if (isPaidAtOrderTime) {
       if (!paymentMethod) {
         showError('Please select a payment method.');
         return;
       }
-      
+
       if (paymentAmount <= 0) {
         showError('Payment amount must be positive.');
         return;
       }
-      
+
       // Conditional validation for specific payment methods
       if (paymentMethod === 'Cheque/DD' && (!chequeDdNo || !chequeDdDate)) {
         showError('Please enter Cheque/DD number and date.');
         return;
       }
-      
+
       if (paymentMethod === 'Card' && (!cardNumber || !cardHolderName || !expiryDate || !cvv)) {
         showError('Please fill in all card details.');
         return;
       }
-      
+
       if (paymentMethod === 'Bank Transfer' && (!bankName || !accountNumber || !ifscCode || !transactionId)) {
         showError('Please fill in all bank transfer details.');
         return;
       }
-      
+
       if (paymentMethod === 'UPI' && (!upiId || !transactionId)) {
         showError('Please fill in all UPI details.');
         return;
       }
     }
-    
+
     setLoading(true);
+
     try {
       const payload: any = {
         dealerId: selectedDealer,
@@ -337,7 +347,7 @@ const MultiItemOrderForm: React.FC = () => {
         paymentStatus: isPaidAtOrderTime ? 'pending_approval' : 'pending',
         paymentDueDate: paymentDueDate,
       };
-      
+
       if (isPaidAtOrderTime) {
         payload.paymentDetails = {
           amount: paymentAmount,
@@ -355,7 +365,7 @@ const MultiItemOrderForm: React.FC = () => {
           transaction_id: (paymentMethod === 'Bank Transfer' || paymentMethod === 'UPI') ? transactionId : null,
         };
       }
-      
+
       const response = await fetch(CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
@@ -363,13 +373,13 @@ const MultiItemOrderForm: React.FC = () => {
         },
         body: JSON.stringify(payload),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to place order');
       }
-      
+
       showSuccess('Order placed successfully!');
       // Reset form
       setSelectedDealer('');
@@ -407,7 +417,6 @@ const MultiItemOrderForm: React.FC = () => {
   // Filter products based on search value - improved matching
   const filteredProducts = useMemo(() => {
     if (!searchValue) return products;
-    
     const searchTerms = searchValue.toLowerCase().split(' ').filter(term => term.length > 0);
     return products.filter(product => {
       const productName = product.name.toLowerCase();
@@ -440,7 +449,7 @@ const MultiItemOrderForm: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            
+
             {selectedDealer && totalPendingAmount > 0 && (
               <Alert variant="destructive" className="mt-2">
                 <AlertCircle className="h-4 w-4" />
@@ -460,7 +469,7 @@ const MultiItemOrderForm: React.FC = () => {
                         {pendingPayments.map((payment, index) => (
                           <tr key={index} className="border-b">
                             <td>#{payment.order_number}</td>
-                            <td>{payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A'}</td>
+                            <td>{payment.payment_due_date ? formatDate(payment.payment_due_date) : 'N/A'}</td>
                             <td className="text-right">₹{payment.total_amount.toFixed(2)}</td>
                           </tr>
                         ))}
@@ -470,7 +479,7 @@ const MultiItemOrderForm: React.FC = () => {
                 </AlertDescription>
               </Alert>
             )}
-            
+
             {selectedDealer && dealerBalance !== null && (
               <div className="mt-2 p-3 bg-muted rounded-md">
                 <div className="flex justify-between text-sm">
@@ -494,22 +503,20 @@ const MultiItemOrderForm: React.FC = () => {
                 {paymentDueDate && (
                   <div className="flex justify-between text-sm">
                     <span>Payment Due Date:</span>
-                    <span className="font-medium">{new Date(paymentDueDate).toLocaleDateString()}</span>
+                    <span className="font-medium">{formatDate(paymentDueDate)}</span>
                   </div>
                 )}
               </div>
             )}
           </div>
-          
+
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <Label>Order Items</Label>
               <Button type="button" onClick={addOrderItem} size="sm" className="flex items-center gap-1">
-                <Plus className="h-4 w-4" />
-                Add Item
+                <Plus className="h-4 w-4" /> Add Item
               </Button>
             </div>
-            
             {orderItems.map((item, index) => (
               <div key={item.id} className="grid grid-cols-12 gap-2 items-end">
                 <div className="col-span-5">
@@ -561,7 +568,6 @@ const MultiItemOrderForm: React.FC = () => {
                     </PopoverContent>
                   </Popover>
                 </div>
-                
                 <div className="col-span-3">
                   <Label htmlFor={`quantity-${item.id}`}>Quantity</Label>
                   <Input
@@ -573,12 +579,10 @@ const MultiItemOrderForm: React.FC = () => {
                     className="w-full"
                   />
                 </div>
-                
                 <div className="col-span-3">
                   <Label>Item Total</Label>
                   <div className="font-medium">₹{calculateItemTotal(item).toFixed(2)}</div>
                 </div>
-                
                 <div className="col-span-1">
                   {orderItems.length > 1 && (
                     <Button
@@ -595,7 +599,7 @@ const MultiItemOrderForm: React.FC = () => {
               </div>
             ))}
           </div>
-          
+
           {orderItems.length > 0 && (
             <div className="p-4 bg-muted rounded-md">
               <div className="flex justify-between text-lg font-semibold">
@@ -615,7 +619,7 @@ const MultiItemOrderForm: React.FC = () => {
               )}
             </div>
           )}
-          
+
           {/* Payment at Order Time Section */}
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex items-center space-x-2">
@@ -647,7 +651,6 @@ const MultiItemOrderForm: React.FC = () => {
                 Payment Received at Order Time
               </Label>
             </div>
-            
             {isPaidAtOrderTime && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -665,7 +668,6 @@ const MultiItemOrderForm: React.FC = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                
                 <div>
                   <Label htmlFor="paymentAmount">Amount Paid</Label>
                   <Input
@@ -677,7 +679,6 @@ const MultiItemOrderForm: React.FC = () => {
                     className="w-full"
                   />
                 </div>
-                
                 {paymentMethod === 'Cheque/DD' && (
                   <>
                     <div>
@@ -702,7 +703,6 @@ const MultiItemOrderForm: React.FC = () => {
                     </div>
                   </>
                 )}
-                
                 {paymentMethod === 'Card' && (
                   <>
                     <div>
@@ -751,7 +751,6 @@ const MultiItemOrderForm: React.FC = () => {
                     </div>
                   </>
                 )}
-                
                 {paymentMethod === 'Bank Transfer' && (
                   <>
                     <div>
@@ -800,7 +799,6 @@ const MultiItemOrderForm: React.FC = () => {
                     </div>
                   </>
                 )}
-                
                 {paymentMethod === 'UPI' && (
                   <>
                     <div>
@@ -830,7 +828,7 @@ const MultiItemOrderForm: React.FC = () => {
               </div>
             )}
           </div>
-          
+
           <Button
             type="submit"
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90"

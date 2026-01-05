@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -11,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import DispatchOrderDialog from '@/components/DispatchOrderDialog';
-import { Label } from '@/components/ui/label'; // Added import for Label
+import { Label } from '@/components/ui/label';
 
 interface OrderToDispatch {
   id: string;
@@ -28,24 +27,31 @@ interface DealerOption {
 }
 
 interface OrdersToDispatchCardProps {
-  onDispatchSuccess: (dispatchedOrderId: string) => void; // New prop to handle dispatch and print
+  onDispatchSuccess: (dispatchedOrderId: string) => void;
 }
 
 const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchSuccess }) => {
   const [orders, setOrders] = useState<OrderToDispatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
-
   // Filter states
   const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterDate, setFilterDate] = useState<string>('');
-
   // Dialog states
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
   const [isDispatchDialogOpen, setIsDispatchDialogOpen] = useState(false);
   const [selectedOrderIdForDispatch, setSelectedOrderIdForDispatch] = useState<string | null>(null);
+
+  // Format date as dd/mm/yyyy
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
 
   const fetchOrdersAndDealers = useCallback(async () => {
     setLoading(true);
@@ -158,15 +164,15 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
           </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterDealer">Dealer Name</Label>
-            <Select 
-              value={filterDealerId || "all"} // Set default value for Select
-              onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)} // Handle "all" value
+            <Select
+              value={filterDealerId || "all"}
+              onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}
             >
               <SelectTrigger id="filterDealer" className="w-full">
                 <SelectValue placeholder="Filter by dealer" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Dealers</SelectItem> {/* Changed value to "all" */}
+                <SelectItem value="all">All Dealers</SelectItem>
                 {allDealers.map(dealer => (
                   <SelectItem key={dealer.value} value={dealer.value}>{dealer.label}</SelectItem>
                 ))}
@@ -190,7 +196,6 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
             Clear Filters
           </Button>
         </div>
-
         <div className="overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -200,9 +205,9 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
           ) : orders.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No orders awaiting dispatch found.</p>
           ) : (
-            <div className="max-h-[250px] overflow-y-auto border rounded-md"> {/* Added max-h and overflow */}
+            <div className="max-h-[250px] overflow-y-auto border rounded-md">
               <Table>
-                <TableHeader className="sticky top-0 bg-background z-10"> {/* Made header sticky */}
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground">Order No.</TableHead>
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
@@ -216,14 +221,24 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
                     <TableRow key={order.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(order.order_date)}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Order Details">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleViewOrderDetails(order.id)}
+                            title="View Order Details"
+                          >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDispatchOrder(order.id)} title="Dispatch Order">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDispatchOrder(order.id)}
+                            title="Dispatch Order"
+                          >
                             <Truck className="h-4 w-4 text-green-600" />
                           </Button>
                         </div>
@@ -236,18 +251,16 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
           )}
         </div>
       </CardContent>
-
       <OrderDetailsDialog
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}
         onOpenChange={setIsOrderDetailsDialogOpen}
       />
-
       <DispatchOrderDialog
         orderId={selectedOrderIdForDispatch}
         isOpen={isDispatchDialogOpen}
         onOpenChange={setIsDispatchDialogOpen}
-        onDispatchSuccess={onDispatchSuccess} // Pass the prop from parent
+        onDispatchSuccess={onDispatchSuccess}
       />
     </Card>
   );
