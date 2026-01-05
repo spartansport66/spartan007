@@ -210,6 +210,14 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">Sales Dashboard</h1>
+        <Button 
+          onClick={handleLogout} 
+          variant="ghost" 
+          size="icon" 
+          className="text-foreground hover:text-foreground"
+        >
+          <LogOut className="h-5 w-5" />
+        </Button>
       </div>
       
       {/* Sales Person Performance Card */}
@@ -326,42 +334,6 @@ const Dashboard = () => {
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
-      
-      {/* Quick Actions */}
-      <Card className="bg-card text-card-foreground shadow-lg">
-        <CardHeader className="bg-orange-500 dark:bg-orange-700 text-white rounded-t-lg p-4">
-          <CardTitle className="text-xl font-semibold">Quick Actions</CardTitle>
-          <CardDescription className="text-orange-100 dark:text-orange-200">Perform common tasks quickly.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4 p-4">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/manage-dealers')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
-                <Building className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Manage Dealers</TooltipContent>
-          </Tooltip>
-          
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={() => navigate('/add-dealer')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
-                <PlusCircle className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Add Dealer</TooltipContent>
-          </Tooltip>
-          
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Logout</TooltipContent>
-          </Tooltip>
         </CardContent>
       </Card>
       
