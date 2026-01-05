@@ -11,7 +11,6 @@ import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog,
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
-// import PaymentCard from '@/components/PaymentCard'; // Removed import
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -22,12 +21,12 @@ import DealerReportDialog from '@/components/reports/DealerReportDialog';
 import SalesPersonPerformanceOverviewCard from '@/components/SalesPersonPerformanceOverviewCard';
 import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog';
 import CompanyInfoDialog from '@/components/CompanyInfoDialog';
-// import PaymentsForApprovalCard from '@/components/PaymentsForApprovalCard'; // REMOVED
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import AdminSidebar from '@/components/AdminSidebar';
 import SalesReportsDialog from '@/components/reports/SalesReportsDialog';
-import ProductionAlertsCard from '@/components/ProductionAlertsCard'; // Import the new component
-import AllPendingPaymentsCard from '@/components/AllPendingPaymentsCard'; // NEW IMPORT
+import ProductionAlertsCard from '@/components/ProductionAlertsCard';
+import AllPendingPaymentsCard from '@/components/AllPendingPaymentsCard';
+import PaymentOverviewCard from '@/components/PaymentOverviewCard'; // NEW IMPORT
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -45,6 +44,11 @@ const AdminDashboard = () => {
   const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0); // Key to force re-fetch in child components
+
+  // State for PaymentsReportDialog filters
+  const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
+  const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
+  const [paymentsReportInitialToDate, setPaymentsReportInitialToDate] = useState<string>('');
 
   // Simplified dashboard data
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
@@ -161,6 +165,13 @@ const AdminDashboard = () => {
     fetchDashboardData(); // Also refresh main dashboard data
   };
 
+  const handleViewPaymentsReport = (status: 'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval', fromDate?: string, toDate?: string) => {
+    setPaymentsReportInitialStatus(status);
+    setPaymentsReportInitialFromDate(fromDate || '');
+    setPaymentsReportInitialToDate(toDate || '');
+    setIsPaymentsReportOpen(true);
+  };
+
   // Show loading state with logout option
   if (sessionLoading || loadingData) {
     return (
@@ -274,7 +285,9 @@ const AdminDashboard = () => {
         <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 border-2 border-red-500 p-2"> {/* Temporary border for debugging */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        {/* Payment Overview Card */}
+        <PaymentOverviewCard onViewReport={handleViewPaymentsReport} />
         {/* All Pending Payments Card */}
         <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
       </div>
@@ -306,6 +319,9 @@ const AdminDashboard = () => {
       <PaymentsReportDialog
         isOpen={isPaymentsReportOpen}
         onOpenChange={setIsPaymentsReportOpen}
+        initialFilterStatus={paymentsReportInitialStatus}
+        initialFilterFromDate={paymentsReportInitialFromDate}
+        initialFilterToDate={paymentsReportInitialToDate}
       />
       <SalesReportsDialog
         isOpen={isSalesReportsDialogOpen}

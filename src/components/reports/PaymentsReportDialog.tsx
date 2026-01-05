@@ -36,12 +36,23 @@ interface DealerOption {
 interface PaymentsReportDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  initialFilterStatus?: 'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval';
+  initialFilterDealerId?: string;
+  initialFilterFromDate?: string; // YYYY-MM-DD
+  initialFilterToDate?: string; // YYYY-MM-DD
 }
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const APPROVE_PAYMENT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/approve-payment";
 
-const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onOpenChange }) => {
+const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
+  isOpen,
+  onOpenChange,
+  initialFilterStatus = 'pending',
+  initialFilterDealerId = '',
+  initialFilterFromDate = '',
+  initialFilterToDate = '',
+}) => {
   const [payments, setPayments] = useState<PaymentReportData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
@@ -51,10 +62,20 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
   const [isSubmittingAction, setIsSubmittingAction] = useState(false); // For approve/reject actions
 
   // Filter states
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('pending');
-  const [filterDealerId, setFilterDealerId] = useState<string>('');
-  const [filterFromDate, setFilterFromDate] = useState<string>('');
-  const [filterToDate, setFilterToDate] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>(initialFilterStatus);
+  const [filterDealerId, setFilterDealerId] = useState<string>(initialFilterDealerId);
+  const [filterFromDate, setFilterFromDate] = useState<string>(initialFilterFromDate);
+  const [filterToDate, setFilterToDate] = useState<string>(initialFilterToDate);
+
+  // Reset filters when dialog opens with new initial values
+  useEffect(() => {
+    if (isOpen) {
+      setFilterStatus(initialFilterStatus);
+      setFilterDealerId(initialFilterDealerId);
+      setFilterFromDate(initialFilterFromDate);
+      setFilterToDate(initialFilterToDate);
+    }
+  }, [isOpen, initialFilterStatus, initialFilterDealerId, initialFilterFromDate, initialFilterToDate]);
 
   // Helper to get start of current UTC day
   const getStartOfUTCDayISO = () => {
@@ -112,51 +133,49 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO();
 
-      if (filterStatus === 'pending_approval') {
-        // If filtering for pending approval, query payments table directly
+      if (filterStatus === 'pending_approval' || filterStatus === 'paid') {
+        // If filtering for pending approval or paid, query payments table directly
         let query = supabase
           .from('payments')
           .select(`
-            id, order_id, amount, payment_method, payment_date,
+            id, order_id, amount, payment_method, payment_date, approved_at,
             orders (
               id, order_number, order_date, total_amount, payment_status, payment_due_date, dealer_id,
               dealers (name, phone)
             )
           `)
-          .eq('status', 'pending_approval')
+          .eq('status', filterStatus === 'paid' ? 'completed' : 'pending_approval')
           .order('payment_date', { ascending: true });
 
         if (filterDealerId) {
           query = query.eq('orders.dealer_id', filterDealerId);
         }
-        // Date filters for payments would apply to payment_date, not order_date
+        // Date filters for payments would apply to payment_date or approved_at
         if (filterFromDate) {
           const startOfDay = `${filterFromDate}T00:00:00.000Z`;
-          query = query.gte('payment_date', startOfDay);
+          query = query.gte(filterStatus === 'paid' ? 'approved_at' : 'payment_date', startOfDay);
         }
         if (filterToDate) {
           const endOfDay = `${filterToDate}T23:59:59.999Z`;
-          query = query.lte('payment_date', endOfDay);
+          query = query.lte(filterStatus === 'paid' ? 'approved_at' : 'payment_date', endOfDay);
         }
 
         const { data, error } = await query;
         fetchedData = data;
         fetchError = error;
-        console.log("DEBUG: Raw fetchedData for pending_approval:", fetchedData); // DEBUG LOG
       } else {
-        // For other statuses, query orders table
+        // For other statuses (pending, overdue, upcoming, todays_due, all), query orders table
         let query = supabase
           .from('orders')
           .select(`
             id, order_number, order_date, total_amount, payment_status, payment_due_date, dealer_id,
-            dealers (name, phone)
+            dealers (name, phone),
+            payments (id, amount, payment_method, payment_date, cheque_dd_date, status)
           `)
           .order('payment_due_date', { ascending: true });
 
         if (filterStatus === 'pending') {
           query = query.eq('payment_status', 'pending');
-        } else if (filterStatus === 'paid') {
-          query = query.eq('payment_status', 'paid');
         } else if (filterStatus === 'overdue') {
           query = query.eq('payment_status', 'pending').lte('payment_due_date', startOfUTCTodayISO);
         } else if (filterStatus === 'upcoming') {
@@ -190,17 +209,15 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         setPayments([]);
       } else {
         const formattedPayments: PaymentReportData[] = (fetchedData || []).map((item: any) => {
-          if (filterStatus === 'pending_approval') {
+          if (filterStatus === 'pending_approval' || filterStatus === 'paid') {
             // When querying payments directly
-            console.log("DEBUG: Mapping pending_approval item. Raw item:", item); // Log the entire raw item
-            console.log("DEBUG: item.id (payment ID from payments table):", item.id, "item.orders.id (order ID from orders table):", item.orders.id); // NEW LOG
             return {
               id: item.orders.id, // Order ID
               order_number: item.orders.order_number,
               dealer_name: item.orders.dealers?.name || 'N/A',
               dealer_phone: item.orders.dealers?.phone || '',
               total_amount: item.amount, // Payment amount from the payment record
-              payment_status: item.orders.payment_status, // Order's payment status
+              payment_status: item.status === 'completed' ? 'paid' : item.status, // Payment's status
               payment_due_date: item.orders.payment_due_date,
               order_date: item.orders.order_date,
               payment_id: item.id, // This is the payment record ID
@@ -208,8 +225,6 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
             };
           } else {
             // When querying orders directly
-            console.log("DEBUG: Mapping non-pending_approval item. Raw item:", item); // Log the entire raw item
-            console.log("DEBUG: item.id (order ID):", item.id); // NEW LOG
             return {
               id: item.id, // Order ID
               order_number: item.order_number,
@@ -219,12 +234,11 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
               payment_status: item.payment_status,
               payment_due_date: item.payment_due_date,
               order_date: item.order_date,
-              payment_id: null, // No specific payment ID needed for these statuses in this context
+              payment_id: item.payments?.[0]?.id || null, // Get payment ID if available
               dealer_id: item.dealer_id,
             };
           }
         });
-        console.log("DEBUG: Formatted payments after mapping:", formattedPayments); // DEBUG LOG
         setPayments(formattedPayments);
       }
     } catch (error: any) {
@@ -243,7 +257,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
   }, [isOpen, fetchCompanyInfo, fetchPaymentsAndDealers]);
 
   const handleClearFilters = () => {
-    setFilterStatus('pending');
+    setFilterStatus('all');
     setFilterDealerId('');
     setFilterFromDate('');
     setFilterToDate('');
@@ -276,9 +290,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
   };
 
   const handleApproveRejectPayment = async (payment: PaymentReportData, action: 'approve' | 'reject') => {
-    console.log("DEBUG: handleApproveRejectPayment received payment object:", payment); // NEW LOG
     if (!payment.payment_id) {
-      console.error("ERROR: payment.payment_id is missing for this record in handleApproveRejectPayment:", payment); // DEBUG LOG
       showError('Payment ID is missing for this record.');
       return;
     }
@@ -330,9 +342,6 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
         payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A',
         new Date(payment.order_date).toLocaleDateString(),
       ]);
-
-      console.log('Payments Report - Table Columns:', tableColumn);
-      console.log('Payments Report - Table Rows:', tableRows);
 
       autoTable(doc, {
         head: [tableColumn],
@@ -507,7 +516,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({ isOpen, onO
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
                           {payment.payment_status === 'pending' && (
-                            <Button variant="ghost" size="icon" onClick={() => handleUpdatePaymentClick(payment)} title="Update Payment" className="hover:bg-green-100">
+                            <Button variant="ghost" size="icon" onClick={() => handleUpdatePaymentClick(payment)} title="Add Payment" className="hover:bg-green-100">
                               <DollarSign className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
