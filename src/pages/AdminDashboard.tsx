@@ -105,8 +105,18 @@ const AdminDashboard = () => {
         setTotalOrders(ordersCount || 0);
       }
 
-      // Set a dummy sales value for now
-      setTotalSalesValue(125000);
+      // Fetch total sales value
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select('total_price');
+
+      if (salesError) {
+        console.error('Error fetching total sales value:', salesError.message);
+        setTotalSalesValue(0);
+      } else {
+        const total = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
+        setTotalSalesValue(total);
+      }
 
     } catch (error: any) {
       console.error('AdminDashboard: Error fetching dashboard data:', error);
@@ -188,21 +198,21 @@ const AdminDashboard = () => {
     {
       title: "Total Sales Value",
       value: `₹${totalSalesValue.toFixed(2)}`,
-      change: "+20.1% from last month",
+      change: "+20.1% from last month", // This is still a placeholder, can be made dynamic later
       icon: <DollarSign className="h-3 w-3 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Orders",
       value: totalOrders.toString(),
-      change: "+180.1% from last month",
+      change: "+180.1% from last month", // This is still a placeholder, can be made dynamic later
       icon: <Package className="h-3 w-3 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
-      change: "+19% from last month",
+      change: "+19% from last month", // This is still a placeholder, can be made dynamic later
       icon: <Building className="h-3 w-3 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
