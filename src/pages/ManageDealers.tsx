@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -9,34 +8,18 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Edit, Trash2, Eye, Loader2, CalendarDays } from 'lucide-react'; // Added CalendarDays icon
+import { ArrowLeft, Edit, Trash2, Eye, Loader2, CalendarDays, Upload } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import MultiSelect from '@/components/MultiSelect';
-import DealerMonthlyCreditManager from '@/components/DealerMonthlyCreditManager'; // Import the new component
+import DealerMonthlyCreditManager from '@/components/DealerMonthlyCreditManager';
+import ExcelUpload from '@/components/ExcelUpload';
 
 interface Dealer {
   id: string;
@@ -92,7 +75,7 @@ const ManageDealers = () => {
   const [allSalesPersons, setAllSalesPersons] = useState<SalesPerson[]>([]);
   const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false); // New state for monthly credit dialog
   const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null); // New state for selected dealer for monthly credit
-
+  const [isUploading, setIsUploading] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -133,7 +116,6 @@ const ManageDealers = () => {
       .from('profiles')
       .select('id, first_name, last_name')
       .eq('user_type', 'sales_person');
-
     if (error) {
       console.error('Error fetching all sales persons:', error);
       showError(`Failed to load sales persons: ${error.message}`);
@@ -152,10 +134,7 @@ const ManageDealers = () => {
 
     const { data: dealersData, error: dealersError } = await supabase
       .from('dealers')
-      .select(`
-        *,
-        dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name))
-      `);
+      .select(` *, dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name)) `);
 
     if (dealersError) {
       console.error('Error fetching dealers:', dealersError);
@@ -169,7 +148,6 @@ const ManageDealers = () => {
     // Fetch all monthly credit limits for the current month
     const today = new Date();
     const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0]; // YYYY-MM-01
-
     const { data: monthlyLimitsData, error: monthlyLimitsError } = await supabase
       .from('dealer_monthly_credit_limits')
       .select('dealer_id, credit_limit')
@@ -193,8 +171,8 @@ const ManageDealers = () => {
       }));
 
       // Determine the effective credit limit for the current month
-      const currentMonthCreditLimit = monthlyLimitsMap.has(d.id)
-        ? monthlyLimitsMap.get(d.id)!
+      const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) 
+        ? monthlyLimitsMap.get(d.id)! 
         : d.credit_limit; // Fallback to general credit_limit
 
       return {
@@ -203,6 +181,7 @@ const ManageDealers = () => {
         current_month_credit_limit: currentMonthCreditLimit,
       };
     });
+
     setDealers(formattedDealers);
     setLoading(false);
   }, [user]);
@@ -255,7 +234,6 @@ const ManageDealers = () => {
 
     const currentAssignedIds = selectedDealer.assigned_sales_persons.map(sp => sp.id);
     const newAssignedIds = values.assignedSalesPersonIds;
-
     const toAdd = newAssignedIds.filter(id => !currentAssignedIds.includes(id));
     const toRemove = currentAssignedIds.filter(id => !newAssignedIds.includes(id));
 
@@ -263,6 +241,7 @@ const ManageDealers = () => {
       const { error: addError } = await supabase
         .from('dealer_sales_persons')
         .insert(toAdd.map(spId => ({ dealer_id: selectedDealer.id, sales_person_id: spId })));
+
       if (addError) {
         console.error('Error adding sales persons:', addError);
         showError(`Failed to assign sales persons: ${addError.message}`);
@@ -276,6 +255,7 @@ const ManageDealers = () => {
         .delete()
         .eq('dealer_id', selectedDealer.id)
         .in('sales_person_id', toRemove);
+
       if (removeError) {
         console.error('Error removing sales persons:', removeError);
         showError(`Failed to unassign sales persons: ${removeError.message}`);
@@ -303,6 +283,49 @@ const ManageDealers = () => {
     }
   };
 
+  const handleBulkUpload = async (data: any[]) => {
+    if (!user) {
+      showError('You must be logged in to add dealers.');
+      navigate('/login');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Transform data to match dealer schema
+      const dealersToInsert = data.map((row: any) => ({
+        user_id: user.id,
+        name: row.name || row.Name || row['Dealer Name'] || '',
+        contact_person: row.contact_person || row.ContactPerson || row['Contact Person'] || '',
+        email: row.email || row.Email || '',
+        phone: row.phone || row.Phone || row['Phone Number'] || '',
+        address: row.address || row.Address || '',
+        city: row.city || row.City || 'Unknown',
+        state: row.state || row.State || 'Unknown',
+        country: row.country || row.Country || 'Unknown',
+        credit_limit: parseFloat(row.credit_limit || row.CreditLimit || row['Credit Limit'] || '0'),
+        allotted_credit_days: parseInt(row.allotted_credit_days || row.AllottedCreditDays || row['Allotted Credit Days'] || '0'),
+      }));
+
+      const { data: insertedData, error } = await supabase
+        .from('dealers')
+        .insert(dealersToInsert)
+        .select();
+
+      if (error) {
+        throw error;
+      }
+
+      showSuccess(`Successfully uploaded ${insertedData?.length || 0} dealers!`);
+      fetchDealers();
+    } catch (error: any) {
+      console.error('Error uploading dealers:', error);
+      showError(`Failed to upload dealers: ${error.message}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   if (sessionLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -317,7 +340,8 @@ const ManageDealers = () => {
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
         <p className="text-lg text-red-600 dark:text-red-400 mb-4">{error}</p>
         <Button onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} className="flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
         </Button>
       </div>
     );
@@ -328,108 +352,161 @@ const ManageDealers = () => {
     label: `${sp.first_name} ${sp.last_name}`,
   }));
 
+  const sampleDealerData = [
+    {
+      name: 'Global Distributors',
+      contact_person: 'John Doe',
+      email: 'john@gd.com',
+      phone: '+1234567890',
+      address: '123 Business St',
+      city: 'New York',
+      state: 'NY',
+      country: 'USA',
+      credit_limit: 50000,
+      allotted_credit_days: 30
+    },
+    {
+      name: 'Regional Traders',
+      contact_person: 'Jane Smith',
+      email: 'jane@rt.com',
+      phone: '+1987654321',
+      address: '456 Trade Ave',
+      city: 'Los Angeles',
+      state: 'CA',
+      country: 'USA',
+      credit_limit: 30000,
+      allotted_credit_days: 45
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-full">
         <Button variant="outline" onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} className="mb-6 flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
         </Button>
-
-        <Card className="bg-card text-card-foreground shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-2xl font-semibold text-primary">Manage Dealers</CardTitle>
-            <CardDescription className="text-muted-foreground">View, edit, or delete your registered dealers.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              {dealers.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No dealers found. Add a new dealer to get started!</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted hover:bg-muted/90">
-                      <TableHead className="text-muted-foreground">Name</TableHead>
-                      <TableHead className="text-muted-foreground">Contact Person</TableHead>
-                      <TableHead className="text-muted-foreground">Email</TableHead>
-                      <TableHead className="text-muted-foreground">Phone</TableHead>
-                      <TableHead className="text-muted-foreground">Address</TableHead>
-                      <TableHead className="text-muted-foreground">City</TableHead>
-                      <TableHead className="text-muted-foreground">State</TableHead>
-                      <TableHead className="text-muted-foreground">Country</TableHead>
-                      <TableHead className="text-muted-foreground">Monthly Credit Limit</TableHead> {/* Updated TableHead */}
-                      <TableHead className="text-muted-foreground">Credit Days</TableHead>
-                      <TableHead className="text-muted-foreground">Assigned To</TableHead>
-                      <TableHead className="text-muted-foreground">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dealers.map((dealer) => (
-                      <TableRow key={dealer.id} className="hover:bg-accent/50">
-                        <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.contact_person}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.phone}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.address}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
-                        <TableCell className="text-muted-foreground">{dealer.country}</TableCell>
-                        <TableCell className="text-muted-foreground">₹{dealer.current_month_credit_limit.toFixed(2)}</TableCell> {/* Display effective monthly limit */}
-                        <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {dealer.assigned_sales_persons.length > 0
-                            ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name}`).join(', ')
-                            : 'Unassigned'}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer)} title="Edit Dealer">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              onClick={() => handleManageMonthlyCredit(dealer)} 
-                              title="Manage Monthly Credit Limits"
-                            >
-                              <CalendarDays className="h-4 w-4" />
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" title="Delete Dealer">
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This action cannot be undone. This will permanently delete the dealer.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDelete(dealer.id)}>Continue</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </TableCell>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <Card className="bg-card text-card-foreground shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-2xl font-semibold text-primary">Manage Dealers</CardTitle>
+              <CardDescription className="text-muted-foreground">View, edit, or delete your registered dealers.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                {dealers.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No dealers found. Add a new dealer to get started!</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted hover:bg-muted/90">
+                        <TableHead className="text-muted-foreground">Name</TableHead>
+                        <TableHead className="text-muted-foreground">Contact Person</TableHead>
+                        <TableHead className="text-muted-foreground">Email</TableHead>
+                        <TableHead className="text-muted-foreground">Phone</TableHead>
+                        <TableHead className="text-muted-foreground">Address</TableHead>
+                        <TableHead className="text-muted-foreground">City</TableHead>
+                        <TableHead className="text-muted-foreground">State</TableHead>
+                        <TableHead className="text-muted-foreground">Country</TableHead>
+                        <TableHead className="text-muted-foreground">Monthly Credit Limit</TableHead>
+                        <TableHead className="text-muted-foreground">Credit Days</TableHead>
+                        <TableHead className="text-muted-foreground">Assigned To</TableHead>
+                        <TableHead className="text-muted-foreground">Actions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </div>
-            <div className="mt-6 text-right">
-              <Button onClick={() => navigate('/add-dealer')} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                Add New Dealer
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {dealers.map((dealer) => (
+                        <TableRow key={dealer.id} className="hover:bg-accent/50">
+                          <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.contact_person}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.phone}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.address}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.country}</TableCell>
+                          <TableCell className="text-muted-foreground">₹{dealer.current_month_credit_limit.toFixed(2)}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {dealer.assigned_sales_persons.length > 0 
+                              ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name}`).join(', ') 
+                              : 'Unassigned'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer)} title="Edit Dealer">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleManageMonthlyCredit(dealer)} title="Manage Monthly Credit Limits">
+                                <CalendarDays className="h-4 w-4" />
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" title="Delete Dealer">
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This action cannot be undone. This will permanently delete the dealer.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDelete(dealer.id)}>Continue</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+              <div className="mt-6 text-right">
+                <Button onClick={() => navigate('/add-dealer')} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  Add New Dealer
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <div className="space-y-6">
+            <ExcelUpload
+              onUpload={handleBulkUpload}
+              sampleData={sampleDealerData}
+              sampleFileName="sample_dealers.xlsx"
+              uploadButtonText="Upload Dealers"
+              tableHeaders={['Name', 'Contact Person', 'Email', 'Phone', 'Address', 'City', 'State', 'Country', 'Credit Limit', 'Credit Days']}
+              requiredHeaders={['name', 'contact', 'email', 'phone', 'address', 'city', 'state', 'country', 'credit', 'days']}
+            />
+            
+            <Card className="bg-card text-card-foreground shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  Bulk Upload Instructions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="list-disc pl-5 space-y-2 text-sm">
+                  <li>Download the sample Excel file to see the required format</li>
+                  <li>Required columns: Name, Contact Person, Email, Phone, Address, City, State, Country, Credit Limit, Credit Days</li>
+                  <li>Credit Limit should be a number (e.g., 50000)</li>
+                  <li>Credit Days should be a whole number (e.g., 30)</li>
+                  <li>Save your file as .xlsx or .xls format</li>
+                </ul>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
       <MadeWithDyad />
-
       {selectedDealer && (
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="sm:max-w-[425px]">
@@ -511,7 +588,6 @@ const ManageDealers = () => {
                   <Input id="allottedCreditDays" type="number" placeholder="e.g., 30" {...form.register('allottedCreditDays')} className="col-span-3" />
                   {form.formState.errors.allottedCreditDays && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.allottedCreditDays.message}</p>}
                 </div>
-                
                 <FormField
                   control={form.control}
                   name="assignedSalesPersonIds"
@@ -531,7 +607,6 @@ const ManageDealers = () => {
                     </FormItem>
                   )}
                 />
-                
                 <DialogFooter>
                   <Button type="submit">Save changes</Button>
                 </DialogFooter>
@@ -540,7 +615,6 @@ const ManageDealers = () => {
           </DialogContent>
         </Dialog>
       )}
-      
       {/* Manage Monthly Credit Limit Dialog */}
       {selectedDealerForMonthlyCredit && (
         <Dialog open={isMonthlyCreditDialogOpen} onOpenChange={setIsMonthlyCreditDialogOpen}>
@@ -551,10 +625,7 @@ const ManageDealers = () => {
                 Add, edit, or delete month-wise credit limits for this dealer.
               </DialogDescription>
             </DialogHeader>
-            <DealerMonthlyCreditManager 
-              dealer={selectedDealerForMonthlyCredit} 
-              onCreditLimitsUpdated={fetchDealers} 
-            />
+            <DealerMonthlyCreditManager dealer={selectedDealerForMonthlyCredit} onCreditLimitsUpdated={fetchDealers} />
           </DialogContent>
         </Dialog>
       )}

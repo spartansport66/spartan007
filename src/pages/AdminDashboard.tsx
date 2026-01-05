@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
@@ -7,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Upload } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
@@ -44,13 +43,11 @@ const AdminDashboard = () => {
   const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0); // Key to force re-fetch in child components
-
   // State for PaymentsReportDialog filters
   const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
   const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
   const [paymentsReportInitialToDate, setPaymentsReportInitialToDate] = useState<string>('');
   const [paymentsReportDialogKey, setPaymentsReportDialogKey] = useState(0); // New key for PaymentsReportDialog
-
   // Simplified dashboard data
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
   const [totalOrders, setTotalOrders] = useState<number>(0);
@@ -64,7 +61,6 @@ const AdminDashboard = () => {
         .select('company_name')
         .limit(1)
         .single();
-
       if (error && error.code !== 'PGRST116') {
         throw error;
       }
@@ -82,34 +78,27 @@ const AdminDashboard = () => {
       const { count: productsCount, error: productsError } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true });
-
       if (!productsError) {
         setProductsCount(productsCount || 0);
       }
-
       // Fetch dealers count
       const { count: dealersCount, error: dealersError } = await supabase
         .from('dealers')
         .select('*', { count: 'exact', head: true });
-
       if (!dealersError) {
         setActiveDealersCount(dealersCount || 0);
       }
-
       // Fetch orders count
       const { count: ordersCount, error: ordersError } = await supabase
         .from('orders')
         .select('*', { count: 'exact', head: true });
-
       if (!ordersError) {
         setTotalOrders(ordersCount || 0);
       }
-
       // Fetch total sales value
       const { data: salesData, error: salesError } = await supabase
         .from('sales')
         .select('total_price');
-
       if (salesError) {
         console.error('Error fetching total sales value:', salesError.message);
         setTotalSalesValue(0);
@@ -117,7 +106,6 @@ const AdminDashboard = () => {
         const total = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
         setTotalSalesValue(total);
       }
-
     } catch (error: any) {
       console.error('AdminDashboard: Error fetching dashboard data:', error);
     } finally {
@@ -176,14 +164,15 @@ const AdminDashboard = () => {
     setIsPaymentsReportOpen(true);
   };
 
-  // Show loading state with logout option
+  // Show loading state with logout option if (sessionLoading || loadingData)
   if (sessionLoading || loadingData) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="ml-2 text-lg text-gray-700 dark:text-gray-300 mb-4">Loading admin dashboard...</p>
         <Button onClick={handleLogout} variant="destructive" className="flex items-center gap-2">
-          <LogOut className="h-4 w-4" /> Force Logout
+          <LogOut className="h-4 w-4" />
+          Force Logout
         </Button>
       </div>
     );
@@ -199,28 +188,28 @@ const AdminDashboard = () => {
       title: "Total Sales Value",
       value: `₹${totalSalesValue.toFixed(2)}`,
       change: "+20.1% from last month", // This is still a placeholder, can be made dynamic later
-      icon: <DollarSign className="h-3 w-3 text-white" />,
+      icon: <DollarSign className="h-4 w-4 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Orders",
       value: totalOrders.toString(),
       change: "+180.1% from last month", // This is still a placeholder, can be made dynamic later
-      icon: <Package className="h-3 w-3 text-white" />,
+      icon: <Package className="h-4 w-4 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
       change: "+19% from last month", // This is still a placeholder, can be made dynamic later
-      icon: <Building className="h-3 w-3 text-white" />,
+      icon: <Building className="h-4 w-4 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Products",
       value: productsCount.toString(),
       change: "Overall",
-      icon: <Boxes className="h-3 w-3 text-white" />,
+      icon: <Boxes className="h-4 w-4 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
   ];
@@ -231,13 +220,13 @@ const AdminDashboard = () => {
         {/* Left: Company Name */}
         <div className="text-left">
           {companyName && (
-            <h2 className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
+            <h2 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">
               {companyName}
             </h2>
           )}
         </div>
         {/* Center: Admin Dashboard Title */}
-        <h1 className="text-center text-2xl sm:text-3xl font-bold text-primary">Admin Dashboard</h1>
+        <h1 className="text-center text-3xl sm:text-4xl font-bold text-primary">Admin Dashboard</h1>
         {/* Right: Sidebar Trigger */}
         <Sheet>
           <SheetTrigger asChild>
@@ -262,42 +251,36 @@ const AdminDashboard = () => {
           </SheetContent>
         </Sheet>
       </div>
-
-      <div className="grid gap-2 grid-cols-2 lg:grid-cols-4 mb-6">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md h-full">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 p-2 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg">
-              <CardTitle className="text-[0.5rem] font-medium text-white">{item.title}</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg">
+              <CardTitle className="text-base font-medium text-white">{item.title}</CardTitle>
               {item.icon}
             </CardHeader>
-            <CardContent className="p-2 pt-0">
-              <div className={`text-2xl font-bold ${item.valueColor}`}>{item.value}</div>
-              <p className="text-[0.4rem] text-muted-foreground mt-1">{item.change}</p>
+            <CardContent className="p-4 pt-0">
+              <div className={`text-3xl font-bold ${item.valueColor}`}>{item.value}</div>
+              <p className="text-xs text-muted-foreground mt-1">{item.change}</p>
             </CardContent>
           </Card>
         ))}
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
         <DispatchedOrdersCard />
       </div>
-      
       {/* New row for Production Alerts and Sales Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <ProductionAlertsCard />
         <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         {/* Payment Overview Card */}
         <PaymentOverviewCard onViewReport={handleViewPaymentsReport} />
         {/* All Pending Payments Card */}
         <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
       </div>
-
       <MadeWithDyad />
-
       <OrderDetailsDialog
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}
