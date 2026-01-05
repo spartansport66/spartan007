@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +13,6 @@ interface PaymentOverviewCardProps {
 
 const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport }) => {
   const [loading, setLoading] = useState(true);
-
   const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
   const [totalReceivedAmount, setTotalReceivedAmount] = useState<number>(0);
   const [totalPendingApprovalAmount, setTotalPendingApprovalAmount] = useState<number>(0);
@@ -54,7 +52,9 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
         .from('orders')
         .select('total_amount')
         .eq('payment_status', 'pending');
+
       if (pendingOrdersError) throw pendingOrdersError;
+
       const calculatedTotalPending = (pendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
       console.log("DEBUG: PaymentOverviewCard - Raw pendingOrders data:", pendingOrders);
       console.log("DEBUG: PaymentOverviewCard - Calculated Total Pending Amount:", calculatedTotalPending);
@@ -66,7 +66,9 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
         .from('payments')
         .select('amount')
         .eq('status', 'completed');
+
       if (receivedPaymentsError) throw receivedPaymentsError;
+
       const calculatedTotalReceived = (receivedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       console.log("DEBUG: PaymentOverviewCard - Raw receivedPayments data:", receivedPayments);
       console.log("DEBUG: PaymentOverviewCard - Calculated Total Received Amount:", calculatedTotalReceived);
@@ -78,10 +80,10 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
         .from('payments')
         .select('amount')
         .eq('status', 'pending_approval');
-      
-      console.log("DEBUG: PaymentOverviewCard - Raw pendingApprovalPayments data:", pendingApprovalPayments);
 
+      console.log("DEBUG: PaymentOverviewCard - Raw pendingApprovalPayments data:", pendingApprovalPayments);
       if (pendingApprovalPaymentsError) throw pendingApprovalPaymentsError;
+
       const calculatedTotalPendingApproval = (pendingApprovalPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       console.log("DEBUG: PaymentOverviewCard - Calculated Total Pending for Approval Amount:", calculatedTotalPendingApproval);
       setTotalPendingApprovalAmount(calculatedTotalPendingApproval);
@@ -94,9 +96,10 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
         .eq('status', 'completed')
         .gte('approved_at', startOfUTCTodayISO)
         .lte('approved_at', endOfUTCTodayISO);
-      
+
       console.log("DEBUG: PaymentOverviewCard - Raw todayReceived data (approved_at):", todayReceived);
       if (todayReceivedError) throw todayReceivedError;
+
       const calculatedTodayReceived = (todayReceived || []).reduce((sum, payment) => sum + payment.amount, 0);
       console.log("DEBUG: PaymentOverviewCard - Calculated Today Received Amount:", calculatedTodayReceived);
       setTodayReceivedAmount(calculatedTodayReceived);
@@ -109,9 +112,10 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
         .eq('status', 'pending_approval')
         .gte('payment_date', startOfUTCTodayISO)
         .lte('payment_date', endOfUTCTodayISO);
-      
+
       console.log("DEBUG: PaymentOverviewCard - Raw todayPendingApproval data (payment_date):", todayPendingApproval);
       if (todayPendingApprovalError) throw todayPendingApprovalError;
+
       const calculatedTodayPendingApproval = (todayPendingApproval || []).reduce((sum, payment) => sum + payment.amount, 0);
       console.log("DEBUG: PaymentOverviewCard - Calculated Today Pending for Approval Amount (payment_date):", calculatedTodayPendingApproval);
       setTodayPendingApprovalAmount(calculatedTodayPendingApproval);
