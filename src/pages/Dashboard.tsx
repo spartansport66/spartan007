@@ -55,13 +55,19 @@ const Dashboard = () => {
   const { user, loading: sessionLoading, isAdmin } = useSession();
   const [orders, setOrders] = useState<OrderDisplay[]>([]); // Changed from sales to orders
   const [loadingData, setLoadingData] = useState(true);
-
-  // Filter states for recent sales
+  
+  // Filter states for recent sales - Set default to today's date
   const [filterDealerId, setFilterDealerId] = useState<string>('');
-  const [filterFromDate, setFilterFromDate] = useState<string>('');
-  const [filterToDate, setFilterToDate] = useState<string>('');
+  const [filterFromDate, setFilterFromDate] = useState<string>(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
+  const [filterToDate, setFilterToDate] = useState<string>(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
   const [allDealers, setAllDealers] = useState<{ id: string; name: string }[]>([]);
-
+  
   // Dialog states for order details
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
@@ -71,15 +77,15 @@ const Dashboard = () => {
       setLoadingData(false);
       return;
     }
-
+    
     setLoadingData(true);
-
+    
     // Fetch all dealers assigned to the current user for the filter dropdown
     const { data: assignedDealersData, error: assignedDealersError } = await supabase
       .from('dealer_sales_persons')
       .select('dealers(id, name)')
       .eq('sales_person_id', user.id);
-
+    
     if (assignedDealersError) {
       console.error('Error fetching assigned dealers:', assignedDealersError);
       showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
@@ -88,7 +94,7 @@ const Dashboard = () => {
       const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
       setAllDealers(formattedDealers);
     }
-
+    
     // Fetch orders and their associated sales items
     let ordersQuery = supabase
       .from('orders')
@@ -107,20 +113,22 @@ const Dashboard = () => {
       `)
       .eq('user_id', user.id) // Filter by current sales person
       .order('order_date', { ascending: false });
-
+    
     // Apply filters
     if (filterDealerId) {
       ordersQuery = ordersQuery.eq('dealer_id', filterDealerId);
     }
+    
     if (filterFromDate) {
       ordersQuery = ordersQuery.gte('order_date', `${filterFromDate}T00:00:00.000Z`);
     }
+    
     if (filterToDate) {
       ordersQuery = ordersQuery.lte('order_date', `${filterToDate}T23:59:59.999Z`);
     }
-
+    
     const { data: ordersData, error: ordersError } = await ordersQuery;
-
+    
     if (ordersError) {
       console.error('Error fetching orders:', ordersError);
       showError(`Failed to load orders data: ${ordersError.message}`);
@@ -141,10 +149,10 @@ const Dashboard = () => {
           total_price: sale.total_price,
         })),
       }));
-
+      
       setOrders(processedOrders);
     }
-
+    
     setLoadingData(false);
   }, [user, filterDealerId, filterFromDate, filterToDate]);
 
@@ -173,8 +181,11 @@ const Dashboard = () => {
 
   const handleClearFilters = () => {
     setFilterDealerId('');
-    setFilterFromDate('');
-    setFilterToDate('');
+    // Set filters to today's date by default
+    const today = new Date();
+    const todayString = today.toISOString().split('T')[0];
+    setFilterFromDate(todayString);
+    setFilterToDate(todayString);
   };
 
   const handleViewOrderDetails = (orderId: string) => {
@@ -200,34 +211,34 @@ const Dashboard = () => {
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">Sales Dashboard</h1>
       </div>
-
+      
       {/* Sales Person Performance Card */}
       <div className="mb-6">
         <SalesPersonPerformanceCard />
       </div>
-
+      
       {/* Multi-Item Order Form - Full Width */}
       <div className="mb-6">
         <MultiItemOrderForm />
       </div>
-
+      
       {/* Payment Status Card */}
       <div className="mb-6">
         <PaymentStatusCard />
       </div>
-
+      
       {/* Recent Activities (Orders) */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
         <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
-          <CardTitle className="text-xl font-semibold">My Recent Orders</CardTitle> {/* Changed title */}
+          <CardTitle className="text-xl font-semibold">My Recent Orders</CardTitle>
           <CardDescription className="text-teal-100 dark:text-teal-200">A list of your recent orders.</CardDescription>
         </CardHeader>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
             <div className="flex-1 min-w-[150px]">
               <Label htmlFor="filterDealer">Dealer Name</Label>
-              <Select
-                value={filterDealerId || "all"}
+              <Select 
+                value={filterDealerId || "all"} 
                 onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}
               >
                 <SelectTrigger id="filterDealer" className="w-full">
@@ -241,34 +252,39 @@ const Dashboard = () => {
                 </SelectContent>
               </Select>
             </div>
+            
             <div className="flex-1 min-w-[150px]">
               <Label htmlFor="filterFromDate">From Date</Label>
-              <Input
-                id="filterFromDate"
-                type="date"
-                value={filterFromDate}
-                onChange={(e) => setFilterFromDate(e.target.value)}
-                className="w-full"
+              <Input 
+                id="filterFromDate" 
+                type="date" 
+                value={filterFromDate} 
+                onChange={(e) => setFilterFromDate(e.target.value)} 
+                className="w-full" 
               />
             </div>
+            
             <div className="flex-1 min-w-[150px]">
               <Label htmlFor="filterToDate">To Date</Label>
-              <Input
-                id="filterToDate"
-                type="date"
-                value={filterToDate}
-                onChange={(e) => setFilterToDate(e.target.value)}
-                className="w-full"
+              <Input 
+                id="filterToDate" 
+                type="date" 
+                value={filterToDate} 
+                onChange={(e) => setFilterToDate(e.target.value)} 
+                className="w-full" 
               />
             </div>
+            
             <Button onClick={fetchDashboardData} className="flex items-center gap-2">
-              <Search className="h-4 w-4" /> Apply Filters
+              <Search className="h-4 w-4" />
+              Apply Filters
             </Button>
+            
             <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
               Clear Filters
             </Button>
           </div>
-
+          
           <div className="overflow-x-auto">
             {orders.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No orders recorded yet or matching your filters.</p>
@@ -277,18 +293,18 @@ const Dashboard = () => {
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="bg-muted hover:bg-muted/90">
-                      <TableHead className="text-muted-foreground">Order No.</TableHead> {/* Changed header */}
+                      <TableHead className="text-muted-foreground">Order No.</TableHead>
                       <TableHead className="text-muted-foreground">Dealer</TableHead>
-                      <TableHead className="text-muted-foreground">Order Date</TableHead> {/* Changed header */}
+                      <TableHead className="text-muted-foreground">Order Date</TableHead>
                       <TableHead className="text-muted-foreground">Total Amount</TableHead>
                       <TableHead className="text-muted-foreground">Payment Status</TableHead>
-                      <TableHead className="text-muted-foreground text-center">Actions</TableHead> {/* Added Actions header */}
+                      <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {orders.map((order) => (
                       <TableRow key={order.id} className="hover:bg-accent/50">
-                        <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell> {/* Display order_number */}
+                        <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
                         <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
                         <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
                         <TableCell className="text-muted-foreground">₹{order.total_amount.toFixed(2)}</TableCell>
@@ -312,7 +328,7 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
-
+      
       {/* Quick Actions */}
       <Card className="bg-card text-card-foreground shadow-lg">
         <CardHeader className="bg-orange-500 dark:bg-orange-700 text-white rounded-t-lg p-4">
@@ -328,6 +344,7 @@ const Dashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Manage Dealers</TooltipContent>
           </Tooltip>
+          
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={() => navigate('/add-dealer')} size="icon" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
@@ -336,6 +353,7 @@ const Dashboard = () => {
             </TooltipTrigger>
             <TooltipContent>Add Dealer</TooltipContent>
           </Tooltip>
+          
           <Tooltip>
             <TooltipTrigger asChild>
               <Button onClick={handleLogout} variant="destructive" size="icon" className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
@@ -346,13 +364,14 @@ const Dashboard = () => {
           </Tooltip>
         </CardContent>
       </Card>
+      
       <MadeWithDyad />
-
+      
       {/* Order Details Dialog */}
-      <OrderDetailsDialog
-        orderId={selectedOrderIdForDetails}
-        isOpen={isOrderDetailsDialogOpen}
-        onOpenChange={setIsOrderDetailsDialogOpen}
+      <OrderDetailsDialog 
+        orderId={selectedOrderIdForDetails} 
+        isOpen={isOrderDetailsDialogOpen} 
+        onOpenChange={setIsOrderDetailsDialogOpen} 
       />
     </div>
   );
