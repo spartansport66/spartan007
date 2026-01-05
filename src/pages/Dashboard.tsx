@@ -55,6 +55,7 @@ const Dashboard = () => {
   const { user, loading: sessionLoading, isAdmin } = useSession();
   const [orders, setOrders] = useState<OrderDisplay[]>([]); // Changed from sales to orders
   const [loadingData, setLoadingData] = useState(true);
+  const [salesPersonName, setSalesPersonName] = useState<string>('');
   
   // Filter states for recent sales - Set default to today's date
   const [filterDealerId, setFilterDealerId] = useState<string>('');
@@ -79,6 +80,17 @@ const Dashboard = () => {
     }
     
     setLoadingData(true);
+    
+    // Fetch sales person name
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('first_name, last_name')
+      .eq('id', user.id)
+      .single();
+    
+    if (!profileError && profileData) {
+      setSalesPersonName(`${profileData.first_name || ''} ${profileData.last_name || ''}`.trim());
+    }
     
     // Fetch all dealers assigned to the current user for the filter dropdown
     const { data: assignedDealersData, error: assignedDealersError } = await supabase
@@ -209,12 +221,17 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">Sales Dashboard</h1>
+        <div className="text-left">
+          <h2 className="text-xl sm:text-2xl font-bold text-black dark:text-black">
+            Welcome, {salesPersonName || 'Sales Person'}!
+          </h2>
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-black dark:text-black">Sales Dashboard</h1>
         <Button 
           onClick={handleLogout} 
           variant="ghost" 
           size="icon" 
-          className="text-foreground hover:text-foreground"
+          className="text-black hover:text-black"
         >
           <LogOut className="h-5 w-5" />
         </Button>
