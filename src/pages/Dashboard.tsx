@@ -220,21 +220,25 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <div className="text-left">
-          <h2 className="text-xl sm:text-2xl font-bold text-black dark:text-black">
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 w-full">
+        <div className="text-left flex-shrink-0">
+          <h2 className="text-[4vw] sm:text-[2vw] md:text-xl lg:text-2xl font-bold text-black dark:text-black whitespace-nowrap overflow-hidden text-ellipsis max-w-[40vw] sm:max-w-none">
             Welcome, {salesPersonName || 'Sales Person'}!
           </h2>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-black dark:text-black">Sales Dashboard</h1>
-        <Button 
-          onClick={handleLogout} 
-          variant="ghost" 
-          size="icon" 
-          className="text-black hover:text-black"
-        >
-          <LogOut className="h-5 w-5" />
-        </Button>
+        <h1 className="text-[5vw] sm:text-[2.5vw] md:text-2xl lg:text-3xl font-bold text-black dark:text-black text-center flex-grow mx-2">
+          Sales Dashboard
+        </h1>
+        <div className="flex-shrink-0">
+          <Button 
+            onClick={handleLogout} 
+            variant="ghost" 
+            size="icon" 
+            className="text-black hover:text-black p-2"
+          >
+            <LogOut className="h-5 w-5 sm:h-6 sm:w-6" />
+          </Button>
+        </div>
       </div>
       
       {/* Sales Person Performance Card */}
