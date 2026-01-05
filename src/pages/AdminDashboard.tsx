@@ -49,6 +49,7 @@ const AdminDashboard = () => {
   const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
   const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
   const [paymentsReportInitialToDate, setPaymentsReportInitialToDate] = useState<string>('');
+  const [paymentsReportDialogKey, setPaymentsReportDialogKey] = useState(0); // New key for PaymentsReportDialog
 
   // Simplified dashboard data
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
@@ -161,6 +162,7 @@ const AdminDashboard = () => {
     setPaymentsReportInitialStatus('all'); // Reset to default 'all'
     setPaymentsReportInitialFromDate(''); // Clear date filters
     setPaymentsReportInitialToDate(''); // Clear date filters
+    setPaymentsReportDialogKey(prev => prev + 1); // Increment key to force remount
     setIsPaymentsReportOpen(true);
   };
 
@@ -309,6 +311,7 @@ const AdminDashboard = () => {
         onOpenChange={setIsDealerReportOpen}
       />
       <PaymentsReportDialog
+        key={paymentsReportDialogKey} // Add key prop here
         isOpen={isPaymentsReportOpen}
         onOpenChange={setIsPaymentsReportOpen}
         initialFilterStatus={paymentsReportInitialStatus}

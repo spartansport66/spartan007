@@ -48,7 +48,7 @@ const APPROVE_PAYMENT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase
 const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
   isOpen,
   onOpenChange,
-  initialFilterStatus = 'pending',
+  initialFilterStatus = 'all', // Default to 'all'
   initialFilterDealerId = '',
   initialFilterFromDate = '',
   initialFilterToDate = '',
@@ -61,21 +61,20 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PaymentReportData | null>(null);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false); // For approve/reject actions
 
-  // Filter states
+  // Filter states, initialized directly from props
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>(initialFilterStatus);
   const [filterDealerId, setFilterDealerId] = useState<string>(initialFilterDealerId);
   const [filterFromDate, setFilterFromDate] = useState<string>(initialFilterFromDate);
   const [filterToDate, setFilterToDate] = useState<string>(initialFilterToDate);
 
-  // Reset filters when dialog opens with new initial values
+  // Update local filter states when initial props change (due to key prop in parent)
   useEffect(() => {
-    if (isOpen) {
-      setFilterStatus(initialFilterStatus);
-      setFilterDealerId(initialFilterDealerId);
-      setFilterFromDate(initialFilterFromDate);
-      setFilterToDate(initialFilterToDate);
-    }
-  }, [isOpen, initialFilterStatus, initialFilterDealerId, initialFilterFromDate, initialFilterToDate]);
+    setFilterStatus(initialFilterStatus);
+    setFilterDealerId(initialFilterDealerId);
+    setFilterFromDate(initialFilterFromDate);
+    setFilterToDate(initialFilterToDate);
+  }, [initialFilterStatus, initialFilterDealerId, initialFilterFromDate, initialFilterToDate]);
+
 
   // Helper to get start of current UTC day
   const getStartOfUTCDayISO = () => {
@@ -251,18 +250,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      console.log('PaymentsReportDialog useEffect: Dialog is open. Fetching data.');
       fetchCompanyInfo();
       fetchPaymentsAndDealers();
-    } else {
-      console.log('PaymentsReportDialog useEffect: Dialog is closed. Resetting state.');
-      // Optionally reset filters when dialog closes
-      // setFilterStatus(initialFilterStatus);
-      // setFilterDealerId(initialFilterDealerId);
-      // setFilterFromDate(initialFilterFromDate);
-      // setFilterToDate(initialFilterToDate);
     }
-  }, [isOpen, fetchCompanyInfo, fetchPaymentsAndDealers, initialFilterStatus, initialFilterDealerId, initialFilterFromDate, initialFilterToDate]);
+  }, [isOpen, fetchCompanyInfo, fetchPaymentsAndDealers]);
 
   const handleClearFilters = () => {
     setFilterStatus('all');
@@ -414,10 +405,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(openState) => {
-      console.log('PaymentsReportDialog onOpenChange called with:', openState);
-      onOpenChange(openState);
-    }}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">Payments Report</DialogTitle>
