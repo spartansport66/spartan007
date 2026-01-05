@@ -9,7 +9,7 @@ import { showError } from '@/utils/toast';
 import { Separator } from '@/components/ui/separator';
 
 interface PaymentOverviewCardProps {
-  onViewReport: (status: 'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval', fromDate?: string, toDate?: string) => void;
+  onViewReport: () => void; // Simplified to a simple callback
 }
 
 const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport }) => {
@@ -44,7 +44,6 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
     try {
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO();
-      const todayDateOnly = new Date().toISOString().split('T')[0]; // YYYY-MM-DD for date filters
 
       // 1. Total Pending Amount (from orders table, payment_status = 'pending')
       const { data: pendingOrders, error: pendingOrdersError } = await supabase
@@ -107,8 +106,6 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
     fetchOverviewData();
   }, [fetchOverviewData]);
 
-  const todayDateOnly = new Date().toISOString().split('T')[0]; // YYYY-MM-DD for date filters
-
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
@@ -130,30 +127,21 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
                 <AlertCircle className="h-5 w-5 text-red-600" />
                 <span className="text-muted-foreground">Total Pending:</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-red-600">₹{totalPendingAmount.toFixed(2)}</span>
-                <Button variant="link" size="sm" onClick={() => onViewReport('pending')}>View All</Button>
-              </div>
+              <span className="text-lg font-bold text-red-600">₹{totalPendingAmount.toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-green-600" />
                 <span className="text-muted-foreground">Total Received:</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-green-600">₹{totalReceivedAmount.toFixed(2)}</span>
-                <Button variant="link" size="sm" onClick={() => onViewReport('paid')}>View All</Button>
-              </div>
+              <span className="text-lg font-bold text-green-600">₹{totalReceivedAmount.toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-blue-600" />
                 <span className="text-muted-foreground">Total Pending for Approval:</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-blue-600">₹{totalPendingApprovalAmount.toFixed(2)}</span>
-                <Button variant="link" size="sm" onClick={() => onViewReport('pending_approval')}>View All</Button>
-              </div>
+              <span className="text-lg font-bold text-blue-600">₹{totalPendingApprovalAmount.toFixed(2)}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
@@ -161,21 +149,18 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
                 <TrendingUp className="h-5 w-5 text-green-600" />
                 <span className="text-muted-foreground">Today Received:</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-green-600">₹{todayReceivedAmount.toFixed(2)}</span>
-                <Button variant="link" size="sm" onClick={() => onViewReport('paid', todayDateOnly, todayDateOnly)}>View All</Button>
-              </div>
+              <span className="text-lg font-bold text-green-600">₹{todayReceivedAmount.toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-orange-600" />
                 <span className="text-muted-foreground">Today Pending for Approval:</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-orange-600">₹{todayPendingApprovalAmount.toFixed(2)}</span>
-                <Button variant="link" size="sm" onClick={() => onViewReport('pending_approval', todayDateOnly, todayDateOnly)}>View All</Button>
-              </div>
+              <span className="text-lg font-bold text-orange-600">₹{todayPendingApprovalAmount.toFixed(2)}</span>
             </div>
+            <Button onClick={onViewReport} className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white">
+              View Detailed Report
+            </Button>
           </div>
         )}
       </CardContent>

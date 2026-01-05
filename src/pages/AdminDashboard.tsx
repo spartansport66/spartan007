@@ -26,7 +26,7 @@ import AdminSidebar from '@/components/AdminSidebar';
 import SalesReportsDialog from '@/components/reports/SalesReportsDialog';
 import ProductionAlertsCard from '@/components/ProductionAlertsCard';
 import AllPendingPaymentsCard from '@/components/AllPendingPaymentsCard';
-import PaymentOverviewCard from '@/components/PaymentOverviewCard'; // NEW IMPORT
+import PaymentOverviewCard from '@/components/PaymentOverviewCard';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -115,17 +115,13 @@ const AdminDashboard = () => {
   }, [user]);
 
   useEffect(() => {
-    console.log('AdminDashboard session check: sessionLoading=', sessionLoading, 'user=', user, 'userType=', userType, 'isAdmin=', isAdmin);
     if (!sessionLoading) {
       if (!user) {
-        console.log('AdminDashboard: No user, navigating to /login');
         navigate('/login');
       } else if (userType !== 'admin') {
-        console.log('AdminDashboard: User is not admin (userType:', userType, '), navigating to /dashboard');
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
-        console.log('AdminDashboard: User is admin, fetching data.');
         fetchDashboardData();
         fetchCompanyInfo();
       }
@@ -160,11 +156,11 @@ const AdminDashboard = () => {
     fetchDashboardData(); // Also refresh main dashboard data
   };
 
-  const handleViewPaymentsReport = (status: 'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval', fromDate?: string, toDate?: string) => {
-    console.log('AdminDashboard: handleViewPaymentsReport called. Setting dialog open.');
-    setPaymentsReportInitialStatus(status);
-    setPaymentsReportInitialFromDate(fromDate || '');
-    setPaymentsReportInitialToDate(toDate || '');
+  // Modified to open PaymentsReportDialog with default filters
+  const handleViewPaymentsReport = () => {
+    setPaymentsReportInitialStatus('all'); // Reset to default 'all'
+    setPaymentsReportInitialFromDate(''); // Clear date filters
+    setPaymentsReportInitialToDate(''); // Clear date filters
     setIsPaymentsReportOpen(true);
   };
 
