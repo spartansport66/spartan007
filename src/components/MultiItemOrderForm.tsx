@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -61,33 +60,28 @@ const MultiItemOrderForm: React.FC = () => {
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
-  
   // Payment at order time states
   const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
-  
   // Cheque/DD fields
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
-  
   // Card fields (only transaction ID)
   const [cardNumber, setCardNumber] = useState<string>('');
   const [cardHolderName, setCardHolderName] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<string>('');
   const [cvv, setCvv] = useState<string>('');
-  
   // Bank Transfer fields
   const [bankName, setBankName] = useState<string>('');
   const [accountNumber, setAccountNumber] = useState<string>('');
   const [ifscCode, setIfscCode] = useState<string>('');
-  
   // UPI fields
   const [upiId, setUpiId] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
   
   const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
-  
+
   // Fetch dealers and products
   useEffect(() => {
     const fetchData = async () => {
@@ -123,7 +117,7 @@ const MultiItemOrderForm: React.FC = () => {
     
     fetchData();
   }, [user]);
-  
+
   // Check for pending payments when dealer is selected
   useEffect(() => {
     const checkPendingPayments = async () => {
@@ -135,7 +129,6 @@ const MultiItemOrderForm: React.FC = () => {
       
       try {
         const todayISOString = new Date().toISOString();
-        
         // Fetch pending payments for the selected dealer (only pending, not pending_approval)
         // Exclude payments with future due dates (post-dated cheques)
         const { data, error } = await supabase
@@ -167,7 +160,7 @@ const MultiItemOrderForm: React.FC = () => {
     
     checkPendingPayments();
   }, [selectedDealer]);
-  
+
   // Calculate dealer balance and payment due date
   useEffect(() => {
     const calculateBalanceAndDueDate = async () => {
@@ -183,7 +176,6 @@ const MultiItemOrderForm: React.FC = () => {
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
-        
         // Calculate payment due date
         const currentDate = new Date();
         currentDate.setDate(currentDate.getDate() + selectedDealerData.allotted_credit_days);
@@ -235,36 +227,36 @@ const MultiItemOrderForm: React.FC = () => {
     
     calculateBalanceAndDueDate();
   }, [selectedDealer, dealers, isPaidAtOrderTime, orderItems]);
-  
+
   const addOrderItem = () => {
     setOrderItems([...orderItems, { id: Date.now().toString(), product_id: '', quantity: 1 }]);
   };
-  
+
   const removeOrderItem = (id: string) => {
     if (orderItems.length > 1) {
       setOrderItems(orderItems.filter(item => item.id !== id));
     }
   };
-  
+
   const updateOrderItem = (id: string, field: keyof OrderItem, value: string | number) => {
     setOrderItems(orderItems.map(item => 
       item.id === id ? { ...item, [field]: value } : item
     ));
   };
-  
+
   const calculateItemTotal = (item: OrderItem) => {
     const product = products.find(p => p.id === item.product_id);
     return product ? item.quantity * product.price : 0;
   };
-  
+
   const calculateTotalOrderValue = () => {
     return orderItems.reduce((total, item) => total + calculateItemTotal(item), 0);
   };
-  
+
   const availableCredit = dealerBalance !== null ? dealerCreditLimit - dealerBalance : null;
   const totalOrderValue = calculateTotalOrderValue();
   const remainingCredit = availableCredit !== null ? availableCredit - totalOrderValue : null;
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -291,6 +283,12 @@ const MultiItemOrderForm: React.FC = () => {
     
     if (remainingCredit !== null && remainingCredit < 0) {
       showError('Order exceeds dealer\'s available credit limit.');
+      return;
+    }
+    
+    // Require payment option - either paid at order time or credit
+    if (!isPaidAtOrderTime) {
+      showError('Please select a payment option. Either pay at order time or use credit.');
       return;
     }
     
@@ -328,7 +326,6 @@ const MultiItemOrderForm: React.FC = () => {
     }
     
     setLoading(true);
-    
     try {
       const payload: any = {
         dealerId: selectedDealer,
@@ -374,7 +371,6 @@ const MultiItemOrderForm: React.FC = () => {
       }
       
       showSuccess('Order placed successfully!');
-      
       // Reset form
       setSelectedDealer('');
       setOrderItems([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
@@ -403,20 +399,18 @@ const MultiItemOrderForm: React.FC = () => {
       setLoading(false);
     }
   };
-  
+
   // State for searchable product dropdown
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
-  
+
   // Filter products based on search value - improved matching
   const filteredProducts = useMemo(() => {
     if (!searchValue) return products;
     
     const searchTerms = searchValue.toLowerCase().split(' ').filter(term => term.length > 0);
-    
     return products.filter(product => {
       const productName = product.name.toLowerCase();
-      
       // Match if all search terms are found in the product name
       return searchTerms.every(term => productName.includes(term));
     });
@@ -434,11 +428,7 @@ const MultiItemOrderForm: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <Label htmlFor="dealer">Dealer</Label>
-            <Select 
-              value={selectedDealer} 
-              onValueChange={setSelectedDealer}
-              disabled={dealers.length === 0}
-            >
+            <Select value={selectedDealer} onValueChange={setSelectedDealer} disabled={dealers.length === 0}>
               <SelectTrigger id="dealer" className="w-full">
                 <SelectValue placeholder={dealers.length === 0 ? "No dealers available" : "Select a dealer"} />
               </SelectTrigger>
@@ -515,7 +505,8 @@ const MultiItemOrderForm: React.FC = () => {
             <div className="flex justify-between items-center">
               <Label>Order Items</Label>
               <Button type="button" onClick={addOrderItem} size="sm" className="flex items-center gap-1">
-                <Plus className="h-4 w-4" /> Add Item
+                <Plus className="h-4 w-4" />
+                Add Item
               </Button>
             </div>
             
@@ -538,8 +529,8 @@ const MultiItemOrderForm: React.FC = () => {
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                       <Command>
-                        <CommandInput 
-                          placeholder="Search product (e.g. 'VOLLEY' or 'CD 334')..." 
+                        <CommandInput
+                          placeholder="Search product (e.g. 'VOLLEY' or 'CD 334')..."
                           value={searchValue}
                           onValueChange={setSearchValue}
                         />
@@ -611,7 +602,6 @@ const MultiItemOrderForm: React.FC = () => {
                 <span>Total Order Value:</span>
                 <span>₹{totalOrderValue.toFixed(2)}</span>
               </div>
-              
               {selectedDealer && dealerBalance !== null && (
                 <>
                   <Separator className="my-2" />
@@ -845,9 +835,9 @@ const MultiItemOrderForm: React.FC = () => {
             type="submit"
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
             disabled={
-              loading || 
-              !selectedDealer || 
-              (remainingCredit !== null && remainingCredit < 0) || 
+              loading ||
+              !selectedDealer ||
+              (remainingCredit !== null && remainingCredit < 0) ||
               totalPendingAmount > 0
             }
           >
