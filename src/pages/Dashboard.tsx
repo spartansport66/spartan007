@@ -15,8 +15,8 @@ import PaymentStatusCard from '@/components/PaymentStatusCard';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import OrderDetailsDialog from '@/components/OrderDetailsDialog'; // Import OrderDetailsDialog
-import SalesPersonPerformanceCard from '@/components/SalesPersonPerformanceCard'; // Import the new component
+import OrderDetailsDialog from '@/components/OrderDetailsDialog';
+import SalesPersonPerformanceCard from '@/components/SalesPersonPerformanceCard';
 
 interface Product {
   id: string;
@@ -31,9 +31,8 @@ interface Dealer {
   name: string;
 }
 
-// New interfaces for order-wise display
 interface OrderItemDisplay {
-  product_id: string; // Added for client-side filtering
+  product_id: string;
   product_name: string;
   quantity: number;
   unit_price: number;
@@ -53,11 +52,10 @@ interface OrderDisplay {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
-  const [orders, setOrders] = useState<OrderDisplay[]>([]); // Changed from sales to orders
+  const [orders, setOrders] = useState<OrderDisplay[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [salesPersonName, setSalesPersonName] = useState<string>('');
   
-  // Filter states for recent sales - Set default to today's date
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>(() => {
     const today = new Date();
@@ -69,7 +67,6 @@ const Dashboard = () => {
   });
   const [allDealers, setAllDealers] = useState<{ id: string; name: string }[]>([]);
   
-  // Dialog states for order details
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
 
@@ -123,7 +120,7 @@ const Dashboard = () => {
           products (id, name, price)
         )
       `)
-      .eq('user_id', user.id) // Filter by current sales person
+      .eq('user_id', user.id)
       .order('order_date', { ascending: false });
     
     // Apply filters
@@ -154,7 +151,7 @@ const Dashboard = () => {
         dealer_name: order.dealers?.name || 'N/A',
         payment_status: order.payment_status,
         items: (order.sales || []).map((sale: any) => ({
-          product_id: sale.products?.id || '', // Added product_id for client-side filtering
+          product_id: sale.products?.id || '',
           product_name: sale.products?.name || 'N/A',
           quantity: sale.quantity,
           unit_price: sale.products?.price || 0,
@@ -193,7 +190,6 @@ const Dashboard = () => {
 
   const handleClearFilters = () => {
     setFilterDealerId('');
-    // Set filters to today's date by default
     const today = new Date();
     const todayString = today.toISOString().split('T')[0];
     setFilterFromDate(todayString);
