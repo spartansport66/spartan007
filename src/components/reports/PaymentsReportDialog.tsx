@@ -21,7 +21,7 @@ interface PaymentReportData {
   dealer_name: string;
   dealer_phone: string;
   total_amount: number;
-  payment_status: string;
+  payment_status: string; // New: to store the actual payment record ID for approval actions
   payment_due_date: string | null;
   order_date: string;
   payment_id: string | null; // New: to store the actual payment record ID for approval actions
@@ -503,9 +503,9 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                       <TableCell className="text-foreground">{payment.dealer_name}</TableCell>
                       <TableCell className="text-foreground text-right font-medium">₹{payment.total_amount.toFixed(2)}</TableCell>
                       <TableCell>
-                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(payment.payment_status)}`}>
-                          {getStatusIcon(payment.payment_status)}
-                          <span className="capitalize">{payment.payment_status.replace('_', ' ')}</span>
+                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(payment.payment_status ?? 'unknown')}`}>
+                          {getStatusIcon(payment.payment_status ?? 'unknown')}
+                          <span className="capitalize">{(payment.payment_status ?? 'unknown').replace('_', ' ')}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-foreground">
