@@ -251,10 +251,18 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      console.log('PaymentsReportDialog useEffect: Dialog is open. Fetching data.');
       fetchCompanyInfo();
       fetchPaymentsAndDealers();
+    } else {
+      console.log('PaymentsReportDialog useEffect: Dialog is closed. Resetting state.');
+      // Optionally reset filters when dialog closes
+      // setFilterStatus(initialFilterStatus);
+      // setFilterDealerId(initialFilterDealerId);
+      // setFilterFromDate(initialFilterFromDate);
+      // setFilterToDate(initialFilterToDate);
     }
-  }, [isOpen, fetchCompanyInfo, fetchPaymentsAndDealers]);
+  }, [isOpen, fetchCompanyInfo, fetchPaymentsAndDealers, initialFilterStatus, initialFilterDealerId, initialFilterFromDate, initialFilterToDate]);
 
   const handleClearFilters = () => {
     setFilterStatus('all');
@@ -406,7 +414,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={(openState) => {
+      console.log('PaymentsReportDialog onOpenChange called with:', openState);
+      onOpenChange(openState);
+    }}>
       <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">Payments Report</DialogTitle>

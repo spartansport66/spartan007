@@ -115,22 +115,17 @@ const AdminDashboard = () => {
   }, [user]);
 
   useEffect(() => {
-    console.log('AdminDashboard useEffect triggered');
-    console.log('sessionLoading:', sessionLoading);
-    console.log('user:', user);
-    console.log('userType:', userType);
-    console.log('isAdmin:', isAdmin);
-
+    console.log('AdminDashboard session check: sessionLoading=', sessionLoading, 'user=', user, 'userType=', userType, 'isAdmin=', isAdmin);
     if (!sessionLoading) {
       if (!user) {
-        console.log('No user, redirecting to login');
+        console.log('AdminDashboard: No user, navigating to /login');
         navigate('/login');
       } else if (userType !== 'admin') {
-        console.log('User is not admin, redirecting to dashboard');
+        console.log('AdminDashboard: User is not admin (userType:', userType, '), navigating to /dashboard');
         showError('Access Denied: You must be an administrator to view this page.');
         navigate('/dashboard');
       } else {
-        console.log('User is admin, fetching dashboard data');
+        console.log('AdminDashboard: User is admin, fetching data.');
         fetchDashboardData();
         fetchCompanyInfo();
       }
@@ -166,6 +161,7 @@ const AdminDashboard = () => {
   };
 
   const handleViewPaymentsReport = (status: 'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval', fromDate?: string, toDate?: string) => {
+    console.log('AdminDashboard: handleViewPaymentsReport called. Setting dialog open.');
     setPaymentsReportInitialStatus(status);
     setPaymentsReportInitialFromDate(fromDate || '');
     setPaymentsReportInitialToDate(toDate || '');
