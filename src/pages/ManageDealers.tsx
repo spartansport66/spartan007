@@ -31,11 +31,11 @@ interface Dealer {
   city: string;
   state: string;
   country: string;
-  credit_limit: number; // General credit limit (fallback)
+  credit_limit: number;
   allotted_credit_days: number;
   user_id: string;
   assigned_sales_persons: { id: string; first_name: string; last_name: string }[];
-  current_month_credit_limit: number; // New: effective credit limit for the current month
+  current_month_credit_limit: number;
 }
 
 interface SalesPerson {
@@ -73,8 +73,8 @@ const ManageDealers = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
   const [allSalesPersons, setAllSalesPersons] = useState<SalesPerson[]>([]);
-  const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false); // New state for monthly credit dialog
-  const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null); // New state for selected dealer for monthly credit
+  const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false);
+  const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -145,9 +145,8 @@ const ManageDealers = () => {
       return;
     }
 
-    // Fetch all monthly credit limits for the current month
     const today = new Date();
-    const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0]; // YYYY-MM-01
+    const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0];
     const { data: monthlyLimitsData, error: monthlyLimitsError } = await supabase
       .from('dealer_monthly_credit_limits')
       .select('dealer_id, credit_limit')
@@ -156,7 +155,6 @@ const ManageDealers = () => {
     if (monthlyLimitsError) {
       console.error('Error fetching monthly credit limits:', monthlyLimitsError);
       showError(`Failed to load monthly credit limits: ${monthlyLimitsError.message}`);
-      // Continue without monthly limits if there's an error
     }
 
     const monthlyLimitsMap = new Map(
@@ -170,10 +168,9 @@ const ManageDealers = () => {
         last_name: dsp.profiles.last_name,
       }));
 
-      // Determine the effective credit limit for the current month
       const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) 
         ? monthlyLimitsMap.get(d.id)! 
-        : d.credit_limit; // Fallback to general credit_limit
+        : d.credit_limit;
 
       return {
         ...d,
@@ -217,7 +214,7 @@ const ManageDealers = () => {
       city: values.city,
       state: values.state,
       country: values.country,
-      credit_limit: values.creditLimit, // Keep updating general credit_limit for fallback
+      credit_limit: values.creditLimit,
       allotted_credit_days: values.allottedCreditDays,
     };
 
@@ -292,7 +289,7 @@ const ManageDealers = () => {
 
     setIsUploading(true);
     try {
-      // Transform data to match dealer schema
+      // First, create all dealers
       const dealersToInsert = data.map((row: any) => ({
         user_id: user.id,
         name: row.name || row.Name || row['Dealer Name'] || '',
@@ -307,16 +304,52 @@ const ManageDealers = () => {
         allotted_credit_days: parseInt(row.allotted_credit_days || row.AllottedCreditDays || row['Allotted Credit Days'] || '0'),
       }));
 
-      const { data: insertedData, error } = await supabase
+      const { data: insertedDealers, error: insertError } = await supabase
         .from('dealers')
         .insert(dealersToInsert)
         .select();
 
-      if (error) {
-        throw error;
+      if (insertError) {
+        throw insertError;
       }
 
-      showSuccess(`Successfully uploaded ${insertedData?.length || 0} dealers!`);
+      // Then handle sales person assignments if provided
+      const assignmentsToInsert: any[] = [];
+      
+      data.forEach((row: any, index: number) => {
+        const dealerId = insertedDealers[index].id;
+        
+        // Handle assigned sales persons if provided in the Excel
+        if (row.assigned_to || row.AssignedTo || row['Assigned To']) {
+          const assignedSalesPersons = (row.assigned_to || row.AssignedTo || row['Assigned To']).split(',').map((name: string) => name.trim());
+          
+          assignedSalesPersons.forEach((salesPersonName: string) => {
+            const salesPerson = allSalesPersons.find(sp => 
+              `${sp.first_name} ${sp.last_name}`.toLowerCase() === salesPersonName.toLowerCase()
+            );
+            
+            if (salesPerson) {
+              assignmentsToInsert.push({
+                dealer_id: dealerId,
+                sales_person_id: salesPerson.id
+              });
+            }
+          });
+        }
+      });
+
+      // Insert all assignments
+      if (assignmentsToInsert.length > 0) {
+        const { error: assignmentError } = await supabase
+          .from('dealer_sales_persons')
+          .insert(assignmentsToInsert);
+
+        if (assignmentError) {
+          throw assignmentError;
+        }
+      }
+
+      showSuccess(`Successfully uploaded ${insertedDealers.length} dealers!`);
       fetchDealers();
     } catch (error: any) {
       console.error('Error uploading dealers:', error);
@@ -363,7 +396,8 @@ const ManageDealers = () => {
       state: 'NY',
       country: 'USA',
       credit_limit: 50000,
-      allotted_credit_days: 30
+      allotted_credit_days: 30,
+      assigned_to: 'Sales Person 1'
     },
     {
       name: 'Regional Traders',
@@ -375,7 +409,8 @@ const ManageDealers = () => {
       state: 'CA',
       country: 'USA',
       credit_limit: 30000,
-      allotted_credit_days: 45
+      allotted_credit_days: 45,
+      assigned_to: 'Sales Person 2'
     }
   ];
 
@@ -482,7 +517,7 @@ const ManageDealers = () => {
               sampleData={sampleDealerData}
               sampleFileName="sample_dealers.xlsx"
               uploadButtonText="Upload Dealers"
-              tableHeaders={['Name', 'Contact Person', 'Email', 'Phone', 'Address', 'City', 'State', 'Country', 'Credit Limit', 'Credit Days']}
+              tableHeaders={['Name', 'Contact Person', 'Email', 'Phone', 'Address', 'City', 'State', 'Country', 'Credit Limit', 'Credit Days', 'Assigned To']}
               requiredHeaders={['name', 'contact', 'email', 'phone', 'address', 'city', 'state', 'country', 'credit', 'days']}
             />
             
@@ -497,8 +532,10 @@ const ManageDealers = () => {
                 <ul className="list-disc pl-5 space-y-2 text-sm">
                   <li>Download the sample Excel file to see the required format</li>
                   <li>Required columns: Name, Contact Person, Email, Phone, Address, City, State, Country, Credit Limit, Credit Days</li>
+                  <li>Optional column: Assigned To (Sales Person Name)</li>
                   <li>Credit Limit should be a number (e.g., 50000)</li>
                   <li>Credit Days should be a whole number (e.g., 30)</li>
+                  <li>Assigned To should match existing sales person names</li>
                   <li>Save your file as .xlsx or .xls format</li>
                 </ul>
               </CardContent>
