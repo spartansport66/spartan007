@@ -22,11 +22,12 @@ import DealerReportDialog from '@/components/reports/DealerReportDialog';
 import SalesPersonPerformanceOverviewCard from '@/components/SalesPersonPerformanceOverviewCard';
 import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog';
 import CompanyInfoDialog from '@/components/CompanyInfoDialog';
-import PaymentsForApprovalCard from '@/components/PaymentsForApprovalCard';
+// import PaymentsForApprovalCard from '@/components/PaymentsForApprovalCard'; // REMOVED
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import AdminSidebar from '@/components/AdminSidebar';
 import SalesReportsDialog from '@/components/reports/SalesReportsDialog';
 import ProductionAlertsCard from '@/components/ProductionAlertsCard'; // Import the new component
+import AllPendingPaymentsCard from '@/components/AllPendingPaymentsCard'; // NEW IMPORT
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -274,9 +275,8 @@ const AdminDashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* PaymentCard removed from here */}
-        {/* New: Payments Pending Approval Card */}
-        <PaymentsForApprovalCard onPaymentAction={handlePaymentAction} key={`payments-for-approval-${refreshKey}`} />
+        {/* All Pending Payments Card */}
+        <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
       </div>
 
       <MadeWithDyad />
