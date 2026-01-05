@@ -7,13 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, MessageCircle, DollarSign, Calendar, Clock, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
+import { Loader2, Search, Printer, MessageCircle, DollarSign, Calendar, Clock, CheckCircle, AlertCircle, XCircle, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import PaymentDetailsDialog from '@/components/PaymentDetailsDialog'; // Import PaymentDetailsDialog
 
 interface PaymentReportData {
   id: string; // Order ID
@@ -62,6 +63,10 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
   const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PaymentReportData | null>(null);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false); // For approve/reject actions
+
+  // New state for PaymentDetailsDialog
+  const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
+  const [selectedPaymentIdForDetails, setSelectedPaymentIdForDetails] = useState<string | null>(null);
 
   // Filter states, initialized directly from props
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>(initialFilterStatus);
@@ -316,6 +321,11 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
   const handleUpdatePaymentClick = (order: PaymentReportData) => {
     setSelectedOrderForPaymentUpdate(order);
     setIsUpdatePaymentDialogOpen(true);
+  };
+
+  const handleViewPaymentDetails = (paymentId: string) => {
+    setSelectedPaymentIdForDetails(paymentId);
+    setIsPaymentDetailsDialogOpen(true);
   };
 
   const handlePaymentUpdated = () => {
@@ -588,6 +598,14 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                             )}
                             {payment.payment_status === 'pending_approval' && (
                               <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleViewPaymentDetails(payment.payment_id!)} // Pass payment_id
+                                  title="View Payment Details"
+                                >
+                                  <Eye className="h-4 w-4 text-blue-500" />
+                                </Button>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button variant="ghost" size="icon" title={paymentIsDue ? "Approve Payment" : "Payment not yet due"} disabled={isSubmittingAction || !paymentIsDue}>
@@ -670,6 +688,13 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
           isOpen={isUpdatePaymentDialogOpen}
           onOpenChange={setIsUpdatePaymentDialogOpen}
           onPaymentUpdated={handlePaymentUpdated}
+        />
+      )}
+      {selectedPaymentIdForDetails && (
+        <PaymentDetailsDialog
+          paymentId={selectedPaymentIdForDetails}
+          isOpen={isPaymentDetailsDialogOpen}
+          onOpenChange={setIsPaymentDetailsDialogOpen}
         />
       )}
     </Dialog>
