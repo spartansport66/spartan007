@@ -230,23 +230,26 @@ const Login = () => {
             </CardContent>
           </Card>
         ) : (
-          <Auth
-            supabaseClient={supabase}
-            providers={[]} // Only email authentication
-            appearance={{
-              theme: ThemeSupa,
-              variables: {
-                default: {
-                  colors: {
-                    brand: 'hsl(var(--primary))',
-                    brandAccent: 'hsl(var(--primary-foreground))',
+          <div>
+            <Auth
+              supabaseClient={supabase}
+              providers={[]} // Only email authentication
+              appearance={{
+                theme: ThemeSupa,
+                variables: {
+                  default: {
+                    colors: {
+                      brand: 'hsl(var(--primary))',
+                      brandAccent: 'hsl(var(--primary-foreground))',
+                    },
                   },
                 },
-              },
-            }}
-            theme="light" // Use light theme, adjust if dark theme is preferred
-            redirectTo={window.location.origin + '/'} // Changed to redirect to root
-          />
+              }}
+              theme="light" // Use light theme, adjust if dark theme is preferred
+              redirectTo={window.location.origin + '/'}
+            />
+            {/* Removed the duplicate "Don't have an account? Sign Up" button here */}
+          </div>
         )}
         
         <Button 
