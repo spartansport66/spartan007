@@ -23,7 +23,7 @@ import { Loader2 } from 'lucide-react';
 const CREATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-user";
 
 // The secret key known only to the admin
-const ADMIN_SECRET_KEY_VALUE = "Param@1313"; 
+const ADMIN_SECRET_KEY_VALUE = "Param@1313";
 
 const signupFormSchema = z.object({
   firstName: z.string().min(1, { message: 'First name is required.' }),
@@ -55,7 +55,7 @@ const Login = () => {
   useEffect(() => {
     if (!loading && session) {
       // This redirect will now go to the root, which then handles role-based redirection
-      navigate('/'); 
+      navigate('/');
     }
   }, [session, loading, navigate]);
 
@@ -63,6 +63,7 @@ const Login = () => {
     setIsSubmitting(true);
     try {
       let finalUserType = values.userType;
+      
       if (values.secretKey === ADMIN_SECRET_KEY_VALUE) {
         finalUserType = 'admin';
       } else if (values.userType === 'admin' && values.secretKey !== ADMIN_SECRET_KEY_VALUE) {
@@ -89,7 +90,6 @@ const Login = () => {
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create user');
       }
@@ -119,7 +119,7 @@ const Login = () => {
         <h1 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-6">
           {isSigningUp ? 'Sign Up' : 'Login'}
         </h1>
-
+        
         {isSigningUp ? (
           <Card className="bg-card text-card-foreground shadow-lg border-none">
             <CardContent className="pt-6">
@@ -214,7 +214,11 @@ const Login = () => {
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={isSubmitting}
+                  >
                     {isSubmitting ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
@@ -244,13 +248,13 @@ const Login = () => {
             redirectTo={window.location.origin + '/'} // Changed to redirect to root
           />
         )}
-
-        <Button
-          variant="link"
-          onClick={() => setIsSigningUp(!isSigningUp)}
+        
+        <Button 
+          variant="link" 
+          onClick={() => setIsSigningUp(!isSigningUp)} 
           className="mt-4 w-full text-sm text-muted-foreground hover:text-primary"
         >
-          {isSigningUp ? 'Already have an account? Sign In' : 'Don\'t have an account? Sign Up'}
+          {isSigningUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
         </Button>
       </div>
       <MadeWithDyad />
