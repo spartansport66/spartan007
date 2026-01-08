@@ -47,8 +47,6 @@ interface DealerBalance {
   id: string;
   name: string;
   opening_balance: number;
-  overdue_amount: number;
-  total_overdue: number;
 }
 
 // Format date as dd/mm/yyyy
@@ -214,57 +212,42 @@ const PaymentStatusCard: React.FC = () => {
         setOrders(formattedOrders);
       }
 
-      // Fetch dealer balances and overdue amounts
-      const { data: dealerBalancesData, error: dealerBalancesError } = await supabase
-        .from('dealer_sales_persons')
-        .select(`
-          dealers (
-            id,
-            name,
-            dealer_balances (
-              opening_balance
-            ),
-            orders (
-              total_amount,
-              payment_status,
-              payment_due_date
+      // Fetch dealer balances when showing overdue payments
+      if (filterStatus === 'overdue') {
+        const { data: dealerBalancesData, error: dealerBalancesError } = await supabase
+          .from('dealer_sales_persons')
+          .select(`
+            dealers (
+              id,
+              name,
+              dealer_balances (
+                opening_balance
+              )
             )
-          )
-        `)
-        .eq('sales_person_id', user.id);
+          `)
+          .eq('sales_person_id', user.id);
 
-      if (dealerBalancesError) {
-        console.error('Error fetching dealer balances:', dealerBalancesError.message);
-        showError('Failed to load dealer balances.');
-        setDealerBalances([]);
+        if (dealerBalancesError) {
+          console.error('Error fetching dealer balances:', dealerBalancesError.message);
+          showError('Failed to load dealer balances.');
+          setDealerBalances([]);
+        } else {
+          const formattedBalances: DealerBalance[] = (dealerBalancesData || [])
+            .map((item: any) => {
+              const dealer = item.dealers;
+              const openingBalance = dealer.dealer_balances?.[0]?.opening_balance || 0;
+              return {
+                id: dealer.id,
+                name: dealer.name,
+                opening_balance: openingBalance
+              };
+            })
+            .filter((dealer: DealerBalance) => dealer.opening_balance > 0); // Only dealers with positive opening balance
+          
+          setDealerBalances(formattedBalances);
+        }
       } else {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const formattedBalances: DealerBalance[] = (dealerBalancesData || []).map((item: any) => {
-          const dealer = item.dealers;
-          const openingBalance = dealer.dealer_balances?.[0]?.opening_balance || 0;
-          
-          // Calculate overdue amount (pending orders with due date <= today)
-          const overdueAmount = (dealer.orders || [])
-            .filter((order: any) => 
-              order.payment_status === 'pending' && 
-              new Date(order.payment_due_date) <= today
-            )
-            .reduce((sum: number, order: any) => sum + order.total_amount, 0);
-          
-          const totalOverdue = openingBalance + overdueAmount;
-          
-          return {
-            id: dealer.id,
-            name: dealer.name,
-            opening_balance: openingBalance,
-            overdue_amount: overdueAmount,
-            total_overdue: totalOverdue
-          };
-        });
-        
-        setDealerBalances(formattedBalances);
+        setDealerBalances([]);
       }
     } catch (error: any) {
       console.error('Error in fetchOrdersAndDealers:', error.message);
@@ -433,41 +416,30 @@ const PaymentStatusCard: React.FC = () => {
           </Button>
         </div>
 
-        {/* Dealer Balances Section */}
-        <div className="mb-6 p-4 bg-muted rounded-lg">
-          <h3 className="text-lg font-semibold mb-3">Dealer Balances</h3>
-          {dealerBalances.length === 0 ? (
-            <p className="text-muted-foreground">No dealer balances available.</p>
-          ) : (
-            <div className="max-h-60 overflow-y-auto">
+        {/* Dealer Balances Section - Only shown when filtering for overdue payments */}
+        {filterStatus === 'overdue' && dealerBalances.length > 0 && (
+          <div className="mb-6 p-4 bg-muted rounded-lg">
+            <h3 className="text-lg font-semibold mb-3">Dealers with Opening Balance</h3>
+            <div className="max-h-40 overflow-y-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Overdue Amount</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Total Overdue</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dealerBalances
-                    .filter(dealer => dealer.total_overdue > 0) // Only show dealers with overdue amounts
-                    .map((dealer) => (
-                      <TableRow key={dealer.id} className="hover:bg-accent/50">
-                        <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                        <TableCell className="text-right">₹{dealer.opening_balance.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">₹{dealer.overdue_amount.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-semibold text-red-600">₹{dealer.total_overdue.toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
+                  {dealerBalances.map((dealer) => (
+                    <TableRow key={dealer.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
+                      <TableCell className="text-right font-semibold">₹{dealer.opening_balance.toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
-              {dealerBalances.filter(dealer => dealer.total_overdue > 0).length === 0 && (
-                <p className="text-muted-foreground text-center py-2">No dealers with overdue amounts.</p>
-              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           {loading ? (
