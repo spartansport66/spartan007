@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ interface Dealer {
   name: string;
   credit_limit: number;
   allotted_credit_days: number;
+  opening_balance: number; // Added opening balance
 }
 
 interface OrderItem {
@@ -60,22 +62,28 @@ const MultiItemOrderForm: React.FC = () => {
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
+  const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0); // Added opening balance state
+
   // Payment at order time states
   const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
+
   // Cheque/DD fields
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
+
   // Card fields (only transaction ID)
   const [cardNumber, setCardNumber] = useState<string>('');
   const [cardHolderName, setCardHolderName] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<string>('');
   const [cvv, setCvv] = useState<string>('');
+
   // Bank Transfer fields
   const [bankName, setBankName] = useState<string>('');
   const [accountNumber, setAccountNumber] = useState<string>('');
   const [ifscCode, setIfscCode] = useState<string>('');
+
   // UPI fields
   const [upiId, setUpiId] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
@@ -99,7 +107,15 @@ const MultiItemOrderForm: React.FC = () => {
       // Fetch dealers assigned to the current user
       const { data: assignedDealersData, error: assignedDealersError } = await supabase
         .from('dealer_sales_persons')
-        .select('dealers(id, name, credit_limit, allotted_credit_days)')
+        .select(`
+          dealers(
+            id, 
+            name, 
+            credit_limit, 
+            allotted_credit_days,
+            dealer_balances(opening_balance)
+          )
+        `)
         .eq('sales_person_id', user.id);
 
       if (assignedDealersError) {
@@ -107,7 +123,10 @@ const MultiItemOrderForm: React.FC = () => {
         showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
         setDealers([]);
       } else {
-        const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
+        const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => ({
+          ...item.dealers,
+          opening_balance: item.dealers.dealer_balances?.[0]?.opening_balance || 0
+        }));
         setDealers(formattedDealers);
       }
 
@@ -138,6 +157,7 @@ const MultiItemOrderForm: React.FC = () => {
 
       try {
         const todayISOString = new Date().toISOString();
+
         // Fetch pending payments for the selected dealer (only pending, not pending_approval)
         // Exclude payments with future due dates (post-dated cheques)
         const { data, error } = await supabase
@@ -179,12 +199,15 @@ const MultiItemOrderForm: React.FC = () => {
         setAllottedCreditDays(0);
         setPaymentDueDate(null);
         setPaymentAmount(0);
+        setDealerOpeningBalance(0); // Reset opening balance
         return;
       }
 
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
+        setDealerOpeningBalance(selectedDealerData.opening_balance || 0); // Set opening balance
+
         // Calculate payment due date
         const currentDate = new Date();
         currentDate.setDate(currentDate.getDate() + selectedDealerData.allotted_credit_days);
@@ -194,6 +217,7 @@ const MultiItemOrderForm: React.FC = () => {
       // Determine the effective credit limit for the current month
       const currentMonthDate = new Date();
       const currentMonthYear = new Date(Date.UTC(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1)).toISOString().split('T')[0];
+
       const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
         .from('dealer_monthly_credit_limits')
         .select('credit_limit')
@@ -262,8 +286,15 @@ const MultiItemOrderForm: React.FC = () => {
     return orderItems.reduce((total, item) => total + calculateItemTotal(item), 0);
   };
 
-  const availableCredit = dealerBalance !== null ? dealerCreditLimit - dealerBalance : null;
+  // Calculate used credit including opening balance
+  const usedCredit = dealerBalance !== null ? dealerBalance + dealerOpeningBalance : null;
+  
+  // Calculate available credit (credit limit - used credit)
+  const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
+  
   const totalOrderValue = calculateTotalOrderValue();
+  
+  // Calculate remaining credit after this order
   const remainingCredit = availableCredit !== null ? availableCredit - totalOrderValue : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -375,12 +406,12 @@ const MultiItemOrderForm: React.FC = () => {
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.error || 'Failed to place order');
       }
 
       showSuccess('Order placed successfully!');
+      
       // Reset form
       setSelectedDealer('');
       setOrderItems([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
@@ -417,6 +448,7 @@ const MultiItemOrderForm: React.FC = () => {
   // Filter products based on search value - improved matching
   const filteredProducts = useMemo(() => {
     if (!searchValue) return products;
+    
     const searchTerms = searchValue.toLowerCase().split(' ').filter(term => term.length > 0);
     return products.filter(product => {
       const productName = product.name.toLowerCase();
@@ -480,19 +512,29 @@ const MultiItemOrderForm: React.FC = () => {
               </Alert>
             )}
 
-            {selectedDealer && dealerBalance !== null && (
+            {selectedDealer && (
               <div className="mt-2 p-3 bg-muted rounded-md">
+                <div className="flex justify-between text-sm">
+                  <span>Opening Balance:</span>
+                  <span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span>
+                </div>
                 <div className="flex justify-between text-sm">
                   <span>Credit Limit (Current Month):</span>
                   <span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Used Credit (Pending Orders):</span>
-                  <span className="font-medium">₹{dealerBalance.toFixed(2)}</span>
+                  <span className="font-medium">₹{dealerBalance !== null ? dealerBalance.toFixed(2) : '0.00'}</span>
                 </div>
                 <div className="flex justify-between text-sm font-semibold">
+                  <span>Total Used Credit (Opening + Pending):</span>
+                  <span className={usedCredit !== null && usedCredit > dealerCreditLimit ? "text-destructive" : "text-primary"}>
+                    ₹{usedCredit !== null ? usedCredit.toFixed(2) : '0.00'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
                   <span>Available Credit:</span>
-                  <span className={availableCredit && availableCredit < 0 ? "text-destructive" : "text-primary"}>
+                  <span className={availableCredit !== null && availableCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>
                     ₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}
                   </span>
                 </div>
@@ -536,8 +578,8 @@ const MultiItemOrderForm: React.FC = () => {
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                       <Command>
-                        <CommandInput
-                          placeholder="Search product (e.g. 'VOLLEY' or 'CD 334')..."
+                        <CommandInput 
+                          placeholder="Search product (e.g. 'VOLLEY' or 'CD 334')..." 
                           value={searchValue}
                           onValueChange={setSearchValue}
                         />
