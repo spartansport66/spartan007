@@ -15,7 +15,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import MultiSelect from '@/components/MultiSelect'; // Import the new MultiSelect component
+import MultiSelect from '@/components/MultiSelect';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Dealer name must be at least 2 characters.' }),
@@ -30,18 +30,21 @@ const formSchema = z.object({
     (val) => Number(val),
     z.number().min(0, { message: 'Credit limit cannot be negative.' })
   ),
-  allottedCreditDays: z.preprocess( // Added
+  allottedCreditDays: z.preprocess(
     (val) => Number(val),
     z.number().int().min(0, { message: 'Allotted credit days cannot be negative.' })
   ),
-  assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }), // Now mandatory and an array
+  openingBalance: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Opening balance cannot be negative.' })
+  ),
+  assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }),
 });
 
 interface SalesPerson {
   id: string;
   first_name: string;
-  last_name:
-  string;
+  last_name: string;
 }
 
 const AddDealer = () => {
@@ -62,8 +65,9 @@ const AddDealer = () => {
       state: '',
       country: '',
       creditLimit: 0,
-      allottedCreditDays: 0, // Default to 0
-      assignedSalesPersonIds: [], // Default to empty array
+      allottedCreditDays: 0,
+      openingBalance: 0,
+      assignedSalesPersonIds: [],
     },
   });
 
@@ -96,6 +100,7 @@ const AddDealer = () => {
         // If admin, leave it empty for them to choose
         form.setValue('assignedSalesPersonIds', []);
       }
+
       setDataLoading(false);
     };
 
@@ -113,54 +118,66 @@ const AddDealer = () => {
       return;
     }
 
-    const dealerData = {
-      user_id: user.id, // Creator of the dealer
-      name: values.name,
-      contact_person: values.contactPerson,
-      email: values.email,
-      phone: values.phone,
-      address: values.address,
-      city: values.city,
-      state: values.state,
-      country: values.country,
-      credit_limit: values.creditLimit,
-      allotted_credit_days: values.allottedCreditDays, // Include in insert
-      // sales_person_id is removed from dealers table
-    };
+    try {
+      const dealerData = {
+        user_id: user.id, // Creator of the dealer
+        name: values.name,
+        contact_person: values.contactPerson,
+        email: values.email,
+        phone: values.phone,
+        address: values.address,
+        city: values.city,
+        state: values.state,
+        country: values.country,
+        credit_limit: values.creditLimit,
+        allotted_credit_days: values.allottedCreditDays,
+      };
 
-    const { data: newDealer, error: dealerError } = await supabase
-      .from('dealers')
-      .insert([dealerData])
-      .select()
-      .single();
+      const { data: newDealer, error: dealerError } = await supabase
+        .from('dealers')
+        .insert([dealerData])
+        .select()
+        .single();
 
-    if (dealerError) {
-      console.error('Error adding dealer:', dealerError);
-      showError(`Failed to add dealer: ${dealerError.message}`);
-      return;
+      if (dealerError) {
+        throw dealerError;
+      }
+
+      // Insert dealer balance
+      const { error: balanceError } = await supabase
+        .from('dealer_balances')
+        .insert({
+          dealer_id: newDealer.id,
+          opening_balance: values.openingBalance,
+          closing_balance: values.openingBalance, // Initially same as opening
+        });
+
+      if (balanceError) {
+        throw balanceError;
+      }
+
+      // Insert into the new join table: dealer_sales_persons
+      const dealerSalesPersonsData = values.assignedSalesPersonIds.map(spId => ({
+        dealer_id: newDealer.id,
+        sales_person_id: spId,
+      }));
+
+      const { error: joinTableError } = await supabase
+        .from('dealer_sales_persons')
+        .insert(dealerSalesPersonsData);
+
+      if (joinTableError) {
+        throw joinTableError;
+      }
+
+      showSuccess('Dealer added successfully and sales persons assigned!');
+      form.reset();
+      console.log('New Dealer Data:', newDealer);
+      navigate('/manage-dealers');
+    } catch (error: any) {
+      console.error('Error adding dealer:', error);
+      showError(`Failed to add dealer: ${error.message}`);
     }
-
-    // Insert into the new join table: dealer_sales_persons
-    const dealerSalesPersonsData = values.assignedSalesPersonIds.map(spId => ({
-      dealer_id: newDealer.id,
-      sales_person_id: spId,
-    }));
-
-    const { error: joinTableError } = await supabase
-      .from('dealer_sales_persons')
-      .insert(dealerSalesPersonsData);
-
-    if (joinTableError) {
-      console.error('Error assigning sales persons to dealer:', joinTableError);
-      showError(`Failed to assign sales persons: ${joinTableError.message}`);
-      // Optionally, you might want to delete the newly created dealer here if the assignment fails
-      return;
-    }
-
-    showSuccess('Dealer added successfully and sales persons assigned!');
-    form.reset();
-    console.log('New Dealer Data:', newDealer);
-    navigate('/manage-dealers');
   };
 
   if (sessionLoading || dataLoading) {
@@ -183,7 +200,6 @@ const AddDealer = () => {
         <Button variant="outline" onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} className="mb-6 flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" /> Back to Dashboard
         </Button>
-
         <Card className="bg-card text-card-foreground shadow-lg">
           <CardHeader>
             <CardTitle className="text-2xl font-semibold text-primary">Add New Dealer</CardTitle>
@@ -324,13 +340,26 @@ const AddDealer = () => {
                 />
                 <FormField
                   control={form.control}
+                  name="openingBalance"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Opening Balance</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 10000.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name="assignedSalesPersonIds"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Assign Sales Person(s)</FormLabel>
                       <FormControl>
-                        <MultiSelect
-                          options={salesPersonOptions}
+                        <MultiSelect 
+                          options={salesPersonOptions} 
                           value={field.value} // Changed from 'selected' to 'value'
                           onChange={field.onChange} // Changed from 'onSelect' to 'onChange'
                           placeholder="Select sales person(s)"

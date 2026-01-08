@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -36,6 +37,8 @@ interface Dealer {
   user_id: string;
   assigned_sales_persons: { id: string; first_name: string; last_name: string }[];
   current_month_credit_limit: number;
+  opening_balance: number;
+  closing_balance: number;
 }
 
 interface SalesPerson {
@@ -61,6 +64,10 @@ const formSchema = z.object({
     (val) => Number(val),
     z.number().int().min(0, { message: 'Allotted credit days cannot be negative.' })
   ),
+  openingBalance: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Opening balance cannot be negative.' })
+  ),
   assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }),
 });
 
@@ -76,6 +83,7 @@ const ManageDealers = () => {
   const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false);
   const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -89,6 +97,7 @@ const ManageDealers = () => {
       country: '',
       creditLimit: 0,
       allottedCreditDays: 0,
+      openingBalance: 0,
       assignedSalesPersonIds: [],
     },
   });
@@ -106,6 +115,7 @@ const ManageDealers = () => {
         country: selectedDealer.country,
         creditLimit: selectedDealer.credit_limit,
         allottedCreditDays: selectedDealer.allotted_credit_days,
+        openingBalance: selectedDealer.opening_balance || 0,
         assignedSalesPersonIds: selectedDealer.assigned_sales_persons.map(sp => sp.id),
       });
     }
@@ -116,6 +126,7 @@ const ManageDealers = () => {
       .from('profiles')
       .select('id, first_name, last_name')
       .eq('user_type', 'sales_person');
+
     if (error) {
       console.error('Error fetching all sales persons:', error);
       showError(`Failed to load sales persons: ${error.message}`);
@@ -129,58 +140,81 @@ const ManageDealers = () => {
       setLoading(false);
       return;
     }
+
     setLoading(true);
     setError(null);
 
-    const { data: dealersData, error: dealersError } = await supabase
-      .from('dealers')
-      .select(` *, dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name)) `);
+    try {
+      // Fetch dealers with their assigned sales persons
+      const { data: dealersData, error: dealersError } = await supabase
+        .from('dealers')
+        .select(`
+          *,
+          dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name))
+        `);
 
-    if (dealersError) {
-      console.error('Error fetching dealers:', dealersError);
-      setError(`Failed to load dealers: ${dealersError.message}`);
-      showError(`Failed to load dealers: ${dealersError.message}`);
+      if (dealersError) {
+        throw dealersError;
+      }
+
+      // Fetch dealer balances
+      const { data: balancesData, error: balancesError } = await supabase
+        .from('dealer_balances')
+        .select('*');
+
+      if (balancesError) {
+        throw balancesError;
+      }
+
+      // Create a map of dealer balances for easy lookup
+      const balancesMap = new Map(balancesData?.map(balance => [balance.dealer_id, balance]) || []);
+
+      // Get current month for credit limit
+      const today = new Date();
+      const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0];
+
+      // Fetch monthly credit limits
+      const { data: monthlyLimitsData, error: monthlyLimitsError } = await supabase
+        .from('dealer_monthly_credit_limits')
+        .select('dealer_id, credit_limit')
+        .eq('month_year', currentMonthYear);
+
+      if (monthlyLimitsError) {
+        throw monthlyLimitsError;
+      }
+
+      const monthlyLimitsMap = new Map(
+        (monthlyLimitsData || []).map(limit => [limit.dealer_id, limit.credit_limit])
+      );
+
+      const formattedDealers: Dealer[] = (dealersData || []).map((d: any) => {
+        const assignedSalesPersons = d.dealer_sales_persons.map((dsp: any) => ({
+          id: dsp.profiles.id,
+          first_name: dsp.profiles.first_name,
+          last_name: dsp.profiles.last_name,
+        }));
+
+        const balance = balancesMap.get(d.id) || { opening_balance: 0, closing_balance: 0 };
+        const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) ? monthlyLimitsMap.get(d.id)! : d.credit_limit;
+
+        return {
+          ...d,
+          assigned_sales_persons: assignedSalesPersons,
+          current_month_credit_limit: currentMonthCreditLimit,
+          opening_balance: balance.opening_balance || 0,
+          closing_balance: balance.closing_balance || 0,
+        };
+      });
+
+      setDealers(formattedDealers);
+    } catch (error: any) {
+      console.error('Error fetching dealers:', error);
+      setError(`Failed to load dealers: ${error.message}`);
+      showError(`Failed to load dealers: ${error.message}`);
       setDealers([]);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const today = new Date();
-    const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0];
-    const { data: monthlyLimitsData, error: monthlyLimitsError } = await supabase
-      .from('dealer_monthly_credit_limits')
-      .select('dealer_id, credit_limit')
-      .eq('month_year', currentMonthYear);
-
-    if (monthlyLimitsError) {
-      console.error('Error fetching monthly credit limits:', monthlyLimitsError);
-      showError(`Failed to load monthly credit limits: ${monthlyLimitsError.message}`);
-    }
-
-    const monthlyLimitsMap = new Map(
-      (monthlyLimitsData || []).map(limit => [limit.dealer_id, limit.credit_limit])
-    );
-
-    const formattedDealers: Dealer[] = (dealersData || []).map((d: any) => {
-      const assignedSalesPersons = d.dealer_sales_persons.map((dsp: any) => ({
-        id: dsp.profiles.id,
-        first_name: dsp.profiles.first_name,
-        last_name: dsp.profiles.last_name,
-      }));
-
-      const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) 
-        ? monthlyLimitsMap.get(d.id)! 
-        : d.credit_limit;
-
-      return {
-        ...d,
-        assigned_sales_persons: assignedSalesPersons,
-        current_month_credit_limit: currentMonthCreditLimit,
-      };
-    });
-
-    setDealers(formattedDealers);
-    setLoading(false);
   }, [user]);
 
   useEffect(() => {
@@ -205,78 +239,99 @@ const ManageDealers = () => {
   const handleUpdateDealer = async (values: z.infer<typeof formSchema>) => {
     if (!selectedDealer || !user) return;
 
-    const updateData: Partial<Omit<Dealer, 'assigned_sales_persons' | 'current_month_credit_limit'>> = {
-      name: values.name,
-      contact_person: values.contactPerson,
-      email: values.email,
-      phone: values.phone,
-      address: values.address,
-      city: values.city,
-      state: values.state,
-      country: values.country,
-      credit_limit: values.creditLimit,
-      allotted_credit_days: values.allottedCreditDays,
-    };
+    try {
+      // Update dealer information
+      const updateData: Partial<Omit<Dealer, 'assigned_sales_persons' | 'current_month_credit_limit' | 'opening_balance' | 'closing_balance'>> = {
+        name: values.name,
+        contact_person: values.contactPerson,
+        email: values.email,
+        phone: values.phone,
+        address: values.address,
+        city: values.city,
+        state: values.state,
+        country: values.country,
+        credit_limit: values.creditLimit,
+        allotted_credit_days: values.allottedCreditDays,
+      };
 
-    const { error: dealerUpdateError } = await supabase
-      .from('dealers')
-      .update(updateData)
-      .eq('id', selectedDealer.id);
+      const { error: dealerUpdateError } = await supabase
+        .from('dealers')
+        .update(updateData)
+        .eq('id', selectedDealer.id);
 
-    if (dealerUpdateError) {
-      console.error('Error updating dealer:', dealerUpdateError);
-      showError(`Failed to update dealer: ${dealerUpdateError.message}`);
-      return;
-    }
-
-    const currentAssignedIds = selectedDealer.assigned_sales_persons.map(sp => sp.id);
-    const newAssignedIds = values.assignedSalesPersonIds;
-    const toAdd = newAssignedIds.filter(id => !currentAssignedIds.includes(id));
-    const toRemove = currentAssignedIds.filter(id => !newAssignedIds.includes(id));
-
-    if (toAdd.length > 0) {
-      const { error: addError } = await supabase
-        .from('dealer_sales_persons')
-        .insert(toAdd.map(spId => ({ dealer_id: selectedDealer.id, sales_person_id: spId })));
-
-      if (addError) {
-        console.error('Error adding sales persons:', addError);
-        showError(`Failed to assign sales persons: ${addError.message}`);
-        return;
+      if (dealerUpdateError) {
+        throw dealerUpdateError;
       }
-    }
 
-    if (toRemove.length > 0) {
-      const { error: removeError } = await supabase
-        .from('dealer_sales_persons')
-        .delete()
-        .eq('dealer_id', selectedDealer.id)
-        .in('sales_person_id', toRemove);
+      // Update dealer balance
+      const { error: balanceUpdateError } = await supabase
+        .from('dealer_balances')
+        .upsert({
+          dealer_id: selectedDealer.id,
+          opening_balance: values.openingBalance,
+          closing_balance: values.openingBalance, // Initially same as opening
+        }, { onConflict: 'dealer_id' });
 
-      if (removeError) {
-        console.error('Error removing sales persons:', removeError);
-        showError(`Failed to unassign sales persons: ${removeError.message}`);
-        return;
+      if (balanceUpdateError) {
+        throw balanceUpdateError;
       }
-    }
 
-    showSuccess('Dealer updated successfully!');
-    setIsEditDialogOpen(false);
-    fetchDealers();
+      // Update sales person assignments
+      const currentAssignedIds = selectedDealer.assigned_sales_persons.map(sp => sp.id);
+      const newAssignedIds = values.assignedSalesPersonIds;
+      const toAdd = newAssignedIds.filter(id => !currentAssignedIds.includes(id));
+      const toRemove = currentAssignedIds.filter(id => !newAssignedIds.includes(id));
+
+      if (toAdd.length > 0) {
+        const { error: addError } = await supabase
+          .from('dealer_sales_persons')
+          .insert(toAdd.map(spId => ({
+            dealer_id: selectedDealer.id,
+            sales_person_id: spId
+          })));
+
+        if (addError) {
+          throw addError;
+        }
+      }
+
+      if (toRemove.length > 0) {
+        const { error: removeError } = await supabase
+          .from('dealer_sales_persons')
+          .delete()
+          .eq('dealer_id', selectedDealer.id)
+          .in('sales_person_id', toRemove);
+
+        if (removeError) {
+          throw removeError;
+        }
+      }
+
+      showSuccess('Dealer updated successfully!');
+      setIsEditDialogOpen(false);
+      fetchDealers();
+    } catch (error: any) {
+      console.error('Error updating dealer:', error);
+      showError(`Failed to update dealer: ${error.message}`);
+    }
   };
 
   const handleDelete = async (dealerId: string) => {
-    const { error } = await supabase
-      .from('dealers')
-      .delete()
-      .eq('id', dealerId);
+    try {
+      const { error } = await supabase
+        .from('dealers')
+        .delete()
+        .eq('id', dealerId);
 
-    if (error) {
-      console.error('Error deleting dealer:', error);
-      showError(`Failed to delete dealer: ${error.message}`);
-    } else {
+      if (error) {
+        throw error;
+      }
+
       showSuccess('Dealer deleted successfully!');
       fetchDealers();
+    } catch (error: any) {
+      console.error('Error deleting dealer:', error);
+      showError(`Failed to delete dealer: ${error.message}`);
     }
   };
 
@@ -313,15 +368,16 @@ const ManageDealers = () => {
         throw insertError;
       }
 
-      // Then handle sales person assignments if provided
+      // Then handle sales person assignments if provided in the Excel
       const assignmentsToInsert: any[] = [];
-      
       data.forEach((row: any, index: number) => {
         const dealerId = insertedDealers[index].id;
         
         // Handle assigned sales persons if provided in the Excel
         if (row.assigned_to || row.AssignedTo || row['Assigned To']) {
-          const assignedSalesPersons = (row.assigned_to || row.AssignedTo || row['Assigned To']).split(',').map((name: string) => name.trim());
+          const assignedSalesPersons = (row.assigned_to || row.AssignedTo || row['Assigned To'])
+            .split(',')
+            .map((name: string) => name.trim());
           
           assignedSalesPersons.forEach((salesPersonName: string) => {
             const salesPerson = allSalesPersons.find(sp => 
@@ -373,8 +429,7 @@ const ManageDealers = () => {
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
         <p className="text-lg text-red-600 dark:text-red-400 mb-4">{error}</p>
         <Button onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} className="flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" />
-          Back to Dashboard
+          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
         </Button>
       </div>
     );
@@ -397,6 +452,7 @@ const ManageDealers = () => {
       country: 'USA',
       credit_limit: 50000,
       allotted_credit_days: 30,
+      opening_balance: 10000,
       assigned_to: 'Sales Person 1'
     },
     {
@@ -410,6 +466,7 @@ const ManageDealers = () => {
       country: 'USA',
       credit_limit: 30000,
       allotted_credit_days: 45,
+      opening_balance: 5000,
       assigned_to: 'Sales Person 2'
     }
   ];
@@ -418,8 +475,7 @@ const ManageDealers = () => {
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-full">
         <Button variant="outline" onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} className="mb-6 flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" />
-          Back to Dashboard
+          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
         </Button>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -440,10 +496,8 @@ const ManageDealers = () => {
                         <TableHead className="text-muted-foreground">Contact Person</TableHead>
                         <TableHead className="text-muted-foreground">Email</TableHead>
                         <TableHead className="text-muted-foreground">Phone</TableHead>
-                        <TableHead className="text-muted-foreground">Address</TableHead>
-                        <TableHead className="text-muted-foreground">City</TableHead>
-                        <TableHead className="text-muted-foreground">State</TableHead>
-                        <TableHead className="text-muted-foreground">Country</TableHead>
+                        <TableHead className="text-muted-foreground">Opening Balance</TableHead>
+                        <TableHead className="text-muted-foreground">Closing Balance</TableHead>
                         <TableHead className="text-muted-foreground">Monthly Credit Limit</TableHead>
                         <TableHead className="text-muted-foreground">Credit Days</TableHead>
                         <TableHead className="text-muted-foreground">Assigned To</TableHead>
@@ -457,10 +511,8 @@ const ManageDealers = () => {
                           <TableCell className="text-muted-foreground">{dealer.contact_person}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.phone}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.address}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.country}</TableCell>
+                          <TableCell className="text-muted-foreground">₹{dealer.opening_balance.toFixed(2)}</TableCell>
+                          <TableCell className="text-muted-foreground">₹{dealer.closing_balance.toFixed(2)}</TableCell>
                           <TableCell className="text-muted-foreground">₹{dealer.current_month_credit_limit.toFixed(2)}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell>
                           <TableCell className="text-muted-foreground">
@@ -512,29 +564,28 @@ const ManageDealers = () => {
           </Card>
           
           <div className="space-y-6">
-            <ExcelUpload
+            <ExcelUpload 
               onUpload={handleBulkUpload}
               sampleData={sampleDealerData}
               sampleFileName="sample_dealers.xlsx"
               uploadButtonText="Upload Dealers"
-              tableHeaders={['Name', 'Contact Person', 'Email', 'Phone', 'Address', 'City', 'State', 'Country', 'Credit Limit', 'Credit Days', 'Assigned To']}
-              requiredHeaders={['name', 'contact', 'email', 'phone', 'address', 'city', 'state', 'country', 'credit', 'days']}
+              tableHeaders={['Name', 'Contact Person', 'Email', 'Phone', 'Address', 'City', 'State', 'Country', 'Credit Limit', 'Credit Days', 'Opening Balance', 'Assigned To']}
+              requiredHeaders={['name', 'contact', 'email', 'phone', 'address', 'city', 'state', 'country', 'credit', 'days', 'opening']}
             />
-            
             <Card className="bg-card text-card-foreground shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  Bulk Upload Instructions
+                  <Upload className="h-5 w-5" /> Bulk Upload Instructions
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="list-disc pl-5 space-y-2 text-sm">
                   <li>Download the sample Excel file to see the required format</li>
-                  <li>Required columns: Name, Contact Person, Email, Phone, Address, City, State, Country, Credit Limit, Credit Days</li>
+                  <li>Required columns: Name, Contact Person, Email, Phone, Address, City, State, Country, Credit Limit, Credit Days, Opening Balance</li>
                   <li>Optional column: Assigned To (Sales Person Name)</li>
                   <li>Credit Limit should be a number (e.g., 50000)</li>
                   <li>Credit Days should be a whole number (e.g., 30)</li>
+                  <li>Opening Balance should be a number (e.g., 10000)</li>
                   <li>Assigned To should match existing sales person names</li>
                   <li>Save your file as .xlsx or .xls format</li>
                 </ul>
@@ -544,6 +595,7 @@ const ManageDealers = () => {
         </div>
       </div>
       <MadeWithDyad />
+      
       {selectedDealer && (
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="sm:max-w-[425px]">
@@ -625,6 +677,13 @@ const ManageDealers = () => {
                   <Input id="allottedCreditDays" type="number" placeholder="e.g., 30" {...form.register('allottedCreditDays')} className="col-span-3" />
                   {form.formState.errors.allottedCreditDays && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.allottedCreditDays.message}</p>}
                 </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="openingBalance" className="text-right">
+                    Opening Balance
+                  </Label>
+                  <Input id="openingBalance" type="number" placeholder="e.g., 10000.00" {...form.register('openingBalance')} className="col-span-3" />
+                  {form.formState.errors.openingBalance && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.openingBalance.message}</p>}
+                </div>
                 <FormField
                   control={form.control}
                   name="assignedSalesPersonIds"
@@ -632,9 +691,9 @@ const ManageDealers = () => {
                     <FormItem>
                       <FormLabel className="text-right">Assign to</FormLabel>
                       <FormControl>
-                        <MultiSelect
-                          options={salesPersonOptions}
-                          value={field.value}
+                        <MultiSelect 
+                          options={salesPersonOptions} 
+                          value={field.value} 
                           onChange={field.onChange}
                           placeholder="Select sales person(s)"
                           disabled={!isAdmin}
@@ -652,6 +711,7 @@ const ManageDealers = () => {
           </DialogContent>
         </Dialog>
       )}
+      
       {/* Manage Monthly Credit Limit Dialog */}
       {selectedDealerForMonthlyCredit && (
         <Dialog open={isMonthlyCreditDialogOpen} onOpenChange={setIsMonthlyCreditDialogOpen}>
@@ -662,7 +722,10 @@ const ManageDealers = () => {
                 Add, edit, or delete month-wise credit limits for this dealer.
               </DialogDescription>
             </DialogHeader>
-            <DealerMonthlyCreditManager dealer={selectedDealerForMonthlyCredit} onCreditLimitsUpdated={fetchDealers} />
+            <DealerMonthlyCreditManager 
+              dealer={selectedDealerForMonthlyCredit} 
+              onCreditLimitsUpdated={fetchDealers} 
+            />
           </DialogContent>
         </Dialog>
       )}
