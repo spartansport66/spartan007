@@ -95,10 +95,10 @@ const AddProduct = () => {
       // Transform data to match product schema
       const productsToInsert = data.map((row: any) => ({
         user_id: user.id,
-        name: row.name || row.Name || row['Product Name'] || '',
-        description: row.description || row.Description || row['Product Description'] || '',
-        price: parseFloat(row.price || row.Price || row['Unit Price'] || '0'),
-        stock: parseInt(row.stock || row.Stock || row['Quantity'] || '0'),
+        name: row.name,
+        description: row.description,
+        price: row.price,
+        stock: row.stock,
       }));
 
       const { data: insertedData, error } = await supabase
@@ -153,6 +153,15 @@ const AddProduct = () => {
       stock: 200
     }
   ];
+
+  const productColumnMap = {
+    "name": "name",
+    "description": "description",
+    "price": "price",
+    "stock": "stock",
+  };
+
+  const productDisplayHeaders = ['Name', 'Description', 'Price', 'Stock'];
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -237,8 +246,9 @@ const AddProduct = () => {
               sampleData={sampleProductData}
               sampleFileName="sample_products.xlsx"
               uploadButtonText="Upload Products"
-              tableHeaders={['Name', 'Description', 'Price', 'Stock']}
-              requiredHeaders={['name', 'price', 'stock']}
+              displayHeaders={productDisplayHeaders}
+              columnMap={productColumnMap}
+              validationSchema={formSchema}
             />
             
             <Card className="bg-card text-card-foreground shadow-lg">

@@ -71,6 +71,31 @@ const formSchema = z.object({
   assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }),
 });
 
+// Zod schema for Excel upload validation
+const dealerExcelSchema = z.object({
+  name: z.string().min(1, { message: 'Dealer Name is required.' }),
+  contactperson: z.string().min(1, { message: 'Contact Person is required.' }),
+  email: z.string().email({ message: 'Valid Email is required.' }),
+  phone: z.string().min(10, { message: 'Phone must be at least 10 digits.' }).max(15, { message: 'Phone cannot exceed 15 digits.' }),
+  address: z.string().min(5, { message: 'Address is required.' }),
+  city: z.string().min(1, { message: 'City is required.' }),
+  state: z.string().min(1, { message: 'State is required.' }),
+  country: z.string().min(1, { message: 'Country is required.' }),
+  creditlimit: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Credit Limit cannot be negative.' })
+  ),
+  allottedcreditdays: z.preprocess(
+    (val) => Number(val),
+    z.number().int().min(0, { message: 'Allotted Credit Days cannot be negative.' })
+  ),
+  openingbalance: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Opening Balance cannot be negative.' })
+  ),
+  assignedto: z.string().optional().nullable(), // This will be a string of names, handled separately
+});
+
 const ManageDealers = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
@@ -347,16 +372,16 @@ const ManageDealers = () => {
       // First, create all dealers
       const dealersToInsert = data.map((row: any) => ({
         user_id: user.id,
-        name: row.name || row.Name || row['Dealer Name'] || '',
-        contact_person: row.contact_person || row.ContactPerson || row['Contact Person'] || '',
-        email: row.email || row.Email || '',
-        phone: row.phone || row.Phone || row['Phone Number'] || '',
-        address: row.address || row.Address || '',
-        city: row.city || row.City || 'Unknown',
-        state: row.state || row.State || 'Unknown',
-        country: row.country || row.Country || 'Unknown',
-        credit_limit: parseFloat(row.credit_limit || row.CreditLimit || row['Credit Limit'] || '0'),
-        allotted_credit_days: parseInt(row.allotted_credit_days || row.AllottedCreditDays || row['Allotted Credit Days'] || '0'),
+        name: row.name,
+        contact_person: row.contactperson,
+        email: row.email,
+        phone: row.phone,
+        address: row.address,
+        city: row.city,
+        state: row.state,
+        country: row.country,
+        credit_limit: row.creditlimit,
+        allotted_credit_days: row.allottedcreditdays,
       }));
 
       const { data: insertedDealers, error: insertError } = await supabase
@@ -374,8 +399,8 @@ const ManageDealers = () => {
         const dealerId = insertedDealers[index].id;
         
         // Handle assigned sales persons if provided in the Excel
-        if (row.assigned_to || row.AssignedTo || row['Assigned To']) {
-          const assignedSalesPersons = (row.assigned_to || row.AssignedTo || row['Assigned To'])
+        if (row.assignedto) {
+          const assignedSalesPersons = String(row.assignedto)
             .split(',')
             .map((name: string) => name.trim());
           
@@ -403,6 +428,21 @@ const ManageDealers = () => {
         if (assignmentError) {
           throw assignmentError;
         }
+      }
+
+      // Handle opening balances
+      const balancesToInsert = data.map((row: any, index: number) => ({
+        dealer_id: insertedDealers[index].id,
+        opening_balance: row.openingbalance,
+        closing_balance: row.openingbalance, // Initially same as opening
+      }));
+
+      const { error: balanceInsertError } = await supabase
+        .from('dealer_balances')
+        .insert(balancesToInsert);
+
+      if (balanceInsertError) {
+        throw balanceInsertError;
       }
 
       showSuccess(`Successfully uploaded ${insertedDealers.length} dealers!`);
@@ -442,33 +482,52 @@ const ManageDealers = () => {
 
   const sampleDealerData = [
     {
-      name: 'Global Distributors',
-      contact_person: 'John Doe',
-      email: 'john@gd.com',
-      phone: '+1234567890',
-      address: '123 Business St',
-      city: 'New York',
-      state: 'NY',
-      country: 'USA',
-      credit_limit: 50000,
-      allotted_credit_days: 30,
-      opening_balance: 10000,
-      assigned_to: 'Sales Person 1'
+      "Dealer Name": 'Global Distributors',
+      "Contact Person": 'John Doe',
+      "Email": 'john@gd.com',
+      "Phone Number": '+1234567890',
+      "Address": '123 Business St',
+      "City": 'New York',
+      "State": 'NY',
+      "Country": 'USA',
+      "Credit Limit": 50000,
+      "Allotted Credit Days": 30,
+      "Opening Balance": 10000,
+      "Assigned To": 'Sales Person 1' // Example: "John Doe, Jane Smith"
     },
     {
-      name: 'Regional Traders',
-      contact_person: 'Jane Smith',
-      email: 'jane@rt.com',
-      phone: '+1987654321',
-      address: '456 Trade Ave',
-      city: 'Los Angeles',
-      state: 'CA',
-      country: 'USA',
-      credit_limit: 30000,
-      allotted_credit_days: 45,
-      opening_balance: 5000,
-      assigned_to: 'Sales Person 2'
+      "Dealer Name": 'Regional Traders',
+      "Contact Person": 'Jane Smith',
+      "Email": 'jane@rt.com',
+      "Phone Number": '+1987654321',
+      "Address": '456 Trade Ave',
+      "City": 'Los Angeles',
+      "State": 'CA',
+      "Country": 'USA',
+      "Credit Limit": 30000,
+      "Allotted Credit Days": 45,
+      "Opening Balance": 5000,
+      "Assigned To": 'Sales Person 2'
     }
+  ];
+
+  const dealerColumnMap = {
+    "Dealer Name": "name",
+    "Contact Person": "contactperson",
+    "Email": "email",
+    "Phone Number": "phone",
+    "Address": "address",
+    "City": "city",
+    "State": "state",
+    "Country": "country",
+    "Credit Limit": "creditlimit",
+    "Allotted Credit Days": "allottedcreditdays",
+    "Opening Balance": "openingbalance",
+    "Assigned To": "assignedto",
+  };
+
+  const dealerDisplayHeaders = [
+    "Dealer Name", "Contact Person", "Email", "Phone Number", "Address", "City", "State", "Country", "Credit Limit", "Allotted Credit Days", "Opening Balance", "Assigned To"
   ];
 
   return (
@@ -569,8 +628,9 @@ const ManageDealers = () => {
               sampleData={sampleDealerData}
               sampleFileName="sample_dealers.xlsx"
               uploadButtonText="Upload Dealers"
-              tableHeaders={['Name', 'Contact Person', 'Email', 'Phone', 'Address', 'City', 'State', 'Country', 'Credit Limit', 'Credit Days', 'Opening Balance', 'Assigned To']}
-              requiredHeaders={['name', 'contact', 'email', 'phone', 'address', 'city', 'state', 'country', 'credit', 'days', 'opening']}
+              displayHeaders={dealerDisplayHeaders}
+              columnMap={dealerColumnMap}
+              validationSchema={dealerExcelSchema}
             />
             <Card className="bg-card text-card-foreground shadow-lg">
               <CardHeader>
@@ -581,12 +641,12 @@ const ManageDealers = () => {
               <CardContent>
                 <ul className="list-disc pl-5 space-y-2 text-sm">
                   <li>Download the sample Excel file to see the required format</li>
-                  <li>Required columns: Name, Contact Person, Email, Phone, Address, City, State, Country, Credit Limit, Credit Days, Opening Balance</li>
-                  <li>Optional column: Assigned To (Sales Person Name)</li>
-                  <li>Credit Limit should be a number (e.g., 50000)</li>
-                  <li>Credit Days should be a whole number (e.g., 30)</li>
-                  <li>Opening Balance should be a number (e.g., 10000)</li>
-                  <li>Assigned To should match existing sales person names</li>
+                  <li>Required columns: "Dealer Name", "Contact Person", "Email", "Phone Number", "Address", "City", "State", "Country", "Credit Limit", "Allotted Credit Days", "Opening Balance"</li>
+                  <li>Optional column: "Assigned To" (comma-separated sales person names, e.g., "John Doe, Jane Smith")</li>
+                  <li>"Credit Limit" and "Opening Balance" should be numbers (e.g., 50000)</li>
+                  <li>"Allotted Credit Days" should be a whole number (e.g., 30)</li>
+                  <li>"Email" must be a valid email format</li>
+                  <li>"Phone Number" must be between 10 and 15 digits</li>
                   <li>Save your file as .xlsx or .xls format</li>
                 </ul>
               </CardContent>
@@ -712,7 +772,6 @@ const ManageDealers = () => {
         </Dialog>
       )}
       
-      {/* Manage Monthly Credit Limit Dialog */}
       {selectedDealerForMonthlyCredit && (
         <Dialog open={isMonthlyCreditDialogOpen} onOpenChange={setIsMonthlyCreditDialogOpen}>
           <DialogContent className="sm:max-w-[700px]">
