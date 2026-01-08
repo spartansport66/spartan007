@@ -46,6 +46,13 @@ interface PendingPayment {
   payment_due_date: string | null;
 }
 
+interface DealerBalance {
+  id: string;
+  dealer_id: string;
+  opening_balance: number;
+  closing_balance: number;
+}
+
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-multi-item-order";
 
@@ -104,7 +111,7 @@ const MultiItemOrderForm: React.FC = () => {
     const fetchData = async () => {
       if (!user) return;
 
-      // Fetch dealers assigned to the current user
+      // Fetch dealers assigned to the current user with their balances
       const { data: assignedDealersData, error: assignedDealersError } = await supabase
         .from('dealer_sales_persons')
         .select(`
@@ -112,8 +119,7 @@ const MultiItemOrderForm: React.FC = () => {
             id, 
             name, 
             credit_limit, 
-            allotted_credit_days,
-            dealer_balances(opening_balance)
+            allotted_credit_days
           )
         `)
         .eq('sales_person_id', user.id);
@@ -123,11 +129,35 @@ const MultiItemOrderForm: React.FC = () => {
         showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
         setDealers([]);
       } else {
-        const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => ({
-          ...item.dealers,
-          opening_balance: item.dealers.dealer_balances?.[0]?.opening_balance || 0
-        }));
-        setDealers(formattedDealers);
+        // Fetch opening balances for all dealers
+        const dealerIds = (assignedDealersData || []).map((item: any) => item.dealers.id);
+        
+        if (dealerIds.length > 0) {
+          const { data: balancesData, error: balancesError } = await supabase
+            .from('dealer_balances')
+            .select('dealer_id, opening_balance')
+            .in('dealer_id', dealerIds);
+
+          if (balancesError) {
+            console.error('Error fetching dealer balances:', balancesError);
+            showError(`Failed to load dealer balances: ${balancesError.message}`);
+          }
+
+          const balancesMap = new Map(balancesData?.map((b: any) => [b.dealer_id, b.opening_balance]) || []);
+          
+          const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => ({
+            ...item.dealers,
+            opening_balance: balancesMap.get(item.dealers.id) || 0
+          }));
+          
+          setDealers(formattedDealers);
+        } else {
+          const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => ({
+            ...item.dealers,
+            opening_balance: 0
+          }));
+          setDealers(formattedDealers);
+        }
       }
 
       // Fetch all products
