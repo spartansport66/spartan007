@@ -30,7 +30,7 @@ interface Dealer {
   name: string;
   credit_limit: number;
   allotted_credit_days: number;
-  opening_balance: number; // Added opening balance
+  opening_balance: number;
 }
 
 interface OrderItem {
@@ -44,13 +44,6 @@ interface PendingPayment {
   total_amount: number;
   payment_status: string;
   payment_due_date: string | null;
-}
-
-interface DealerBalance {
-  id: string;
-  dealer_id: string;
-  opening_balance: number;
-  closing_balance: number;
 }
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
@@ -69,7 +62,7 @@ const MultiItemOrderForm: React.FC = () => {
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
-  const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0); // Added opening balance state
+  const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
 
   // Payment at order time states
   const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
@@ -111,28 +104,32 @@ const MultiItemOrderForm: React.FC = () => {
     const fetchData = async () => {
       if (!user) return;
 
-      // Fetch dealers assigned to the current user with their balances
-      const { data: assignedDealersData, error: assignedDealersError } = await supabase
-        .from('dealer_sales_persons')
-        .select(`
-          dealers(
-            id, 
-            name, 
-            credit_limit, 
-            allotted_credit_days
-          )
-        `)
-        .eq('sales_person_id', user.id);
+      try {
+        // Fetch dealers assigned to the current user
+        const { data: assignedDealersData, error: assignedDealersError } = await supabase
+          .from('dealer_sales_persons')
+          .select(`
+            dealers(
+              id, 
+              name, 
+              credit_limit, 
+              allotted_credit_days
+            )
+          `)
+          .eq('sales_person_id', user.id);
 
-      if (assignedDealersError) {
-        console.error('Error fetching assigned dealers:', assignedDealersError);
-        showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
-        setDealers([]);
-      } else {
-        // Fetch opening balances for all dealers
+        if (assignedDealersError) {
+          console.error('Error fetching assigned dealers:', assignedDealersError);
+          showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
+          setDealers([]);
+          return;
+        }
+
+        // Get dealer IDs to fetch their balances
         const dealerIds = (assignedDealersData || []).map((item: any) => item.dealers.id);
         
         if (dealerIds.length > 0) {
+          // Fetch opening balances for all dealers
           const { data: balancesData, error: balancesError } = await supabase
             .from('dealer_balances')
             .select('dealer_id, opening_balance')
@@ -143,13 +140,20 @@ const MultiItemOrderForm: React.FC = () => {
             showError(`Failed to load dealer balances: ${balancesError.message}`);
           }
 
-          const balancesMap = new Map(balancesData?.map((b: any) => [b.dealer_id, b.opening_balance]) || []);
-          
+          // Create a map of dealer balances for easy lookup
+          const balancesMap = new Map();
+          if (balancesData) {
+            balancesData.forEach((balance: any) => {
+              balancesMap.set(balance.dealer_id, balance.opening_balance || 0);
+            });
+          }
+
+          // Format dealers with their opening balances
           const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => ({
             ...item.dealers,
             opening_balance: balancesMap.get(item.dealers.id) || 0
           }));
-          
+
           setDealers(formattedDealers);
         } else {
           const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => ({
@@ -158,18 +162,21 @@ const MultiItemOrderForm: React.FC = () => {
           }));
           setDealers(formattedDealers);
         }
-      }
 
-      // Fetch all products
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
-        .select('id, name, price, stock');
+        // Fetch all products
+        const { data: productsData, error: productsError } = await supabase
+          .from('products')
+          .select('id, name, price, stock');
 
-      if (productsError) {
-        console.error('Error fetching products:', productsError);
-        showError(`Failed to load products: ${productsError.message}`);
-      } else {
-        setProducts(productsData || []);
+        if (productsError) {
+          console.error('Error fetching products:', productsError);
+          showError(`Failed to load products: ${productsError.message}`);
+        } else {
+          setProducts(productsData || []);
+        }
+      } catch (error: any) {
+        console.error('Error in fetchData:', error);
+        showError(`Failed to load data: ${error.message}`);
       }
     };
 
@@ -189,13 +196,12 @@ const MultiItemOrderForm: React.FC = () => {
         const todayISOString = new Date().toISOString();
 
         // Fetch pending payments for the selected dealer (only pending, not pending_approval)
-        // Exclude payments with future due dates (post-dated cheques)
         const { data, error } = await supabase
           .from('orders')
           .select('order_number, total_amount, payment_status, payment_due_date')
           .eq('dealer_id', selectedDealer)
           .eq('payment_status', 'pending')
-          .lte('payment_due_date', todayISOString); // Only include payments due today or earlier
+          .lte('payment_due_date', todayISOString);
 
         if (error) {
           console.error('Error fetching pending payments:', error);
@@ -229,14 +235,14 @@ const MultiItemOrderForm: React.FC = () => {
         setAllottedCreditDays(0);
         setPaymentDueDate(null);
         setPaymentAmount(0);
-        setDealerOpeningBalance(0); // Reset opening balance
+        setDealerOpeningBalance(0);
         return;
       }
 
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
-        setDealerOpeningBalance(selectedDealerData.opening_balance || 0); // Set opening balance
+        setDealerOpeningBalance(selectedDealerData.opening_balance || 0);
 
         // Calculate payment due date
         const currentDate = new Date();
@@ -248,38 +254,48 @@ const MultiItemOrderForm: React.FC = () => {
       const currentMonthDate = new Date();
       const currentMonthYear = new Date(Date.UTC(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1)).toISOString().split('T')[0];
 
-      const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
-        .from('dealer_monthly_credit_limits')
-        .select('credit_limit')
-        .eq('dealer_id', selectedDealer)
-        .eq('month_year', currentMonthYear)
-        .single();
+      try {
+        const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
+          .from('dealer_monthly_credit_limits')
+          .select('credit_limit')
+          .eq('dealer_id', selectedDealer)
+          .eq('month_year', currentMonthYear)
+          .single();
 
-      if (monthlyLimitError && monthlyLimitError.code !== 'PGRST116') {
-        console.error('Error fetching monthly credit limit:', monthlyLimitError.message);
-        showError(`Failed to load monthly credit limit: ${monthlyLimitError.message}`);
-        setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
-      } else if (monthlyLimitData) {
-        setDealerCreditLimit(monthlyLimitData.credit_limit);
-      } else {
+        if (monthlyLimitError && monthlyLimitError.code !== 'PGRST116') {
+          console.error('Error fetching monthly credit limit:', monthlyLimitError.message);
+          showError(`Failed to load monthly credit limit: ${monthlyLimitError.message}`);
+          setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
+        } else if (monthlyLimitData) {
+          setDealerCreditLimit(monthlyLimitData.credit_limit);
+        } else {
+          setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
+        }
+      } catch (error) {
+        console.error('Error fetching monthly credit limit:', error);
         setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
       }
 
       // Fetch total spent by this dealer from BOTH 'pending' AND 'pending_approval' orders
-      // This includes ALL unpaid orders, including those with future due dates (post-dated cheques)
-      const { data, error } = await supabase
-        .from('orders')
-        .select('total_amount')
-        .eq('dealer_id', selectedDealer)
-        .in('payment_status', ['pending', 'pending_approval']);
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('total_amount')
+          .eq('dealer_id', selectedDealer)
+          .in('payment_status', ['pending', 'pending_approval']);
 
-      if (error) {
+        if (error) {
+          console.error('Error fetching dealer balance:', error);
+          showError(`Failed to calculate dealer balance: ${error.message}`);
+          setDealerBalance(null);
+        } else {
+          const totalSpent = data.reduce((sum, order) => sum + order.total_amount, 0);
+          setDealerBalance(totalSpent);
+        }
+      } catch (error: any) {
         console.error('Error fetching dealer balance:', error);
         showError(`Failed to calculate dealer balance: ${error.message}`);
         setDealerBalance(null);
-      } else {
-        const totalSpent = data.reduce((sum, order) => sum + order.total_amount, 0);
-        setDealerBalance(totalSpent);
       }
 
       // Set payment amount to total order value if paid at order time
@@ -482,7 +498,6 @@ const MultiItemOrderForm: React.FC = () => {
     const searchTerms = searchValue.toLowerCase().split(' ').filter(term => term.length > 0);
     return products.filter(product => {
       const productName = product.name.toLowerCase();
-      // Match if all search terms are found in the product name
       return searchTerms.every(term => productName.includes(term));
     });
   }, [products, searchValue]);
@@ -623,7 +638,7 @@ const MultiItemOrderForm: React.FC = () => {
                                 onSelect={(currentValue) => {
                                   updateOrderItem(item.id, 'product_id', currentValue === item.product_id ? '' : currentValue);
                                   setOpen(false);
-                                  setSearchValue(""); // Clear search after selection
+                                  setSearchValue("");
                                 }}
                               >
                                 <div>
@@ -701,7 +716,7 @@ const MultiItemOrderForm: React.FC = () => {
                 onCheckedChange={(checked) => {
                   setIsPaidAtOrderTime(!!checked);
                   if (!!checked) {
-                    setPaymentAmount(totalOrderValue); // Default to total order value
+                    setPaymentAmount(totalOrderValue);
                   } else {
                     setPaymentMethod('');
                     setPaymentAmount(0);
