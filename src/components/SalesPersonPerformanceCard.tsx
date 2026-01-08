@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Target, TrendingUp, Activity } from 'lucide-react';
+import { Loader2, Target, TrendingUp, Activity, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
@@ -14,6 +14,7 @@ const SalesPersonPerformanceCard: React.FC = () => {
   const [targetAmount, setTargetAmount] = useState<number | null>(null);
   const [achievedSales, setAchievedSales] = useState<number | null>(null);
   const [pendingSales, setPendingSales] = useState<number | null>(null);
+  const [totalOverdueAmount, setTotalOverdueAmount] = useState<number | null>(null); // New state for total overdue
 
   const fetchPerformanceData = useCallback(async () => {
     if (!user) return;
@@ -21,6 +22,7 @@ const SalesPersonPerformanceCard: React.FC = () => {
     setLoading(true);
     try {
       const today = new Date();
+      today.setHours(0, 0, 0, 0); // Normalize today to start of day UTC
       const currentYear = today.getFullYear();
       const currentMonth = today.getMonth(); // 0-indexed
 
@@ -60,12 +62,65 @@ const SalesPersonPerformanceCard: React.FC = () => {
 
       setPendingSales(currentTarget - currentAchievedSales);
 
+      // --- Fetch Overdue Payments and Opening Balances ---
+      let calculatedTotalOverdue = 0;
+
+      // 1. Fetch all dealers assigned to the current sales person
+      const { data: assignedDealers, error: assignedDealersError } = await supabase
+        .from('dealer_sales_persons')
+        .select('dealer_id')
+        .eq('sales_person_id', user.id);
+
+      if (assignedDealersError) {
+        throw new Error(`Failed to fetch assigned dealers: ${assignedDealersError.message}`);
+      }
+
+      const dealerIds = (assignedDealers || []).map(d => d.dealer_id);
+
+      if (dealerIds.length > 0) {
+        // 2. Fetch opening balances for these dealers
+        const { data: dealerBalances, error: balancesError } = await supabase
+          .from('dealer_balances')
+          .select('dealer_id, opening_balance')
+          .in('dealer_id', dealerIds);
+
+        if (balancesError) {
+          throw new Error(`Failed to fetch dealer balances: ${balancesError.message}`);
+        }
+        const openingBalancesMap = new Map((dealerBalances || []).map(b => [b.dealer_id, b.opening_balance || 0]));
+
+        // Add opening balances to total overdue
+        dealerIds.forEach(dealerId => {
+          calculatedTotalOverdue += openingBalancesMap.get(dealerId) || 0;
+        });
+
+        // 3. Fetch overdue orders for these dealers (payment_status = 'pending' and due date <= today)
+        const { data: overdueOrders, error: overdueOrdersError } = await supabase
+          .from('orders')
+          .select('total_amount')
+          .eq('payment_status', 'pending')
+          .lte('payment_due_date', today.toISOString()) // Orders due today or earlier
+          .in('dealer_id', dealerIds);
+
+        if (overdueOrdersError) {
+          throw new Error(`Failed to fetch overdue orders: ${overdueOrdersError.message}`);
+        }
+
+        // Add overdue order amounts to total overdue
+        (overdueOrders || []).forEach(order => {
+          calculatedTotalOverdue += order.total_amount;
+        });
+      }
+      
+      setTotalOverdueAmount(calculatedTotalOverdue);
+
     } catch (error: any) {
       console.error('Error fetching sales person performance:', error.message);
       showError(`Failed to load performance data: ${error.message}`);
       setTargetAmount(null);
       setAchievedSales(null);
       setPendingSales(null);
+      setTotalOverdueAmount(null); // Reset overdue amount on error
     } finally {
       setLoading(false);
     }
@@ -135,6 +190,16 @@ const SalesPersonPerformanceCard: React.FC = () => {
           </div>
           <span className={`text-lg font-bold ${pendingSales !== null && pendingSales > 0 ? 'text-red-600' : 'text-green-600'}`}>
             ₹{pendingSales !== null ? pendingSales.toFixed(2) : 'N/A'}
+          </span>
+        </div>
+        <Separator />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-red-600" />
+            <span className="text-muted-foreground">Total Overdue (Dealers):</span>
+          </div>
+          <span className="text-lg font-bold text-red-600">
+            ₹{totalOverdueAmount !== null ? totalOverdueAmount.toFixed(2) : 'N/A'}
           </span>
         </div>
       </CardContent>
