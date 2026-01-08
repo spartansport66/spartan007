@@ -12,7 +12,6 @@ import { useSession } from '@/contexts/SessionContext';
 import { Label } from '@/components/ui/label';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator'; // Import Separator
 
 interface Order {
   id: string;
@@ -62,28 +61,13 @@ const PaymentStatusCard: React.FC = () => {
   // Filter states - Set default to 'todays_due' for today's pending payments
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'pending_approval' | 'todays_due'>('todays_due');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
-  const [filterFromDate, setFilterFromDate] = useState<string>(() => {
-    const today = new Date();
-    const day = String(today.getDate()).padStart(2, '0');
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const year = today.getFullYear();
-    return `${year}-${month}-${day}`;
-  });
-  const [filterToDate, setFilterToDate] = useState<string>(() => {
-    const today = new Date();
-    const day = String(today.getDate()).padStart(2, '0');
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const year = today.getFullYear();
-    return `${year}-${month}-${day}`;
-  });
+  const [filterFromDate, setFilterFromDate] = useState<string>('');
+  const [filterToDate, setFilterToDate] = useState<string>('');
   // Dialog states
   const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<Order | null>(null);
   const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
   const [selectedOrderForPaymentDetails, setSelectedOrderForPaymentDetails] = useState<Order | null>(null);
-
-  // New state for total overdue amount
-  const [totalOverdueAmount, setTotalOverdueAmount] = useState<number>(0);
 
   const getTodayDateISO = () => {
     const today = new Date();
@@ -121,49 +105,6 @@ const PaymentStatusCard: React.FC = () => {
           label: item.dealers.name
         })));
       }
-
-      // --- Calculate Total Overdue Amount (Opening Balance + Overdue Pending Orders) ---
-      let calculatedTotalOverdue = 0;
-      const assignedDealerIds = (assignedDealersData || []).map((item: any) => item.dealers.id);
-
-      if (assignedDealerIds.length > 0) {
-        // 1. Fetch opening balances for these dealers
-        const { data: dealerBalances, error: balancesError } = await supabase
-          .from('dealer_balances')
-          .select('dealer_id, opening_balance')
-          .in('dealer_id', assignedDealerIds);
-
-        if (balancesError) {
-          console.error('Error fetching dealer balances for overdue calculation:', balancesError.message);
-          // Don't throw, just log and continue with 0 for balances
-        } else {
-          const openingBalancesMap = new Map((dealerBalances || []).map(b => [b.dealer_id, b.opening_balance || 0]));
-          assignedDealerIds.forEach(dealerId => {
-            calculatedTotalOverdue += openingBalancesMap.get(dealerId) || 0;
-          });
-        }
-
-        // 2. Fetch overdue orders for these dealers (payment_status = 'pending' and due date <= today)
-        const todayISO = getTodayDateISO();
-        const { data: overdueOrders, error: overdueOrdersError } = await supabase
-          .from('orders')
-          .select('total_amount')
-          .eq('payment_status', 'pending')
-          .lte('payment_due_date', todayISO) // Orders due today or earlier
-          .in('dealer_id', assignedDealerIds);
-
-        if (overdueOrdersError) {
-          console.error('Error fetching overdue orders for overdue calculation:', overdueOrdersError.message);
-          // Don't throw, just log and continue with 0 for overdue orders
-        } else {
-          (overdueOrders || []).forEach(order => {
-            calculatedTotalOverdue += order.total_amount;
-          });
-        }
-      }
-      setTotalOverdueAmount(calculatedTotalOverdue);
-      // --- End Total Overdue Amount Calculation ---
-
 
       // Build the query for orders, including payments directly
       let query = supabase
@@ -451,17 +392,6 @@ const PaymentStatusCard: React.FC = () => {
             Clear Filters
           </Button>
         </div>
-
-        {/* Display Total Overdue Amount */}
-        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-red-600" />
-            <span className="text-lg font-semibold text-red-800 dark:text-red-200">Total Overdue (Opening Balance + Pending Orders):</span>
-          </div>
-          <span className="text-2xl font-bold text-red-800 dark:text-red-200">₹{totalOverdueAmount.toFixed(2)}</span>
-        </div>
-        <Separator className="my-6" /> {/* Add a separator for better visual separation */}
-
         <div className="overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
