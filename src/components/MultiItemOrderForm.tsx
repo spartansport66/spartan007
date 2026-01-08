@@ -502,6 +502,9 @@ const MultiItemOrderForm: React.FC = () => {
     });
   }, [products, searchValue]);
 
+  // Condition to disable "Add Item" button
+  const disableAddItem = selectedDealer && availableCredit !== null && availableCredit <= 0;
+
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
       <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
@@ -600,10 +603,19 @@ const MultiItemOrderForm: React.FC = () => {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <Label>Order Items</Label>
-              <Button type="button" onClick={addOrderItem} size="sm" className="flex items-center gap-1">
+              <Button type="button" onClick={addOrderItem} size="sm" className="flex items-center gap-1" disabled={disableAddItem}>
                 <Plus className="h-4 w-4" /> Add Item
               </Button>
             </div>
+            {disableAddItem && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Insufficient Credit</AlertTitle>
+                <AlertDescription>
+                  Dealer's available credit is ₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}. Please clear the balance or increase the credit limit to add more items.
+                </AlertDescription>
+              </Alert>
+            )}
             {orderItems.map((item, index) => (
               <div key={item.id} className="grid grid-cols-12 gap-2 items-end">
                 <div className="col-span-5">
