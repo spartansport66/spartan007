@@ -66,7 +66,7 @@ const PaymentStatusCard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
   // Filter states - Set default to 'todays_due' for today's pending payments
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'pending_approval' | 'todays_due'>('todays_due');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'pending_approval' | 'todays_due' | 'opening_balance'>('todays_due');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
@@ -158,6 +158,9 @@ const PaymentStatusCard: React.FC = () => {
         query = query.eq('payment_status', 'pending')
           .gte('payment_due_date', todayISO)
           .lte('payment_due_date', endOfTodayISO);
+      } else if (filterStatus === 'opening_balance') {
+        // For opening balance, we'll fetch all orders but filter will be handled in UI
+        // No specific query filtering needed here
       }
 
       // Apply dealer filter
@@ -212,8 +215,8 @@ const PaymentStatusCard: React.FC = () => {
         setOrders(formattedOrders);
       }
 
-      // Fetch dealer balances when showing overdue payments
-      if (filterStatus === 'overdue') {
+      // Fetch dealer balances when showing opening balance or overdue payments
+      if (filterStatus === 'overdue' || filterStatus === 'opening_balance') {
         const { data: dealerBalancesData, error: dealerBalancesError } = await supabase
           .from('dealer_sales_persons')
           .select(`
@@ -382,6 +385,7 @@ const PaymentStatusCard: React.FC = () => {
                 <SelectItem value="overdue">Overdue</SelectItem>
                 <SelectItem value="todays_due">Today's Due</SelectItem>
                 <SelectItem value="upcoming">Upcoming</SelectItem>
+                <SelectItem value="opening_balance">Opening Balance</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -416,8 +420,8 @@ const PaymentStatusCard: React.FC = () => {
           </Button>
         </div>
 
-        {/* Dealer Balances Section - Only shown when filtering for overdue payments */}
-        {filterStatus === 'overdue' && dealerBalances.length > 0 && (
+        {/* Dealer Balances Section - Only shown when filtering for opening balance or overdue payments */}
+        {(filterStatus === 'overdue' || filterStatus === 'opening_balance') && dealerBalances.length > 0 && (
           <div className="mb-6 p-4 bg-muted rounded-lg">
             <h3 className="text-lg font-semibold mb-3">Dealers with Opening Balance</h3>
             <div className="max-h-40 overflow-y-auto">
