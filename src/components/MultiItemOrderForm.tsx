@@ -119,7 +119,7 @@ const MultiItemOrderForm: React.FC = () => {
           .eq('sales_person_id', user.id);
 
         if (assignedDealersError) {
-          console.error('Error fetching assigned dealers:', assignedDealersError);
+          console.error('[MultiItemOrderForm] Error fetching assigned dealers:', assignedDealersError);
           showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
           setDealers([]);
           return;
@@ -136,8 +136,10 @@ const MultiItemOrderForm: React.FC = () => {
             .in('dealer_id', dealerIds);
 
           if (balancesError) {
-            console.error('Error fetching dealer balances:', balancesError);
+            console.error('[MultiItemOrderForm] Error fetching dealer balances:', balancesError);
             showError(`Failed to load dealer balances: ${balancesError.message}`);
+          } else {
+            console.log('[MultiItemOrderForm] Fetched balancesData:', balancesData); // ADDED LOG
           }
 
           // Create a map of dealer balances for easy lookup
@@ -147,13 +149,14 @@ const MultiItemOrderForm: React.FC = () => {
               balancesMap.set(balance.dealer_id, balance.opening_balance || 0);
             });
           }
+          console.log('[MultiItemOrderForm] Created balancesMap:', balancesMap); // ADDED LOG
 
           // Format dealers with their opening balances
           const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => ({
             ...item.dealers,
             opening_balance: balancesMap.get(item.dealers.id) || 0
           }));
-
+          console.log('[MultiItemOrderForm] Formatted dealers with opening_balance:', formattedDealers); // ADDED LOG
           setDealers(formattedDealers);
         } else {
           const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => ({
@@ -169,13 +172,13 @@ const MultiItemOrderForm: React.FC = () => {
           .select('id, name, price, stock');
 
         if (productsError) {
-          console.error('Error fetching products:', productsError);
+          console.error('[MultiItemOrderForm] Error fetching products:', productsError);
           showError(`Failed to load products: ${productsError.message}`);
         } else {
           setProducts(productsData || []);
         }
       } catch (error: any) {
-        console.error('Error in fetchData:', error);
+        console.error('[MultiItemOrderForm] Error in fetchData:', error);
         showError(`Failed to load data: ${error.message}`);
       }
     };
@@ -204,7 +207,7 @@ const MultiItemOrderForm: React.FC = () => {
           .lte('payment_due_date', todayISOString);
 
         if (error) {
-          console.error('Error fetching pending payments:', error);
+          console.error('[MultiItemOrderForm] Error fetching pending payments:', error);
           showError(`Failed to check pending payments: ${error.message}`);
           setPendingPayments([]);
           setTotalPendingAmount(0);
@@ -216,7 +219,7 @@ const MultiItemOrderForm: React.FC = () => {
         const total = pendingData.reduce((sum, order) => sum + order.total_amount, 0);
         setTotalPendingAmount(total);
       } catch (error: any) {
-        console.error('Error checking pending payments:', error);
+        console.error('[MultiItemOrderForm] Error checking pending payments:', error);
         showError(`Failed to check pending payments: ${error.message}`);
         setPendingPayments([]);
         setTotalPendingAmount(0);
@@ -240,9 +243,11 @@ const MultiItemOrderForm: React.FC = () => {
       }
 
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
+      console.log('[MultiItemOrderForm] Selected dealer data in calculateBalanceAndDueDate:', selectedDealerData); // ADDED LOG
       if (selectedDealerData) {
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
         setDealerOpeningBalance(selectedDealerData.opening_balance || 0);
+        console.log('[MultiItemOrderForm] Setting dealerOpeningBalance to:', selectedDealerData.opening_balance || 0); // ADDED LOG
 
         // Calculate payment due date
         const currentDate = new Date();
@@ -263,7 +268,7 @@ const MultiItemOrderForm: React.FC = () => {
           .single();
 
         if (monthlyLimitError && monthlyLimitError.code !== 'PGRST116') {
-          console.error('Error fetching monthly credit limit:', monthlyLimitError.message);
+          console.error('[MultiItemOrderForm] Error fetching monthly credit limit:', monthlyLimitError.message);
           showError(`Failed to load monthly credit limit: ${monthlyLimitError.message}`);
           setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
         } else if (monthlyLimitData) {
@@ -272,7 +277,7 @@ const MultiItemOrderForm: React.FC = () => {
           setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
         }
       } catch (error) {
-        console.error('Error fetching monthly credit limit:', error);
+        console.error('[MultiItemOrderForm] Error fetching monthly credit limit:', error);
         setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
       }
 
@@ -285,7 +290,7 @@ const MultiItemOrderForm: React.FC = () => {
           .in('payment_status', ['pending', 'pending_approval']);
 
         if (error) {
-          console.error('Error fetching dealer balance:', error);
+          console.error('[MultiItemOrderForm] Error fetching dealer balance:', error);
           showError(`Failed to calculate dealer balance: ${error.message}`);
           setDealerBalance(null);
         } else {
@@ -293,7 +298,7 @@ const MultiItemOrderForm: React.FC = () => {
           setDealerBalance(totalSpent);
         }
       } catch (error: any) {
-        console.error('Error fetching dealer balance:', error);
+        console.error('[MultiItemOrderForm] Error fetching dealer balance:', error);
         showError(`Failed to calculate dealer balance: ${error.message}`);
         setDealerBalance(null);
       }
@@ -480,7 +485,7 @@ const MultiItemOrderForm: React.FC = () => {
       setPendingPayments([]);
       setTotalPendingAmount(0);
     } catch (error: any) {
-      console.error('Error placing order:', error);
+      console.error('[MultiItemOrderForm] Error placing order:', error); // ADDED LOG
       showError(`Failed to place order: ${error.message}`);
     } finally {
       setLoading(false);
