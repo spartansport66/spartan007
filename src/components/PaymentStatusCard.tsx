@@ -43,6 +43,14 @@ interface DealerOption {
   label: string;
 }
 
+interface DealerBalance {
+  id: string;
+  name: string;
+  opening_balance: number;
+  overdue_amount: number;
+  total_overdue: number;
+}
+
 // Format date as dd/mm/yyyy
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
@@ -56,6 +64,7 @@ const formatDate = (dateString: string | null) => {
 const PaymentStatusCard: React.FC = () => {
   const { user } = useSession();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [dealerBalances, setDealerBalances] = useState<DealerBalance[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
   // Filter states - Set default to 'todays_due' for today's pending payments
@@ -86,7 +95,6 @@ const PaymentStatusCard: React.FC = () => {
       setLoading(false);
       return;
     }
-
     setLoading(true);
     try {
       // Fetch all dealers assigned to the current user for the filter dropdown
@@ -94,7 +102,6 @@ const PaymentStatusCard: React.FC = () => {
         .from('dealer_sales_persons')
         .select('dealers(id, name)')
         .eq('sales_person_id', user.id);
-
       if (assignedDealersError) {
         console.error('Error fetching assigned dealers for filter:', assignedDealersError.message);
         showError('Failed to load dealers for filter.');
@@ -171,7 +178,6 @@ const PaymentStatusCard: React.FC = () => {
       }
 
       const { data: ordersData, error: ordersError } = await query;
-
       if (ordersError) {
         console.error('Error fetching orders:', ordersError.message);
         showError('Failed to load orders.');
@@ -180,7 +186,6 @@ const PaymentStatusCard: React.FC = () => {
         const formattedOrders: Order[] = (ordersData || []).map((order: any) => {
           // Payment details are now directly nested in order.payments
           const paymentInfo = order.payments && order.payments.length > 0 ? order.payments[0] : null;
-
           return {
             id: order.id,
             order_number: order.order_number,
@@ -207,6 +212,59 @@ const PaymentStatusCard: React.FC = () => {
           };
         });
         setOrders(formattedOrders);
+      }
+
+      // Fetch dealer balances and overdue amounts
+      const { data: dealerBalancesData, error: dealerBalancesError } = await supabase
+        .from('dealer_sales_persons')
+        .select(`
+          dealers (
+            id,
+            name,
+            dealer_balances (
+              opening_balance
+            ),
+            orders (
+              total_amount,
+              payment_status,
+              payment_due_date
+            )
+          )
+        `)
+        .eq('sales_person_id', user.id);
+
+      if (dealerBalancesError) {
+        console.error('Error fetching dealer balances:', dealerBalancesError.message);
+        showError('Failed to load dealer balances.');
+        setDealerBalances([]);
+      } else {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const formattedBalances: DealerBalance[] = (dealerBalancesData || []).map((item: any) => {
+          const dealer = item.dealers;
+          const openingBalance = dealer.dealer_balances?.[0]?.opening_balance || 0;
+          
+          // Calculate overdue amount (pending orders with due date <= today)
+          const overdueAmount = (dealer.orders || [])
+            .filter((order: any) => 
+              order.payment_status === 'pending' && 
+              new Date(order.payment_due_date) <= today
+            )
+            .reduce((sum: number, order: any) => sum + order.total_amount, 0);
+          
+          const totalOverdue = openingBalance + overdueAmount;
+          
+          return {
+            id: dealer.id,
+            name: dealer.name,
+            opening_balance: openingBalance,
+            overdue_amount: overdueAmount,
+            total_overdue: totalOverdue
+          };
+        });
+        
+        setDealerBalances(formattedBalances);
       }
     } catch (error: any) {
       console.error('Error in fetchOrdersAndDealers:', error.message);
@@ -269,7 +327,6 @@ const PaymentStatusCard: React.FC = () => {
 
   const renderPaymentDetails = (order: Order) => {
     if (!order.payment_method) return null;
-
     return (
       <div className="space-y-2">
         <h3 className="text-lg font-semibold">Payment Details for Order #{order.order_number}</h3>
@@ -330,10 +387,7 @@ const PaymentStatusCard: React.FC = () => {
         <div id="payment-filters" className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterStatus">Payment Status</Label>
-            <Select
-              value={filterStatus}
-              onValueChange={(value) => setFilterStatus(value as typeof filterStatus)}
-            >
+            <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as typeof filterStatus)}>
               <SelectTrigger id="filterStatus" className="w-full">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -350,10 +404,7 @@ const PaymentStatusCard: React.FC = () => {
           </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterDealer">Dealer Name</Label>
-            <Select
-              value={filterDealerId || "all"}
-              onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}
-            >
+            <Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}>
               <SelectTrigger id="filterDealer" className="w-full">
                 <SelectValue placeholder="Filter by dealer" />
               </SelectTrigger>
@@ -367,31 +418,57 @@ const PaymentStatusCard: React.FC = () => {
           </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterFromDate">From Order Date</Label>
-            <Input
-              id="filterFromDate"
-              type="date"
-              value={filterFromDate}
-              onChange={(e) => setFilterFromDate(e.target.value)}
-              className="w-full"
-            />
+            <Input id="filterFromDate" type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} className="w-full" />
           </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterToDate">To Order Date</Label>
-            <Input
-              id="filterToDate"
-              type="date"
-              value={filterToDate}
-              onChange={(e) => setFilterToDate(e.target.value)}
-              className="w-full"
-            />
+            <Input id="filterToDate" type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} className="w-full" />
           </div>
           <Button onClick={fetchOrdersAndDealers} className="flex items-center gap-2">
-            <Search className="h-4 w-4" /> Apply Filters
+            <Search className="h-4 w-4" />
+            Apply Filters
           </Button>
           <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
             Clear Filters
           </Button>
         </div>
+
+        {/* Dealer Balances Section */}
+        <div className="mb-6 p-4 bg-muted rounded-lg">
+          <h3 className="text-lg font-semibold mb-3">Dealer Balances</h3>
+          {dealerBalances.length === 0 ? (
+            <p className="text-muted-foreground">No dealer balances available.</p>
+          ) : (
+            <div className="max-h-60 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Overdue Amount</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Total Overdue</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dealerBalances
+                    .filter(dealer => dealer.total_overdue > 0) // Only show dealers with overdue amounts
+                    .map((dealer) => (
+                      <TableRow key={dealer.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
+                        <TableCell className="text-right">₹{dealer.opening_balance.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">₹{dealer.overdue_amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-semibold text-red-600">₹{dealer.total_overdue.toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+              {dealerBalances.filter(dealer => dealer.total_overdue > 0).length === 0 && (
+                <p className="text-muted-foreground text-center py-2">No dealers with overdue amounts.</p>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -416,8 +493,8 @@ const PaymentStatusCard: React.FC = () => {
                 </TableHeader>
                 <TableBody>
                   {orders.map((order) => (
-                    <TableRow
-                      key={order.id}
+                    <TableRow 
+                      key={order.id} 
                       className={isOverdue(order.payment_due_date, order.payment_status) ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-accent/50"}
                     >
                       <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
@@ -436,20 +513,20 @@ const PaymentStatusCard: React.FC = () => {
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
                           {order.payment_status === 'pending' && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleAddPaymentDetails(order)}
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleAddPaymentDetails(order)} 
                               title="Add Payment Details"
                             >
                               <DollarSign className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
                           {(order.payment_status === 'paid' || order.payment_status === 'pending_approval') && order.payment_method && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleViewPaymentDetails(order)}
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleViewPaymentDetails(order)} 
                               title="View Payment Details"
                             >
                               <Eye className="h-4 w-4 text-blue-600" />
@@ -464,6 +541,7 @@ const PaymentStatusCard: React.FC = () => {
             </div>
           )}
         </div>
+
         {/* Payment Details Section - Always visible below the table */}
         <div className="mt-6 p-4 bg-muted rounded-lg">
           <h3 className="text-lg font-semibold mb-3">Payment Details</h3>
@@ -483,11 +561,11 @@ const PaymentStatusCard: React.FC = () => {
         </div>
       </CardContent>
       {selectedOrderForPaymentUpdate && (
-        <UpdatePaymentDialog
-          orderToUpdate={selectedOrderForPaymentUpdate}
-          isOpen={isUpdatePaymentDialogOpen}
-          onOpenChange={setIsUpdatePaymentDialogOpen}
-          onPaymentUpdated={handlePaymentUpdated}
+        <UpdatePaymentDialog 
+          orderToUpdate={selectedOrderForPaymentUpdate} 
+          isOpen={isUpdatePaymentDialogOpen} 
+          onOpenChange={setIsUpdatePaymentDialogOpen} 
+          onPaymentUpdated={handlePaymentUpdated} 
         />
       )}
       {/* Payment Details Dialog */}
