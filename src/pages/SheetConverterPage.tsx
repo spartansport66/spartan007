@@ -6,12 +6,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import SheetConverter from '@/components/SheetConverter';
+import DealerDataParser from '@/components/DealerDataParser';
 import { useSession } from '@/contexts/SessionContext';
 
 const SheetConverterPage = () => {
   const navigate = useNavigate();
   const { isAdmin } = useSession();
-
+  
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-6xl">
@@ -25,6 +26,10 @@ const SheetConverterPage = () => {
         </Button>
         
         <div className="grid grid-cols-1 gap-6">
+          {/* New Dealer Data Parser */}
+          <DealerDataParser />
+          
+          {/* Existing Sheet Converter */}
           <SheetConverter />
           
           <Card className="bg-card text-card-foreground shadow-lg">
