@@ -10,7 +10,8 @@ import { Loader2, Upload as UploadIcon, Download, CheckCircle, AlertTriangle } f
 import { showError, showSuccess } from '@/utils/toast';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import MultiSelect from '@/components/MultiSelect'; // Assuming MultiSelect is available
+// MultiSelect is not used in this component, removing import to keep it clean.
+// import MultiSelect from '@/components/MultiSelect'; 
 
 interface ColumnMapping {
   source: string;
@@ -86,7 +87,17 @@ const SheetConverter: React.FC = () => {
           return;
         }
         
-        const excelHeaders = (jsonData[0] as string[]).map(h => String(h).trim());
+        // Safely get headers from the first row, ensuring it's an array
+        const excelHeaders = Array.isArray(jsonData[0]) 
+          ? (jsonData[0] as string[]).map(h => String(h).trim()) 
+          : [];
+
+        if (excelHeaders.length === 0 && jsonData.length > 1) {
+          showError('Could not detect headers in the first row. Please ensure your Excel file has headers.');
+          setLoading(false);
+          return;
+        }
+
         setHeaders(excelHeaders);
         
         const initialMappings: ColumnMapping[] = excelHeaders.map(header => ({
