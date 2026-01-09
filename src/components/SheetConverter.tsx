@@ -135,14 +135,14 @@ const SheetConverter: React.FC = () => {
 
   const handleMappingChange = (sourceIndex: number, targetValue: string) => {
     const updatedMappings = [...columnMappings];
-    updatedMappings[sourceIndex].target = targetValue;
+    updatedMappings[sourceIndex].target = targetValue === "__NONE__" ? "" : targetValue;
     setColumnMappings(updatedMappings);
   };
 
   const handleSplitPartMappingChange = (requiredHeader: string, partIndex: string) => {
     setSplitPartMapping(prev => ({
       ...prev,
-      [requiredHeader]: partIndex
+      [requiredHeader]: partIndex === "__NONE__" ? "" : partIndex
     }));
   };
 
@@ -182,7 +182,7 @@ const SheetConverter: React.FC = () => {
             
             splitTargetHeaders.forEach(targetHeader => {
               const partIndexStr = splitPartMapping[targetHeader];
-              if (partIndexStr !== undefined) {
+              if (partIndexStr !== undefined && partIndexStr !== "") { // Check for non-empty string
                 const partIndex = parseInt(partIndexStr, 10);
                 if (!isNaN(partIndex) && parts[partIndex] !== undefined) {
                   newRow[targetHeader] = parts[partIndex];
@@ -284,10 +284,17 @@ const SheetConverter: React.FC = () => {
     );
   }, [columnToSplitSourceHeader, splitDelimiter, parsedData]);
 
-  const requiredHeaderOptions = requiredHeaders.map(header => ({
-    label: header,
-    value: header,
-  }));
+  // Update splitTargetHeaders based on selected columnToSplitSourceHeader
+  useEffect(() => {
+    if (columnToSplitSourceHeader) {
+      // If a column is selected for splitting, allow mapping to all required headers
+      setSplitTargetHeaders(requiredHeaders);
+    } else {
+      // If no column is selected for splitting, clear target headers and mappings
+      setSplitTargetHeaders([]);
+      setSplitPartMapping({});
+    }
+  }, [columnToSplitSourceHeader]);
 
   return (
     <Card className="w-full">
@@ -353,7 +360,7 @@ const SheetConverter: React.FC = () => {
                             <SelectValue placeholder="Select required column" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Do not map</SelectItem>
+                            <SelectItem value="__NONE__">Do not map</SelectItem>
                             {requiredHeaders.map((header) => (
                               <SelectItem key={header} value={header}>{header}</SelectItem>
                             ))}
@@ -386,7 +393,7 @@ const SheetConverter: React.FC = () => {
                     <SelectValue placeholder="Select your column" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Do not split any column</SelectItem>
+                    <SelectItem value="__NONE__">Do not split any column</SelectItem>
                     {headers.map((header) => (
                       <SelectItem key={header} value={header}>{header}</SelectItem>
                     ))}
@@ -422,21 +429,21 @@ const SheetConverter: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {requiredHeaders.map((header) => (
+                      {splitTargetHeaders.map((header) => (
                         <TableRow key={`split-map-${header}`}>
                           <TableCell className="font-medium">{header}</TableCell>
                           <TableCell>
                             <Select 
-                              value={splitPartMapping[header] || ''} 
+                              value={splitPartMapping[header] || '__NONE__'} // Default to __NONE__ if not mapped
                               onValueChange={(value) => handleSplitPartMappingChange(header, value)}
                             >
                               <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Select part index" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">Do not map</SelectItem>
+                                <SelectItem value="__NONE__">Do not map</SelectItem>
                                 {Array.from({ length: 10 }, (_, i) => i.toString()).map(index => ( // Max 10 parts for now
-                                  <SelectItem key={index} value={index}>{`Part ${parseInt(index) + 1} (Index ${index})`}</SelectItem>
+                                  <SelectItem key={index} value={index.toString()}>{`Part ${parseInt(index) + 1} (Index ${index})`}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
