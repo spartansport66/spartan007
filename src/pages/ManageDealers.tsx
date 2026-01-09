@@ -82,7 +82,7 @@ const ManageDealers = () => {
   const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false);
   const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-
+  
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -125,7 +125,7 @@ const ManageDealers = () => {
       .from('profiles')
       .select('id, first_name, last_name')
       .eq('user_type', 'sales_person');
-
+    
     if (error) {
       console.error('Error fetching all sales persons:', error);
       showError(`Failed to load sales persons: ${error.message}`);
@@ -139,62 +139,62 @@ const ManageDealers = () => {
       setLoading(false);
       return;
     }
+    
     setLoading(true);
     setError(null);
+    
     try {
       // Fetch dealers with their assigned sales persons
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select(`*, dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name))`);
-
+      
       if (dealersError) {
         throw dealersError;
       }
-
+      
       // Fetch dealer balances
       const { data: balancesData, error: balancesError } = await supabase
         .from('dealer_balances')
         .select('*');
-
+      
       if (balancesError) {
         throw balancesError;
       }
-
+      
       // Create a map of dealer balances for easy lookup
       const balancesMap = new Map(
         balancesData?.map(balance => [balance.dealer_id, balance]) || []
       );
-
+      
       // Get current month for credit limit
       const today = new Date();
       const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0];
-
+      
       // Fetch monthly credit limits
       const { data: monthlyLimitsData, error: monthlyLimitsError } = await supabase
         .from('dealer_monthly_credit_limits')
         .select('dealer_id, credit_limit')
         .eq('month_year', currentMonthYear);
-
+      
       if (monthlyLimitsError) {
         throw monthlyLimitsError;
       }
-
+      
       const monthlyLimitsMap = new Map(
         (monthlyLimitsData || []).map(limit => [limit.dealer_id, limit.credit_limit])
       );
-
+      
       const formattedDealers: Dealer[] = (dealersData || []).map((d: any) => {
         const assignedSalesPersons = d.dealer_sales_persons.map((dsp: any) => ({
           id: dsp.profiles.id,
           first_name: dsp.profiles.first_name,
           last_name: dsp.profiles.last_name,
         }));
-
+        
         const balance = balancesMap.get(d.id) || { opening_balance: 0, closing_balance: 0 };
-        const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) 
-          ? monthlyLimitsMap.get(d.id)! 
-          : d.credit_limit;
-
+        const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) ? monthlyLimitsMap.get(d.id)! : d.credit_limit;
+        
         return {
           ...d,
           assigned_sales_persons: assignedSalesPersons,
@@ -203,7 +203,7 @@ const ManageDealers = () => {
           closing_balance: balance.closing_balance || 0,
         };
       });
-
+      
       setDealers(formattedDealers);
     } catch (error: any) {
       console.error('Error fetching dealers:', error);
@@ -236,6 +236,7 @@ const ManageDealers = () => {
 
   const handleUpdateDealer = async (values: z.infer<typeof formSchema>) => {
     if (!selectedDealer || !user) return;
+    
     try {
       // Update dealer information
       const updateData: Partial<Omit<Dealer, 'assigned_sales_persons' | 'current_month_credit_limit' | 'opening_balance' | 'closing_balance'>> = {
@@ -250,16 +251,16 @@ const ManageDealers = () => {
         credit_limit: values.creditLimit,
         allotted_credit_days: values.allottedCreditDays,
       };
-
+      
       const { error: dealerUpdateError } = await supabase
         .from('dealers')
         .update(updateData)
         .eq('id', selectedDealer.id);
-
+      
       if (dealerUpdateError) {
         throw dealerUpdateError;
       }
-
+      
       // Update dealer balance
       const { error: balanceUpdateError } = await supabase
         .from('dealer_balances')
@@ -267,18 +268,21 @@ const ManageDealers = () => {
           dealer_id: selectedDealer.id,
           opening_balance: values.openingBalance,
           closing_balance: values.openingBalance, // Initially same as opening
-        }, { onConflict: 'dealer_id' });
-
+        }, {
+          onConflict: 'dealer_id'
+        });
+      
       if (balanceUpdateError) {
         throw balanceUpdateError;
       }
-
+      
       // Update sales person assignments
       const currentAssignedIds = selectedDealer.assigned_sales_persons.map(sp => sp.id);
       const newAssignedIds = values.assignedSalesPersonIds;
+      
       const toAdd = newAssignedIds.filter(id => !currentAssignedIds.includes(id));
       const toRemove = currentAssignedIds.filter(id => !newAssignedIds.includes(id));
-
+      
       if (toAdd.length > 0) {
         const { error: addError } = await supabase
           .from('dealer_sales_persons')
@@ -286,24 +290,24 @@ const ManageDealers = () => {
             dealer_id: selectedDealer.id,
             sales_person_id: spId
           })));
-
+        
         if (addError) {
           throw addError;
         }
       }
-
+      
       if (toRemove.length > 0) {
         const { error: removeError } = await supabase
           .from('dealer_sales_persons')
           .delete()
           .eq('dealer_id', selectedDealer.id)
           .in('sales_person_id', toRemove);
-
+        
         if (removeError) {
           throw removeError;
         }
       }
-
+      
       showSuccess('Dealer updated successfully!');
       setIsEditDialogOpen(false);
       fetchDealers();
@@ -319,11 +323,11 @@ const ManageDealers = () => {
         .from('dealers')
         .delete()
         .eq('id', dealerId);
-
+      
       if (error) {
         throw error;
       }
-
+      
       showSuccess('Dealer deleted successfully!');
       fetchDealers();
     } catch (error: any) {
@@ -382,12 +386,16 @@ const ManageDealers = () => {
           <Card className="bg-card text-card-foreground shadow-lg">
             <CardHeader>
               <CardTitle className="text-2xl font-semibold text-primary">Manage Dealers</CardTitle>
-              <CardDescription className="text-muted-foreground">View, edit, or delete your registered dealers.</CardDescription>
+              <CardDescription className="text-muted-foreground">
+                View, edit, or delete your registered dealers.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 {dealers.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No dealers found. Add a new dealer to get started!</p>
+                  <p className="text-center text-muted-foreground py-8">
+                    No dealers found. Add a new dealer to get started!
+                  </p>
                 ) : (
                   <Table>
                     <TableHeader>
@@ -411,7 +419,9 @@ const ManageDealers = () => {
                           <TableCell className="text-muted-foreground">{dealer.contact_person}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.phone}</TableCell>
-                          <TableCell className="text-muted-foreground">₹{dealer.opening_balance.toFixed(2)}</TableCell>
+                          <TableCell className={`text-muted-foreground ${dealer.opening_balance > 0 ? 'text-red-600 font-semibold' : ''}`}>
+                            ₹{dealer.opening_balance.toFixed(2)}
+                          </TableCell>
                           <TableCell className="text-muted-foreground">₹{dealer.closing_balance.toFixed(2)}</TableCell>
                           <TableCell className="text-muted-foreground">₹{dealer.current_month_credit_limit.toFixed(2)}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell>
@@ -422,7 +432,12 @@ const ManageDealers = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-2">
-                              <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer)} title="Edit Dealer">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleEdit(dealer)} 
+                                title="Edit Dealer"
+                              >
                                 <Edit className="h-4 w-4" />
                               </Button>
                               <Button 
@@ -468,7 +483,6 @@ const ManageDealers = () => {
                 >
                   Add New Dealer
                 </Button>
-                
                 <Button 
                   onClick={() => setIsUploadDialogOpen(true)} 
                   className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
@@ -476,7 +490,6 @@ const ManageDealers = () => {
                   <Upload className="h-4 w-4" />
                   Bulk Upload Dealers
                 </Button>
-                
                 <Button 
                   onClick={() => navigate('/sheet-converter')} 
                   variant="outline" 
@@ -490,7 +503,6 @@ const ManageDealers = () => {
           </Card>
         </div>
       </div>
-      
       <MadeWithDyad />
       
       {selectedDealer && (
@@ -564,23 +576,42 @@ const ManageDealers = () => {
                   <Label htmlFor="creditLimit" className="text-right">
                     Credit Limit
                   </Label>
-                  <Input id="creditLimit" type="number" placeholder="e.g., 5000.00" {...form.register('creditLimit')} className="col-span-3" />
+                  <Input 
+                    id="creditLimit" 
+                    type="number" 
+                    placeholder="e.g., 5000.00" 
+                    {...form.register('creditLimit')} 
+                    className="col-span-3" 
+                  />
                   {form.formState.errors.creditLimit && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.creditLimit.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="allottedCreditDays" className="text-right">
                     Credit Days
                   </Label>
-                  <Input id="allottedCreditDays" type="number" placeholder="e.g., 30" {...form.register('allottedCreditDays')} className="col-span-3" />
+                  <Input 
+                    id="allottedCreditDays" 
+                    type="number" 
+                    placeholder="e.g., 30" 
+                    {...form.register('allottedCreditDays')} 
+                    className="col-span-3" 
+                  />
                   {form.formState.errors.allottedCreditDays && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.allottedCreditDays.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="openingBalance" className="text-right">
                     Opening Balance
                   </Label>
-                  <Input id="openingBalance" type="number" placeholder="e.g., 10000.00" {...form.register('openingBalance')} className="col-span-3" />
+                  <Input 
+                    id="openingBalance" 
+                    type="number" 
+                    placeholder="e.g., 10000.00" 
+                    {...form.register('openingBalance')} 
+                    className="col-span-3" 
+                  />
                   {form.formState.errors.openingBalance && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.openingBalance.message}</p>}
                 </div>
+                
                 <FormField
                   control={form.control}
                   name="assignedSalesPersonIds"
@@ -588,10 +619,10 @@ const ManageDealers = () => {
                     <FormItem>
                       <FormLabel className="text-right">Assign to</FormLabel>
                       <FormControl>
-                        <MultiSelect
-                          options={salesPersonOptions}
-                          value={field.value}
-                          onChange={field.onChange}
+                        <MultiSelect 
+                          options={salesPersonOptions} 
+                          value={field.value} 
+                          onChange={field.onChange} 
                           placeholder="Select sales person(s)"
                           disabled={!isAdmin}
                         />
@@ -600,6 +631,7 @@ const ManageDealers = () => {
                     </FormItem>
                   )}
                 />
+                
                 <DialogFooter>
                   <Button type="submit">Save changes</Button>
                 </DialogFooter>
