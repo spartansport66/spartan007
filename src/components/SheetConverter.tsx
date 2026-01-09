@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react'; // Added useEffect import
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,8 +10,6 @@ import { Loader2, Upload as UploadIcon, Download, CheckCircle, AlertTriangle } f
 import { showError, showSuccess } from '@/utils/toast';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-// MultiSelect is not used in this component, removing import to keep it clean.
-// import MultiSelect from '@/components/MultiSelect'; 
 
 interface ColumnMapping {
   source: string;
@@ -102,7 +100,7 @@ const SheetConverter: React.FC = () => {
         
         const initialMappings: ColumnMapping[] = excelHeaders.map(header => ({
           source: header,
-          target: ''
+          target: '' // This will be handled by the UI logic now
         }));
         setColumnMappings(initialMappings);
         
@@ -135,12 +133,13 @@ const SheetConverter: React.FC = () => {
 
   const handleMappingChange = (sourceIndex: number, targetValue: string) => {
     const updatedMappings = [...columnMappings];
-    // Convert "__NONE__" back to "" for application logic
+    // Convert "__NONE__" back to "" for internal state/storage
     updatedMappings[sourceIndex].target = targetValue === "__NONE__" ? "" : targetValue;
     setColumnMappings(updatedMappings);
   };
 
   const handleSplitPartMappingChange = (requiredHeader: string, partIndex: string) => {
+    // Convert "__NONE__" back to "" for internal state/storage
     setSplitPartMapping(prev => ({
       ...prev,
       [requiredHeader]: partIndex === "__NONE__" ? "" : partIndex
@@ -285,6 +284,18 @@ const SheetConverter: React.FC = () => {
     );
   }, [columnToSplitSourceHeader, splitDelimiter, parsedData]);
 
+  // Update splitTargetHeaders based on selected columnToSplitSourceHeader
+  useEffect(() => {
+    if (columnToSplitSourceHeader) {
+      // If a column is selected for splitting, allow mapping to all required headers
+      setSplitTargetHeaders(requiredHeaders);
+    } else {
+      // If no column is selected for splitting, clear target headers and mappings
+      setSplitTargetHeaders([]);
+      setSplitPartMapping({});
+    }
+  }, [columnToSplitSourceHeader]);
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -343,14 +354,16 @@ const SheetConverter: React.FC = () => {
                   {columnMappings.map((mapping, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{mapping.source}</TableCell>
-TableCell>
                       <TableCell>
-                        <Select value={mapping.target} onValueChange={(value) => handleMappingChange(index, value)}>
+                        <Select 
+                          value={mapping.target || "__NONE__"} // Display "__NONE__" if target is ""
+                          onValueChange={(value) => handleMappingChange(index, value)}
+                        >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select required column" />
                           </SelectTrigger>
                           <SelectContent>
-                            {/* Use "__NONE__" instead of "" for the value */}
+                            {/* Changed value from "" to "__NONE__" */}
                             <SelectItem value="__NONE__">Do not map</SelectItem>
                             {requiredHeaders.map((header) => (
                               <SelectItem key={header} value={header}>{header}</SelectItem>
@@ -377,14 +390,14 @@ TableCell>
               <div>
                 <Label htmlFor="columnToSplit">Select Column to Split</Label>
                 <Select 
-                  value={columnToSplitSourceHeader} 
-                  onValueChange={(value) => setColumnToSplitSourceHeader(value === "__NONE__" ? "" : value)}
+                  value={columnToSplitSourceHeader || "__NONE__"} // Display "__NONE__" if columnToSplitSourceHeader is ""
+                  onValueChange={setColumnToSplitSourceHeader}
                 >
                   <SelectTrigger id="columnToSplit" className="w-full">
                     <SelectValue placeholder="Select your column" />
                   </SelectTrigger>
                   <SelectContent>
-                    {/* Use "__NONE__" instead of "" for the value */}
+                    {/* Changed value from "" to "__NONE__" */}
                     <SelectItem value="__NONE__">Do not split any column</SelectItem>
                     {headers.map((header) => (
                       <SelectItem key={header} value={header}>{header}</SelectItem>
@@ -421,7 +434,7 @@ TableCell>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {requiredHeaders.map((header) => (
+                      {splitTargetHeaders.map((header) => (
                         <TableRow key={`split-map-${header}`}>
                           <TableCell className="font-medium">{header}</TableCell>
                           <TableCell>
@@ -433,7 +446,7 @@ TableCell>
                                 <SelectValue placeholder="Select part index" />
                               </SelectTrigger>
                               <SelectContent>
-                                {/* Use "__NONE__" instead of "" for the value */}
+                                {/* Changed value from "" to "__NONE__" */}
                                 <SelectItem value="__NONE__">Do not map</SelectItem>
                                 {Array.from({ length: 10 }, (_, i) => i.toString()).map(index => ( // Max 10 parts for now
                                   <SelectItem key={index} value={index.toString()}>{`Part ${parseInt(index) + 1} (Index ${index})`}</SelectItem>
