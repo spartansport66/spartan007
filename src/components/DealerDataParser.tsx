@@ -49,52 +49,64 @@ const DealerDataParser: React.FC = () => {
         // Read all data as array of arrays
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
-        if (jsonData.length < 4) {
-          showError('Excel file does not contain enough data rows.');
+        if (jsonData.length < 1) {
+          showError('Excel file is empty.');
           setLoading(false);
           return;
         }
 
         const parsedDealers: ParsedDealer[] = [];
-        let i = 0;
         
-        // Process data in groups of 4 rows (dealer info + empty row)
-        while (i < jsonData.length) {
-          // Check if we have at least 3 rows for current dealer
-          if (i + 2 >= jsonData.length) break;
+        // Process each row to extract dealer information
+        for (let i = 0; i < jsonData.length; i++) {
+          const row = jsonData[i] as any[];
           
-          // Get the row with dealer name and city
-          const nameRow = jsonData[i] as any[];
-          // Get the row with address line 1
-          const addressRow1 = jsonData[i + 1] as any[];
-          // Get the row with address line 2
-          const addressRow2 = jsonData[i + 2] as any[];
-          
-          // Skip if name row is empty
-          if (!nameRow || nameRow.length === 0 || !nameRow[0]) {
-            i += 4; // Move to next dealer group
+          // Skip empty rows
+          if (!row || row.length === 0 || !row[0]) {
             continue;
           }
           
-          // Extract dealer name and city from first row
-          const nameCell = String(nameRow[0] || '').trim();
-          let dealerName = nameCell;
+          // Check if this looks like a dealer name row (has content in first column)
+          const firstCell = String(row[0] || '').trim();
+          
+          // Skip rows that look like address lines (no city in parentheses)
+          if (!firstCell.includes('(') && !firstCell.includes(')')) {
+            continue;
+          }
+          
+          // Extract dealer name and city from first column
+          let dealerName = firstCell;
           let city = '';
           
-          // Check if name contains city in parentheses
-          const cityMatch = nameCell.match(/\(([^)]+)\)/);
+          // Extract city from parentheses
+          const cityMatch = firstCell.match(/\(([^)]+)\)/);
           if (cityMatch) {
-            dealerName = nameCell.replace(cityMatch[0], '').trim();
+            dealerName = firstCell.replace(cityMatch[0], '').trim();
             city = cityMatch[1].trim();
           }
           
-          // Extract address from rows 2 and 3
-          const addressLine1 = String(addressRow1[0] || '').trim();
-          const addressLine2 = String(addressRow2[0] || '').trim();
-          const address = [addressLine1, addressLine2].filter(line => line).join(', ');
+          // Get address from next row if it exists
+          let address = '';
+          if (i + 1 < jsonData.length) {
+            const nextRow = jsonData[i + 1] as any[];
+            if (nextRow && nextRow[0]) {
+              address = String(nextRow[0] || '').trim();
+              
+              // Add second address line if it exists
+              if (i + 2 < jsonData.length) {
+                const thirdRow = jsonData[i + 2] as any[];
+                if (thirdRow && thirdRow[0]) {
+                  const secondAddressLine = String(thirdRow[0] || '').trim();
+                  if (secondAddressLine) {
+                    address += ', ' + secondAddressLine;
+                  }
+                }
+              }
+            }
+          }
           
-          // Extract phone number from column B of the first row
-          const phone = String(nameRow[1] || '').trim();
+          // Extract phone number from column B if it exists
+          const phone = row[1] ? String(row[1]).trim() : '';
           
           parsedDealers.push({
             name: dealerName,
@@ -102,8 +114,6 @@ const DealerDataParser: React.FC = () => {
             address: address,
             phone: phone
           });
-          
-          i += 4; // Move to next dealer group (4 rows per dealer)
         }
         
         setParsedData(parsedDealers);
@@ -132,16 +142,16 @@ const DealerDataParser: React.FC = () => {
       // Convert to the required format
       const formattedData = parsedData.map(dealer => ({
         "Dealer Name": dealer.name,
-        "Contact Person": "", // Will need to be filled manually
-        "Email": "", // Will need to be filled manually
+        "Contact Person": "",
+        "Email": "",
         "Phone Number": dealer.phone,
         "Address": dealer.address,
         "City": dealer.city,
-        "State": "", // Will need to be filled manually
-        "Country": "India", // Default to India
-        "Credit Limit": 0, // Will need to be set manually
-        "Allotted Credit Days": 0, // Will need to be set manually
-        "Opening Balance": 0 // Will need to be set manually
+        "State": "",
+        "Country": "India",
+        "Credit Limit": 0,
+        "Allotted Credit Days": 0,
+        "Opening Balance": 0
       }));
       
       const ws = XLSX.utils.json_to_sheet(formattedData);
@@ -163,7 +173,7 @@ const DealerDataParser: React.FC = () => {
           Dealer Data Parser
         </CardTitle>
         <CardDescription>
-          Parse dealer data from the specific multi-row format
+          Automatically parse dealer data from your specific format
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -221,6 +231,16 @@ const DealerDataParser: React.FC = () => {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+            
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4">
+              <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">Next Steps:</h4>
+              <ol className="list-decimal list-inside space-y-1 text-sm text-blue-700 dark:text-blue-300">
+                <li>Download the parsed data using the "Download Parsed Data" button</li>
+                <li>Open the downloaded Excel file</li>
+                <li>Fill in missing information (Contact Person, Email, State, Credit Limit, etc.)</li>
+                <li>Save the file and use it for bulk dealer upload</li>
+              </ol>
             </div>
           </div>
         )}
