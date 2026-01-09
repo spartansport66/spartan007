@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, Upload as UploadIcon, Download, CheckCircle, AlertTriangle } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import { cn } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import MultiSelect from '@/components/MultiSelect'; // Assuming MultiSelect is available
 
 interface ColumnMapping {
   source: string;
@@ -23,6 +25,12 @@ const SheetConverter: React.FC = () => {
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [convertedData, setConvertedData] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // New states for split column functionality
+  const [columnToSplitSourceHeader, setColumnToSplitSourceHeader] = useState<string>('');
+  const [splitDelimiter, setSplitDelimiter] = useState<string>(',');
+  const [splitTargetHeaders, setSplitTargetHeaders] = useState<string[]>([]); // Which required headers to populate from the split column
+  const [splitPartMapping, setSplitPartMapping] = useState<{ [key: string]: string }>({}); // Maps requiredHeader to split part index (e.g., "Dealer Name": "0")
 
   // Required format headers
   const requiredHeaders = [
@@ -47,6 +55,10 @@ const SheetConverter: React.FC = () => {
       setHeaders([]);
       setColumnMappings([]);
       setConvertedData([]);
+      setColumnToSplitSourceHeader('');
+      setSplitDelimiter(',');
+      setSplitTargetHeaders([]);
+      setSplitPartMapping({});
     } else {
       setFile(null);
     }
@@ -66,7 +78,6 @@ const SheetConverter: React.FC = () => {
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         
-        // Parse data as array of arrays to get headers and data
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
         if (jsonData.length < 1) {
@@ -75,20 +86,15 @@ const SheetConverter: React.FC = () => {
           return;
         }
         
-        // Get headers from first row
         const excelHeaders = (jsonData[0] as string[]).map(h => String(h).trim());
-        console.log("[SheetConverter] Parsed Excel Headers:", excelHeaders); // DEBUG LOG
         setHeaders(excelHeaders);
         
-        // Initialize column mappings with empty targets
         const initialMappings: ColumnMapping[] = excelHeaders.map(header => ({
           source: header,
           target: ''
         }));
-        console.log("[SheetConverter] Initial Column Mappings:", initialMappings); // DEBUG LOG
         setColumnMappings(initialMappings);
         
-        // Get data rows (skip header row)
         const dataRows = jsonData.slice(1);
         const formattedData: any[] = dataRows.map((row: any, index: number) => {
           const rowData: any = {};
@@ -96,12 +102,11 @@ const SheetConverter: React.FC = () => {
             rowData[header] = row[i] !== undefined ? row[i] : '';
           });
           return {
-            originalRow: index + 2, // +2 because of 0-based index and header row
+            originalRow: index + 2,
             ...rowData
           };
         });
         
-        console.log("[SheetConverter] Raw Parsed Data (first 2 rows):", formattedData.slice(0, 2)); // DEBUG LOG
         setParsedData(formattedData);
       } catch (error: any) {
         console.error('Error parsing Excel file:', error);
@@ -121,7 +126,13 @@ const SheetConverter: React.FC = () => {
     const updatedMappings = [...columnMappings];
     updatedMappings[sourceIndex].target = targetValue;
     setColumnMappings(updatedMappings);
-    console.log("[SheetConverter] Mapping changed. New columnMappings:", updatedMappings); // DEBUG LOG
+  };
+
+  const handleSplitPartMappingChange = (requiredHeader: string, partIndex: string) => {
+    setSplitPartMapping(prev => ({
+      ...prev,
+      [requiredHeader]: partIndex
+    }));
   };
 
   const handleConvert = () => {
@@ -131,35 +142,49 @@ const SheetConverter: React.FC = () => {
     }
     
     try {
-      // Create mapping from source to target columns
-      const sourceMapping: { [key: string]: string } = {};
+      const sourceToTargetMap: { [key: string]: string } = {};
       columnMappings.forEach(mapping => {
         if (mapping.target) {
-          sourceMapping[mapping.source] = mapping.target;
+          sourceToTargetMap[mapping.source] = mapping.target;
         }
       });
-      console.log("[SheetConverter] Source Mapping for Conversion:", sourceMapping); // DEBUG LOG
       
-      // Convert data based on mappings
       const converted = parsedData.map(row => {
         const newRow: any = {};
-        // Map required headers to empty values first
         requiredHeaders.forEach(header => {
-          newRow[header] = '';
+          newRow[header] = ''; // Initialize all required headers
         });
         
-        // Apply mappings
-        Object.keys(row).forEach(key => {
-          if (sourceMapping[key]) {
-            newRow[sourceMapping[key]] = row[key];
+        // Apply one-to-one mappings first
+        Object.keys(row).forEach(sourceHeader => {
+          const targetHeader = sourceToTargetMap[sourceHeader];
+          if (targetHeader) {
+            newRow[targetHeader] = row[sourceHeader];
           }
         });
+
+        // Apply split column logic, potentially overwriting one-to-one mappings
+        if (columnToSplitSourceHeader && splitTargetHeaders.length > 0 && splitDelimiter) {
+          const combinedValue = row[columnToSplitSourceHeader];
+          if (combinedValue) {
+            const parts = String(combinedValue).split(splitDelimiter).map(p => p.trim());
+            
+            splitTargetHeaders.forEach(targetHeader => {
+              const partIndexStr = splitPartMapping[targetHeader];
+              if (partIndexStr !== undefined) {
+                const partIndex = parseInt(partIndexStr, 10);
+                if (!isNaN(partIndex) && parts[partIndex] !== undefined) {
+                  newRow[targetHeader] = parts[partIndex];
+                }
+              }
+            });
+          }
+        }
         
         return newRow;
       });
       
       setConvertedData(converted);
-      console.log("[SheetConverter] Converted Data (first 2 rows):", converted.slice(0, 2)); // DEBUG LOG
       showSuccess(`Converted ${converted.length} rows successfully!`);
     } catch (error: any) {
       console.error('Error converting data:', error);
@@ -227,6 +252,32 @@ const SheetConverter: React.FC = () => {
     }
   };
 
+  // Memoized preview of split data for the first row
+  const splitPreview = useMemo(() => {
+    if (!columnToSplitSourceHeader || !splitDelimiter || parsedData.length === 0) {
+      return null;
+    }
+    const firstRowValue = parsedData[0][columnToSplitSourceHeader];
+    if (!firstRowValue) return null;
+
+    const parts = String(firstRowValue).split(splitDelimiter).map(p => p.trim());
+    return (
+      <div className="mt-4 p-3 bg-muted rounded-md text-sm">
+        <p className="font-semibold mb-2">Preview of first row split:</p>
+        {parts.map((part, index) => (
+          <p key={index}>
+            Part {index + 1}: <span className="font-mono text-primary">{part}</span>
+          </p>
+        ))}
+      </div>
+    );
+  }, [columnToSplitSourceHeader, splitDelimiter, parsedData]);
+
+  const requiredHeaderOptions = requiredHeaders.map(header => ({
+    label: header,
+    value: header,
+  }));
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -272,7 +323,7 @@ const SheetConverter: React.FC = () => {
 
         {headers.length > 0 && (
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Map Columns</h3>
+            <h3 className="text-lg font-semibold">Map Columns (One-to-One)</h3>
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
@@ -286,26 +337,113 @@ const SheetConverter: React.FC = () => {
                     <TableRow key={index}>
                       <TableCell className="font-medium">{mapping.source}</TableCell>
                       <TableCell>
-                        <select
-                          value={mapping.target}
-                          onChange={(e) => handleMappingChange(index, e.target.value)}
-                          className="w-full p-2 border rounded"
-                        >
-                          <option value="">Select required column</option>
-                          {requiredHeaders.map((header) => (
-                            <option key={header} value={header}>{header}</option>
-                          ))}
-                        </select>
+                        <Select value={mapping.target} onValueChange={(value) => handleMappingChange(index, value)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select required column" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">Do not map</SelectItem>
+                            {requiredHeaders.map((header) => (
+                              <SelectItem key={header} value={header}>{header}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
-            <Button onClick={handleConvert} className="w-full">
-              Convert Data
-            </Button>
           </div>
+        )}
+
+        {headers.length > 0 && (
+          <div className="space-y-4 p-4 border rounded-md bg-muted/50">
+            <h3 className="text-lg font-semibold">Split Column Configuration (One-to-Many)</h3>
+            <p className="text-sm text-muted-foreground">
+              If one of your columns contains multiple pieces of information (e.g., "Name, Address, City"),
+              configure how to split it here. This will override any one-to-one mapping for the target headers.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="columnToSplit">Select Column to Split</Label>
+                <Select 
+                  value={columnToSplitSourceHeader} 
+                  onValueChange={setColumnToSplitSourceHeader}
+                >
+                  <SelectTrigger id="columnToSplit" className="w-full">
+                    <SelectValue placeholder="Select your column" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Do not split any column</SelectItem>
+                    {headers.map((header) => (
+                      <SelectItem key={header} value={header}>{header}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="splitDelimiter">Delimiter</Label>
+                <Input
+                  id="splitDelimiter"
+                  placeholder="e.g., ,"
+                  value={splitDelimiter}
+                  onChange={(e) => setSplitDelimiter(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            {splitPreview}
+
+            {columnToSplitSourceHeader && splitDelimiter && parsedData.length > 0 && (
+              <div className="space-y-2 mt-4">
+                <Label>Map Split Parts to Required Columns</Label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Assign each part of the split string to its corresponding required column.
+                </p>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Required Column</TableHead>
+                        <TableHead>Split Part Index (0-based)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {requiredHeaders.map((header) => (
+                        <TableRow key={`split-map-${header}`}>
+                          <TableCell className="font-medium">{header}</TableCell>
+                          <TableCell>
+                            <Select 
+                              value={splitPartMapping[header] || ''} 
+                              onValueChange={(value) => handleSplitPartMappingChange(header, value)}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select part index" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">Do not map</SelectItem>
+                                {Array.from({ length: 10 }, (_, i) => i.toString()).map(index => ( // Max 10 parts for now
+                                  <SelectItem key={index} value={index}>{`Part ${parseInt(index) + 1} (Index ${index})`}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {headers.length > 0 && (
+          <Button onClick={handleConvert} className="w-full">
+            Convert Data
+          </Button>
         )}
 
         {parsedData.length > 0 && headers.length > 0 && (
