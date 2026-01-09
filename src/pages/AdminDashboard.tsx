@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Upload } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Upload, FileSpreadsheet } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
@@ -43,11 +43,13 @@ const AdminDashboard = () => {
   const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0); // Key to force re-fetch in child components
+
   // State for PaymentsReportDialog filters
   const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
   const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
   const [paymentsReportInitialToDate, setPaymentsReportInitialToDate] = useState<string>('');
   const [paymentsReportDialogKey, setPaymentsReportDialogKey] = useState(0); // New key for PaymentsReportDialog
+
   // Simplified dashboard data
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
   const [totalOrders, setTotalOrders] = useState<number>(0);
@@ -61,6 +63,7 @@ const AdminDashboard = () => {
         .select('company_name')
         .limit(1)
         .single();
+
       if (error && error.code !== 'PGRST116') {
         throw error;
       }
@@ -78,27 +81,34 @@ const AdminDashboard = () => {
       const { count: productsCount, error: productsError } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true });
+
       if (!productsError) {
         setProductsCount(productsCount || 0);
       }
+
       // Fetch dealers count
       const { count: dealersCount, error: dealersError } = await supabase
         .from('dealers')
         .select('*', { count: 'exact', head: true });
+
       if (!dealersError) {
         setActiveDealersCount(dealersCount || 0);
       }
+
       // Fetch orders count
       const { count: ordersCount, error: ordersError } = await supabase
         .from('orders')
         .select('*', { count: 'exact', head: true });
+
       if (!ordersError) {
         setTotalOrders(ordersCount || 0);
       }
+
       // Fetch total sales value
       const { data: salesData, error: salesError } = await supabase
         .from('sales')
         .select('total_price');
+
       if (salesError) {
         console.error('Error fetching total sales value:', salesError.message);
         setTotalSalesValue(0);
@@ -165,7 +175,7 @@ const AdminDashboard = () => {
   };
 
   // Show loading state with logout option if (sessionLoading || loadingData)
-  if (sessionLoading || loadingData) {
+  if (sessionLoading || loadingData) if (sessionLoading || loadingData) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -225,8 +235,10 @@ const AdminDashboard = () => {
             </h2>
           )}
         </div>
+        
         {/* Center: Admin Dashboard Title */}
         <h1 className="text-center text-3xl sm:text-4xl font-bold text-primary">Admin Dashboard</h1>
+        
         {/* Right: Sidebar Trigger */}
         <Sheet>
           <SheetTrigger asChild>
@@ -238,7 +250,7 @@ const AdminDashboard = () => {
             <SheetHeader>
               <SheetTitle>Admin Navigation</SheetTitle>
             </SheetHeader>
-            <AdminSidebar
+            <AdminSidebar 
               handleLogout={handleLogout}
               setIsOrdersAwaitingDispatchReportOpen={setIsOrdersAwaitingDispatchReportOpen}
               setIsDispatchedOrdersReportOpen={setIsDispatchedOrdersReportOpen}
@@ -251,6 +263,7 @@ const AdminDashboard = () => {
           </SheetContent>
         </Sheet>
       </div>
+
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md h-full">
@@ -265,58 +278,89 @@ const AdminDashboard = () => {
           </Card>
         ))}
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
         <DispatchedOrdersCard />
       </div>
+
       {/* New row for Production Alerts and Sales Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <ProductionAlertsCard />
         <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         {/* Payment Overview Card */}
         <PaymentOverviewCard onViewReport={handleViewPaymentsReport} />
         {/* All Pending Payments Card */}
         <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <Card className="bg-card text-card-foreground shadow-lg">
+          <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5" />
+              Sheet Converter
+            </CardTitle>
+            <CardDescription className="text-green-100 dark:text-green-200">
+              Convert Excel sheets to required format
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              Convert your existing Excel sheets to the required format for bulk uploads.
+            </p>
+            <Button 
+              onClick={() => navigate('/sheet-converter')} 
+              className="w-full bg-green-600 hover:bg-green-700 text-white"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Convert Sheets
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
       <MadeWithDyad />
-      <OrderDetailsDialog
-        orderId={selectedOrderIdForDetails}
-        isOpen={isOrderDetailsDialogOpen}
+      
+      <OrderDetailsDialog 
+        orderId={selectedOrderIdForDetails} 
+        isOpen={isOrderDetailsDialogOpen} 
         onOpenChange={setIsOrderDetailsDialogOpen}
         shouldPrintOnLoad={shouldPrintOrderDetails}
       />
-      <OrdersAwaitingDispatchReportDialog
-        isOpen={isOrdersAwaitingDispatchReportOpen}
-        onOpenChange={setIsOrdersAwaitingDispatchReportOpen}
+      <OrdersAwaitingDispatchReportDialog 
+        isOpen={isOrdersAwaitingDispatchReportOpen} 
+        onOpenChange={setIsOrdersAwaitingDispatchReportOpen} 
       />
-      <DispatchedOrdersReportDialog
-        isOpen={isDispatchedOrdersReportOpen}
-        onOpenChange={setIsDispatchedOrdersReportOpen}
+      <DispatchedOrdersReportDialog 
+        isOpen={isDispatchedOrdersReportOpen} 
+        onOpenChange={setIsDispatchedOrdersReportOpen} 
       />
-      <SalesPersonPerformanceReportDialog
-        isOpen={isSalesPersonPerformanceReportOpen}
-        onOpenChange={setIsSalesPersonPerformanceReportOpen}
+      <SalesPersonPerformanceReportDialog 
+        isOpen={isSalesPersonPerformanceReportOpen} 
+        onOpenChange={setIsSalesPersonPerformanceReportOpen} 
       />
-      <DealerReportDialog
-        isOpen={isDealerReportOpen}
-        onOpenChange={setIsDealerReportOpen}
+      <DealerReportDialog 
+        isOpen={isDealerReportOpen} 
+        onOpenChange={setIsDealerReportOpen} 
       />
-      <PaymentsReportDialog
+      <PaymentsReportDialog 
         key={paymentsReportDialogKey} // Add key prop here
-        isOpen={isPaymentsReportOpen}
+        isOpen={isPaymentsReportOpen} 
         onOpenChange={setIsPaymentsReportOpen}
         initialFilterStatus={paymentsReportInitialStatus}
         initialFilterFromDate={paymentsReportInitialFromDate}
         initialFilterToDate={paymentsReportInitialToDate}
       />
-      <SalesReportsDialog
-        isOpen={isSalesReportsDialogOpen}
-        onOpenChange={setIsSalesReportsDialogOpen}
+      <SalesReportsDialog 
+        isOpen={isSalesReportsDialogOpen} 
+        onOpenChange={setIsSalesReportsDialogOpen} 
       />
-      <CompanyInfoDialog
-        isOpen={isCompanyInfoDialogOpen}
+      <CompanyInfoDialog 
+        isOpen={isCompanyInfoDialogOpen} 
         onOpenChange={setIsCompanyInfoDialogOpen}
         onCompanyInfoUpdated={fetchCompanyInfo}
       />

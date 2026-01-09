@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -9,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Edit, Trash2, Eye, Loader2, CalendarDays, Upload } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Eye, Loader2, CalendarDays, Upload, FileSpreadsheet } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -20,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import MultiSelect from '@/components/MultiSelect';
 import DealerMonthlyCreditManager from '@/components/DealerMonthlyCreditManager';
-import ExcelUpload from '@/components/ExcelUpload';
+import DealerExcelUpload from '@/components/DealerExcelUpload';
 
 interface Dealer {
   id: string;
@@ -71,31 +70,6 @@ const formSchema = z.object({
   assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }),
 });
 
-// Zod schema for Excel upload validation
-const dealerExcelSchema = z.object({
-  name: z.string().min(1, { message: 'Dealer Name is required.' }),
-  contactperson: z.string().min(1, { message: 'Contact Person is required.' }),
-  email: z.string().email({ message: 'Valid Email is required.' }),
-  phone: z.string().min(10, { message: 'Phone must be at least 10 digits.' }).max(15, { message: 'Phone cannot exceed 15 digits.' }),
-  address: z.string().min(5, { message: 'Address is required.' }),
-  city: z.string().min(1, { message: 'City is required.' }),
-  state: z.string().min(1, { message: 'State is required.' }),
-  country: z.string().min(1, { message: 'Country is required.' }),
-  creditlimit: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'Credit Limit cannot be negative.' })
-  ),
-  allottedcreditdays: z.preprocess(
-    (val) => Number(val),
-    z.number().int().min(0, { message: 'Allotted Credit Days cannot be negative.' })
-  ),
-  openingbalance: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'Opening Balance cannot be negative.' })
-  ),
-  assignedto: z.string().optional().nullable(), // This will be a string of names, handled separately
-});
-
 const ManageDealers = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
@@ -107,7 +81,7 @@ const ManageDealers = () => {
   const [allSalesPersons, setAllSalesPersons] = useState<SalesPerson[]>([]);
   const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false);
   const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -165,18 +139,13 @@ const ManageDealers = () => {
       setLoading(false);
       return;
     }
-
     setLoading(true);
     setError(null);
-
     try {
       // Fetch dealers with their assigned sales persons
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
-        .select(`
-          *,
-          dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name))
-        `);
+        .select(`*, dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name))`);
 
       if (dealersError) {
         throw dealersError;
@@ -192,7 +161,9 @@ const ManageDealers = () => {
       }
 
       // Create a map of dealer balances for easy lookup
-      const balancesMap = new Map(balancesData?.map(balance => [balance.dealer_id, balance]) || []);
+      const balancesMap = new Map(
+        balancesData?.map(balance => [balance.dealer_id, balance]) || []
+      );
 
       // Get current month for credit limit
       const today = new Date();
@@ -220,7 +191,9 @@ const ManageDealers = () => {
         }));
 
         const balance = balancesMap.get(d.id) || { opening_balance: 0, closing_balance: 0 };
-        const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) ? monthlyLimitsMap.get(d.id)! : d.credit_limit;
+        const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) 
+          ? monthlyLimitsMap.get(d.id)! 
+          : d.credit_limit;
 
         return {
           ...d,
@@ -263,7 +236,6 @@ const ManageDealers = () => {
 
   const handleUpdateDealer = async (values: z.infer<typeof formSchema>) => {
     if (!selectedDealer || !user) return;
-
     try {
       // Update dealer information
       const updateData: Partial<Omit<Dealer, 'assigned_sales_persons' | 'current_month_credit_limit' | 'opening_balance' | 'closing_balance'>> = {
@@ -360,99 +332,9 @@ const ManageDealers = () => {
     }
   };
 
-  const handleBulkUpload = async (data: any[]) => {
-    if (!user) {
-      showError('You must be logged in to add dealers.');
-      navigate('/login');
-      return;
-    }
-
-    setIsUploading(true);
-    try {
-      // First, create all dealers
-      const dealersToInsert = data.map((row: any) => ({
-        user_id: user.id,
-        name: row.name,
-        contact_person: row.contactperson,
-        email: row.email,
-        phone: row.phone,
-        address: row.address,
-        city: row.city,
-        state: row.state,
-        country: row.country,
-        credit_limit: row.creditlimit,
-        allotted_credit_days: row.allottedcreditdays,
-      }));
-
-      const { data: insertedDealers, error: insertError } = await supabase
-        .from('dealers')
-        .insert(dealersToInsert)
-        .select();
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      // Then handle sales person assignments if provided in the Excel
-      const assignmentsToInsert: any[] = [];
-      data.forEach((row: any, index: number) => {
-        const dealerId = insertedDealers[index].id;
-        
-        // Handle assigned sales persons if provided in the Excel
-        if (row.assignedto) {
-          const assignedSalesPersons = String(row.assignedto)
-            .split(',')
-            .map((name: string) => name.trim());
-          
-          assignedSalesPersons.forEach((salesPersonName: string) => {
-            const salesPerson = allSalesPersons.find(sp => 
-              `${sp.first_name} ${sp.last_name}`.toLowerCase() === salesPersonName.toLowerCase()
-            );
-            
-            if (salesPerson) {
-              assignmentsToInsert.push({
-                dealer_id: dealerId,
-                sales_person_id: salesPerson.id
-              });
-            }
-          });
-        }
-      });
-
-      // Insert all assignments
-      if (assignmentsToInsert.length > 0) {
-        const { error: assignmentError } = await supabase
-          .from('dealer_sales_persons')
-          .insert(assignmentsToInsert);
-
-        if (assignmentError) {
-          throw assignmentError;
-        }
-      }
-
-      // Handle opening balances
-      const balancesToInsert = data.map((row: any, index: number) => ({
-        dealer_id: insertedDealers[index].id,
-        opening_balance: row.openingbalance,
-        closing_balance: row.openingbalance, // Initially same as opening
-      }));
-
-      const { error: balanceInsertError } = await supabase
-        .from('dealer_balances')
-        .insert(balancesToInsert);
-
-      if (balanceInsertError) {
-        throw balanceInsertError;
-      }
-
-      showSuccess(`Successfully uploaded ${insertedDealers.length} dealers!`);
-      fetchDealers();
-    } catch (error: any) {
-      console.error('Error uploading dealers:', error);
-      showError(`Failed to upload dealers: ${error.message}`);
-    } finally {
-      setIsUploading(false);
-    }
+  const handleUploadComplete = () => {
+    fetchDealers();
+    setIsUploadDialogOpen(false);
   };
 
   if (sessionLoading || loading) {
@@ -468,8 +350,12 @@ const ManageDealers = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
         <p className="text-lg text-red-600 dark:text-red-400 mb-4">{error}</p>
-        <Button onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} className="flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+        <Button 
+          onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} 
+          className="flex items-center gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
         </Button>
       </div>
     );
@@ -480,64 +366,19 @@ const ManageDealers = () => {
     label: `${sp.first_name} ${sp.last_name}`,
   }));
 
-  const sampleDealerData = [
-    {
-      "Dealer Name": 'Global Distributors',
-      "Contact Person": 'John Doe',
-      "Email": 'john@gd.com',
-      "Phone Number": '+1234567890',
-      "Address": '123 Business St',
-      "City": 'New York',
-      "State": 'NY',
-      "Country": 'USA',
-      "Credit Limit": 50000,
-      "Allotted Credit Days": 30,
-      "Opening Balance": 10000,
-      "Assigned To": 'Sales Person 1' // Example: "John Doe, Jane Smith"
-    },
-    {
-      "Dealer Name": 'Regional Traders',
-      "Contact Person": 'Jane Smith',
-      "Email": 'jane@rt.com',
-      "Phone Number": '+1987654321',
-      "Address": '456 Trade Ave',
-      "City": 'Los Angeles',
-      "State": 'CA',
-      "Country": 'USA',
-      "Credit Limit": 30000,
-      "Allotted Credit Days": 45,
-      "Opening Balance": 5000,
-      "Assigned To": 'Sales Person 2'
-    }
-  ];
-
-  const dealerColumnMap = {
-    "Dealer Name": "name",
-    "Contact Person": "contactperson",
-    "Email": "email",
-    "Phone Number": "phone",
-    "Address": "address",
-    "City": "city",
-    "State": "state",
-    "Country": "country",
-    "Credit Limit": "creditlimit",
-    "Allotted Credit Days": "allottedcreditdays",
-    "Opening Balance": "openingbalance",
-    "Assigned To": "assignedto",
-  };
-
-  const dealerDisplayHeaders = [
-    "Dealer Name", "Contact Person", "Email", "Phone Number", "Address", "City", "State", "Country", "Credit Limit", "Allotted Credit Days", "Opening Balance", "Assigned To"
-  ];
-
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-full">
-        <Button variant="outline" onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} className="mb-6 flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+        <Button 
+          variant="outline" 
+          onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} 
+          className="mb-6 flex items-center gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
         </Button>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 gap-6 mb-6">
           <Card className="bg-card text-card-foreground shadow-lg">
             <CardHeader>
               <CardTitle className="text-2xl font-semibold text-primary">Manage Dealers</CardTitle>
@@ -584,7 +425,12 @@ const ManageDealers = () => {
                               <Button variant="ghost" size="icon" onClick={() => handleEdit(dealer)} title="Edit Dealer">
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleManageMonthlyCredit(dealer)} title="Manage Monthly Credit Limits">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleManageMonthlyCredit(dealer)} 
+                                title="Manage Monthly Credit Limits"
+                              >
                                 <CalendarDays className="h-4 w-4" />
                               </Button>
                               <AlertDialog>
@@ -614,46 +460,37 @@ const ManageDealers = () => {
                   </Table>
                 )}
               </div>
-              <div className="mt-6 text-right">
-                <Button onClick={() => navigate('/add-dealer')} className="bg-primary text-primary-foreground hover:bg-primary/90">
+              
+              <div className="mt-6 flex flex-wrap gap-4">
+                <Button 
+                  onClick={() => navigate('/add-dealer')} 
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                >
                   Add New Dealer
+                </Button>
+                
+                <Button 
+                  onClick={() => setIsUploadDialogOpen(true)} 
+                  className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  Bulk Upload Dealers
+                </Button>
+                
+                <Button 
+                  onClick={() => navigate('/sheet-converter')} 
+                  variant="outline" 
+                  className="flex items-center gap-2"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Sheet Converter
                 </Button>
               </div>
             </CardContent>
           </Card>
-          
-          <div className="space-y-6">
-            <ExcelUpload 
-              onUpload={handleBulkUpload}
-              sampleData={sampleDealerData}
-              sampleFileName="sample_dealers.xlsx"
-              uploadButtonText="Upload Dealers"
-              displayHeaders={dealerDisplayHeaders}
-              columnMap={dealerColumnMap}
-              validationSchema={dealerExcelSchema}
-            />
-            <Card className="bg-card text-card-foreground shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="h-5 w-5" /> Bulk Upload Instructions
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="list-disc pl-5 space-y-2 text-sm">
-                  <li>Download the sample Excel file to see the required format</li>
-                  <li>Required columns: "Dealer Name", "Contact Person", "Email", "Phone Number", "Address", "City", "State", "Country", "Credit Limit", "Allotted Credit Days", "Opening Balance"</li>
-                  <li>Optional column: "Assigned To" (comma-separated sales person names, e.g., "John Doe, Jane Smith")</li>
-                  <li>"Credit Limit" and "Opening Balance" should be numbers (e.g., 50000)</li>
-                  <li>"Allotted Credit Days" should be a whole number (e.g., 30)</li>
-                  <li>"Email" must be a valid email format</li>
-                  <li>"Phone Number" must be between 10 and 15 digits</li>
-                  <li>Save your file as .xlsx or .xls format</li>
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       </div>
+      
       <MadeWithDyad />
       
       {selectedDealer && (
@@ -751,9 +588,9 @@ const ManageDealers = () => {
                     <FormItem>
                       <FormLabel className="text-right">Assign to</FormLabel>
                       <FormControl>
-                        <MultiSelect 
-                          options={salesPersonOptions} 
-                          value={field.value} 
+                        <MultiSelect
+                          options={salesPersonOptions}
+                          value={field.value}
                           onChange={field.onChange}
                           placeholder="Select sales person(s)"
                           disabled={!isAdmin}
@@ -788,6 +625,18 @@ const ManageDealers = () => {
           </DialogContent>
         </Dialog>
       )}
+      
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bulk Upload Dealers</DialogTitle>
+            <DialogDescription>
+              Upload an Excel sheet to add multiple dealers at once
+            </DialogDescription>
+          </DialogHeader>
+          <DealerExcelUpload onUploadComplete={handleUploadComplete} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
