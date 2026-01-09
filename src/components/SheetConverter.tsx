@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useRef, useMemo, useEffect } from 'react'; // Added useEffect import
+// Added missing useEffect import
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -100,7 +101,7 @@ const SheetConverter: React.FC = () => {
         
         const initialMappings: ColumnMapping[] = excelHeaders.map(header => ({
           source: header,
-          target: '' // This will be handled by the UI logic now
+          target: ''
         }));
         setColumnMappings(initialMappings);
         
@@ -133,13 +134,12 @@ const SheetConverter: React.FC = () => {
 
   const handleMappingChange = (sourceIndex: number, targetValue: string) => {
     const updatedMappings = [...columnMappings];
-    // Convert "__NONE__" back to "" for internal state/storage
+    // Convert "__NONE__" back to "" for application logic
     updatedMappings[sourceIndex].target = targetValue === "__NONE__" ? "" : targetValue;
     setColumnMappings(updatedMappings);
   };
 
   const handleSplitPartMappingChange = (requiredHeader: string, partIndex: string) => {
-    // Convert "__NONE__" back to "" for internal state/storage
     setSplitPartMapping(prev => ({
       ...prev,
       [requiredHeader]: partIndex === "__NONE__" ? "" : partIndex
@@ -355,15 +355,12 @@ const SheetConverter: React.FC = () => {
                     <TableRow key={index}>
                       <TableCell className="font-medium">{mapping.source}</TableCell>
                       <TableCell>
-                        <Select 
-                          value={mapping.target || "__NONE__"} // Display "__NONE__" if target is ""
-                          onValueChange={(value) => handleMappingChange(index, value)}
-                        >
+                        <Select value={mapping.target} onValueChange={(value) => handleMappingChange(index, value)}>
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select required column" />
                           </SelectTrigger>
                           <SelectContent>
-                            {/* Changed value from "" to "__NONE__" */}
+                            {/* Use "__NONE__" instead of "" for the value */}
                             <SelectItem value="__NONE__">Do not map</SelectItem>
                             {requiredHeaders.map((header) => (
                               <SelectItem key={header} value={header}>{header}</SelectItem>
@@ -390,14 +387,14 @@ const SheetConverter: React.FC = () => {
               <div>
                 <Label htmlFor="columnToSplit">Select Column to Split</Label>
                 <Select 
-                  value={columnToSplitSourceHeader || "__NONE__"} // Display "__NONE__" if columnToSplitSourceHeader is ""
-                  onValueChange={setColumnToSplitSourceHeader}
+                  value={columnToSplitSourceHeader} 
+                  onValueChange={(value) => setColumnToSplitSourceHeader(value === "__NONE__" ? "" : value)}
                 >
                   <SelectTrigger id="columnToSplit" className="w-full">
                     <SelectValue placeholder="Select your column" />
                   </SelectTrigger>
                   <SelectContent>
-                    {/* Changed value from "" to "__NONE__" */}
+                    {/* Use "__NONE__" instead of "" for the value */}
                     <SelectItem value="__NONE__">Do not split any column</SelectItem>
                     {headers.map((header) => (
                       <SelectItem key={header} value={header}>{header}</SelectItem>
@@ -434,7 +431,7 @@ const SheetConverter: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {splitTargetHeaders.map((header) => (
+                      {requiredHeaders.map((header) => (
                         <TableRow key={`split-map-${header}`}>
                           <TableCell className="font-medium">{header}</TableCell>
                           <TableCell>
@@ -446,7 +443,7 @@ const SheetConverter: React.FC = () => {
                                 <SelectValue placeholder="Select part index" />
                               </SelectTrigger>
                               <SelectContent>
-                                {/* Changed value from "" to "__NONE__" */}
+                                {/* Use "__NONE__" instead of "" for the value */}
                                 <SelectItem value="__NONE__">Do not map</SelectItem>
                                 {Array.from({ length: 10 }, (_, i) => i.toString()).map(index => ( // Max 10 parts for now
                                   <SelectItem key={index} value={index.toString()}>{`Part ${parseInt(index) + 1} (Index ${index})`}</SelectItem>
