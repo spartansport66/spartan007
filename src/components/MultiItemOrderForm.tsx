@@ -974,7 +974,7 @@ const MultiItemOrderForm: React.FC = () => {
               (remainingCredit !== null && remainingCredit < 0) ||
               totalPendingAmount > 0 ||
               (dealerHasPositiveOpeningBalance && !openingBalanceSettled) ||
-              (selectedDealer && dealers.find(d => d.id === selectedDealer)?.opening_balance === 0) // Fixed: Use correct variable name
+              (selectedDealer && dealers.find(d => d.id === selectedDealer)?.opening_balance === 0)
             }
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}
