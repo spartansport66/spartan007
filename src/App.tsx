@@ -15,8 +15,8 @@ import ManageUsers from "./pages/ManageUsers";
 import AdminDashboard from "./pages/AdminDashboard";
 import ProductManagementConsole from "./pages/ProductManagementConsole";
 import BulkAddProducts from "./pages/BulkAddProducts";
-// import CreateComboOffer from "./pages/CreateComboOffer"; // Removed import
 import ComboOffersDashboard from "./pages/ComboOffersDashboard";
+import SheetConverterPage from "./pages/SheetConverterPage";
 import { SessionContextProvider } from "./contexts/SessionContext";
 
 const queryClient = new QueryClient();
@@ -40,8 +40,8 @@ const App = () => (
             <Route path="/manage-users" element={<ManageUsers />} />
             <Route path="/product-management-console" element={<ProductManagementConsole />} />
             <Route path="/bulk-add-products" element={<BulkAddProducts />} />
-            {/* <Route path="/create-combo-offer" element={<CreateComboOffer />} /> Removed route */}
             <Route path="/combo-offers-dashboard" element={<ComboOffersDashboard />} />
+            <Route path="/sheet-converter" element={<SheetConverterPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
