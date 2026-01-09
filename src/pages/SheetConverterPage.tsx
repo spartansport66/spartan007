@@ -56,7 +56,16 @@ const SheetConverterPage = () => {
                 <li><strong>Credit Limit</strong> - Credit limit amount</li>
                 <li><strong>Allotted Credit Days</strong> - Number of credit days</li>
                 <li><strong>Opening Balance</strong> - Opening balance amount</li>
+                <li><strong>Sales Person</strong> - Name of assigned sales person (optional)</li>
               </ul>
+              
+              <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+                <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Note:</h4>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                  When uploading dealers with a Sales Person assigned, the system will automatically 
+                  link the dealer to the sales person if their name matches an existing user in the system.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>

@@ -54,6 +54,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       (val) => Number(val),
       z.number().min(0, { message: 'Opening balance cannot be negative.' })
     ),
+    salesperson: z.string().optional(), // Optional sales person column
   });
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,8 +84,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         // Parse data as array of arrays to get headers and data
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
-        if (jsonData.length < 2) {
-          // At least header + one data row
+        if (jsonData.length < 2) { // At least header + one data row
           showError('Excel file is empty or has no data rows.');
           setLoading(false);
           return;
@@ -117,6 +117,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           
           // Transform row object to match schema keys
           const transformedRowObject: { [key: string]: any } = {};
+          
           for (const header of excelHeaders) {
             const schemaKey = header.toLowerCase().replace(/ /g, '');
             const rawValue = rawRowObject[header];
@@ -234,6 +235,43 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         throw balanceInsertError;
       }
       
+      // Handle sales person assignments if provided
+      const assignmentsToInsert: { dealer_id: string; sales_person_id: string }[] = [];
+      
+      for (let i = 0; i < validParsedData.length; i++) {
+        const row = validParsedData[i];
+        const dealerId = insertedDealers[i].id;
+        
+        // If sales person is specified, find the user ID
+        if (row.data.salesperson) {
+          // Try to find sales person by name
+          const { data: salesPerson, error: salesPersonError } = await supabase
+            .from('profiles')
+            .select('id')
+            .or(`first_name.ilike.%${row.data.salesperson}%,last_name.ilike.%${row.data.salesperson}%`)
+            .eq('user_type', 'sales_person')
+            .single();
+          
+          if (!salesPersonError && salesPerson) {
+            assignmentsToInsert.push({
+              dealer_id: dealerId,
+              sales_person_id: salesPerson.id
+            });
+          }
+        }
+      }
+      
+      // Insert sales person assignments
+      if (assignmentsToInsert.length > 0) {
+        const { error: assignmentError } = await supabase
+          .from('dealer_sales_persons')
+          .insert(assignmentsToInsert);
+        
+        if (assignmentError) {
+          throw assignmentError;
+        }
+      }
+      
       showSuccess(`Successfully uploaded ${insertedDealers.length} dealers!`);
       setParsedData([]);
       setFile(null);
@@ -263,7 +301,8 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           "Country": 'USA',
           "Credit Limit": 50000,
           "Allotted Credit Days": 30,
-          "Opening Balance": 10000
+          "Opening Balance": 10000,
+          "Sales Person": 'Sales Person Name' // Added sales person column
         },
         {
           "Dealer Name": 'Regional Traders',
@@ -276,7 +315,8 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           "Country": 'USA',
           "Credit Limit": 30000,
           "Allotted Credit Days": 45,
-          "Opening Balance": 5000
+          "Opening Balance": 5000,
+          "Sales Person": 'Sales Person Name'
         }
       ];
       
@@ -353,6 +393,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
                     <TableHead>Credit Limit</TableHead>
                     <TableHead>Allotted Credit Days</TableHead>
                     <TableHead>Opening Balance</TableHead>
+                    <TableHead>Sales Person</TableHead>
                     <TableHead>Errors</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -383,6 +424,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
                       <TableCell>{row.rawData["Credit Limit"] !== undefined ? String(row.rawData["Credit Limit"]) : 'N/A'}</TableCell>
                       <TableCell>{row.rawData["Allotted Credit Days"] !== undefined ? String(row.rawData["Allotted Credit Days"]) : 'N/A'}</TableCell>
                       <TableCell>{row.rawData["Opening Balance"] !== undefined ? String(row.rawData["Opening Balance"]) : 'N/A'}</TableCell>
+                      <TableCell>{row.rawData["Sales Person"] !== undefined ? String(row.rawData["Sales Person"]) : 'N/A'}</TableCell>
                       <TableCell className="text-yellow-600 dark:text-yellow-400 text-sm">
                         {row.errors.length > 0 ? row.errors.join('; ') : 'None'}
                       </TableCell>
@@ -390,7 +432,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
                   ))}
                   {parsedData.length > 10 && (
                     <TableRow>
-                      <TableCell colSpan={14} className="text-center">
+                      <TableCell colSpan={15} className="text-center">
                         ... and {parsedData.length - 10} more rows
                       </TableCell>
                     </TableRow>

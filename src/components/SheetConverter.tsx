@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useMemo, useEffect } from 'react'; // Added useEffect import
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,26 +24,20 @@ const SheetConverter: React.FC = () => {
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [convertedData, setConvertedData] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
+  
   // New states for split column functionality
   const [columnToSplitSourceHeader, setColumnToSplitSourceHeader] = useState<string>('');
   const [splitDelimiter, setSplitDelimiter] = useState<string>(',');
-  const [splitTargetHeaders, setSplitTargetHeaders] = useState<string[]>([]); // Which required headers to populate from the split column
-  const [splitPartMapping, setSplitPartMapping] = useState<{ [key: string]: string }>({}); // Maps requiredHeader to split part index (e.g., "Dealer Name": "0")
-
-  // Required format headers
+  const [splitTargetHeaders, setSplitTargetHeaders] = useState<string[]>([]);
+  // Which required headers to populate from the split column
+  const [splitPartMapping, setSplitPartMapping] = useState<{ [key: string]: string }>({});
+  // Maps requiredHeader to split part index (e.g., "Dealer Name": "0")
+  
+  // Required format headers - Added Sales Person column
   const requiredHeaders = [
-    "Dealer Name",
-    "Contact Person",
-    "Email",
-    "Phone Number",
-    "Address",
-    "City",
-    "State",
-    "Country",
-    "Credit Limit",
-    "Allotted Credit Days",
-    "Opening Balance"
+    "Dealer Name", "Contact Person", "Email", "Phone Number", 
+    "Address", "City", "State", "Country", "Credit Limit", 
+    "Allotted Credit Days", "Opening Balance", "Sales Person"
   ];
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -76,7 +70,6 @@ const SheetConverter: React.FC = () => {
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
         if (jsonData.length < 1) {
@@ -86,16 +79,14 @@ const SheetConverter: React.FC = () => {
         }
         
         // Safely get headers from the first row, ensuring it's an array
-        const excelHeaders = Array.isArray(jsonData[0]) 
-          ? (jsonData[0] as string[]).map(h => String(h).trim()) 
-          : [];
-
+        const excelHeaders = Array.isArray(jsonData[0]) ? (jsonData[0] as string[]).map(h => String(h).trim()) : [];
+        
         if (excelHeaders.length === 0 && jsonData.length > 1) {
           showError('Could not detect headers in the first row. Please ensure your Excel file has headers.');
           setLoading(false);
           return;
         }
-
+        
         setHeaders(excelHeaders);
         
         const initialMappings: ColumnMapping[] = excelHeaders.map(header => ({
@@ -115,7 +106,6 @@ const SheetConverter: React.FC = () => {
             ...rowData
           };
         });
-        
         setParsedData(formattedData);
       } catch (error: any) {
         console.error('Error parsing Excel file:', error);
@@ -172,13 +162,12 @@ const SheetConverter: React.FC = () => {
             newRow[targetHeader] = row[sourceHeader];
           }
         });
-
+        
         // Apply split column logic, potentially overwriting one-to-one mappings
         if (columnToSplitSourceHeader && splitTargetHeaders.length > 0 && splitDelimiter) {
           const combinedValue = row[columnToSplitSourceHeader];
           if (combinedValue) {
             const parts = String(combinedValue).split(splitDelimiter).map(p => p.trim());
-            
             splitTargetHeaders.forEach(targetHeader => {
               const partIndexStr = splitPartMapping[targetHeader];
               if (partIndexStr !== undefined && partIndexStr !== "") { // Check for non-empty string
@@ -234,7 +223,8 @@ const SheetConverter: React.FC = () => {
           "Country": 'USA',
           "Credit Limit": 50000,
           "Allotted Credit Days": 30,
-          "Opening Balance": 10000
+          "Opening Balance": 10000,
+          "Sales Person": 'Sales Person Name' // Added sales person column
         },
         {
           "Dealer Name": 'Regional Traders',
@@ -247,7 +237,8 @@ const SheetConverter: React.FC = () => {
           "Country": 'USA',
           "Credit Limit": 30000,
           "Allotted Credit Days": 45,
-          "Opening Balance": 5000
+          "Opening Balance": 5000,
+          "Sales Person": 'Sales Person Name'
         }
       ];
       
@@ -267,10 +258,12 @@ const SheetConverter: React.FC = () => {
     if (!columnToSplitSourceHeader || !splitDelimiter || parsedData.length === 0) {
       return null;
     }
+    
     const firstRowValue = parsedData[0][columnToSplitSourceHeader];
     if (!firstRowValue) return null;
-
+    
     const parts = String(firstRowValue).split(splitDelimiter).map(p => p.trim());
+    
     return (
       <div className="mt-4 p-3 bg-muted rounded-md text-sm">
         <p className="font-semibold mb-2">Preview of first row split:</p>
@@ -354,7 +347,10 @@ const SheetConverter: React.FC = () => {
                     <TableRow key={index}>
                       <TableCell className="font-medium">{mapping.source}</TableCell>
                       <TableCell>
-                        <Select value={mapping.target} onValueChange={(value) => handleMappingChange(index, value)}>
+                        <Select 
+                          value={mapping.target} 
+                          onValueChange={(value) => handleMappingChange(index, value)}
+                        >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select required column" />
                           </SelectTrigger>
@@ -379,9 +375,9 @@ const SheetConverter: React.FC = () => {
           <div className="space-y-4 p-4 border rounded-md bg-muted/50">
             <h3 className="text-lg font-semibold">Split Column Configuration (One-to-Many)</h3>
             <p className="text-sm text-muted-foreground">
-              If one of your columns contains multiple pieces of information (e.g., "Name, Address, City"),
-              configure how to split it here. This will override any one-to-one mapping for the target headers.
+              If one of your columns contains multiple pieces of information (e.g., "Name, Address, City"), configure how to split it here. This will override any one-to-one mapping for the target headers.
             </p>
+            
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="columnToSplit">Select Column to Split</Label>
@@ -403,18 +399,18 @@ const SheetConverter: React.FC = () => {
               </div>
               <div>
                 <Label htmlFor="splitDelimiter">Delimiter</Label>
-                <Input
-                  id="splitDelimiter"
-                  placeholder="e.g., ,"
-                  value={splitDelimiter}
-                  onChange={(e) => setSplitDelimiter(e.target.value)}
-                  className="w-full"
+                <Input 
+                  id="splitDelimiter" 
+                  placeholder="e.g., ," 
+                  value={splitDelimiter} 
+                  onChange={(e) => setSplitDelimiter(e.target.value)} 
+                  className="w-full" 
                 />
               </div>
             </div>
-
+            
             {splitPreview}
-
+            
             {columnToSplitSourceHeader && splitDelimiter && parsedData.length > 0 && (
               <div className="space-y-2 mt-4">
                 <Label>Map Split Parts to Required Columns</Label>
@@ -444,7 +440,8 @@ const SheetConverter: React.FC = () => {
                               <SelectContent>
                                 {/* Use "__NONE__" instead of "" for the value */}
                                 <SelectItem value="__NONE__">Do not map</SelectItem>
-                                {Array.from({ length: 10 }, (_, i) => i.toString()).map(index => ( // Max 10 parts for now
+                                {Array.from({ length: 10 }, (_, i) => i.toString()).map(index => (
+                                  // Max 10 parts for now
                                   <SelectItem key={index} value={index.toString()}>{`Part ${parseInt(index) + 1} (Index ${index})`}</SelectItem>
                                 ))}
                               </SelectContent>
@@ -505,10 +502,7 @@ const SheetConverter: React.FC = () => {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Converted Data</h3>
-              <Button 
-                onClick={handleDownloadConverted} 
-                className="flex items-center gap-2"
-              >
+              <Button onClick={handleDownloadConverted} className="flex items-center gap-2">
                 <Download className="h-4 w-4" />
                 Download Converted File
               </Button>

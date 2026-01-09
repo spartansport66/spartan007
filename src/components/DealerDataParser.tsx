@@ -14,6 +14,7 @@ interface ParsedDealer {
   city: string;
   address: string;
   phone: string;
+  salesPerson?: string; // Optional sales person field
 }
 
 const DealerDataParser: React.FC = () => {
@@ -108,11 +109,15 @@ const DealerDataParser: React.FC = () => {
           // Extract phone number from column B if it exists
           const phone = row[1] ? String(row[1]).trim() : '';
           
+          // Extract sales person from column C if it exists
+          const salesPerson = row[2] ? String(row[2]).trim() : '';
+          
           parsedDealers.push({
             name: dealerName,
             city: city,
             address: address,
-            phone: phone
+            phone: phone,
+            salesPerson: salesPerson
           });
         }
         
@@ -151,7 +156,8 @@ const DealerDataParser: React.FC = () => {
         "Country": "India",
         "Credit Limit": 0,
         "Allotted Credit Days": 0,
-        "Opening Balance": 0
+        "Opening Balance": 0,
+        "Sales Person": dealer.salesPerson || "" // Include sales person if available
       }));
       
       const ws = XLSX.utils.json_to_sheet(formattedData);
@@ -218,6 +224,7 @@ const DealerDataParser: React.FC = () => {
                     <TableHead>City</TableHead>
                     <TableHead>Address</TableHead>
                     <TableHead>Phone</TableHead>
+                    <TableHead>Sales Person</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -227,6 +234,7 @@ const DealerDataParser: React.FC = () => {
                       <TableCell>{dealer.city}</TableCell>
                       <TableCell>{dealer.address}</TableCell>
                       <TableCell>{dealer.phone}</TableCell>
+                      <TableCell>{dealer.salesPerson || 'N/A'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
