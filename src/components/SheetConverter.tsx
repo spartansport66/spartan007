@@ -77,6 +77,7 @@ const SheetConverter: React.FC = () => {
         
         // Get headers from first row
         const excelHeaders = (jsonData[0] as string[]).map(h => String(h).trim());
+        console.log("[SheetConverter] Parsed Excel Headers:", excelHeaders); // DEBUG LOG
         setHeaders(excelHeaders);
         
         // Initialize column mappings with empty targets
@@ -84,6 +85,7 @@ const SheetConverter: React.FC = () => {
           source: header,
           target: ''
         }));
+        console.log("[SheetConverter] Initial Column Mappings:", initialMappings); // DEBUG LOG
         setColumnMappings(initialMappings);
         
         // Get data rows (skip header row)
@@ -99,6 +101,7 @@ const SheetConverter: React.FC = () => {
           };
         });
         
+        console.log("[SheetConverter] Raw Parsed Data (first 2 rows):", formattedData.slice(0, 2)); // DEBUG LOG
         setParsedData(formattedData);
       } catch (error: any) {
         console.error('Error parsing Excel file:', error);
@@ -118,6 +121,7 @@ const SheetConverter: React.FC = () => {
     const updatedMappings = [...columnMappings];
     updatedMappings[sourceIndex].target = targetValue;
     setColumnMappings(updatedMappings);
+    console.log("[SheetConverter] Mapping changed. New columnMappings:", updatedMappings); // DEBUG LOG
   };
 
   const handleConvert = () => {
@@ -134,6 +138,7 @@ const SheetConverter: React.FC = () => {
           sourceMapping[mapping.source] = mapping.target;
         }
       });
+      console.log("[SheetConverter] Source Mapping for Conversion:", sourceMapping); // DEBUG LOG
       
       // Convert data based on mappings
       const converted = parsedData.map(row => {
@@ -154,6 +159,7 @@ const SheetConverter: React.FC = () => {
       });
       
       setConvertedData(converted);
+      console.log("[SheetConverter] Converted Data (first 2 rows):", converted.slice(0, 2)); // DEBUG LOG
       showSuccess(`Converted ${converted.length} rows successfully!`);
     } catch (error: any) {
       console.error('Error converting data:', error);
