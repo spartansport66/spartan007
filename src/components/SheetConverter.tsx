@@ -24,7 +24,7 @@ const SheetConverter: React.FC = () => {
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [convertedData, setConvertedData] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // New states for split column functionality
   const [columnToSplitSourceHeader, setColumnToSplitSourceHeader] = useState<string>('');
   const [splitDelimiter, setSplitDelimiter] = useState<string>(',');
@@ -32,12 +32,11 @@ const SheetConverter: React.FC = () => {
   // Which required headers to populate from the split column
   const [splitPartMapping, setSplitPartMapping] = useState<{ [key: string]: string }>({});
   // Maps requiredHeader to split part index (e.g., "Dealer Name": "0")
-  
+
   // Required format headers - Added Sales Person column
   const requiredHeaders = [
-    "Dealer Name", "Contact Person", "Email", "Phone Number", 
-    "Address", "City", "State", "Country", "Credit Limit", 
-    "Allotted Credit Days", "Opening Balance", "Sales Person"
+    "Dealer Name", "Contact Person", "Email", "Phone Number", "Address", "City", "State", "Country", 
+    "Credit Limit", "Allotted Credit Days", "Opening Balance", "Sales Person"
   ];
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,7 +70,6 @@ const SheetConverter: React.FC = () => {
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
         if (jsonData.length < 1) {
           showError('Excel file is empty.');
           setLoading(false);
@@ -80,7 +78,6 @@ const SheetConverter: React.FC = () => {
         
         // Safely get headers from the first row, ensuring it's an array
         const excelHeaders = Array.isArray(jsonData[0]) ? (jsonData[0] as string[]).map(h => String(h).trim()) : [];
-        
         if (excelHeaders.length === 0 && jsonData.length > 1) {
           showError('Could not detect headers in the first row. Please ensure your Excel file has headers.');
           setLoading(false);
@@ -88,11 +85,7 @@ const SheetConverter: React.FC = () => {
         }
         
         setHeaders(excelHeaders);
-        
-        const initialMappings: ColumnMapping[] = excelHeaders.map(header => ({
-          source: header,
-          target: ''
-        }));
+        const initialMappings: ColumnMapping[] = excelHeaders.map(header => ({ source: header, target: '' }));
         setColumnMappings(initialMappings);
         
         const dataRows = jsonData.slice(1);
@@ -101,10 +94,7 @@ const SheetConverter: React.FC = () => {
           excelHeaders.forEach((header, i) => {
             rowData[header] = row[i] !== undefined ? row[i] : '';
           });
-          return {
-            originalRow: index + 2,
-            ...rowData
-          };
+          return { originalRow: index + 2, ...rowData };
         });
         setParsedData(formattedData);
       } catch (error: any) {
@@ -180,6 +170,17 @@ const SheetConverter: React.FC = () => {
           }
         }
         
+        // Apply default values for optional fields
+        if (!newRow["Contact Person"]) newRow["Contact Person"] = "N/A";
+        if (!newRow["Email"]) newRow["Email"] = "N/A";
+        if (!newRow["Phone Number"]) newRow["Phone Number"] = "N/A";
+        if (!newRow["City"]) newRow["City"] = "N/A";
+        if (!newRow["State"]) newRow["State"] = "N/A";
+        if (!newRow["Country"]) newRow["Country"] = "India";
+        if (!newRow["Credit Limit"]) newRow["Credit Limit"] = 0;
+        if (!newRow["Allotted Credit Days"]) newRow["Allotted Credit Days"] = 0;
+        if (!newRow["Opening Balance"]) newRow["Opening Balance"] = 0;
+        
         return newRow;
       });
       
@@ -224,7 +225,7 @@ const SheetConverter: React.FC = () => {
           "Credit Limit": 50000,
           "Allotted Credit Days": 30,
           "Opening Balance": 10000,
-          "Sales Person": 'Sales Person Name' // Added sales person column
+          "Sales Person": 'Sales Person Name'
         },
         {
           "Dealer Name": 'Regional Traders',
@@ -263,7 +264,6 @@ const SheetConverter: React.FC = () => {
     if (!firstRowValue) return null;
     
     const parts = String(firstRowValue).split(splitDelimiter).map(p => p.trim());
-    
     return (
       <div className="mt-4 p-3 bg-muted rounded-md text-sm">
         <p className="font-semibold mb-2">Preview of first row split:</p>
@@ -303,34 +303,34 @@ const SheetConverter: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-center gap-4">
           <div className="grid w-full max-w-sm items-center gap-1.5">
             <Label htmlFor="excel-file">Excel File</Label>
-            <Input 
-              id="excel-file" 
-              type="file" 
-              accept=".xlsx, .xls" 
-              onChange={handleFileChange} 
-              ref={fileInputRef} 
-              disabled={loading} 
+            <Input
+              id="excel-file"
+              type="file"
+              accept=".xlsx, .xls"
+              onChange={handleFileChange}
+              ref={fileInputRef}
+              disabled={loading}
             />
           </div>
-          <Button 
-            onClick={handleParseExcel} 
-            disabled={!file || loading} 
+          <Button
+            onClick={handleParseExcel}
+            disabled={!file || loading}
             className="w-full sm:w-auto"
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadIcon className="mr-2 h-4 w-4" />}
             {loading ? 'Parsing...' : 'Parse Excel'}
           </Button>
-          <Button 
-            variant="outline" 
-            onClick={handleDownloadSample} 
-            disabled={loading} 
+          <Button
+            variant="outline"
+            onClick={handleDownloadSample}
+            disabled={loading}
             className="w-full sm:w-auto"
           >
             <Download className="mr-2 h-4 w-4" />
             Download Sample
           </Button>
         </div>
-
+        
         {headers.length > 0 && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Map Columns (One-to-One)</h3>
@@ -347,8 +347,8 @@ const SheetConverter: React.FC = () => {
                     <TableRow key={index}>
                       <TableCell className="font-medium">{mapping.source}</TableCell>
                       <TableCell>
-                        <Select 
-                          value={mapping.target} 
+                        <Select
+                          value={mapping.target}
                           onValueChange={(value) => handleMappingChange(index, value)}
                         >
                           <SelectTrigger className="w-full">
@@ -370,7 +370,7 @@ const SheetConverter: React.FC = () => {
             </div>
           </div>
         )}
-
+        
         {headers.length > 0 && (
           <div className="space-y-4 p-4 border rounded-md bg-muted/50">
             <h3 className="text-lg font-semibold">Split Column Configuration (One-to-Many)</h3>
@@ -381,8 +381,8 @@ const SheetConverter: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="columnToSplit">Select Column to Split</Label>
-                <Select 
-                  value={columnToSplitSourceHeader} 
+                <Select
+                  value={columnToSplitSourceHeader}
                   onValueChange={(value) => setColumnToSplitSourceHeader(value === "__NONE__" ? "" : value)}
                 >
                   <SelectTrigger id="columnToSplit" className="w-full">
@@ -399,12 +399,12 @@ const SheetConverter: React.FC = () => {
               </div>
               <div>
                 <Label htmlFor="splitDelimiter">Delimiter</Label>
-                <Input 
-                  id="splitDelimiter" 
-                  placeholder="e.g., ," 
-                  value={splitDelimiter} 
-                  onChange={(e) => setSplitDelimiter(e.target.value)} 
-                  className="w-full" 
+                <Input
+                  id="splitDelimiter"
+                  placeholder="e.g., ,"
+                  value={splitDelimiter}
+                  onChange={(e) => setSplitDelimiter(e.target.value)}
+                  className="w-full"
                 />
               </div>
             </div>
@@ -430,7 +430,7 @@ const SheetConverter: React.FC = () => {
                         <TableRow key={`split-map-${header}`}>
                           <TableCell className="font-medium">{header}</TableCell>
                           <TableCell>
-                            <Select 
+                            <Select
                               value={splitPartMapping[header] || '__NONE__'} // Default to __NONE__ if not mapped
                               onValueChange={(value) => handleSplitPartMappingChange(header, value)}
                             >
@@ -456,13 +456,13 @@ const SheetConverter: React.FC = () => {
             )}
           </div>
         )}
-
+        
         {headers.length > 0 && (
           <Button onClick={handleConvert} className="w-full">
             Convert Data
           </Button>
         )}
-
+        
         {parsedData.length > 0 && headers.length > 0 && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Preview Original Data</h3>
@@ -497,7 +497,7 @@ const SheetConverter: React.FC = () => {
             </div>
           </div>
         )}
-
+        
         {convertedData.length > 0 && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">

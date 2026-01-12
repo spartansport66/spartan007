@@ -193,7 +193,9 @@ const ManageDealers = () => {
         }));
         
         const balance = balancesMap.get(d.id) || { opening_balance: 0, closing_balance: 0 };
-        const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) ? monthlyLimitsMap.get(d.id)! : d.credit_limit;
+        const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) 
+          ? monthlyLimitsMap.get(d.id)! 
+          : d.credit_limit;
         
         return {
           ...d,
@@ -268,9 +270,7 @@ const ManageDealers = () => {
           dealer_id: selectedDealer.id,
           opening_balance: values.openingBalance,
           closing_balance: values.openingBalance, // Initially same as opening
-        }, {
-          onConflict: 'dealer_id'
-        });
+        }, { onConflict: 'dealer_id' });
       
       if (balanceUpdateError) {
         throw balanceUpdateError;
@@ -279,7 +279,6 @@ const ManageDealers = () => {
       // Update sales person assignments
       const currentAssignedIds = selectedDealer.assigned_sales_persons.map(sp => sp.id);
       const newAssignedIds = values.assignedSalesPersonIds;
-      
       const toAdd = newAssignedIds.filter(id => !currentAssignedIds.includes(id));
       const toRemove = currentAssignedIds.filter(id => !newAssignedIds.includes(id));
       
@@ -503,6 +502,7 @@ const ManageDealers = () => {
           </Card>
         </div>
       </div>
+      
       <MadeWithDyad />
       
       {selectedDealer && (
@@ -520,68 +520,102 @@ const ManageDealers = () => {
                   <Label htmlFor="name" className="text-right">
                     Name
                   </Label>
-                  <Input id="name" {...form.register('name')} className="col-span-3" />
+                  <Input
+                    id="name"
+                    {...form.register('name')}
+                    className="col-span-3"
+                  />
                   {form.formState.errors.name && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.name.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="contactPerson" className="text-right">
                     Contact Person
                   </Label>
-                  <Input id="contactPerson" {...form.register('contactPerson')} className="col-span-3" />
+                  <Input
+                    id="contactPerson"
+                    {...form.register('contactPerson')}
+                    className="col-span-3"
+                  />
                   {form.formState.errors.contactPerson && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.contactPerson.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="email" className="text-right">
                     Email
                   </Label>
-                  <Input id="email" type="email" {...form.register('email')} className="col-span-3" />
+                  <Input
+                    id="email"
+                    type="email"
+                    {...form.register('email')}
+                    className="col-span-3"
+                  />
                   {form.formState.errors.email && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.email.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="phone" className="text-right">
                     Phone
                   </Label>
-                  <Input id="phone" type="tel" {...form.register('phone')} className="col-span-3" />
+                  <Input
+                    id="phone"
+                    type="tel"
+                    {...form.register('phone')}
+                    className="col-span-3"
+                  />
                   {form.formState.errors.phone && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.phone.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="address" className="text-right">
                     Address
                   </Label>
-                  <Input id="address" {...form.register('address')} className="col-span-3" />
+                  <Input
+                    id="address"
+                    {...form.register('address')}
+                    className="col-span-3"
+                  />
                   {form.formState.errors.address && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.address.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="city" className="text-right">
                     City
                   </Label>
-                  <Input id="city" {...form.register('city')} className="col-span-3" />
+                  <Input
+                    id="city"
+                    {...form.register('city')}
+                    className="col-span-3"
+                  />
                   {form.formState.errors.city && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.city.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="state" className="text-right">
                     State
                   </Label>
-                  <Input id="state" {...form.register('state')} className="col-span-3" />
+                  <Input
+                    id="state"
+                    {...form.register('state')}
+                    className="col-span-3"
+                  />
                   {form.formState.errors.state && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.state.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="country" className="text-right">
                     Country
                   </Label>
-                  <Input id="country" {...form.register('country')} className="col-span-3" />
+                  <Input
+                    id="country"
+                    {...form.register('country')}
+                    className="col-span-3"
+                  />
                   {form.formState.errors.country && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.country.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="creditLimit" className="text-right">
                     Credit Limit
                   </Label>
-                  <Input 
-                    id="creditLimit" 
-                    type="number" 
-                    placeholder="e.g., 5000.00" 
-                    {...form.register('creditLimit')} 
-                    className="col-span-3" 
+                  <Input
+                    id="creditLimit"
+                    type="number"
+                    placeholder="e.g., 5000.00"
+                    {...form.register('creditLimit')}
+                    className="col-span-3"
                   />
                   {form.formState.errors.creditLimit && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.creditLimit.message}</p>}
                 </div>
@@ -589,12 +623,12 @@ const ManageDealers = () => {
                   <Label htmlFor="allottedCreditDays" className="text-right">
                     Credit Days
                   </Label>
-                  <Input 
-                    id="allottedCreditDays" 
-                    type="number" 
-                    placeholder="e.g., 30" 
-                    {...form.register('allottedCreditDays')} 
-                    className="col-span-3" 
+                  <Input
+                    id="allottedCreditDays"
+                    type="number"
+                    placeholder="e.g., 30"
+                    {...form.register('allottedCreditDays')}
+                    className="col-span-3"
                   />
                   {form.formState.errors.allottedCreditDays && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.allottedCreditDays.message}</p>}
                 </div>
@@ -602,16 +636,15 @@ const ManageDealers = () => {
                   <Label htmlFor="openingBalance" className="text-right">
                     Opening Balance
                   </Label>
-                  <Input 
-                    id="openingBalance" 
-                    type="number" 
-                    placeholder="e.g., 10000.00" 
-                    {...form.register('openingBalance')} 
-                    className="col-span-3" 
+                  <Input
+                    id="openingBalance"
+                    type="number"
+                    placeholder="e.g., 10000.00"
+                    {...form.register('openingBalance')}
+                    className="col-span-3"
                   />
                   {form.formState.errors.openingBalance && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.openingBalance.message}</p>}
                 </div>
-                
                 <FormField
                   control={form.control}
                   name="assignedSalesPersonIds"
@@ -619,10 +652,10 @@ const ManageDealers = () => {
                     <FormItem>
                       <FormLabel className="text-right">Assign to</FormLabel>
                       <FormControl>
-                        <MultiSelect 
-                          options={salesPersonOptions} 
-                          value={field.value} 
-                          onChange={field.onChange} 
+                        <MultiSelect
+                          options={salesPersonOptions}
+                          value={field.value}
+                          onChange={field.onChange}
                           placeholder="Select sales person(s)"
                           disabled={!isAdmin}
                         />
@@ -631,7 +664,6 @@ const ManageDealers = () => {
                     </FormItem>
                   )}
                 />
-                
                 <DialogFooter>
                   <Button type="submit">Save changes</Button>
                 </DialogFooter>

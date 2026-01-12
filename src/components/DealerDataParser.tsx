@@ -14,7 +14,7 @@ interface ParsedDealer {
   city: string;
   address: string;
   phone: string;
-  salesPerson?: string; // Optional sales person field
+  salesPerson?: string;
 }
 
 const DealerDataParser: React.FC = () => {
@@ -49,13 +49,12 @@ const DealerDataParser: React.FC = () => {
         
         // Read all data as array of arrays
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
         if (jsonData.length < 1) {
           showError('Excel file is empty.');
           setLoading(false);
           return;
         }
-
+        
         const parsedDealers: ParsedDealer[] = [];
         
         // Process each row to extract dealer information
@@ -144,19 +143,19 @@ const DealerDataParser: React.FC = () => {
     }
     
     try {
-      // Convert to the required format
+      // Convert to the required format with defaults
       const formattedData = parsedData.map(dealer => ({
         "Dealer Name": dealer.name,
-        "Contact Person": "",
-        "Email": "",
-        "Phone Number": dealer.phone,
+        "Contact Person": "N/A", // Default value
+        "Email": "N/A", // Default value
+        "Phone Number": dealer.phone || "N/A",
         "Address": dealer.address,
-        "City": dealer.city,
-        "State": "",
-        "Country": "India",
-        "Credit Limit": 0,
-        "Allotted Credit Days": 0,
-        "Opening Balance": 0,
+        "City": dealer.city || "N/A",
+        "State": "N/A", // Default value
+        "Country": "India", // Default value
+        "Credit Limit": 0, // Default value
+        "Allotted Credit Days": 0, // Default value
+        "Opening Balance": 0, // Default value
         "Sales Person": dealer.salesPerson || "" // Include sales person if available
       }));
       
@@ -186,33 +185,33 @@ const DealerDataParser: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-center gap-4">
           <div className="grid w-full max-w-sm items-center gap-1.5">
             <Label htmlFor="dealer-file">Excel File</Label>
-            <Input 
-              id="dealer-file" 
-              type="file" 
-              accept=".xlsx, .xls" 
-              onChange={handleFileChange} 
-              ref={fileInputRef} 
-              disabled={loading} 
+            <Input
+              id="dealer-file"
+              type="file"
+              accept=".xlsx, .xls"
+              onChange={handleFileChange}
+              ref={fileInputRef}
+              disabled={loading}
             />
           </div>
-          <Button 
-            onClick={handleParseExcel} 
-            disabled={!file || loading} 
+          <Button
+            onClick={handleParseExcel}
+            disabled={!file || loading}
             className="w-full sm:w-auto"
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadIcon className="mr-2 h-4 w-4" />}
             {loading ? 'Parsing...' : 'Parse Dealer Data'}
           </Button>
-          <Button 
-            onClick={handleDownloadConverted} 
-            disabled={parsedData.length === 0 || loading} 
+          <Button
+            onClick={handleDownloadConverted}
+            disabled={parsedData.length === 0 || loading}
             className="w-full sm:w-auto"
           >
             <Download className="mr-2 h-4 w-4" />
             Download Parsed Data
           </Button>
         </div>
-
+        
         {parsedData.length > 0 && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Parsed Dealer Data</h3>
@@ -231,9 +230,9 @@ const DealerDataParser: React.FC = () => {
                   {parsedData.map((dealer, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{dealer.name}</TableCell>
-                      <TableCell>{dealer.city}</TableCell>
+                      <TableCell>{dealer.city || 'N/A'}</TableCell>
                       <TableCell>{dealer.address}</TableCell>
-                      <TableCell>{dealer.phone}</TableCell>
+                      <TableCell>{dealer.phone || 'N/A'}</TableCell>
                       <TableCell>{dealer.salesPerson || 'N/A'}</TableCell>
                     </TableRow>
                   ))}

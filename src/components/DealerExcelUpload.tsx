@@ -32,15 +32,15 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Zod schema for dealer validation
+  // Zod schema for dealer validation - making contact person, email, and phone optional for bulk upload
   const dealerSchema = z.object({
     name: z.string().min(1, { message: 'Dealer name is required.' }),
-    contactperson: z.string().min(1, { message: 'Contact person is required.' }),
-    email: z.string().email({ message: 'Valid email is required.' }),
-    phone: z.string().min(10, { message: 'Phone must be at least 10 digits.' }).max(15, { message: 'Phone cannot exceed 15 digits.' }),
+    contactperson: z.string().optional(), // Made optional
+    email: z.string().email({ message: 'Valid email is required.' }).optional(), // Made optional
+    phone: z.string().min(10, { message: 'Phone must be at least 10 digits.' }).max(15, { message: 'Phone cannot exceed 15 digits.' }).optional(), // Made optional
     address: z.string().min(5, { message: 'Address is required.' }),
-    city: z.string().min(1, { message: 'City is required.' }),
-    state: z.string().min(1, { message: 'State is required.' }),
+    city: z.string().optional(), // Made optional with default
+    state: z.string().optional(), // Made optional with default
     country: z.string().min(1, { message: 'Country is required.' }),
     creditlimit: z.preprocess(
       (val) => Number(val),
@@ -54,7 +54,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       (val) => Number(val),
       z.number().min(0, { message: 'Opening balance cannot be negative.' })
     ),
-    salesperson: z.string().optional(), // Optional sales person column
+    salesperson: z.string().optional(),
   });
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,7 +83,6 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         
         // Parse data as array of arrays to get headers and data
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
         if (jsonData.length < 2) { // At least header + one data row
           showError('Excel file is empty or has no data rows.');
           setLoading(false);
@@ -95,9 +94,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         
         // Check if all required headers are present in the Excel file
         const requiredHeaders = [
-          "Dealer Name", "Contact Person", "Email", "Phone Number", 
-          "Address", "City", "State", "Country", "Credit Limit", 
-          "Allotted Credit Days", "Opening Balance"
+          "Dealer Name", "Address", "Country", "Credit Limit", "Allotted Credit Days", "Opening Balance"
         ];
         
         const parsedRows: ParsedRow[] = [];
@@ -117,7 +114,6 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           
           // Transform row object to match schema keys
           const transformedRowObject: { [key: string]: any } = {};
-          
           for (const header of excelHeaders) {
             const schemaKey = header.toLowerCase().replace(/ /g, '');
             const rawValue = rawRowObject[header];
@@ -133,7 +129,6 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           }
           
           const validationResult = dealerSchema.safeParse(transformedRowObject);
-          
           if (validationResult.success) {
             parsedRows.push({
               originalRow: i + 1,
@@ -155,7 +150,6 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         }
         
         setParsedData(parsedRows);
-        
         if (parsedRows.some(row => !row.isValid)) {
           showError('Some rows contain invalid data. Please correct them before uploading.');
         } else if (parsedRows.length > 0) {
@@ -196,16 +190,16 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
     
     setLoading(true);
     try {
-      // Transform data to match dealer schema
+      // Transform data to match dealer schema with defaults
       const dealersToInsert = validParsedData.map((row: ParsedRow) => ({
         user_id: user.id,
         name: row.data.name,
-        contact_person: row.data.contactperson,
-        email: row.data.email,
-        phone: row.data.phone,
+        contact_person: row.data.contactperson || 'N/A',
+        email: row.data.email || 'N/A',
+        phone: row.data.phone || 'N/A',
         address: row.data.address,
-        city: row.data.city,
-        state: row.data.state,
+        city: row.data.city || 'N/A',
+        state: row.data.state || 'N/A',
         country: row.data.country,
         credit_limit: row.data.creditlimit,
         allotted_credit_days: row.data.allottedcreditdays,
@@ -237,7 +231,6 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       
       // Handle sales person assignments if provided
       const assignmentsToInsert: { dealer_id: string; sales_person_id: string }[] = [];
-      
       for (let i = 0; i < validParsedData.length; i++) {
         const row = validParsedData[i];
         const dealerId = insertedDealers[i].id;
@@ -261,7 +254,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         }
       }
       
-      // Insert sales person assignments
+      // Insert sales person assignments if any
       if (assignmentsToInsert.length > 0) {
         const { error: assignmentError } = await supabase
           .from('dealer_sales_persons')
@@ -302,7 +295,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           "Credit Limit": 50000,
           "Allotted Credit Days": 30,
           "Opening Balance": 10000,
-          "Sales Person": 'Sales Person Name' // Added sales person column
+          "Sales Person": 'Sales Person Name'
         },
         {
           "Dealer Name": 'Regional Traders',
@@ -346,34 +339,34 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         <div className="flex flex-col sm:flex-row items-center gap-4">
           <div className="grid w-full max-w-sm items-center gap-1.5">
             <Label htmlFor="excel-file">Excel File</Label>
-            <Input 
-              id="excel-file" 
-              type="file" 
-              accept=".xlsx, .xls" 
-              onChange={handleFileChange} 
-              ref={fileInputRef} 
-              disabled={loading} 
+            <Input
+              id="excel-file"
+              type="file"
+              accept=".xlsx, .xls"
+              onChange={handleFileChange}
+              ref={fileInputRef}
+              disabled={loading}
             />
           </div>
-          <Button 
-            onClick={handleParseExcel} 
-            disabled={!file || loading} 
+          <Button
+            onClick={handleParseExcel}
+            disabled={!file || loading}
             className="w-full sm:w-auto"
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadIcon className="mr-2 h-4 w-4" />}
             {loading ? 'Parsing...' : 'Parse Excel'}
           </Button>
-          <Button 
-            variant="outline" 
-            onClick={handleDownloadSample} 
-            disabled={loading} 
+          <Button
+            variant="outline"
+            onClick={handleDownloadSample}
+            disabled={loading}
             className="w-full sm:w-auto"
           >
             <Download className="mr-2 h-4 w-4" />
             Download Sample
           </Button>
         </div>
-
+        
         {parsedData.length > 0 && (
           <div className="space-y-4">
             <div className="rounded-md border">
@@ -399,8 +392,8 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
                 </TableHeader>
                 <TableBody>
                   {parsedData.slice(0, 10).map((row, rowIndex) => ( // Show first 10 rows
-                    <TableRow 
-                      key={rowIndex} 
+                    <TableRow
+                      key={rowIndex}
                       className={cn(
                         row.isValid ? "" : "bg-red-50/50 hover:bg-red-100/50"
                       )}
@@ -445,8 +438,8 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
               <p className="text-sm text-muted-foreground">
                 {parsedData.filter(p => p.isValid).length} valid rows, {parsedData.filter(p => !p.isValid).length} invalid rows
               </p>
-              <Button 
-                onClick={handleUpload} 
+              <Button
+                onClick={handleUpload}
                 disabled={loading || parsedData.some(row => !row.isValid) || parsedData.length === 0}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
