@@ -19,19 +19,24 @@ import * as z from 'zod';
 import { Loader2 } from 'lucide-react';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
-// Format: https://<PROJECT_REF>.supabase.co/functions/v1/create-user
 const CREATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-user";
+const RESOLVE_USER_IDENTIFIER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/resolve-user-identifier"; // New Edge Function URL
 
 // The secret key known only to the admin
 const ADMIN_SECRET_KEY_VALUE = "Param@1313";
 
 const signupFormSchema = z.object({
   firstName: z.string().min(1, { message: 'First name is required.' }),
-  lastName: z.string().min(1, { message: 'Last name is required.' }),
+  lastName: z.string().optional(), // Made optional
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   userType: z.enum(['sales_person', 'admin'], { message: 'Please select a user type.' }),
   secretKey: z.string().optional(), // Optional secret key for admin creation
+});
+
+const loginFormSchema = z.object({
+  identifier: z.string().min(1, { message: 'Email or Name is required.' }),
+  password: z.string().min(1, { message: 'Password is required.' }),
 });
 
 const Login = () => {
@@ -49,6 +54,14 @@ const Login = () => {
       password: '',
       userType: 'sales_person',
       secretKey: '',
+    },
+  });
+
+  const loginForm = useForm<z.infer<typeof loginFormSchema>>({
+    resolver: zodResolver(loginFormSchema),
+    defaultValues: {
+      identifier: '',
+      password: '',
     },
   });
 
@@ -76,15 +89,12 @@ const Login = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // No Authorization header needed here for the Edge Function's internal logic,
-          // as the secret key is passed in the body and validated client-side.
-          // If the Edge Function itself required a general API key, it would go here.
         },
         body: JSON.stringify({
           email: values.email,
           password: values.password,
           first_name: values.firstName,
-          last_name: values.lastName,
+          last_name: values.lastName || null,
           user_type: finalUserType,
         }),
       });
@@ -105,10 +115,53 @@ const Login = () => {
     }
   };
 
+  const onLoginSubmit = async (values: z.infer<typeof loginFormSchema>) => {
+    setIsSubmitting(true);
+    try {
+      let emailToLoginWith = values.identifier;
+
+      // If the identifier is not an email, try to resolve it using the Edge Function
+      if (!values.identifier.includes('@')) {
+        const response = await fetch(RESOLVE_USER_IDENTIFIER_EDGE_FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ identifier: values.identifier }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to resolve user identifier.');
+        }
+        emailToLoginWith = data.email;
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: emailToLoginWith,
+        password: values.password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      showSuccess('Logged in successfully!');
+      navigate('/'); // Redirect to index which handles role-based redirection
+    } catch (error: any) {
+      console.error('Error logging in:', error);
+      showError(`Login failed: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (loading || session) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-        <p className="text-lg text-gray-700 dark:text-gray-300">Loading...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading...</p>
       </div>
     );
   }
@@ -143,7 +196,7 @@ const Login = () => {
                     name="lastName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Last Name</FormLabel>
+                        <FormLabel>Last Name (Optional)</FormLabel>
                         <FormControl>
                           <Input placeholder="Doe" {...field} />
                         </FormControl>
@@ -230,26 +283,51 @@ const Login = () => {
             </CardContent>
           </Card>
         ) : (
-          <div>
-            <Auth
-              supabaseClient={supabase}
-              providers={[]} // Only email authentication
-              appearance={{
-                theme: ThemeSupa,
-                variables: {
-                  default: {
-                    colors: {
-                      brand: 'hsl(var(--primary))',
-                      brandAccent: 'hsl(var(--primary-foreground))',
-                    },
-                  },
-                },
-              }}
-              theme="light" // Use light theme, adjust if dark theme is preferred
-              redirectTo={window.location.origin + '/'}
-            />
-            {/* Removed the duplicate "Don't have an account? Sign Up" button here */}
-          </div>
+          <Card className="bg-card text-card-foreground shadow-lg border-none">
+            <CardContent className="pt-6">
+              <Form {...loginForm}>
+                <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
+                  <FormField
+                    control={loginForm.control}
+                    name="identifier"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email or Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="john.doe@example.com or John Doe" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={loginForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                          <Input type="password" placeholder="********" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      'Sign In'
+                    )}
+                  </Button>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
         )}
         
         <Button 
