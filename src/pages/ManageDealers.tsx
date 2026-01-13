@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Edit, Trash2, Eye, Loader2, CalendarDays, Upload, FileSpreadsheet } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Eye, Loader2, CalendarDays, Upload, FileSpreadsheet, Search } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -19,7 +19,31 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import MultiSelect from '@/components/MultiSelect';
 import DealerMonthlyCreditManager from '@/components/DealerMonthlyCreditManager';
-import DealerExcelUpload from '@/components/DealerExcelUpload'; // Corrected import
+import DealerExcelUpload from '@/components/DealerExcelUpload';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+interface DealerBalanceFromQuery {
+  opening_balance: number | null;
+  closing_balance: number | null;
+}
+
+interface DealerWithRelations {
+  id: string;
+  name: string;
+  contact_person: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  credit_limit: number;
+  allotted_credit_days: number;
+  user_id: string;
+  dealer_sales_persons: { sales_person_id: string; profiles: { id: string; first_name: string; last_name: string } }[];
+  dealer_balances: DealerBalanceFromQuery[]; // Array of balances
+  dealer_monthly_credit_limits: { dealer_id: string; credit_limit: number; month_year: string }[];
+}
 
 interface Dealer {
   id: string;
@@ -82,6 +106,12 @@ const ManageDealers = () => {
   const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false);
   const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+
+  // Filter states
+  const [filterDealerName, setFilterDealerName] = useState<string>('');
+  const [filterCity, setFilterCity] = useState<string>('');
+  const [filterState, setFilterState] = useState<string>('');
+  const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -144,48 +174,64 @@ const ManageDealers = () => {
     setError(null);
     
     try {
-      // Fetch dealers with their assigned sales persons
-      const { data: dealersData, error: dealersError } = await supabase
-        .from('dealers')
-        .select(`*, dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name))`);
+      let query;
+      if (filterSalesPersonId) {
+        // If filtering by sales person, use !inner join to filter dealers that have this sales person
+        query = supabase
+          .from('dealers')
+          .select(`
+            *,
+            dealer_sales_persons!inner(sales_person_id, profiles(id, first_name, last_name)),
+            dealer_balances(opening_balance, closing_balance),
+            dealer_monthly_credit_limits(dealer_id, credit_limit, month_year)
+          `)
+          .eq('dealer_sales_persons.sales_person_id', filterSalesPersonId);
+      } else {
+        // If not filtering by sales person, use a regular select to get all dealers and their assignments
+        query = supabase
+          .from('dealers')
+          .select(`
+            *,
+            dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name)),
+            dealer_balances(opening_balance, closing_balance),
+            dealer_monthly_credit_limits(dealer_id, credit_limit, month_year)
+          `);
+      }
+
+      // Apply other filters
+      if (filterDealerName) {
+        query = query.ilike('name', `%${filterDealerName}%`);
+      }
+      if (filterCity) {
+        query = query.ilike('city', `%${filterCity}%`);
+      }
+      if (filterState) {
+        query = query.ilike('state', `%${filterState}%`);
+      }
+      
+      query = query.order('name', { ascending: true });
+
+      const { data: dealersData, error: dealersError } = await query as { data: DealerWithRelations[] | null; error: any };
       
       if (dealersError) {
         throw dealersError;
       }
       
-      // Fetch dealer balances
-      const { data: balancesData, error: balancesError } = await supabase
-        .from('dealer_balances')
-        .select('*');
-      
-      if (balancesError) {
-        throw balancesError;
-      }
-      
       // Create a map of dealer balances for easy lookup
-      const balancesMap = new Map(
-        balancesData?.map(balance => [balance.dealer_id, balance]) || []
+      const balancesMap = new Map<string, DealerBalanceFromQuery>(
+        dealersData?.flatMap(d => d.dealer_balances?.map(balance => [d.id, balance])) || []
       );
       
       // Get current month for credit limit
       const today = new Date();
       const currentMonthYear = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0];
       
-      // Fetch monthly credit limits
-      const { data: monthlyLimitsData, error: monthlyLimitsError } = await supabase
-        .from('dealer_monthly_credit_limits')
-        .select('dealer_id, credit_limit')
-        .eq('month_year', currentMonthYear);
-      
-      if (monthlyLimitsError) {
-        throw monthlyLimitsError;
-      }
-      
+      // Create a map of monthly limits for easy lookup
       const monthlyLimitsMap = new Map(
-        (monthlyLimitsData || []).map(limit => [limit.dealer_id, limit.credit_limit])
+        dealersData?.flatMap(d => d.dealer_monthly_credit_limits?.filter((limit: any) => limit.month_year === currentMonthYear).map((limit: any) => [d.id, limit.credit_limit])) || []
       );
       
-      const formattedDealers: Dealer[] = (dealersData || []).map((d: any) => {
+      const formattedDealers: Dealer[] = (dealersData || []).map((d: DealerWithRelations) => {
         const assignedSalesPersons = d.dealer_sales_persons.map((dsp: any) => ({
           id: dsp.profiles.id,
           first_name: dsp.profiles.first_name,
@@ -215,7 +261,7 @@ const ManageDealers = () => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, filterDealerName, filterCity, filterState, filterSalesPersonId]); // Add filter states to dependencies
 
   useEffect(() => {
     if (!sessionLoading && user) {
@@ -340,6 +386,14 @@ const ManageDealers = () => {
     setIsUploadDialogOpen(false);
   };
 
+  const handleClearFilters = () => {
+    setFilterDealerName('');
+    setFilterCity('');
+    setFilterState('');
+    setFilterSalesPersonId('');
+    fetchDealers(); // Re-fetch data with cleared filters
+  };
+
   if (sessionLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -366,7 +420,7 @@ const ManageDealers = () => {
 
   const salesPersonOptions = allSalesPersons.map(sp => ({
     value: sp.id,
-    label: `${sp.first_name} ${sp.last_name}`,
+    label: `${sp.first_name}`, // Removed last_name
   }));
 
   return (
@@ -390,6 +444,60 @@ const ManageDealers = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Filter Section */}
+              <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
+                <div className="flex-1 min-w-[150px]">
+                  <Label htmlFor="filterDealerName">Dealer Name</Label>
+                  <Input
+                    id="filterDealerName"
+                    placeholder="Filter by name"
+                    value={filterDealerName}
+                    onChange={(e) => setFilterDealerName(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="flex-1 min-w-[100px]">
+                  <Label htmlFor="filterCity">City</Label>
+                  <Input
+                    id="filterCity"
+                    placeholder="Filter by city"
+                    value={filterCity}
+                    onChange={(e) => setFilterCity(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="flex-1 min-w-[100px]">
+                  <Label htmlFor="filterState">State</Label>
+                  <Input
+                    id="filterState"
+                    placeholder="Filter by state"
+                    value={filterState}
+                    onChange={(e) => setFilterState(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="flex-1 min-w-[150px]">
+                  <Label htmlFor="filterSalesPerson">Assigned Sales Person</Label>
+                  <Select value={filterSalesPersonId || "all"} onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}>
+                    <SelectTrigger id="filterSalesPerson" className="w-full">
+                      <SelectValue placeholder="All Sales Persons" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Sales Persons</SelectItem>
+                      {allSalesPersons.map(sp => (
+                        <SelectItem key={sp.id} value={sp.id}>{sp.first_name} {sp.last_name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={fetchDealers} className="flex items-center gap-2">
+                  <Search className="h-4 w-4" /> Apply Filters
+                </Button>
+                <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
+                  Clear Filters
+                </Button>
+              </div>
+
               <div className="overflow-x-auto">
                 {dealers.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">
@@ -403,9 +511,9 @@ const ManageDealers = () => {
                         <TableHead className="text-muted-foreground">Contact Person</TableHead>
                         <TableHead className="text-muted-foreground">Email</TableHead>
                         <TableHead className="text-muted-foreground">Phone</TableHead>
-                        <TableHead className="text-muted-foreground">City</TableHead> {/* Added */}
-                        <TableHead className="text-muted-foreground">State</TableHead> {/* Added */}
-                        <TableHead className="text-muted-foreground">Country</TableHead> {/* Added */}
+                        <TableHead className="text-muted-foreground">City</TableHead>
+                        <TableHead className="text-muted-foreground">State</TableHead>
+                        <TableHead className="text-muted-foreground">Country</TableHead>
                         <TableHead className="text-muted-foreground">Opening Balance</TableHead>
                         <TableHead className="text-muted-foreground">Closing Balance</TableHead>
                         <TableHead className="text-muted-foreground">Monthly Credit Limit</TableHead>
@@ -421,9 +529,9 @@ const ManageDealers = () => {
                           <TableCell className="text-muted-foreground">{dealer.contact_person}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.phone}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.city || 'N/A'}</TableCell> {/* Added */}
-                          <TableCell className="text-muted-foreground">{dealer.state || 'N/A'}</TableCell> {/* Added */}
-                          <TableCell className="text-muted-foreground">{dealer.country || 'N/A'}</TableCell> {/* Added */}
+                          <TableCell className="text-muted-foreground">{dealer.city || 'N/A'}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.state || 'N/A'}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.country || 'N/A'}</TableCell>
                           <TableCell className={`text-muted-foreground ${dealer.opening_balance > 0 ? 'text-red-600 font-semibold' : ''}`}>
                             ₹{dealer.opening_balance.toFixed(2)}
                           </TableCell>
@@ -599,7 +707,7 @@ const ManageDealers = () => {
                     {...form.register('state')}
                     className="col-span-3"
                   />
-                  {form.formState.errors.state && <p className className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.state.message}</p>}
+                  {form.formState.errors.state && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.state.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="country" className="text-right">
@@ -681,7 +789,7 @@ const ManageDealers = () => {
       
       {selectedDealerForMonthlyCredit && (
         <Dialog open={isMonthlyCreditDialogOpen} onOpenChange={setIsMonthlyCreditDialogOpen}>
-          <DialogContent className="sm:max-w-[700px]"> {/* Increased max-width */}
+          <DialogContent className="sm:max-w-[700px]">
             <DialogHeader>
               <DialogTitle>Manage Monthly Credit Limits for {selectedDealerForMonthlyCredit.name}</DialogTitle>
               <DialogDescription>
