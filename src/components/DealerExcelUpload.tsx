@@ -40,7 +40,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
     contactperson: z.string().nullable().optional(), // Now nullable and optional
     email: z.string().nullable().optional(), // Now nullable and optional, no .email() validation
     phone: z.string().nullable().optional(), // Now nullable and optional, no min/max length validation
-    address: z.string().min(1, { message: 'Address is required.' }), // Relaxed from min(5) to min(1)
+    address: z.string().min(5, { message: 'Address is required.' }), // Reverted to min(5) for consistency
     city: z.string().nullable().optional(), // Now nullable and optional
     state: z.string().nullable().optional(), // Now nullable and optional
     country: z.string().nullable().optional(), // Now nullable and optional
@@ -60,6 +60,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
   });
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("[DealerExcelUpload] File selected:", event.target.files?.[0]?.name);
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
@@ -71,27 +72,36 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
   };
 
   const handleParseExcel = () => {
+    console.log("[DealerExcelUpload] handleParseExcel called.");
     if (!file) {
       showError('Please select an Excel file to upload.');
+      console.error("[DealerExcelUpload] No file selected.");
       return;
     }
     setLoading(true);
     const reader = new FileReader();
     reader.onload = (e) => {
+      console.log("[DealerExcelUpload] FileReader onload triggered.");
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
+        
         const firstSheetName = workbook.SheetNames[0];
+        console.log(`[DealerExcelUpload] First sheet name: ${firstSheetName}`);
         const worksheet = workbook.Sheets[firstSheetName];
         
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        console.log(`[DealerExcelUpload] Raw JSON data from sheet:`, jsonData);
+
         if (jsonData.length < 2) { // At least header + one data row
           showError('Excel file is empty or has no data rows.');
+          console.error("[DealerExcelUpload] Excel file is empty or has no data rows.");
           setLoading(false);
           return;
         }
         
         const excelHeaders = (jsonData[0] as string[]).map(h => String(h).trim());
+        console.log("[DealerExcelUpload] Detected Excel Headers:", excelHeaders);
         setParsedExcelHeaders(excelHeaders);
         
         // ONLY these headers are strictly required in the Excel file itself
@@ -99,6 +109,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         const missingHeaders = strictlyRequiredExcelHeaders.filter(h => !excelHeaders.includes(h));
         if (missingHeaders.length > 0) {
           showError(`Missing strictly required columns in Excel: ${missingHeaders.join(', ')}`);
+          console.error(`[DealerExcelUpload] Missing strictly required columns: ${missingHeaders.join(', ')}`);
           setLoading(false);
           return;
         }
@@ -109,6 +120,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           const row = jsonData[i] as any[];
           
           if (!row || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
+            console.log(`[DealerExcelUpload] Skipping empty row at index ${i}.`);
             continue;
           }
           
@@ -128,7 +140,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           transformedRowObject.address = String(rawRowObject["Address"] || '').trim();
           transformedRowObject.city = String(rawRowObject["City"] || '').trim() || null;
           transformedRowObject.state = String(rawRowObject["State"] || '').trim() || null;
-          transformedRowObject.country = String(rawRowObject["Country"] || '').trim() || null;
+          transformedRowObject.country = String(rawRowObject["Country"] || '').trim() || null; 
           
           // Numeric fields with defaults
           transformedRowObject.creditlimit = parseFloat(rawRowObject["Credit Limit"]) || 0;
@@ -149,7 +161,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
             });
           } else {
             const zodErrors = validationResult.error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
-            console.error(`Validation failed for row ${i + 1}:`, transformedRowObject, zodErrors); // ADDED LOG
+            console.error(`[DealerExcelUpload] Validation failed for row ${i + 1}:`, transformedRowObject, zodErrors);
             parsedRows.push({
               originalRow: i + 1,
               isValid: false,
@@ -163,19 +175,24 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         setParsedData(parsedRows);
         if (parsedRows.some(row => !row.isValid)) {
           showError('Some rows contain invalid data. Please correct them before uploading.');
+          console.error("[DealerExcelUpload] Some rows contain invalid data after parsing.");
         } else if (parsedRows.length > 0) {
           showSuccess(`Parsed ${parsedRows.length} rows from Excel file. All valid.`);
+          console.log(`[DealerExcelUpload] Parsed ${parsedRows.length} rows. All valid.`);
         } else {
           showError('No valid data found in the Excel file.');
+          console.error("[DealerExcelUpload] No valid data found in the Excel file.");
         }
       } catch (error: any) {
-        console.error('Error parsing Excel file:', error);
+        console.error('[DealerExcelUpload] Error during Excel parsing:', error);
         showError(`Error parsing Excel file: ${error.message}`);
       } finally {
         setLoading(false);
+        console.log("[DealerExcelUpload] handleParseExcel finished.");
       }
     };
-    reader.onerror = () => {
+    reader.onerror = (errorEvent) => {
+      console.error('[DealerExcelUpload] FileReader onerror triggered:', errorEvent);
       showError('Error reading file. Please try again.');
       setLoading(false);
     };
@@ -183,8 +200,10 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
   };
 
   const handleUpload = async () => {
+    console.log("[DealerExcelUpload] handleUpload called.");
     if (!user) {
       showError('You must be logged in to add dealers.');
+      console.error("[DealerExcelUpload] User not logged in.");
       return;
     }
     
@@ -233,6 +252,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
     if (!hasErrors) {
       setLoading(true);
       try {
+        console.log("[DealerExcelUpload] Checking for existing dealers in database...");
         const { data: existingDealers, error: fetchExistingError } = await supabase
           .from('dealers')
           .select('name, email');
@@ -243,6 +263,8 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
 
         const existingEmails = new Set(existingDealers.map(d => d.email).filter(e => e && e !== 'N/A'));
         const existingNames = new Set(existingDealers.map(d => d.name).filter(Boolean));
+        console.log("[DealerExcelUpload] Existing Emails:", existingEmails);
+        console.log("[DealerExcelUpload] Existing Names:", existingNames);
 
         currentParsedData.forEach((row, index) => {
           if (row.isValid) {
@@ -262,7 +284,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           }
         });
       } catch (error: any) {
-        console.error('Error checking existing dealers:', error);
+        console.error('[DealerExcelUpload] Error checking existing dealers:', error);
         showError(`Failed to check existing dealers: ${error.message}`);
         setLoading(false);
         return;
@@ -274,17 +296,20 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
     if (hasErrors) {
       setParsedData(currentParsedData);
       showError('Cannot upload. Please correct all invalid rows first.');
+      console.error("[DealerExcelUpload] Upload aborted due to invalid rows after duplicate checks.");
       return;
     }
     
     const validParsedData = currentParsedData.filter(p => p.isValid);
     if (validParsedData.length === 0) {
       showError('No valid data to upload after all checks.');
+      console.error("[DealerExcelUpload] No valid data to upload after all checks.");
       return;
     }
     
     setLoading(true);
     try {
+      console.log(`[DealerExcelUpload] Attempting to insert ${validParsedData.length} dealers.`);
       const dealersToInsert = validParsedData.map((row: ParsedRow) => ({
         user_id: user.id,
         name: row.data.name,
@@ -307,6 +332,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       if (insertError) {
         throw insertError;
       }
+      console.log("[DealerExcelUpload] Dealers inserted:", insertedDealers);
       
       const balancesToInsert = validParsedData.map((row: ParsedRow, index: number) => ({
         dealer_id: insertedDealers[index].id,
@@ -321,6 +347,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       if (balanceInsertError) {
         throw balanceInsertError;
       }
+      console.log("[DealerExcelUpload] Dealer balances inserted.");
       
       const assignmentsToInsert: { dealer_id: string; sales_person_id: string }[] = [];
       for (let i = 0; i < validParsedData.length; i++) {
@@ -341,7 +368,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
               sales_person_id: salesPerson.id
             });
           } else {
-            console.warn(`Sales person '${row.data.salesperson}' not found for dealer '${row.data.name}'. Skipping assignment.`);
+            console.warn(`[DealerExcelUpload] Sales person '${row.data.salesperson}' not found for dealer '${row.data.name}'. Skipping assignment.`);
           }
         }
       }
@@ -354,6 +381,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         if (assignmentError) {
           throw assignmentError;
         }
+        console.log("[DealerExcelUpload] Dealer assignments inserted.");
       }
       
       showSuccess(`Successfully uploaded ${insertedDealers.length} dealers!`);
@@ -364,10 +392,11 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       }
       onUploadComplete();
     } catch (error: any) {
-      console.error('Error uploading dealers:', error);
+      console.error('[DealerExcelUpload] Error uploading dealers to Supabase:', error);
       showError(`Failed to upload dealers: ${error.message}`);
     } finally {
       setLoading(false);
+      console.log("[DealerExcelUpload] handleUpload finished.");
     }
   };
 
@@ -410,7 +439,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       XLSX.writeFile(wb, 'sample_dealers.xlsx');
       showSuccess('Sample Excel file downloaded successfully!');
     } catch (error: any) {
-      console.error('Error creating sample file:', error);
+      console.error('[DealerExcelUpload] Error creating sample file:', error);
       showError(`Failed to create sample file: ${error.message}`);
     }
   };
