@@ -27,8 +27,9 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Always set email_confirm to false and email_confirmed_at to now()
-    const emailConfirm = false;
+    // Always set email_confirm to true and email_confirmed_at to now()
+    // This ensures all users created via this function are immediately considered confirmed.
+    const emailConfirm = true; // Explicitly set to true
     const emailConfirmedAt = new Date().toISOString();
 
     // --- NEW LOGIC: Check if user already exists by email ---
