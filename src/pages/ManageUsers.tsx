@@ -406,6 +406,11 @@ const ManageUsers = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="flex justify-end mb-4">
+              <Button onClick={() => setIsCreateDialogOpen(true)} className="flex items-center gap-2">
+                <PlusCircle className="h-4 w-4" /> Create New Sales Person
+              </Button>
+            </div>
             <div className="overflow-x-auto">
               {users.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">No sales persons found.</p>
@@ -495,7 +500,6 @@ const ManageUsers = () => {
                 </Table>
               )}
             </div>
-            {/* Removed the "Create New Sales Person" button */}
           </CardContent>
         </Card>
       </div>
