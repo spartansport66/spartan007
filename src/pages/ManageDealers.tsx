@@ -403,6 +403,9 @@ const ManageDealers = () => {
                         <TableHead className="text-muted-foreground">Contact Person</TableHead>
                         <TableHead className="text-muted-foreground">Email</TableHead>
                         <TableHead className="text-muted-foreground">Phone</TableHead>
+                        <TableHead className="text-muted-foreground">City</TableHead> {/* Added */}
+                        <TableHead className="text-muted-foreground">State</TableHead> {/* Added */}
+                        <TableHead className="text-muted-foreground">Country</TableHead> {/* Added */}
                         <TableHead className="text-muted-foreground">Opening Balance</TableHead>
                         <TableHead className="text-muted-foreground">Closing Balance</TableHead>
                         <TableHead className="text-muted-foreground">Monthly Credit Limit</TableHead>
@@ -418,6 +421,9 @@ const ManageDealers = () => {
                           <TableCell className="text-muted-foreground">{dealer.contact_person}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.phone}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.city || 'N/A'}</TableCell> {/* Added */}
+                          <TableCell className="text-muted-foreground">{dealer.state || 'N/A'}</TableCell> {/* Added */}
+                          <TableCell className="text-muted-foreground">{dealer.country || 'N/A'}</TableCell> {/* Added */}
                           <TableCell className={`text-muted-foreground ${dealer.opening_balance > 0 ? 'text-red-600 font-semibold' : ''}`}>
                             ₹{dealer.opening_balance.toFixed(2)}
                           </TableCell>
