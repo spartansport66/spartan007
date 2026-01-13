@@ -40,7 +40,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
     contactperson: z.string().nullable().optional(), // Now nullable and optional
     email: z.string().nullable().optional(), // Now nullable and optional, no .email() validation
     phone: z.string().nullable().optional(), // Now nullable and optional, no min/max length validation
-    address: z.string().min(5, { message: 'Address is required.' }), // Reverted to min(5) for consistency
+    address: z.string().min(1, { message: 'Address is required.' }), // Relaxed from min(5) to min(1)
     city: z.string().nullable().optional(), // Now nullable and optional
     state: z.string().nullable().optional(), // Now nullable and optional
     country: z.string().nullable().optional(), // Now nullable and optional
@@ -173,6 +173,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         }
         
         setParsedData(parsedRows);
+        console.log("[DealerExcelUpload] Parsed Data after Zod validation:", parsedRows); // ADDED LOG
         if (parsedRows.some(row => !row.isValid)) {
           showError('Some rows contain invalid data. Please correct them before uploading.');
           console.error("[DealerExcelUpload] Some rows contain invalid data after parsing.");
@@ -392,7 +393,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       }
       onUploadComplete();
     } catch (error: any) {
-      console.error('[DealerExcelUpload] Error uploading dealers to Supabase:', error);
+      console.error('Error uploading dealers:', error);
       showError(`Failed to upload dealers: ${error.message}`);
     } finally {
       setLoading(false);
@@ -439,7 +440,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       XLSX.writeFile(wb, 'sample_dealers.xlsx');
       showSuccess('Sample Excel file downloaded successfully!');
     } catch (error: any) {
-      console.error('[DealerExcelUpload] Error creating sample file:', error);
+      console.error('Error creating sample file:', error);
       showError(`Failed to create sample file: ${error.message}`);
     }
   };
