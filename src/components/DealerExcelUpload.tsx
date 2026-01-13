@@ -126,7 +126,11 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
               transformedRowObject[schemaKey] = parseFloat(rawValue);
             } else if (schemaKey === 'allottedcreditdays') {
               transformedRowObject[schemaKey] = parseInt(rawValue);
+            } else if (typeof rawValue === 'string' || rawValue === null || rawValue === undefined) {
+              // For string fields, ensure it's always a string and trimmed
+              transformedRowObject[schemaKey] = String(rawValue || '').trim();
             } else {
+              // For any other type, keep as is (e.g., boolean, date objects if XLSX.read preserves them)
               transformedRowObject[schemaKey] = rawValue;
             }
           }
