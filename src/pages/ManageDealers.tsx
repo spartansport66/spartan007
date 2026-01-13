@@ -108,6 +108,7 @@ const ManageDealers = () => {
   const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false);
   const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null); // New state for company name
 
   // Applied filter states (used for fetching data)
   const [appliedFilterDealerName, setAppliedFilterDealerName] = useState<string>('');
@@ -278,14 +279,32 @@ const ManageDealers = () => {
     }
   }, [user, appliedFilterDealerName, appliedFilterCity, appliedFilterState, appliedFilterSalesPersonId]); // Dependencies are now the *applied* filters
 
+  const fetchCompanyInfo = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('company_info')
+        .select('company_name')
+        .limit(1)
+        .single();
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+      setCompanyName(data?.company_name || null);
+    } catch (error: any) {
+      console.error('Error fetching company name for PDF:', error.message);
+      setCompanyName(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!sessionLoading && user) {
       fetchAllSalesPersons();
       fetchDealers();
+      fetchCompanyInfo(); // Fetch company info here
     } else if (!sessionLoading && !user) {
       navigate('/login');
     }
-  }, [sessionLoading, user, fetchDealers, fetchAllSalesPersons, navigate]);
+  }, [sessionLoading, user, fetchDealers, fetchAllSalesPersons, fetchCompanyInfo, navigate]);
 
   const handleEdit = (dealer: Dealer) => {
     setSelectedDealer(dealer);
@@ -425,10 +444,14 @@ const ManageDealers = () => {
     const doc = new jsPDF({
       orientation: 'landscape' // Landscape for more columns
     });
+
+    const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+    doc.setFontSize(22);
+    doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
     doc.setFontSize(18);
-    doc.text("Dealer Report", 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
+    doc.text("Dealer Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
 
     const tableColumn = [
       "Name", "Contact Person", "Email", "Phone", "Address", "City", "State", "Country",
@@ -436,17 +459,17 @@ const ManageDealers = () => {
     ];
     const tableRows = dealers.map(dealer => [
       dealer.name,
-      dealer.contact_person,
-      dealer.email,
-      dealer.phone,
+      dealer.contact_person || 'N/A',
+      dealer.email || 'N/A',
+      dealer.phone || 'N/A',
       dealer.address,
-      dealer.city,
-      dealer.state,
-      dealer.country,
+      dealer.city || 'N/A',
+      dealer.state || 'N/A',
+      dealer.country || 'N/A',
       `₹${dealer.opening_balance.toFixed(2)}`,
       `₹${dealer.closing_balance.toFixed(2)}`,
       `₹${dealer.current_month_credit_limit.toFixed(2)}`,
-      dealer.allotted_credit_days,
+      dealer.allotted_credit_days.toString(),
       dealer.assigned_sales_persons.length > 0
         ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name || ''}`.trim()).join(', ')
         : 'Unassigned',
@@ -455,15 +478,23 @@ const ManageDealers = () => {
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 30,
+      startY: 45, // Adjusted startY to accommodate the new header
       styles: {
-        fontSize: 7
+        fontSize: 7,
+        cellPadding: 2,
+        valign: 'middle',
+        overflow: 'linebreak'
       },
       headStyles: {
-        fillColor: [200, 200, 200],
-        textColor: [0, 0, 0]
+        fillColor: [30, 58, 138], // Dark blue (similar to indigo-800)
+        textColor: [255, 255, 255], // White
+        fontStyle: 'bold',
+        halign: 'center',
       },
-      margin: { top: 25, left: 10, right: 10 },
+      bodyStyles: {
+        textColor: [0, 0, 0],
+      },
+      margin: { top: 10, left: 10, right: 10 },
       columnStyles: {
         0: { cellWidth: 25 }, // Name
         1: { cellWidth: 25 }, // Contact Person
