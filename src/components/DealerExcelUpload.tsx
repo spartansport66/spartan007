@@ -30,6 +30,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [parsedExcelHeaders, setParsedExcelHeaders] = useState<string[]>([]); // New state for dynamic headers
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Zod schema for dealer validation - making contact person, email, and phone optional for bulk upload
@@ -62,6 +63,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
     if (selectedFile) {
       setFile(selectedFile);
       setParsedData([]);
+      setParsedExcelHeaders([]); // Clear headers on new file selection
     } else {
       setFile(null);
     }
@@ -91,6 +93,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         
         // Get headers from first row
         const excelHeaders = (jsonData[0] as string[]).map(h => String(h).trim());
+        setParsedExcelHeaders(excelHeaders); // Store the actual headers from the file
         
         // Check if all required headers are present in the Excel file
         const requiredHeaders = [
@@ -375,18 +378,9 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
                   <TableRow>
                     <TableHead>Row</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Dealer Name</TableHead>
-                    <TableHead>Contact Person</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Address</TableHead>
-                    <TableHead>City</TableHead>
-                    <TableHead>State</TableHead>
-                    <TableHead>Country</TableHead>
-                    <TableHead>Credit Limit</TableHead>
-                    <TableHead>Allotted Credit Days</TableHead>
-                    <TableHead>Opening Balance</TableHead>
-                    <TableHead>Sales Person</TableHead>
+                    {parsedExcelHeaders.map((header, index) => (
+                      <TableHead key={index}>{header}</TableHead>
+                    ))}
                     <TableHead>Errors</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -406,18 +400,11 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
                           <AlertTriangle className="h-4 w-4 text-yellow-500" />
                         )}
                       </TableCell>
-                      <TableCell>{row.rawData["Dealer Name"] !== undefined ? String(row.rawData["Dealer Name"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["Contact Person"] !== undefined ? String(row.rawData["Contact Person"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["Email"] !== undefined ? String(row.rawData["Email"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["Phone Number"] !== undefined ? String(row.rawData["Phone Number"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["Address"] !== undefined ? String(row.rawData["Address"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["City"] !== undefined ? String(row.rawData["City"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["State"] !== undefined ? String(row.rawData["State"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["Country"] !== undefined ? String(row.rawData["Country"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["Credit Limit"] !== undefined ? String(row.rawData["Credit Limit"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["Allotted Credit Days"] !== undefined ? String(row.rawData["Allotted Credit Days"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["Opening Balance"] !== undefined ? String(row.rawData["Opening Balance"]) : 'N/A'}</TableCell>
-                      <TableCell>{row.rawData["Sales Person"] !== undefined ? String(row.rawData["Sales Person"]) : 'N/A'}</TableCell>
+                      {parsedExcelHeaders.map((header, colIndex) => (
+                        <TableCell key={colIndex}>
+                          {row.rawData[header] !== undefined && row.rawData[header] !== null ? String(row.rawData[header]) : 'N/A'}
+                        </TableCell>
+                      ))}
                       <TableCell className="text-yellow-600 dark:text-yellow-400 text-sm">
                         {row.errors.length > 0 ? row.errors.join('; ') : 'None'}
                       </TableCell>
@@ -425,7 +412,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
                   ))}
                   {parsedData.length > 10 && (
                     <TableRow>
-                      <TableCell colSpan={15} className="text-center">
+                      <TableCell colSpan={parsedExcelHeaders.length + 3} className="text-center">
                         ... and {parsedData.length - 10} more rows
                       </TableCell>
                     </TableRow>
