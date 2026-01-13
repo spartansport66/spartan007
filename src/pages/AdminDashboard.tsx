@@ -177,7 +177,7 @@ const AdminDashboard = () => {
   };
 
   // Show loading state with logout option if (sessionLoading || loadingData)
-  if (sessionLoading || loadingData) if (sessionLoading || loadingData) {
+  if (sessionLoading || loadingData) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -261,7 +261,7 @@ const AdminDashboard = () => {
               setIsPaymentsReportOpen={setIsPaymentsReportOpen}
               setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen}
               setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen}
-              setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen} {/* New prop */}
+              setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen}
             />
           </SheetContent>
         </Sheet>

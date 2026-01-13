@@ -99,8 +99,8 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         // Payments before fromDate
         const { data: prevPayments, error: prevPaymentsError } = await supabase
           .from('payments')
-          .select('amount')
-          .eq('orders.dealer_id', dealerId)
+          .select('amount, orders(dealer_id)') // Select orders.dealer_id to filter
+          .eq('orders.dealer_id', dealerId) // Filter by dealer_id from the joined orders table
           .lte('payment_date', fromDateISO)
           .eq('status', 'completed'); // Only completed payments are credits
 
@@ -154,7 +154,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       let paymentsQuery = supabase
         .from('payments')
         .select('id, amount, payment_date, payment_method, orders(order_number)')
-        .eq('orders.dealer_id', dealerId)
+        .eq('orders.dealer_id', dealerId) // Filter by dealer_id from the joined orders table
         .eq('status', 'completed'); // Only completed payments are credits
 
       if (fromDateISO) paymentsQuery = paymentsQuery.gte('payment_date', fromDateISO);
@@ -166,7 +166,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       (paymentsData || []).forEach(payment => {
         ledgerEntries.push({
           date: payment.payment_date.split('T')[0],
-          description: `Payment for Order #${payment.orders?.order_number || 'N/A'} (${payment.payment_method})`,
+          description: `Payment for Order #${payment.orders?.[0]?.order_number || 'N/A'} (${payment.payment_method})`,
           debit: 0,
           credit: payment.amount,
           balance: 0, // Will be calculated later
