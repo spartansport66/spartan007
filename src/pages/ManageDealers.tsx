@@ -441,79 +441,104 @@ const ManageDealers = () => {
   };
 
   const handlePrint = () => {
-    const doc = new jsPDF({
-      orientation: 'landscape' // Landscape for more columns
-    });
+    try {
+      const doc = new jsPDF({
+        orientation: 'landscape' // Landscape for more columns
+      });
 
-    const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
-    doc.setFontSize(22);
-    doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
-    doc.setFontSize(18);
-    doc.text("Dealer Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
-    doc.setFontSize(10);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
+      const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+      doc.setFontSize(22);
+      doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
+      doc.setFontSize(18);
+      doc.text("Dealer Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
 
-    const tableColumn = [
-      "Name", "Contact Person", "Email", "Phone", "Address", "City", "State", "Country",
-      "Opening Balance", "Closing Balance", "Monthly Credit Limit", "Credit Days", "Assigned To"
-    ];
-    const tableRows = dealers.map(dealer => [
-      dealer.name,
-      dealer.contact_person || 'N/A',
-      dealer.email || 'N/A',
-      dealer.phone || 'N/A',
-      dealer.address,
-      dealer.city || 'N/A',
-      dealer.state || 'N/A',
-      dealer.country || 'N/A',
-      `₹${dealer.opening_balance.toFixed(2)}`,
-      `₹${dealer.closing_balance.toFixed(2)}`,
-      `₹${dealer.current_month_credit_limit.toFixed(2)}`,
-      dealer.allotted_credit_days.toString(),
-      dealer.assigned_sales_persons.length > 0
-        ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name || ''}`.trim()).join(', ')
-        : 'Unassigned',
-    ]);
+      const tableColumn = [
+        "Name", "Contact Person", "Email", "Phone", "Address", "City", "State", "Country",
+        "Opening Balance", "Closing Balance", "Monthly Credit Limit", "Credit Days", "Assigned To"
+      ];
+      const tableRows = dealers.map(dealer => [
+        dealer.name,
+        dealer.contact_person || 'N/A',
+        dealer.email || 'N/A',
+        dealer.phone || 'N/A',
+        dealer.address,
+        dealer.city || 'N/A',
+        dealer.state || 'N/A',
+        dealer.country || 'N/A',
+        `₹${dealer.opening_balance.toFixed(2)}`,
+        `₹${dealer.closing_balance.toFixed(2)}`,
+        `₹${dealer.current_month_credit_limit.toFixed(2)}`,
+        dealer.allotted_credit_days.toString(),
+        dealer.assigned_sales_persons.length > 0
+          ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name || ''}`.trim()).join(', ')
+          : 'Unassigned',
+      ]);
 
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 45, // Adjusted startY to accommodate the new header
-      styles: {
-        fontSize: 7,
-        cellPadding: 2,
-        valign: 'middle',
-        overflow: 'linebreak'
-      },
-      headStyles: {
-        fillColor: [30, 58, 138], // Dark blue (similar to indigo-800)
-        textColor: [255, 255, 255], // White
-        fontStyle: 'bold',
-        halign: 'center',
-      },
-      bodyStyles: {
-        textColor: [0, 0, 0],
-      },
-      margin: { top: 10, left: 10, right: 10 },
-      columnStyles: {
-        0: { cellWidth: 25 }, // Name
-        1: { cellWidth: 25 }, // Contact Person
-        2: { cellWidth: 35 }, // Email
-        3: { cellWidth: 25 }, // Phone
-        4: { cellWidth: 35 }, // Address
-        5: { cellWidth: 20 }, // City
-        6: { cellWidth: 20 }, // State
-        7: { cellWidth: 20 }, // Country
-        8: { cellWidth: 25, halign: 'right' }, // Opening Balance
-        9: { cellWidth: 25, halign: 'right' }, // Closing Balance
-        10: { cellWidth: 25, halign: 'right' }, // Monthly Credit Limit
-        11: { cellWidth: 20, halign: 'right' }, // Credit Days
-        12: { cellWidth: 40 }, // Assigned To
-      }
-    });
+      const totalOpeningBalance = dealers.reduce((sum, dealer) => sum + dealer.opening_balance, 0);
+      const totalClosingBalance = dealers.reduce((sum, dealer) => sum + dealer.closing_balance, 0);
+      const totalMonthlyCreditLimit = dealers.reduce((sum, dealer) => sum + dealer.current_month_credit_limit, 0);
 
-    doc.save('dealer_report.pdf');
-    showSuccess('Dealer report generated successfully!');
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        foot: [
+          [
+            { content: 'Totals', colSpan: 8, styles: { halign: 'right', fontStyle: 'bold' } },
+            `₹${totalOpeningBalance.toFixed(2)}`,
+            `₹${totalClosingBalance.toFixed(2)}`,
+            `₹${totalMonthlyCreditLimit.toFixed(2)}`,
+            '', // Credit Days
+            '', // Assigned To
+          ]
+        ],
+        startY: 45, // Adjusted startY to accommodate the new header
+        styles: {
+          fontSize: 7,
+          cellPadding: 2,
+          valign: 'middle',
+          overflow: 'linebreak'
+        },
+        headStyles: {
+          fillColor: [30, 58, 138], // Dark blue (similar to indigo-800)
+          textColor: [255, 255, 255], // White
+          fontStyle: 'bold',
+          halign: 'center',
+        },
+        bodyStyles: {
+          textColor: [0, 0, 0],
+        },
+        footStyles: {
+          fillColor: [220, 220, 220], // Light gray
+          textColor: [0, 0, 0],
+          fontStyle: 'bold',
+          fontSize: 8,
+        },
+        margin: { top: 10, left: 10, right: 10 },
+        columnStyles: {
+          0: { cellWidth: 20 }, // Name
+          1: { cellWidth: 20 }, // Contact Person
+          2: { cellWidth: 30 }, // Email
+          3: { cellWidth: 20 }, // Phone
+          4: { cellWidth: 30 }, // Address
+          5: { cellWidth: 15 }, // City
+          6: { cellWidth: 15 }, // State
+          7: { cellWidth: 15 }, // Country
+          8: { cellWidth: 20, halign: 'right' }, // Opening Balance
+          9: { cellWidth: 20, halign: 'right' }, // Closing Balance
+          10: { cellWidth: 20, halign: 'right' }, // Monthly Credit Limit
+          11: { cellWidth: 15, halign: 'right' }, // Credit Days
+          12: { cellWidth: 35 }, // Assigned To
+        }
+      });
+
+      doc.save('dealer_report.pdf');
+      showSuccess('Dealer report generated successfully!');
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      showError(`Failed to generate dealer report: ${error.message || 'An unknown error occurred.'}`);
+    }
   };
 
   if (sessionLoading || loading) {
@@ -651,9 +676,9 @@ const ManageDealers = () => {
                       {dealers.map((dealer) => (
                         <TableRow key={dealer.id} className="hover:bg-accent/50">
                           <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.contact_person}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.phone}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.contact_person || 'N/A'}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.email || 'N/A'}</TableCell>
+                          <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.city || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.state || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.country || 'N/A'}</TableCell>
