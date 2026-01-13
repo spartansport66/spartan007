@@ -26,6 +26,7 @@ import SalesReportsDialog from '@/components/reports/SalesReportsDialog';
 import ProductionAlertsCard from '@/components/ProductionAlertsCard';
 import AllPendingPaymentsCard from '@/components/AllPendingPaymentsCard';
 import PaymentOverviewCard from '@/components/PaymentOverviewCard';
+import DealerLedgerReportDialog from '@/components/reports/DealerLedgerReportDialog'; // New import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ const AdminDashboard = () => {
   const [isPaymentsReportOpen, setIsPaymentsReportOpen] = useState(false);
   const [isSalesReportsDialogOpen, setIsSalesReportsDialogOpen] = useState(false);
   const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false);
+  const [isDealerLedgerReportOpen, setIsDealerLedgerReportOpen] = useState(false); // New state
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0); // Key to force re-fetch in child components
 
@@ -259,6 +261,7 @@ const AdminDashboard = () => {
               setIsPaymentsReportOpen={setIsPaymentsReportOpen}
               setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen}
               setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen}
+              setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen} {/* New prop */}
             />
           </SheetContent>
         </Sheet>
@@ -363,6 +366,10 @@ const AdminDashboard = () => {
         isOpen={isCompanyInfoDialogOpen} 
         onOpenChange={setIsCompanyInfoDialogOpen}
         onCompanyInfoUpdated={fetchCompanyInfo}
+      />
+      <DealerLedgerReportDialog // New component
+        isOpen={isDealerLedgerReportOpen}
+        onOpenChange={setIsDealerLedgerReportOpen}
       />
     </div>
   );

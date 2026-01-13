@@ -15,8 +15,9 @@ interface AdminSidebarProps {
   setIsSalesPersonPerformanceReportOpen: (isOpen: boolean) => void;
   setIsDealerReportOpen: (isOpen: boolean) => void;
   setIsPaymentsReportOpen: (isOpen: boolean) => void;
-  setIsSalesReportsDialogOpen: (isOpen: boolean) => void; // New prop
+  setIsSalesReportsDialogOpen: (isOpen: boolean) => void;
   setIsCompanyInfoDialogOpen: (isOpen: boolean) => void;
+  setIsDealerLedgerReportOpen: (isOpen: boolean) => void; // New prop
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -26,8 +27,9 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsSalesPersonPerformanceReportOpen,
   setIsDealerReportOpen,
   setIsPaymentsReportOpen,
-  setIsSalesReportsDialogOpen, // Use new prop
+  setIsSalesReportsDialogOpen,
   setIsCompanyInfoDialogOpen,
+  setIsDealerLedgerReportOpen, // Use new prop
 }) => {
   const navigate = useNavigate();
 
@@ -123,8 +125,13 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </DropdownMenuItem>
           </SheetClose>
           <SheetClose asChild>
-            <DropdownMenuItem onClick={() => setIsSalesReportsDialogOpen(true)}> {/* New menu item */}
+            <DropdownMenuItem onClick={() => setIsSalesReportsDialogOpen(true)}>
               Sales Report
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsDealerLedgerReportOpen(true)}> {/* New menu item */}
+              Dealer Ledger Report
             </DropdownMenuItem>
           </SheetClose>
         </DropdownMenuContent>
