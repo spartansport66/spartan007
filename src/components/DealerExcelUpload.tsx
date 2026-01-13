@@ -95,11 +95,14 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         const excelHeaders = (jsonData[0] as string[]).map(h => String(h).trim());
         setParsedExcelHeaders(excelHeaders); // Store the actual headers from the file
         
-        // Check if all required headers are present in the Excel file
-        const requiredHeaders = [
-          "Dealer Name", "Address", "Country", "Credit Limit", "Allotted Credit Days", "Opening Balance"
-        ];
-        
+        // Check if the "Dealer Name" column exists in the uploaded file
+        const dealerNameHeaderExists = excelHeaders.includes("Dealer Name");
+        if (!dealerNameHeaderExists) {
+          showError('The uploaded Excel file must contain a "Dealer Name" column.');
+          setLoading(false);
+          return;
+        }
+
         const parsedRows: ParsedRow[] = [];
         
         for (let i = 1; i < jsonData.length; i++) {
@@ -117,8 +120,22 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           
           // Transform row object to match schema keys
           const transformedRowObject: { [key: string]: any } = {};
+          let rowErrors: string[] = [];
+
+          // Explicitly handle 'Dealer Name' first
+          const dealerNameRawValue = rawRowObject["Dealer Name"];
+          const dealerNameProcessed = String(dealerNameRawValue || '').trim();
+          if (!dealerNameProcessed) {
+            rowErrors.push('Dealer name is required and cannot be empty.');
+            transformedRowObject.name = ""; // Ensure it's a string for Zod
+          } else {
+            transformedRowObject.name = dealerNameProcessed;
+          }
+
           for (const header of excelHeaders) {
             const schemaKey = header.toLowerCase().replace(/ /g, '');
+            if (schemaKey === 'name') continue; // Already handled 'name'
+
             const rawValue = rawRowObject[header];
             
             // Special handling for numbers to ensure they are parsed correctly before Zod
@@ -136,7 +153,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           }
           
           const validationResult = dealerSchema.safeParse(transformedRowObject);
-          if (validationResult.success) {
+          if (validationResult.success && rowErrors.length === 0) {
             parsedRows.push({
               originalRow: i + 1,
               isValid: true,
@@ -145,11 +162,11 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
               rawData: rawRowObject,
             });
           } else {
-            const errors = validationResult.error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
+            const zodErrors = validationResult.success ? [] : validationResult.error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
             parsedRows.push({
               originalRow: i + 1,
               isValid: false,
-              errors: errors,
+              errors: [...rowErrors, ...zodErrors],
               data: transformedRowObject, // Keep transformed data for context
               rawData: rawRowObject,
             });
