@@ -107,11 +107,17 @@ const ManageDealers = () => {
   const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
 
-  // Filter states
-  const [filterDealerName, setFilterDealerName] = useState<string>('');
-  const [filterCity, setFilterCity] = useState<string>('');
-  const [filterState, setFilterState] = useState<string>('');
-  const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
+  // Applied filter states (used for fetching data)
+  const [appliedFilterDealerName, setAppliedFilterDealerName] = useState<string>('');
+  const [appliedFilterCity, setAppliedFilterCity] = useState<string>('');
+  const [appliedFilterState, setAppliedFilterState] = useState<string>('');
+  const [appliedFilterSalesPersonId, setAppliedFilterSalesPersonId] = useState<string>('');
+
+  // Pending filter states (bound to input fields)
+  const [pendingFilterDealerName, setPendingFilterDealerName] = useState<string>('');
+  const [pendingFilterCity, setPendingFilterCity] = useState<string>('');
+  const [pendingFilterState, setPendingFilterState] = useState<string>('');
+  const [pendingFilterSalesPersonId, setPendingFilterSalesPersonId] = useState<string>('');
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -175,7 +181,7 @@ const ManageDealers = () => {
     
     try {
       let query;
-      if (filterSalesPersonId) {
+      if (appliedFilterSalesPersonId) {
         // If filtering by sales person, use !inner join to filter dealers that have this sales person
         query = supabase
           .from('dealers')
@@ -185,7 +191,7 @@ const ManageDealers = () => {
             dealer_balances(opening_balance, closing_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year)
           `)
-          .eq('dealer_sales_persons.sales_person_id', filterSalesPersonId);
+          .eq('dealer_sales_persons.sales_person_id', appliedFilterSalesPersonId);
       } else {
         // If not filtering by sales person, use a regular select to get all dealers and their assignments
         query = supabase
@@ -199,14 +205,14 @@ const ManageDealers = () => {
       }
 
       // Apply other filters
-      if (filterDealerName) {
-        query = query.ilike('name', `%${filterDealerName}%`);
+      if (appliedFilterDealerName) {
+        query = query.ilike('name', `%${appliedFilterDealerName}%`);
       }
-      if (filterCity) {
-        query = query.ilike('city', `%${filterCity}%`);
+      if (appliedFilterCity) {
+        query = query.ilike('city', `%${appliedFilterCity}%`);
       }
-      if (filterState) {
-        query = query.ilike('state', `%${filterState}%`);
+      if (appliedFilterState) {
+        query = query.ilike('state', `%${appliedFilterState}%`);
       }
       
       query = query.order('name', { ascending: true });
@@ -268,7 +274,7 @@ const ManageDealers = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, filterDealerName, filterCity, filterState, filterSalesPersonId]); // Add filter states to dependencies
+  }, [user, appliedFilterDealerName, appliedFilterCity, appliedFilterState, appliedFilterSalesPersonId]); // Dependencies are now the *applied* filters
 
   useEffect(() => {
     if (!sessionLoading && user) {
@@ -393,12 +399,24 @@ const ManageDealers = () => {
     setIsUploadDialogOpen(false);
   };
 
+  const handleApplyFilters = () => {
+    setAppliedFilterDealerName(pendingFilterDealerName);
+    setAppliedFilterCity(pendingFilterCity);
+    setAppliedFilterState(pendingFilterState);
+    setAppliedFilterSalesPersonId(pendingFilterSalesPersonId);
+    // fetchDealers will be called by the useEffect due to dependency change
+  };
+
   const handleClearFilters = () => {
-    setFilterDealerName('');
-    setFilterCity('');
-    setFilterState('');
-    setFilterSalesPersonId('');
-    fetchDealers(); // Re-fetch data with cleared filters
+    setPendingFilterDealerName('');
+    setPendingFilterCity('');
+    setPendingFilterState('');
+    setPendingFilterSalesPersonId('');
+    setAppliedFilterDealerName('');
+    setAppliedFilterCity('');
+    setAppliedFilterState('');
+    setAppliedFilterSalesPersonId('');
+    // fetchDealers will be called by the useEffect due to dependency change
   };
 
   if (sessionLoading || loading) {
@@ -458,8 +476,8 @@ const ManageDealers = () => {
                   <Input
                     id="filterDealerName"
                     placeholder="Filter by name"
-                    value={filterDealerName}
-                    onChange={(e) => setFilterDealerName(e.target.value)}
+                    value={pendingFilterDealerName}
+                    onChange={(e) => setPendingFilterDealerName(e.target.value)}
                     className="w-full"
                   />
                 </div>
@@ -468,8 +486,8 @@ const ManageDealers = () => {
                   <Input
                     id="filterCity"
                     placeholder="Filter by city"
-                    value={filterCity}
-                    onChange={(e) => setFilterCity(e.target.value)}
+                    value={pendingFilterCity}
+                    onChange={(e) => setPendingFilterCity(e.target.value)}
                     className="w-full"
                   />
                 </div>
@@ -478,14 +496,14 @@ const ManageDealers = () => {
                   <Input
                     id="filterState"
                     placeholder="Filter by state"
-                    value={filterState}
-                    onChange={(e) => setFilterState(e.target.value)}
+                    value={pendingFilterState}
+                    onChange={(e) => setPendingFilterState(e.target.value)}
                     className="w-full"
                   />
                 </div>
                 <div className="flex-1 min-w-[150px]">
                   <Label htmlFor="filterSalesPerson">Assigned Sales Person</Label>
-                  <Select value={filterSalesPersonId || "all"} onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}>
+                  <Select value={pendingFilterSalesPersonId || "all"} onValueChange={(value) => setPendingFilterSalesPersonId(value === "all" ? "" : value)}>
                     <SelectTrigger id="filterSalesPerson" className="w-full">
                       <SelectValue placeholder="All Sales Persons" />
                     </SelectTrigger>
@@ -497,7 +515,7 @@ const ManageDealers = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={fetchDealers} className="flex items-center gap-2">
+                <Button onClick={handleApplyFilters} className="flex items-center gap-2">
                   <Search className="h-4 w-4" /> Apply Filters
                 </Button>
                 <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
