@@ -81,7 +81,7 @@ const DealerDataParser: React.FC = () => {
           // Extract city from parentheses
           const cityMatch = firstCell.match(/\(([^)]+)\)/);
           if (cityMatch) {
-            dealerName = firstCell.replace(cityMatch[0], '').trim();
+            dealerName = firstCell.replace(cityMatch[0], '').trim(); // This line removes the (City) part
             city = cityMatch[1].trim();
           }
           
