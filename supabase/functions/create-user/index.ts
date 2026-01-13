@@ -19,6 +19,7 @@ serve(async (req) => {
 
   try {
     const { email, password, first_name, last_name, user_type } = await req.json();
+    console.log(`[create-user] Received request to create/update user: ${email}, type: ${user_type}`);
 
     const supabaseAdmin = createClient(
       // @ts-ignore
@@ -27,12 +28,11 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Always set email_confirm to true and email_confirmed_at to now()
-    // This ensures all users created via this function are immediately considered confirmed.
-    const emailConfirm = true; // Explicitly set to true
+    const emailConfirm = true;
     const emailConfirmedAt = new Date().toISOString();
 
-    // --- NEW LOGIC: Check if user already exists by email ---
+    // --- Check if user already exists by email ---
+    console.log(`[create-user] Listing users with email: ${email}`);
     const { data: existingUsersData, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers({
       email: email,
     });
@@ -42,23 +42,34 @@ serve(async (req) => {
       throw new Error(`Failed to check for existing user: ${listUsersError.message}`);
     }
 
+    console.log(`[create-user] listUsers response for ${email}:`, JSON.stringify(existingUsersData));
+
     if (existingUsersData && existingUsersData.users.length > 0) {
       const existingUser = existingUsersData.users[0];
       console.log(`[create-user] User with email ${email} already exists (ID: ${existingUser.id}). Attempting to update.`);
+      console.log(`[create-user] Existing user details:`, JSON.stringify(existingUser));
+
+      // Defensive check: Ensure the email of the returned user actually matches the queried email
+      if (existingUser.email !== email) {
+        console.error(`[create-user] Mismatch: listUsers returned user with email ${existingUser.email} for requested email ${email}. This indicates an unexpected behavior in Supabase's listUsers function.`);
+        // If this happens, it means Supabase is returning the wrong user for the email query.
+        // We'll throw an error to highlight this, as it's a critical unexpected behavior.
+        throw new Error(`Internal error: Supabase returned incorrect user for email query. Expected ${email}, got ${existingUser.email}. Please check Edge Function logs.`);
+      }
 
       // Attempt to update the existing user
       const { data: updatedUserResponse, error: updateUserError } = await supabaseAdmin.auth.admin.updateUserById(
         existingUser.id,
         {
           password: password,
-          email_confirm: emailConfirm, // Ensure email is confirmed
+          email_confirm: emailConfirm,
           email_confirmed_at: emailConfirmedAt,
-          ban_and_unverify: false, // Unban if they were banned
+          ban_and_unverify: false,
           user_metadata: {
             first_name,
             last_name,
             user_type,
-            is_admin: user_type === 'admin', // Ensure is_admin is set correctly in metadata
+            is_admin: user_type === 'admin',
           },
         }
       );
@@ -81,10 +92,10 @@ serve(async (req) => {
             last_name,
             user_type,
             is_admin: user_type === 'admin',
-            must_reset_password: (user_type === 'sales_person'), // Set must_reset_password for sales_person
+            must_reset_password: (user_type === 'sales_person'),
             updated_at: new Date().toISOString(),
           },
-          { onConflict: 'id' } // Upsert based on ID
+          { onConflict: 'id' }
         );
 
       if (profileUpdateError) {
@@ -98,7 +109,8 @@ serve(async (req) => {
       });
 
     } else {
-      // --- ORIGINAL LOGIC: Create new user ---
+      // --- Create new user ---
+      console.log(`[create-user] No existing user found with email ${email}. Creating new user.`);
       const { data: userResponse, error: userError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
