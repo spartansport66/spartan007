@@ -268,6 +268,8 @@ const ManageDealers = () => {
 
         // Calculate current balance
         let currentBalance = balance.opening_balance || 0;
+        console.log(`[fetchDealers] Dealer ${d.name} (ID: ${d.id}) initial currentBalance from opening_balance:`, currentBalance);
+
         (d.orders || []).forEach(order => {
           // All orders are debits (increase amount owed)
           currentBalance += order.total_amount;
@@ -364,6 +366,7 @@ const ManageDealers = () => {
       }
       
       // Update dealer balance
+      console.log('Updating dealer balance for ID:', selectedDealer.id, 'with openingBalance:', values.openingBalance);
       const { error: balanceUpdateError } = await supabase
         .from('dealer_balances')
         .upsert({
@@ -373,8 +376,10 @@ const ManageDealers = () => {
         }, { onConflict: 'dealer_id' });
       
       if (balanceUpdateError) {
+        console.error('Error updating dealer balance:', balanceUpdateError); // Log the actual error
         throw balanceUpdateError;
       }
+      console.log('Dealer balance upsert successful.');
       
       // Update sales person assignments
       const currentAssignedIds = selectedDealer.assigned_sales_persons.map(sp => sp.id);
@@ -815,7 +820,7 @@ const ManageDealers = () => {
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="contactPerson" className="text-right">
-                    Contact Person
+                    Contact Person (Optional)
                   </Label>
                   <Input
                     id="contactPerson"
@@ -826,7 +831,7 @@ const ManageDealers = () => {
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="email" className="text-right">
-                    Email
+                    Email (Optional)
                   </Label>
                   <Input
                     id="email"
