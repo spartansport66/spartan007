@@ -33,30 +33,29 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
   const [parsedExcelHeaders, setParsedExcelHeaders] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Zod schema for dealer validation - reflecting database NOT NULL constraints
-  // Fields that can be defaulted if missing from Excel are marked optional here.
+  // Zod schema for dealer validation - all fields are now optional and nullable
   const dealerSchema = z.object({
-    name: z.string().min(1, { message: 'Dealer name is required.' }),
-    contactperson: z.string().nullable().optional(), // Now nullable and optional
-    email: z.string().nullable().optional(), // Now nullable and optional, no .email() validation
-    phone: z.string().nullable().optional(), // Now nullable and optional, no min/max length validation
-    address: z.string().min(1, { message: 'Address is required.' }), // Relaxed from min(5) to min(1)
-    city: z.string().nullable().optional(), // Now nullable and optional
-    state: z.string().nullable().optional(), // Now nullable and optional
-    country: z.string().nullable().optional(), // Now nullable and optional
+    name: z.string().nullable().optional(),
+    contactperson: z.string().nullable().optional(),
+    email: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(),
+    address: z.string().nullable().optional(),
+    city: z.string().nullable().optional(),
+    state: z.string().nullable().optional(),
+    country: z.string().nullable().optional(),
     creditlimit: z.preprocess(
       (val) => Number(val),
       z.number().min(0, { message: 'Credit limit cannot be negative.' })
-    ).nullable().optional(), // Now nullable and optional
+    ).nullable().optional(),
     allottedcreditdays: z.preprocess(
       (val) => Number(val),
       z.number().int().min(0, { message: 'Allotted credit days cannot be negative.' })
-    ).nullable().optional(), // Now nullable and optional
+    ).nullable().optional(),
     openingbalance: z.preprocess(
       (val) => Number(val),
       z.number().min(0, { message: 'Opening balance cannot be negative.' })
-    ).nullable().optional(), // Now nullable and optional
-    salesperson: z.string().nullable().optional(), // Now nullable and optional
+    ).nullable().optional(),
+    salesperson: z.string().nullable().optional(),
   });
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,9 +92,9 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         console.log(`[DealerExcelUpload] Raw JSON data from sheet:`, jsonData);
 
-        if (jsonData.length < 2) { // At least header + one data row
-          showError('Excel file is empty or has no data rows.');
-          console.error("[DealerExcelUpload] Excel file is empty or has no data rows.");
+        if (jsonData.length < 1) { // Allow empty file, but no data rows
+          showError('Excel file is empty.');
+          console.error("[DealerExcelUpload] Excel file is empty.");
           setLoading(false);
           return;
         }
@@ -104,19 +103,22 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         console.log("[DealerExcelUpload] Detected Excel Headers:", excelHeaders);
         setParsedExcelHeaders(excelHeaders);
         
-        // ONLY these headers are strictly required in the Excel file itself
-        const strictlyRequiredExcelHeaders = ["Dealer Name", "Address"];
-        const missingHeaders = strictlyRequiredExcelHeaders.filter(h => !excelHeaders.includes(h));
-        if (missingHeaders.length > 0) {
-          showError(`Missing strictly required columns in Excel: ${missingHeaders.join(', ')}`);
-          console.error(`[DealerExcelUpload] Missing strictly required columns: ${missingHeaders.join(', ')}`);
-          setLoading(false);
-          return;
-        }
+        // No strictly required headers anymore as per user request
+        // const strictlyRequiredExcelHeaders = ["Dealer Name", "Address"];
+        // const missingHeaders = strictlyRequiredExcelHeaders.filter(h => !excelHeaders.includes(h));
+        // if (missingHeaders.length > 0) {
+        //   showError(`Missing strictly required columns in Excel: ${missingHeaders.join(', ')}`);
+        //   console.error(`[DealerExcelUpload] Missing strictly required columns: ${missingHeaders.join(', ')}`);
+        //   setLoading(false);
+        //   return;
+        // }
 
         const parsedRows: ParsedRow[] = [];
         
-        for (let i = 1; i < jsonData.length; i++) {
+        // Start from row 1 (after headers) if headers exist, otherwise from row 0
+        const startRowIndex = excelHeaders.length > 0 ? 1 : 0;
+
+        for (let i = startRowIndex; i < jsonData.length; i++) {
           const row = jsonData[i] as any[];
           
           if (!row || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
@@ -132,17 +134,17 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           const transformedRowObject: { [key: string]: any } = {};
           
           // Map Excel headers to schema keys and apply initial transformations/defaults
-          // For string fields, pass null if empty/whitespace. For numeric, default to 0 if empty/non-numeric.
-          transformedRowObject.name = String(rawRowObject["Dealer Name"] || '').trim();
+          // All fields are now optional and can be null if not provided or empty
+          transformedRowObject.name = String(rawRowObject["Dealer Name"] || '').trim() || null;
           transformedRowObject.contactperson = String(rawRowObject["Contact Person"] || '').trim() || null;
           transformedRowObject.email = String(rawRowObject["Email"] || '').trim() || null;
           transformedRowObject.phone = String(rawRowObject["Phone Number"] || '').trim() || null;
-          transformedRowObject.address = String(rawRowObject["Address"] || '').trim();
+          transformedRowObject.address = String(rawRowObject["Address"] || '').trim() || null;
           transformedRowObject.city = String(rawRowObject["City"] || '').trim() || null;
           transformedRowObject.state = String(rawRowObject["State"] || '').trim() || null;
           transformedRowObject.country = String(rawRowObject["Country"] || '').trim() || null; 
           
-          // Numeric fields with defaults
+          // Numeric fields with defaults, but still optional
           transformedRowObject.creditlimit = parseFloat(rawRowObject["Credit Limit"]) || 0;
           transformedRowObject.allottedcreditdays = parseInt(rawRowObject["Allotted Credit Days"]) || 0;
           transformedRowObject.openingbalance = parseFloat(rawRowObject["Opening Balance"]) || 0;
@@ -209,101 +211,22 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
     }
     
     let currentParsedData = [...parsedData];
-    let hasErrors = false;
-
-    // 1. Check for duplicates within the current upload batch
-    const emailsInBatch = new Set<string>();
-    const namesInBatch = new Set<string>();
-    const duplicateEmailRows = new Set<number>();
-    const duplicateNameRows = new Set<number>();
-
-    currentParsedData.forEach((row, index) => {
-      if (row.isValid) {
-        const email = row.data.email;
-        const name = row.data.name;
-
-        // Only check for duplicates if a meaningful email is provided (not null or 'N/A')
-        if (email && email !== 'N/A' && emailsInBatch.has(email)) {
-          duplicateEmailRows.add(index);
-        } else if (email && email !== 'N/A') {
-          emailsInBatch.add(email);
-        }
-
-        // Only check for duplicates if a meaningful name is provided (not null or empty)
-        if (name && namesInBatch.has(name)) {
-          duplicateNameRows.add(index);
-        } else if (name) {
-          namesInBatch.add(name);
-        }
-      }
-    });
-
-    duplicateEmailRows.forEach(index => {
-      currentParsedData[index].isValid = false;
-      currentParsedData[index].errors.push('Duplicate email within this upload batch.');
-      hasErrors = true;
-    });
-    duplicateNameRows.forEach(index => {
-      currentParsedData[index].isValid = false;
-      currentParsedData[index].errors.push('Duplicate dealer name within this upload batch.');
-      hasErrors = true;
-    });
-
-    // 2. Check against existing dealers in the database
-    if (!hasErrors) {
-      setLoading(true);
-      try {
-        console.log("[DealerExcelUpload] Checking for existing dealers in database...");
-        const { data: existingDealers, error: fetchExistingError } = await supabase
-          .from('dealers')
-          .select('name, email');
-
-        if (fetchExistingError) {
-          throw fetchExistingError;
-        }
-
-        const existingEmails = new Set(existingDealers.map(d => d.email).filter(e => e && e !== 'N/A'));
-        const existingNames = new Set(existingDealers.map(d => d.name).filter(Boolean));
-        console.log("[DealerExcelUpload] Existing Emails:", existingEmails);
-        console.log("[DealerExcelUpload] Existing Names:", existingNames);
-
-        currentParsedData.forEach((row, index) => {
-          if (row.isValid) {
-            const email = row.data.email;
-            const name = row.data.name;
-
-            if (email && email !== 'N/A' && existingEmails.has(email)) {
-              currentParsedData[index].isValid = false;
-              currentParsedData[index].errors.push('Email already exists in the database.');
-              hasErrors = true;
-            }
-            if (name && existingNames.has(name)) {
-              currentParsedData[index].isValid = false;
-              currentParsedData[index].errors.push('Dealer name already exists in the database.');
-              hasErrors = true;
-            }
-          }
-        });
-      } catch (error: any) {
-        console.error('[DealerExcelUpload] Error checking existing dealers:', error);
-        showError(`Failed to check existing dealers: ${error.message}`);
-        setLoading(false);
-        return;
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    if (hasErrors) {
-      setParsedData(currentParsedData);
-      showError('Cannot upload. Please correct all invalid rows first.');
-      console.error("[DealerExcelUpload] Upload aborted due to invalid rows after duplicate checks.");
-      return;
-    }
+    
+    // Removed all duplicate checking logic as per user request
+    // let hasErrors = false;
+    // const emailsInBatch = new Set<string>();
+    // const namesInBatch = new Set<string>();
+    // const duplicateEmailRows = new Set<number>();
+    // const duplicateNameRows = new Set<number>();
+    // currentParsedData.forEach((row, index) => { /* ... removed ... */ });
+    // duplicateEmailRows.forEach(index => { /* ... removed ... */ });
+    // duplicateNameRows.forEach(index => { /* ... removed ... */ });
+    // if (!hasErrors) { /* ... removed database duplicate check ... */ }
+    // if (hasErrors) { /* ... removed error handling ... */ }
     
     const validParsedData = currentParsedData.filter(p => p.isValid);
     if (validParsedData.length === 0) {
-      showError('No valid data to upload after all checks.');
+      showError('No valid data to upload.'); // This check remains for Zod validation errors
       console.error("[DealerExcelUpload] No valid data to upload after all checks.");
       return;
     }
@@ -313,11 +236,11 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       console.log(`[DealerExcelUpload] Attempting to insert ${validParsedData.length} dealers.`);
       const dealersToInsert = validParsedData.map((row: ParsedRow) => ({
         user_id: user.id,
-        name: row.data.name,
+        name: row.data.name || 'Unnamed Dealer', // Provide a default if name is null/undefined
         contact_person: row.data.contactperson,
         email: row.data.email,
         phone: row.data.phone,
-        address: row.data.address,
+        address: row.data.address || 'No Address Provided', // Provide a default if address is null/undefined
         city: row.data.city,
         state: row.data.state,
         country: row.data.country,
@@ -335,10 +258,10 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       }
       console.log("[DealerExcelUpload] Dealers inserted:", insertedDealers);
       
-      const balancesToInsert = validParsedData.map((row: ParsedRow, index: number) => ({
-        dealer_id: insertedDealers[index].id,
-        opening_balance: row.data.openingbalance,
-        closing_balance: row.data.openingbalance,
+      const balancesToInsert = insertedDealers.map((dealer, index) => ({
+        dealer_id: dealer.id,
+        opening_balance: validParsedData[index].data.openingbalance || 0, // Use parsed data's opening balance or default to 0
+        closing_balance: validParsedData[index].data.openingbalance || 0,
       }));
       
       const { error: balanceInsertError } = await supabase
