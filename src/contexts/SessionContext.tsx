@@ -10,6 +10,7 @@ interface SessionContextType {
   loading: boolean;
   isAdmin: boolean;
   userType: string | null;
+  mustResetPassword: boolean; // Added mustResetPassword
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -20,6 +21,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userType, setUserType] = useState<string | null>(null);
+  const [mustResetPassword, setMustResetPassword] = useState(false); // Initialize mustResetPassword
 
   useEffect(() => {
     const checkSession = async () => {
@@ -32,7 +34,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
           // Fetch user profile
           const { data: profile, error } = await supabase
             .from('profiles')
-            .select('is_admin, user_type')
+            .select('is_admin, user_type, must_reset_password') // Fetch must_reset_password
             .eq('id', initialSession.user.id)
             .single();
             
@@ -40,12 +42,15 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             console.log('Profile data:', profile);
             setIsAdmin(profile.is_admin === true);
             setUserType(profile.user_type || 'sales_person');
+            setMustResetPassword(profile.must_reset_password === true); // Set mustResetPassword
             console.log('isAdmin set to:', profile.is_admin === true);
             console.log('userType set to:', profile.user_type || 'sales_person');
+            console.log('mustResetPassword set to:', profile.must_reset_password === true);
           } else {
             console.log('Error fetching profile or no profile found:', error);
             setIsAdmin(false);
             setUserType('sales_person');
+            setMustResetPassword(false);
           }
         }
       } catch (error) {
@@ -66,7 +71,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
         // Fetch user profile
         supabase
           .from('profiles')
-          .select('is_admin, user_type')
+          .select('is_admin, user_type, must_reset_password') // Fetch must_reset_password
           .eq('id', session.user.id)
           .single()
           .then(({ data: profile, error }) => {
@@ -74,17 +79,21 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
               console.log('Profile updated:', profile);
               setIsAdmin(profile.is_admin === true);
               setUserType(profile.user_type || 'sales_person');
+              setMustResetPassword(profile.must_reset_password === true); // Set mustResetPassword
               console.log('isAdmin updated to:', profile.is_admin === true);
               console.log('userType updated to:', profile.user_type || 'sales_person');
+              console.log('mustResetPassword updated to:', profile.must_reset_password === true);
             } else {
               console.log('Error fetching updated profile or no profile found:', error);
               setIsAdmin(false);
               setUserType('sales_person');
+              setMustResetPassword(false);
             }
           });
       } else {
         setIsAdmin(false);
         setUserType(null);
+        setMustResetPassword(false);
       }
     });
 
@@ -94,7 +103,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   }, []);
 
   return (
-    <SessionContext.Provider value={{ session, user, loading, isAdmin, userType }}>
+    <SessionContext.Provider value={{ session, user, loading, isAdmin, userType, mustResetPassword }}>
       {children}
     </SessionContext.Provider>
   );

@@ -10,7 +10,7 @@ import { showError, showSuccess } from '@/utils/toast';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { session, loading, isAdmin, userType } = useSession();
+  const { session, loading, isAdmin, userType, mustResetPassword } = useSession();
   const [forceLogoutLoading, setForceLogoutLoading] = useState(false);
 
   useEffect(() => {
@@ -19,12 +19,16 @@ const Index = () => {
     console.log('loading:', loading);
     console.log('isAdmin:', isAdmin);
     console.log('userType:', userType);
+    console.log('mustResetPassword:', mustResetPassword);
     
     if (!loading) {
       if (session) {
         // Only redirect if userType has been determined (is not null)
         if (userType !== null) { 
-          if (userType === 'admin') {
+          if (mustResetPassword && userType === 'sales_person') {
+            console.log('Redirecting sales person to force password reset.');
+            navigate('/force-password-reset');
+          } else if (isAdmin) {
             console.log('Redirecting to admin dashboard');
             navigate('/admin-dashboard');
           } else {
@@ -37,7 +41,7 @@ const Index = () => {
         navigate('/login');
       }
     }
-  }, [session, loading, isAdmin, userType, navigate]);
+  }, [session, loading, isAdmin, userType, mustResetPassword, navigate]);
 
   const handleForceLogout = async () => {
     setForceLogoutLoading(true);

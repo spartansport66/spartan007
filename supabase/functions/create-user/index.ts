@@ -23,11 +23,14 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Determine email_confirm status based on user_type
+    const emailConfirm = user_type === 'sales_person' ? false : true;
+
     // Create the user using the admin client
     const { data: userResponse, error: userError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Automatically confirm email
+      email_confirm: emailConfirm, // Set email_confirm based on user_type
       user_metadata: {
         first_name,
         last_name,

@@ -15,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { userId, email, password, first_name, last_name, user_type, ban_and_unverify, assignedDealerIds } = await req.json();
+    const { userId, email, password, first_name, last_name, user_type, ban_and_unverify, assignedDealerIds, must_reset_password } = await req.json();
 
     // Create a Supabase client with the service role key
     const supabaseAdmin = createClient(
@@ -32,11 +32,14 @@ serve(async (req) => {
     if (typeof ban_and_unverify === 'boolean') userUpdateData.ban_and_unverify = ban_and_unverify;
 
     // Update user_metadata for the handle_new_user trigger to potentially update profile
+    // Only update if these fields are explicitly provided, otherwise keep existing metadata
+    const currentUserMetadata = (await supabaseAdmin.auth.admin.getUserById(userId)).data?.user?.user_metadata || {};
     userUpdateData.user_metadata = {
-      first_name,
-      last_name,
-      user_type,
-      is_admin: user_type === 'admin',
+      ...currentUserMetadata, // Keep existing metadata
+      ...(first_name !== undefined && { first_name }),
+      ...(last_name !== undefined && { last_name }),
+      ...(user_type !== undefined && { user_type }),
+      ...(user_type !== undefined && { is_admin: user_type === 'admin' }),
     };
 
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.updateUserById(
@@ -53,15 +56,17 @@ serve(async (req) => {
     }
 
     // 2. Update public.profiles table
+    const profileUpdateData: { first_name?: string; last_name?: string; user_type?: string; is_admin?: boolean; must_reset_password?: boolean; updated_at?: string } = {};
+    if (first_name !== undefined) profileUpdateData.first_name = first_name;
+    if (last_name !== undefined) profileUpdateData.last_name = last_name;
+    if (user_type !== undefined) profileUpdateData.user_type = user_type;
+    if (user_type !== undefined) profileUpdateData.is_admin = user_type === 'admin';
+    if (must_reset_password !== undefined) profileUpdateData.must_reset_password = must_reset_password; // Update must_reset_password
+    profileUpdateData.updated_at = new Date().toISOString();
+
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .update({
-        first_name,
-        last_name,
-        user_type,
-        is_admin: user_type === 'admin',
-        updated_at: new Date().toISOString(),
-      })
+      .update(profileUpdateData)
       .eq('id', userId);
 
     if (profileError) {
