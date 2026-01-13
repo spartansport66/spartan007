@@ -45,6 +45,8 @@ interface DealerWithRelations {
   dealer_sales_persons: { sales_person_id: string; profiles: { id: string; first_name: string; last_name: string } }[];
   dealer_balances: DealerBalanceFromQuery[]; // Array of balances
   dealer_monthly_credit_limits: { dealer_id: string; credit_limit: number; month_year: string }[];
+  orders: { total_amount: number; payment_status: string }[]; // Added orders
+  payments: { amount: number; status: string }[]; // Added payments
 }
 
 interface Dealer {
@@ -63,7 +65,7 @@ interface Dealer {
   assigned_sales_persons: { id: string; first_name: string; last_name: string }[];
   current_month_credit_limit: number;
   opening_balance: number;
-  closing_balance: number;
+  current_balance: number; // New field for calculated current balance
 }
 
 interface SalesPerson {
@@ -191,8 +193,10 @@ const ManageDealers = () => {
           .select(`
             *,
             dealer_sales_persons!inner(sales_person_id, profiles(id, first_name, last_name)),
-            dealer_balances(opening_balance, closing_balance),
-            dealer_monthly_credit_limits(dealer_id, credit_limit, month_year)
+            dealer_balances(opening_balance),
+            dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
+            orders(total_amount, payment_status),
+            payments(amount, status)
           `)
           .eq('dealer_sales_persons.sales_person_id', appliedFilterSalesPersonId);
       } else {
@@ -202,8 +206,10 @@ const ManageDealers = () => {
           .select(`
             *,
             dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name)),
-            dealer_balances(opening_balance, closing_balance),
-            dealer_monthly_credit_limits(dealer_id, credit_limit, month_year)
+            dealer_balances(opening_balance),
+            dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
+            orders(total_amount, payment_status),
+            payments(amount, status)
           `);
       }
 
@@ -258,13 +264,26 @@ const ManageDealers = () => {
         const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) 
           ? monthlyLimitsMap.get(d.id)! 
           : d.credit_limit;
+
+        // Calculate current balance
+        let currentBalance = balance.opening_balance || 0;
+        (d.orders || []).forEach(order => {
+          // All orders are debits (increase amount owed)
+          currentBalance += order.total_amount;
+        });
+        (d.payments || []).forEach(payment => {
+          // Only completed payments are credits (decrease amount owed)
+          if (payment.status === 'completed') {
+            currentBalance -= payment.amount;
+          }
+        });
         
         return {
           ...d,
           assigned_sales_persons: assignedSalesPersons,
           current_month_credit_limit: currentMonthCreditLimit,
           opening_balance: balance.opening_balance || 0,
-          closing_balance: balance.closing_balance || 0,
+          current_balance: currentBalance, // Use calculated current balance
         };
       });
       
@@ -321,7 +340,7 @@ const ManageDealers = () => {
     
     try {
       // Update dealer information
-      const updateData: Partial<Omit<Dealer, 'assigned_sales_persons' | 'current_month_credit_limit' | 'opening_balance' | 'closing_balance'>> = {
+      const updateData: Partial<Omit<Dealer, 'assigned_sales_persons' | 'current_month_credit_limit' | 'opening_balance' | 'current_balance'>> = {
         name: values.name,
         contact_person: values.contactPerson,
         email: values.email,
@@ -349,7 +368,7 @@ const ManageDealers = () => {
         .upsert({
           dealer_id: selectedDealer.id,
           opening_balance: values.openingBalance,
-          closing_balance: values.openingBalance, // Initially same as opening
+          closing_balance: values.openingBalance, // Initially same as opening, will be dynamically calculated for display
         }, { onConflict: 'dealer_id' });
       
       if (balanceUpdateError) {
@@ -456,7 +475,7 @@ const ManageDealers = () => {
 
       const tableColumn = [
         "Name", "Contact Person", "Email", "Phone", "Address", "City", "State", "Country",
-        "Opening Balance", "Closing Balance", "Monthly Credit Limit", "Credit Days", "Assigned To"
+        "Opening Balance", "Current Balance", "Monthly Credit Limit", "Credit Days", "Assigned To"
       ];
       const tableRows = dealers.map(dealer => [
         dealer.name,
@@ -468,16 +487,16 @@ const ManageDealers = () => {
         dealer.state || 'N/A',
         dealer.country || 'N/A',
         `₹${dealer.opening_balance.toFixed(2)}`,
-        `₹${dealer.closing_balance.toFixed(2)}`,
+        `₹${dealer.current_balance.toFixed(2)}`, // Use calculated current balance
         `₹${dealer.current_month_credit_limit.toFixed(2)}`,
-        dealer.allotted_credit_days, // Pass as number
+        dealer.allotted_credit_days, 
         dealer.assigned_sales_persons.length > 0
           ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name || ''}`.trim()).join(', ')
           : 'Unassigned',
       ]);
 
       const totalOpeningBalance = dealers.reduce((sum, dealer) => sum + dealer.opening_balance, 0);
-      const totalClosingBalance = dealers.reduce((sum, dealer) => sum + dealer.closing_balance, 0);
+      const totalCurrentBalance = dealers.reduce((sum, dealer) => sum + dealer.current_balance, 0); // Sum of current balances
       const totalMonthlyCreditLimit = dealers.reduce((sum, dealer) => sum + dealer.current_month_credit_limit, 0);
 
       autoTable(doc, {
@@ -487,7 +506,7 @@ const ManageDealers = () => {
           [
             { content: 'Totals', colSpan: 8, styles: { halign: 'right', fontStyle: 'bold' } },
             `₹${totalOpeningBalance.toFixed(2)}`,
-            `₹${totalClosingBalance.toFixed(2)}`,
+            `₹${totalCurrentBalance.toFixed(2)}`, // Display total current balance
             `₹${totalMonthlyCreditLimit.toFixed(2)}`,
             '', // Credit Days
             '', // Assigned To
@@ -526,7 +545,7 @@ const ManageDealers = () => {
           6: { cellWidth: 15 }, // State
           7: { cellWidth: 15 }, // Country
           8: { cellWidth: 20, halign: 'right' }, // Opening Balance
-          9: { cellWidth: 20, halign: 'right' }, // Closing Balance
+          9: { cellWidth: 20, halign: 'right' }, // Current Balance
           10: { cellWidth: 20, halign: 'right' }, // Monthly Credit Limit
           11: { cellWidth: 15, halign: 'right' }, // Credit Days
           12: { cellWidth: 35 }, // Assigned To
@@ -665,7 +684,7 @@ const ManageDealers = () => {
                         <TableHead className="text-muted-foreground">State</TableHead>
                         <TableHead className="text-muted-foreground">Country</TableHead>
                         <TableHead className="text-muted-foreground">Opening Balance</TableHead>
-                        <TableHead className="text-muted-foreground">Closing Balance</TableHead>
+                        <TableHead className="text-muted-foreground">Current Balance</TableHead>
                         <TableHead className="text-muted-foreground">Monthly Credit Limit</TableHead>
                         <TableHead className="text-muted-foreground">Credit Days</TableHead>
                         <TableHead className="text-muted-foreground">Assigned To</TableHead>
@@ -685,7 +704,9 @@ const ManageDealers = () => {
                           <TableCell className={`text-muted-foreground ${dealer.opening_balance > 0 ? 'text-red-600 font-semibold' : ''}`}>
                             ₹{dealer.opening_balance.toFixed(2)}
                           </TableCell>
-                          <TableCell className="text-muted-foreground">₹{dealer.closing_balance.toFixed(2)}</TableCell>
+                          <TableCell className={`text-muted-foreground ${dealer.current_balance > 0 ? 'text-red-600 font-semibold' : ''}`}>
+                            ₹{dealer.current_balance.toFixed(2)}
+                          </TableCell>
                           <TableCell className="text-muted-foreground">₹{dealer.current_month_credit_limit.toFixed(2)}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell>
                           <TableCell className="text-muted-foreground">
