@@ -11,7 +11,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import * as z from 'zod';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { useSession } from '@/contexts/Session/SessionContext';
+import { useSession } from '@/contexts/SessionContext'; // Corrected import path
 
 interface ParsedRow {
   originalRow: number;
