@@ -40,7 +40,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
     contactperson: z.string().nullable().optional(), // Now nullable and optional
     email: z.string().nullable().optional(), // Now nullable and optional, no .email() validation
     phone: z.string().nullable().optional(), // Now nullable and optional, no min/max length validation
-    address: z.string().min(5, { message: 'Address is required.' }),
+    address: z.string().min(1, { message: 'Address is required.' }), // Relaxed from min(5) to min(1)
     city: z.string().nullable().optional(), // Now nullable and optional
     state: z.string().nullable().optional(), // Now nullable and optional
     country: z.string().nullable().optional(), // Now nullable and optional
@@ -128,7 +128,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           transformedRowObject.address = String(rawRowObject["Address"] || '').trim();
           transformedRowObject.city = String(rawRowObject["City"] || '').trim() || null;
           transformedRowObject.state = String(rawRowObject["State"] || '').trim() || null;
-          transformedRowObject.country = String(rawRowObject["Country"] || '').trim() || null; // Let DB default to 'India' if null
+          transformedRowObject.country = String(rawRowObject["Country"] || '').trim() || null;
           
           // Numeric fields with defaults
           transformedRowObject.creditlimit = parseFloat(rawRowObject["Credit Limit"]) || 0;
@@ -149,6 +149,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
             });
           } else {
             const zodErrors = validationResult.error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
+            console.error(`Validation failed for row ${i + 1}:`, transformedRowObject, zodErrors); // ADDED LOG
             parsedRows.push({
               originalRow: i + 1,
               isValid: false,
