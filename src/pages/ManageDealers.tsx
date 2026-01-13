@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Edit, Trash2, Eye, Loader2, CalendarDays, Upload, FileSpreadsheet, Search } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Loader2, CalendarDays, Upload, FileSpreadsheet, Search, Printer } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -21,6 +21,8 @@ import MultiSelect from '@/components/MultiSelect';
 import DealerMonthlyCreditManager from '@/components/DealerMonthlyCreditManager';
 import DealerExcelUpload from '@/components/DealerExcelUpload';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 interface DealerBalanceFromQuery {
   opening_balance: number | null;
@@ -419,6 +421,70 @@ const ManageDealers = () => {
     // fetchDealers will be called by the useEffect due to dependency change
   };
 
+  const handlePrint = () => {
+    const doc = new jsPDF({
+      orientation: 'landscape' // Landscape for more columns
+    });
+    doc.setFontSize(18);
+    doc.text("Dealer Report", 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+
+    const tableColumn = [
+      "Name", "Contact Person", "Email", "Phone", "Address", "City", "State", "Country",
+      "Opening Balance", "Closing Balance", "Monthly Credit Limit", "Credit Days", "Assigned To"
+    ];
+    const tableRows = dealers.map(dealer => [
+      dealer.name,
+      dealer.contact_person,
+      dealer.email,
+      dealer.phone,
+      dealer.address,
+      dealer.city,
+      dealer.state,
+      dealer.country,
+      `₹${dealer.opening_balance.toFixed(2)}`,
+      `₹${dealer.closing_balance.toFixed(2)}`,
+      `₹${dealer.current_month_credit_limit.toFixed(2)}`,
+      dealer.allotted_credit_days,
+      dealer.assigned_sales_persons.length > 0
+        ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name || ''}`.trim()).join(', ')
+        : 'Unassigned',
+    ]);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 30,
+      styles: {
+        fontSize: 7
+      },
+      headStyles: {
+        fillColor: [200, 200, 200],
+        textColor: [0, 0, 0]
+      },
+      margin: { top: 25, left: 10, right: 10 },
+      columnStyles: {
+        0: { cellWidth: 25 }, // Name
+        1: { cellWidth: 25 }, // Contact Person
+        2: { cellWidth: 35 }, // Email
+        3: { cellWidth: 25 }, // Phone
+        4: { cellWidth: 35 }, // Address
+        5: { cellWidth: 20 }, // City
+        6: { cellWidth: 20 }, // State
+        7: { cellWidth: 20 }, // Country
+        8: { cellWidth: 25, halign: 'right' }, // Opening Balance
+        9: { cellWidth: 25, halign: 'right' }, // Closing Balance
+        10: { cellWidth: 25, halign: 'right' }, // Monthly Credit Limit
+        11: { cellWidth: 20, halign: 'right' }, // Credit Days
+        12: { cellWidth: 40 }, // Assigned To
+      }
+    });
+
+    doc.save('dealer_report.pdf');
+    showSuccess('Dealer report generated successfully!');
+  };
+
   if (sessionLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -445,32 +511,32 @@ const ManageDealers = () => {
 
   const salesPersonOptions = allSalesPersons.map(sp => ({
     value: sp.id,
-    label: `${sp.first_name} ${sp.last_name || ''}`.trim(), // Corrected to handle missing last_name
+    label: `${sp.first_name} ${sp.last_name || ''}`.trim(),
   }));
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
-      <div className="w-full max-w-full">
+    <div className="h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
+      <div className="w-full max-w-full flex flex-col flex-grow overflow-hidden">
         <Button 
           variant="outline" 
           onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} 
-          className="mb-6 flex items-center gap-2"
+          className="mb-6 flex items-center gap-2 flex-shrink-0"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Dashboard
         </Button>
         
-        <div className="grid grid-cols-1 gap-6 mb-6">
-          <Card className="bg-card text-card-foreground shadow-lg">
-            <CardHeader>
+        <div className="grid grid-cols-1 gap-6 mb-6 flex-grow overflow-hidden">
+          <Card className="bg-card text-card-foreground shadow-lg flex flex-col flex-grow overflow-hidden">
+            <CardHeader className="flex-shrink-0">
               <CardTitle className="text-2xl font-semibold text-primary">Manage Dealers</CardTitle>
               <CardDescription className="text-muted-foreground">
                 View, edit, or delete your registered dealers.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 flex flex-col flex-grow overflow-hidden">
               {/* Filter Section */}
-              <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
+              <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg flex-shrink-0">
                 <div className="flex-1 min-w-[150px]">
                   <Label htmlFor="filterDealerName">Dealer Name</Label>
                   <Input
@@ -521,9 +587,12 @@ const ManageDealers = () => {
                 <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
                   Clear Filters
                 </Button>
+                <Button variant="outline" onClick={handlePrint} disabled={dealers.length === 0} className="flex items-center gap-2">
+                  <Printer className="h-4 w-4" /> Print Report
+                </Button>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto flex-grow overflow-y-auto border rounded-md">
                 {dealers.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">
                     No dealers found. Add a new dealer to get started!
@@ -614,7 +683,7 @@ const ManageDealers = () => {
                 )}
               </div>
               
-              <div className="mt-6 flex flex-wrap gap-4">
+              <div className="mt-6 flex flex-wrap gap-4 flex-shrink-0">
                 <Button 
                   onClick={() => navigate('/add-dealer')} 
                   className="bg-primary text-primary-foreground hover:bg-primary/90"
