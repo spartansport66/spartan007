@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -52,7 +51,7 @@ const AddDealer = () => {
   const { user, loading: sessionLoading, isAdmin } = useSession();
   const [salesPersons, setSalesPersons] = useState<SalesPerson[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
-
+  
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -77,13 +76,13 @@ const AddDealer = () => {
         setDataLoading(false);
         return;
       }
-
+      
       // Always fetch all sales persons to populate the options
       const { data, error } = await supabase
         .from('profiles')
         .select('id, first_name, last_name')
         .eq('user_type', 'sales_person');
-
+      
       if (error) {
         console.error('Error fetching sales persons:', error);
         showError(`Failed to load sales persons: ${error.message}`);
@@ -91,7 +90,7 @@ const AddDealer = () => {
       } else {
         setSalesPersons(data || []);
       }
-
+      
       // Set default assigned sales person(s) based on role
       if (!isAdmin && user) {
         // If current user is a sales person, automatically assign themselves
@@ -100,10 +99,10 @@ const AddDealer = () => {
         // If admin, leave it empty for them to choose
         form.setValue('assignedSalesPersonIds', []);
       }
-
+      
       setDataLoading(false);
     };
-
+    
     if (!sessionLoading && user) {
       fetchSalesPersons();
     } else if (!sessionLoading && !user) {
@@ -117,7 +116,7 @@ const AddDealer = () => {
       navigate('/login');
       return;
     }
-
+    
     try {
       const dealerData = {
         user_id: user.id, // Creator of the dealer
@@ -132,17 +131,17 @@ const AddDealer = () => {
         credit_limit: values.creditLimit,
         allotted_credit_days: values.allottedCreditDays,
       };
-
+      
       const { data: newDealer, error: dealerError } = await supabase
         .from('dealers')
         .insert([dealerData])
         .select()
         .single();
-
+      
       if (dealerError) {
         throw dealerError;
       }
-
+      
       // Insert dealer balance
       const { error: balanceError } = await supabase
         .from('dealer_balances')
@@ -151,25 +150,25 @@ const AddDealer = () => {
           opening_balance: values.openingBalance,
           closing_balance: values.openingBalance, // Initially same as opening
         });
-
+      
       if (balanceError) {
         throw balanceError;
       }
-
+      
       // Insert into the new join table: dealer_sales_persons
       const dealerSalesPersonsData = values.assignedSalesPersonIds.map(spId => ({
         dealer_id: newDealer.id,
         sales_person_id: spId,
       }));
-
+      
       const { error: joinTableError } = await supabase
         .from('dealer_sales_persons')
         .insert(dealerSalesPersonsData);
-
+      
       if (joinTableError) {
         throw joinTableError;
       }
-
+      
       showSuccess('Dealer added successfully and sales persons assigned!');
       form.reset();
       console.log('New Dealer Data:', newDealer);
@@ -188,7 +187,7 @@ const AddDealer = () => {
       </div>
     );
   }
-
+  
   const salesPersonOptions = salesPersons.map(sp => ({
     value: sp.id,
     label: `${sp.first_name} ${sp.last_name}`,
@@ -197,13 +196,21 @@ const AddDealer = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-md sm:max-w-lg">
-        <Button variant="outline" onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} className="mb-6 flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+        <Button 
+          variant="outline" 
+          onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} 
+          className="mb-6 flex items-center gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
         </Button>
+        
         <Card className="bg-card text-card-foreground shadow-lg">
           <CardHeader>
             <CardTitle className="text-2xl font-semibold text-primary">Add New Dealer</CardTitle>
-            <CardDescription className="text-muted-foreground">Enter the details for a new dealer.</CardDescription>
+            <CardDescription className="text-muted-foreground">
+              Enter the details for a new dealer.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...form}>
@@ -221,6 +228,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="contactPerson"
@@ -234,6 +242,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="email"
@@ -247,6 +256,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="phone"
@@ -260,6 +270,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="address"
@@ -273,6 +284,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="city"
@@ -286,6 +298,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="state"
@@ -299,6 +312,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="country"
@@ -312,6 +326,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="creditLimit"
@@ -325,6 +340,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="allottedCreditDays"
@@ -338,6 +354,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="openingBalance"
@@ -351,6 +368,7 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="assignedSalesPersonIds"
@@ -359,7 +377,7 @@ const AddDealer = () => {
                       <FormLabel>Assign Sales Person(s)</FormLabel>
                       <FormControl>
                         <MultiSelect 
-                          options={salesPersonOptions} 
+                          options={salesPersonOptions}
                           value={field.value} // Changed from 'selected' to 'value'
                           onChange={field.onChange} // Changed from 'onSelect' to 'onChange'
                           placeholder="Select sales person(s)"
@@ -370,13 +388,15 @@ const AddDealer = () => {
                     </FormItem>
                   )}
                 />
+                
                 <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
                   Add Dealer
                 </Button>
               </form>
-            </CardContent>
-          </Card>
-        </div>
+            </Form>
+          </CardContent>
+        </Card>
+      </div>
       <MadeWithDyad />
     </div>
   );
