@@ -37,25 +37,25 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
   // Fields that can be defaulted if missing from Excel are marked optional here.
   const dealerSchema = z.object({
     name: z.string().min(1, { message: 'Dealer name is required.' }),
-    contactperson: z.string().optional(), // Made optional in Zod
-    email: z.string().optional(), // Made optional in Zod, removed .email() validation
-    phone: z.string().optional(), // Made optional in Zod, removed min/max length
+    contactperson: z.string().optional(), // Truly optional
+    email: z.string().optional(), // Truly optional, no .email() validation
+    phone: z.string().optional(), // Truly optional, no min/max length validation
     address: z.string().min(5, { message: 'Address is required.' }),
-    city: z.string().optional(), // Made optional in Zod
-    state: z.string().optional(), // Made optional in Zod
-    country: z.string().optional(), // Made optional in Zod
+    city: z.string().optional(), // Truly optional
+    state: z.string().optional(), // Truly optional
+    country: z.string().optional(), // Truly optional
     creditlimit: z.preprocess(
       (val) => Number(val),
       z.number().min(0, { message: 'Credit limit cannot be negative.' })
-    ).optional(), // Made optional in Zod
+    ).optional(), // Truly optional
     allottedcreditdays: z.preprocess(
       (val) => Number(val),
       z.number().int().min(0, { message: 'Allotted credit days cannot be negative.' })
-    ).optional(), // Made optional in Zod
+    ).optional(), // Truly optional
     openingbalance: z.preprocess(
       (val) => Number(val),
       z.number().min(0, { message: 'Opening balance cannot be negative.' })
-    ).optional(), // Made optional in Zod
+    ).optional(), // Truly optional
     salesperson: z.string().optional(),
   });
 
@@ -85,7 +85,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         const worksheet = workbook.Sheets[firstSheetName];
         
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        if (jsonData.length < 2) {
+        if (jsonData.length < 2) { // At least header + one data row
           showError('Excel file is empty or has no data rows.');
           setLoading(false);
           return;
@@ -123,8 +123,8 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           // Ensure all fields that are NOT NULL in DB get a value, even if empty in Excel
           transformedRowObject.name = String(rawRowObject["Dealer Name"] || '').trim();
           transformedRowObject.contactperson = String(rawRowObject["Contact Person"] || '').trim() || 'N/A';
-          transformedRowObject.email = String(rawRowObject["Email"] || '').trim() || 'N/A'; // No email validation here
-          transformedRowObject.phone = String(rawRowObject["Phone Number"] || '').trim() || 'N/A'; // No phone validation here
+          transformedRowObject.email = String(rawRowObject["Email"] || '').trim() || 'N/A';
+          transformedRowObject.phone = String(rawRowObject["Phone Number"] || '').trim() || 'N/A';
           transformedRowObject.address = String(rawRowObject["Address"] || '').trim();
           transformedRowObject.city = String(rawRowObject["City"] || '').trim() || 'N/A';
           transformedRowObject.state = String(rawRowObject["State"] || '').trim() || 'N/A';
@@ -201,12 +201,14 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         const email = row.data.email;
         const name = row.data.name;
 
+        // Only check for duplicates if a meaningful email is provided (not 'N/A' or empty)
         if (email && email !== 'N/A' && emailsInBatch.has(email)) {
           duplicateEmailRows.add(index);
         } else if (email && email !== 'N/A') {
           emailsInBatch.add(email);
         }
 
+        // Only check for duplicates if a meaningful name is provided (not empty)
         if (name && namesInBatch.has(name)) {
           duplicateNameRows.add(index);
         } else if (name) {
@@ -238,7 +240,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           throw fetchExistingError;
         }
 
-        const existingEmails = new Set(existingDealers.map(d => d.email).filter(Boolean));
+        const existingEmails = new Set(existingDealers.map(d => d.email).filter(e => e && e !== 'N/A')); // Filter out 'N/A'
         const existingNames = new Set(existingDealers.map(d => d.name).filter(Boolean));
 
         currentParsedData.forEach((row, index) => {
@@ -324,7 +326,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         const row = validParsedData[i];
         const dealerId = insertedDealers[i].id;
         
-        if (row.data.salesperson) {
+        if (row.data.salesperson && row.data.salesperson !== 'N/A') { // Only try to assign if a salesperson name is provided
           const { data: salesPerson, error: salesPersonError } = await supabase
             .from('profiles')
             .select('id')
@@ -337,6 +339,8 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
               dealer_id: dealerId,
               sales_person_id: salesPerson.id
             });
+          } else {
+            console.warn(`Sales person '${row.data.salesperson}' not found for dealer '${row.data.name}'. Skipping assignment.`);
           }
         }
       }
@@ -385,17 +389,17 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         },
         {
           "Dealer Name": 'Regional Traders',
-          "Contact Person": 'Jane Smith',
-          "Email": 'jane@rt.com',
-          "Phone Number": '+1987654321',
+          "Contact Person": '', // Empty contact person
+          "Email": '', // Empty email
+          "Phone Number": '', // Empty phone number
           "Address": '456 Trade Ave',
-          "City": 'Los Angeles',
-          "State": 'CA',
-          "Country": 'USA',
+          "City": '', // Empty city
+          "State": '', // Empty state
+          "Country": '', // Empty country
           "Credit Limit": 30000,
           "Allotted Credit Days": 45,
           "Opening Balance": 5000,
-          "Sales Person": 'Sales Person Name'
+          "Sales Person": '' // Empty sales person
         }
       ];
       
