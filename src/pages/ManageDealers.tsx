@@ -218,9 +218,16 @@ const ManageDealers = () => {
       }
       
       // Create a map of dealer balances for easy lookup
-      const balancesMap = new Map<string, DealerBalanceFromQuery>(
-        dealersData?.flatMap(d => d.dealer_balances?.map(balance => [d.id, balance])) || []
-      );
+      const balancesMap = new Map<string, DealerBalanceFromQuery>();
+      dealersData?.forEach(d => {
+        // Ensure d.dealer_balances is an array and has at least one element
+        if (Array.isArray(d.dealer_balances) && d.dealer_balances.length > 0) {
+          balancesMap.set(d.id, d.dealer_balances[0]);
+        } else {
+          // Default to zero balance if no balance record or unexpected format
+          balancesMap.set(d.id, { opening_balance: 0, closing_balance: 0 });
+        }
+      });
       
       // Get current month for credit limit
       const today = new Date();
