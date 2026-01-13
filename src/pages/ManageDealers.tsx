@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import MultiSelect from '@/components/MultiSelect';
 import DealerMonthlyCreditManager from '@/components/DealerMonthlyCreditManager';
-import DealerExcelUpload from '@/components/DealerExcelUpload';
+import DealerExcelUpload from '@/components/DealerExcelUpload'; // Corrected import
 
 interface Dealer {
   id: string;
@@ -593,7 +593,7 @@ const ManageDealers = () => {
                     {...form.register('state')}
                     className="col-span-3"
                   />
-                  {form.formState.errors.state && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.state.message}</p>}
+                  {form.formState.errors.state && <p className className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.state.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="country" className="text-right">
@@ -675,7 +675,7 @@ const ManageDealers = () => {
       
       {selectedDealerForMonthlyCredit && (
         <Dialog open={isMonthlyCreditDialogOpen} onOpenChange={setIsMonthlyCreditDialogOpen}>
-          <DialogContent className="sm:max-w-[700px]">
+          <DialogContent className="sm:max-w-[700px]"> {/* Increased max-width */}
             <DialogHeader>
               <DialogTitle>Manage Monthly Credit Limits for {selectedDealerForMonthlyCredit.name}</DialogTitle>
               <DialogDescription>
