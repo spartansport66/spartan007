@@ -11,7 +11,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import * as z from 'zod';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { useSession } from '@/contexts/SessionContext';
+import { useSession } from '@/contexts/Session/SessionContext';
 
 interface ParsedRow {
   originalRow: number;
@@ -32,9 +32,9 @@ const dealerSchema = z.object({
   email: z.string().email({ message: 'Invalid email format.' }).nullable().optional(), // Added email format validation
   phone: z.string().nullable().optional(),
   address: z.string().min(1, { message: 'Address is required.' }), // Made required
-  city: z.string().nullable().optional(),
-  state: z.string().nullable().optional(),
-  country: z.string().nullable().optional(),
+  city: z.string().nullable().optional(), // This is correct for optional
+  state: z.string().nullable().optional(), // This is correct for optional
+  country: z.string().nullable().optional(), // This is correct for optional
   creditlimit: z.preprocess(
     (val) => Number(val),
     z.number().min(0, { message: 'Credit limit cannot be negative.' })
@@ -159,7 +159,8 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
             } else if (schemaKey === 'allottedcreditdays') {
               transformedRowObject[schemaKey] = parseInt(rawValue) || 0;
             } else {
-              transformedRowObject[schemaKey] = (rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== '') ? String(rawValue).trim() : null;
+              // Preserve empty strings as empty strings, null/undefined as null
+              transformedRowObject[schemaKey] = (rawValue !== undefined && rawValue !== null) ? String(rawValue).trim() : null;
             }
           });
 
