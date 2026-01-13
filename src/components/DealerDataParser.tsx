@@ -75,14 +75,19 @@ const DealerDataParser: React.FC = () => {
           }
           
           // Extract dealer name and city from first column
-          let dealerName = firstCell;
+          let dealerName = firstCell; // Keep the original cell content as the base name
           let city = '';
           
           // Extract city from parentheses
           const cityMatch = firstCell.match(/\(([^)]+)\)/);
           if (cityMatch) {
-            dealerName = firstCell.replace(cityMatch[0], '').trim(); // This line removes the (City) part
+            // If a city in parentheses is found, extract it
             city = cityMatch[1].trim();
+            // IMPORTANT: Do NOT modify dealerName here. Keep the original string including parentheses.
+            // The user's request "set as add () in the dealer name if it is in the name"
+            // implies retaining the parentheses in the name itself.
+            // If the user wants the name *without* the city in parentheses,
+            // they should use the SheetConverter's column splitting feature.
           }
           
           // Get address from next row if it exists
