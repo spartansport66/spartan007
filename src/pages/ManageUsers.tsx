@@ -61,7 +61,7 @@ interface AuthUser {
 
 const userFormSchema = z.object({
   firstName: z.string().min(1, { message: 'First name is required.' }),
-  lastName: z.string().min(1, { message: 'Last name is required.' }),
+  lastName: z.string().optional(), // Made optional
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional().or(z.literal('')),
   userType: z.enum(['admin', 'sales_person'], { message: 'Please select a user type.' }),
@@ -85,7 +85,7 @@ const ManageUsers = () => {
     resolver: zodResolver(userFormSchema),
     defaultValues: {
       firstName: '',
-      lastName: '',
+      lastName: '', // Default to empty string
       email: '',
       password: '',
       userType: 'sales_person',
@@ -97,7 +97,7 @@ const ManageUsers = () => {
     resolver: zodResolver(userFormSchema),
     defaultValues: {
       firstName: '',
-      lastName: '',
+      lastName: '', // Default to empty string
       email: '',
       password: '',
       userType: 'sales_person',
@@ -276,7 +276,7 @@ const ManageUsers = () => {
           email: values.email,
           password: values.password,
           first_name: values.firstName,
-          last_name: values.lastName,
+          last_name: values.lastName || null, // Pass null if optional and empty
           user_type: values.userType,
         }),
       });
@@ -306,7 +306,7 @@ const ManageUsers = () => {
         userId: selectedUser.id,
         email: values.email,
         first_name: values.firstName,
-        last_name: values.lastName,
+        last_name: values.lastName || null, // Pass null if optional and empty
         user_type: values.userType,
       };
       
@@ -535,7 +535,7 @@ const ManageUsers = () => {
                 name="lastName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Last Name</FormLabel>
+                    <FormLabel>Last Name (Optional)</FormLabel>
                     <FormControl>
                       <Input placeholder="Doe" {...field} />
                     </FormControl>
@@ -609,7 +609,7 @@ const ManageUsers = () => {
                   name="lastName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Last Name</FormLabel>
+                      <FormLabel>Last Name (Optional)</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
