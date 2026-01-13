@@ -37,26 +37,26 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
   // Fields that can be defaulted if missing from Excel are marked optional here.
   const dealerSchema = z.object({
     name: z.string().min(1, { message: 'Dealer name is required.' }),
-    contactperson: z.string().optional(), // Truly optional
-    email: z.string().optional(), // Truly optional, no .email() validation
-    phone: z.string().optional(), // Truly optional, no min/max length validation
+    contactperson: z.string().nullable().optional(), // Now nullable and optional
+    email: z.string().nullable().optional(), // Now nullable and optional, no .email() validation
+    phone: z.string().nullable().optional(), // Now nullable and optional, no min/max length validation
     address: z.string().min(5, { message: 'Address is required.' }),
-    city: z.string().optional(), // Truly optional
-    state: z.string().optional(), // Truly optional
-    country: z.string().optional(), // Truly optional
+    city: z.string().nullable().optional(), // Now nullable and optional
+    state: z.string().nullable().optional(), // Now nullable and optional
+    country: z.string().nullable().optional(), // Now nullable and optional
     creditlimit: z.preprocess(
       (val) => Number(val),
       z.number().min(0, { message: 'Credit limit cannot be negative.' })
-    ).optional(), // Truly optional
+    ).nullable().optional(), // Now nullable and optional
     allottedcreditdays: z.preprocess(
       (val) => Number(val),
       z.number().int().min(0, { message: 'Allotted credit days cannot be negative.' })
-    ).optional(), // Truly optional
+    ).nullable().optional(), // Now nullable and optional
     openingbalance: z.preprocess(
       (val) => Number(val),
       z.number().min(0, { message: 'Opening balance cannot be negative.' })
-    ).optional(), // Truly optional
-    salesperson: z.string().optional(),
+    ).nullable().optional(), // Now nullable and optional
+    salesperson: z.string().nullable().optional(), // Now nullable and optional
   });
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -120,15 +120,15 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           const transformedRowObject: { [key: string]: any } = {};
           
           // Map Excel headers to schema keys and apply initial transformations/defaults
-          // Ensure all fields that are NOT NULL in DB get a value, even if empty in Excel
+          // For string fields, pass null if empty/whitespace. For numeric, default to 0 if empty/non-numeric.
           transformedRowObject.name = String(rawRowObject["Dealer Name"] || '').trim();
-          transformedRowObject.contactperson = String(rawRowObject["Contact Person"] || '').trim() || 'N/A';
-          transformedRowObject.email = String(rawRowObject["Email"] || '').trim() || 'N/A';
-          transformedRowObject.phone = String(rawRowObject["Phone Number"] || '').trim() || 'N/A';
+          transformedRowObject.contactperson = String(rawRowObject["Contact Person"] || '').trim() || null;
+          transformedRowObject.email = String(rawRowObject["Email"] || '').trim() || null;
+          transformedRowObject.phone = String(rawRowObject["Phone Number"] || '').trim() || null;
           transformedRowObject.address = String(rawRowObject["Address"] || '').trim();
-          transformedRowObject.city = String(rawRowObject["City"] || '').trim() || 'N/A';
-          transformedRowObject.state = String(rawRowObject["State"] || '').trim() || 'N/A';
-          transformedRowObject.country = String(rawRowObject["Country"] || '').trim() || 'India';
+          transformedRowObject.city = String(rawRowObject["City"] || '').trim() || null;
+          transformedRowObject.state = String(rawRowObject["State"] || '').trim() || null;
+          transformedRowObject.country = String(rawRowObject["Country"] || '').trim() || null; // Let DB default to 'India' if null
           
           // Numeric fields with defaults
           transformedRowObject.creditlimit = parseFloat(rawRowObject["Credit Limit"]) || 0;
@@ -136,7 +136,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           transformedRowObject.openingbalance = parseFloat(rawRowObject["Opening Balance"]) || 0;
           
           // Optional sales person field
-          transformedRowObject.salesperson = String(rawRowObject["Sales Person"] || '').trim();
+          transformedRowObject.salesperson = String(rawRowObject["Sales Person"] || '').trim() || null;
 
           const validationResult = dealerSchema.safeParse(transformedRowObject);
           if (validationResult.success) {
@@ -201,14 +201,14 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         const email = row.data.email;
         const name = row.data.name;
 
-        // Only check for duplicates if a meaningful email is provided (not 'N/A' or empty)
+        // Only check for duplicates if a meaningful email is provided (not null or 'N/A')
         if (email && email !== 'N/A' && emailsInBatch.has(email)) {
           duplicateEmailRows.add(index);
         } else if (email && email !== 'N/A') {
           emailsInBatch.add(email);
         }
 
-        // Only check for duplicates if a meaningful name is provided (not empty)
+        // Only check for duplicates if a meaningful name is provided (not null or empty)
         if (name && namesInBatch.has(name)) {
           duplicateNameRows.add(index);
         } else if (name) {
@@ -240,7 +240,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
           throw fetchExistingError;
         }
 
-        const existingEmails = new Set(existingDealers.map(d => d.email).filter(e => e && e !== 'N/A')); // Filter out 'N/A'
+        const existingEmails = new Set(existingDealers.map(d => d.email).filter(e => e && e !== 'N/A'));
         const existingNames = new Set(existingDealers.map(d => d.name).filter(Boolean));
 
         currentParsedData.forEach((row, index) => {
