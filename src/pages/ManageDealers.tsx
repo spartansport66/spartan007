@@ -45,8 +45,11 @@ interface DealerWithRelations {
   dealer_sales_persons: { sales_person_id: string; profiles: { id: string; first_name: string; last_name: string } }[];
   dealer_balances: DealerBalanceFromQuery[]; // Array of balances
   dealer_monthly_credit_limits: { dealer_id: string; credit_limit: number; month_year: string }[];
-  orders: { total_amount: number; payment_status: string }[]; // Added orders
-  payments: { amount: number; status: string }[]; // Added payments
+  orders: { 
+    total_amount: number; 
+    payment_status: string;
+    payments: { amount: number; status: string }[]; // Payments are nested under orders
+  }[]; // Added orders
 }
 
 interface Dealer {
@@ -195,8 +198,7 @@ const ManageDealers = () => {
             dealer_sales_persons!inner(sales_person_id, profiles(id, first_name, last_name)),
             dealer_balances(opening_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
-            orders(total_amount, payment_status),
-            payments(amount, status)
+            orders(total_amount, payment_status, payments(amount, status))
           `)
           .eq('dealer_sales_persons.sales_person_id', appliedFilterSalesPersonId);
       } else {
@@ -208,8 +210,7 @@ const ManageDealers = () => {
             dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name)),
             dealer_balances(opening_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
-            orders(total_amount, payment_status),
-            payments(amount, status)
+            orders(total_amount, payment_status, payments(amount, status))
           `);
       }
 
@@ -270,12 +271,12 @@ const ManageDealers = () => {
         (d.orders || []).forEach(order => {
           // All orders are debits (increase amount owed)
           currentBalance += order.total_amount;
-        });
-        (d.payments || []).forEach(payment => {
-          // Only completed payments are credits (decrease amount owed)
-          if (payment.status === 'completed') {
-            currentBalance -= payment.amount;
-          }
+          // Now, iterate through payments associated with this order
+          (order.payments || []).forEach(payment => {
+            if (payment.status === 'completed') {
+              currentBalance -= payment.amount;
+            }
+          });
         });
         
         return {
