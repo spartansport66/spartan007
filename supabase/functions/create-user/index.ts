@@ -20,7 +20,6 @@ serve(async (req) => {
   try {
     const { email, password, first_name, last_name, user_type } = await req.json();
 
-    // Create a Supabase client with the service role key
     const supabaseAdmin = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -29,35 +28,101 @@ serve(async (req) => {
     );
 
     // Always set email_confirm to false and email_confirmed_at to now()
-    // This ensures all users created via this function are immediately considered confirmed.
     const emailConfirm = false;
     const emailConfirmedAt = new Date().toISOString();
 
-    // Create the user using the admin client
-    const { data: userResponse, error: userError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: emailConfirm,
-      email_confirmed_at: emailConfirmedAt, // Explicitly set email_confirmed_at for all users
-      user_metadata: {
-        first_name,
-        last_name,
-        user_type, // Pass user_type to the handle_new_user trigger
-      },
+    // --- NEW LOGIC: Check if user already exists by email ---
+    const { data: existingUsersData, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers({
+      email: email,
     });
 
-    if (userError) {
-      console.error('Error creating user:', userError.message);
-      return new Response(JSON.stringify({ error: userError.message }), {
-        status: 400,
+    if (listUsersError) {
+      console.error('[create-user] Error listing users:', listUsersError.message);
+      throw new Error(`Failed to check for existing user: ${listUsersError.message}`);
+    }
+
+    if (existingUsersData && existingUsersData.users.length > 0) {
+      const existingUser = existingUsersData.users[0];
+      console.log(`[create-user] User with email ${email} already exists (ID: ${existingUser.id}). Attempting to update.`);
+
+      // Attempt to update the existing user
+      const { data: updatedUserResponse, error: updateUserError } = await supabaseAdmin.auth.admin.updateUserById(
+        existingUser.id,
+        {
+          password: password,
+          email_confirm: emailConfirm, // Ensure email is confirmed
+          email_confirmed_at: emailConfirmedAt,
+          ban_and_unverify: false, // Unban if they were banned
+          user_metadata: {
+            first_name,
+            last_name,
+            user_type,
+            is_admin: user_type === 'admin', // Ensure is_admin is set correctly in metadata
+          },
+        }
+      );
+
+      if (updateUserError) {
+        console.error('[create-user] Error updating existing user:', updateUserError.message);
+        return new Response(JSON.stringify({ error: `Failed to update existing user: ${updateUserError.message}` }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Also update the public.profiles table
+      const { error: profileUpdateError } = await supabaseAdmin
+        .from('profiles')
+        .upsert(
+          {
+            id: existingUser.id,
+            first_name,
+            last_name,
+            user_type,
+            is_admin: user_type === 'admin',
+            must_reset_password: (user_type === 'sales_person'), // Set must_reset_password for sales_person
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' } // Upsert based on ID
+        );
+
+      if (profileUpdateError) {
+        console.error('[create-user] Error upserting profile for existing user:', profileUpdateError.message);
+        // Don't block the user creation/update if profile update fails, but log it
+      }
+
+      return new Response(JSON.stringify({ message: `User ${email} reactivated/updated successfully as ${user_type}!`, user: updatedUserResponse.user }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+
+    } else {
+      // --- ORIGINAL LOGIC: Create new user ---
+      const { data: userResponse, error: userError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: emailConfirm,
+        email_confirmed_at: emailConfirmedAt,
+        user_metadata: {
+          first_name,
+          last_name,
+          user_type,
+        },
+      });
+
+      if (userError) {
+        console.error('Error creating new user:', userError.message);
+        return new Response(JSON.stringify({ error: userError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ message: 'User created successfully', user: userResponse.user }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    return new Response(JSON.stringify({ message: 'User created successfully', user: userResponse.user }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
 
   } catch (error) {
     console.error('Edge Function error:', error.message);
