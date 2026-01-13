@@ -445,7 +445,7 @@ const ManageDealers = () => {
 
   const salesPersonOptions = allSalesPersons.map(sp => ({
     value: sp.id,
-    label: `${sp.first_name}`, // Removed last_name
+    label: `${sp.first_name} ${sp.last_name || ''}`.trim(), // Corrected to handle missing last_name
   }));
 
   return (
@@ -565,7 +565,7 @@ const ManageDealers = () => {
                           <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell>
                           <TableCell className="text-muted-foreground">
                             {dealer.assigned_sales_persons.length > 0 
-                              ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name}`).join(', ') 
+                              ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name || ''}`.trim()).join(', ') 
                               : 'Unassigned'}
                           </TableCell>
                           <TableCell>
