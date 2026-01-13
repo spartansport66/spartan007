@@ -28,17 +28,17 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Determine email_confirm status and email_confirmed_at based on user_type
-    // For sales_person, we want to bypass email confirmation, so we explicitly set email_confirmed_at
-    const emailConfirm = user_type === 'sales_person' ? false : true; // Still pass false to createUser, but rely on email_confirmed_at
-    const emailConfirmedAt = user_type === 'sales_person' ? new Date().toISOString() : undefined; // Set timestamp for sales_person
+    // Always set email_confirm to false and email_confirmed_at to now()
+    // This ensures all users created via this function are immediately considered confirmed.
+    const emailConfirm = false;
+    const emailConfirmedAt = new Date().toISOString();
 
     // Create the user using the admin client
     const { data: userResponse, error: userError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: emailConfirm,
-      email_confirmed_at: emailConfirmedAt, // Explicitly set email_confirmed_at for sales_person
+      email_confirmed_at: emailConfirmedAt, // Explicitly set email_confirmed_at for all users
       user_metadata: {
         first_name,
         last_name,
