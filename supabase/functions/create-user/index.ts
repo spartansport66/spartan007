@@ -1,6 +1,9 @@
+// @ts-ignore
 /// <reference lib="deno.ns" />
 
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -19,18 +22,23 @@ serve(async (req) => {
 
     // Create a Supabase client with the service role key
     const supabaseAdmin = createClient(
+      // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
+      // @ts-ignore
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Determine email_confirm status based on user_type
-    const emailConfirm = user_type === 'sales_person' ? false : true;
+    // Determine email_confirm status and email_confirmed_at based on user_type
+    // For sales_person, we want to bypass email confirmation, so we explicitly set email_confirmed_at
+    const emailConfirm = user_type === 'sales_person' ? false : true; // Still pass false to createUser, but rely on email_confirmed_at
+    const emailConfirmedAt = user_type === 'sales_person' ? new Date().toISOString() : undefined; // Set timestamp for sales_person
 
     // Create the user using the admin client
     const { data: userResponse, error: userError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: emailConfirm, // Set email_confirm based on user_type
+      email_confirm: emailConfirm,
+      email_confirmed_at: emailConfirmedAt, // Explicitly set email_confirmed_at for sales_person
       user_metadata: {
         first_name,
         last_name,
