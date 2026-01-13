@@ -470,7 +470,7 @@ const ManageDealers = () => {
         `₹${dealer.opening_balance.toFixed(2)}`,
         `₹${dealer.closing_balance.toFixed(2)}`,
         `₹${dealer.current_month_credit_limit.toFixed(2)}`,
-        dealer.allotted_credit_days.toString(),
+        dealer.allotted_credit_days, // Pass as number
         dealer.assigned_sales_persons.length > 0
           ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name || ''}`.trim()).join(', ')
           : 'Unassigned',
