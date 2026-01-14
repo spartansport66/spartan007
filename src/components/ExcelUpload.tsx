@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useMemo } from 'react';
-import * as XLSX from 'xlsx';
+import *t as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -51,6 +51,11 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]); // Original Excel headers
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]); // User-defined mappings
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Create a map from schema key to display label for error messages
+  const schemaKeyToLabelMap = useMemo(() => {
+    return new Map(displayHeaders.map(header => [header.key, header.label]));
+  }, [displayHeaders]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -204,7 +209,11 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
               rawData: rawRowObject,
             });
           } else {
-            const zodErrors = validationResult.error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
+            const zodErrors = validationResult.error.errors.map(err => {
+              const path = err.path.join('.');
+              const displayLabel = schemaKeyToLabelMap.get(path) || path; // Get display label or fallback to path
+              return `${displayLabel}: ${err.message}`;
+            });
             console.error(`[ExcelUpload] Validation failed for row ${i + 1}:`, {
               transformedData: transformedRowObject,
               errors: zodErrors,
