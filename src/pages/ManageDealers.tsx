@@ -147,6 +147,7 @@ const ManageDealers = () => {
 
   useEffect(() => {
     if (selectedDealer) {
+      console.log('DEBUG: selectedDealer changed. Resetting form with:', selectedDealer);
       form.reset({
         name: selectedDealer.name,
         contactPerson: selectedDealer.contact_person || '', // Handle null/undefined
@@ -161,6 +162,7 @@ const ManageDealers = () => {
         openingBalance: selectedDealer.opening_balance || 0,
         assignedSalesPersonIds: selectedDealer.assigned_sales_persons.map(sp => sp.id),
       });
+      console.log('DEBUG: Form reset with openingBalance:', selectedDealer.opening_balance || 0);
     }
   }, [selectedDealer, form]);
 
@@ -233,6 +235,8 @@ const ManageDealers = () => {
         throw dealersError;
       }
       
+      console.log('DEBUG: Raw dealersData from Supabase:', dealersData);
+
       // Create a map of dealer balances for easy lookup
       const balancesMap = new Map<string, DealerBalanceFromQuery>();
       dealersData?.forEach(d => {
@@ -281,13 +285,15 @@ const ManageDealers = () => {
           });
         });
         
-        return {
+        const dealerObject = {
           ...d,
           assigned_sales_persons: assignedSalesPersons,
           current_month_credit_limit: currentMonthCreditLimit,
           opening_balance: balance.opening_balance || 0,
           current_balance: currentBalance, // Use calculated current balance
         };
+        console.log('DEBUG: Formatted dealer with opening_balance:', dealerObject.opening_balance);
+        return dealerObject;
       });
       
       setDealers(formattedDealers);
