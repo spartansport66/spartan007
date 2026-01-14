@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Upload as UploadIcon, Download, CheckCircle, AlertTriangle } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
-import * as z from 'zod';
+import *s z from 'zod';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -85,7 +85,7 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
           return;
         }
         
-        const detectedHeaders = (jsonData[0] as string[]).map(h => String(h).trim());
+        const detectedHeaders = (jsonData[0] as string[]).map(h => String(h).trim()).filter(h => h !== ''); // Filter out empty headers
         setExcelHeaders(detectedHeaders);
 
         // Initialize column mappings with detected headers and empty target keys
@@ -119,10 +119,10 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
     reader.readAsArrayBuffer(file);
   };
 
-  const handleMappingChange = (sourceHeader: string, targetKey: string | '') => {
+  const handleMappingChange = (sourceHeader: string, targetValue: string) => {
     setColumnMappings(prevMappings =>
       prevMappings.map(mapping =>
-        mapping.source === sourceHeader ? { ...mapping, targetKey: targetKey } : mapping
+        mapping.source === sourceHeader ? { ...mapping, targetKey: targetValue === "__NONE__" ? "" : targetValue } : mapping
       )
     );
   };
@@ -331,8 +331,8 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                       <TableCell className="font-medium">{mapping.source}</TableCell>
                       <TableCell>
                         <Select
-                          value={mapping.targetKey}
-                          onValueChange={(value: string | '') =>
+                          value={mapping.targetKey || "__NONE__"} // Use __NONE__ for empty targetKey
+                          onValueChange={(value: string) =>
                             handleMappingChange(mapping.source, value)
                           }
                         >
@@ -340,7 +340,7 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                             <SelectValue placeholder="Select required field" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Do not map</SelectItem>
+                            <SelectItem value="__NONE__">Do not map</SelectItem> {/* Use __NONE__ */}
                             {targetKeyOptions.map(option => (
                               <SelectItem key={option.value} value={option.value}>
                                 {option.label}
