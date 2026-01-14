@@ -127,7 +127,17 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
     
     setLoadingUpload(true);
     try {
-      const dealersToUpsert = dealersToUpload.map((row) => ({
+      // Filter out duplicate dealers based on name and phone before upserting
+      const uniqueDealersToUploadMap = new Map<string, z.infer<typeof dealerSchema>>();
+      dealersToUpload.forEach(dealer => {
+        const key = `${dealer.name.toLowerCase()}-${(dealer.phone || '').toLowerCase()}`;
+        if (!uniqueDealersToUploadMap.has(key)) {
+          uniqueDealersToUploadMap.set(key, dealer);
+        }
+      });
+      const filteredDealersToUpload = Array.from(uniqueDealersToUploadMap.values());
+
+      const dealersToUpsert = filteredDealersToUpload.map((row) => ({
         user_id: user.id,
         name: row.name,
         contact_person: row.contactperson,
@@ -154,8 +164,8 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       // For each upserted dealer, update or insert their balance and assignments
       const balancesToUpsert = upsertedDealers.map((dealer, index) => ({
         dealer_id: dealer.id,
-        opening_balance: dealersToUpload[index].openingbalance || 0,
-        closing_balance: dealersToUpload[index].openingbalance || 0,
+        opening_balance: filteredDealersToUpload[index].openingbalance || 0,
+        closing_balance: filteredDealersToUpload[index].openingbalance || 0,
       }));
       
       const { error: balanceUpsertError } = await supabase
@@ -167,8 +177,8 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       }
       
       const assignmentsToInsert: { dealer_id: string; sales_person_id: string }[] = [];
-      for (let i = 0; i < dealersToUpload.length; i++) {
-        const row = dealersToUpload[i];
+      for (let i = 0; i < filteredDealersToUpload.length; i++) {
+        const row = filteredDealersToUpload[i];
         const dealerId = upsertedDealers[i].id; // Use the ID from the upserted dealer
         
         if (row.salesperson) {
