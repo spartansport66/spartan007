@@ -12,21 +12,14 @@ import * as z from 'zod';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext'; // Corrected import path
-
-interface ParsedRow {
-  originalRow: number;
-  isValid: boolean;
-  errors: string[];
-  data: z.infer<typeof dealerSchema>; // Use the inferred type for validated data
-  rawData: { [key: string]: any }; // The raw object from the Excel row (original keys)
-}
+import ExcelUpload from '@/components/ExcelUpload'; // Import the generic ExcelUpload component
 
 interface DealerExcelUploadProps {
   onUploadComplete: () => void;
 }
 
 // Zod schema for dealer validation
-const dealerSchema = z.object({
+export const dealerSchema = z.object({
   name: z.string().min(1, { message: 'Dealer Name is required.' }), // Made required
   contactperson: z.string().nullable().optional(),
   email: z.string().email({ message: 'Invalid email format.' }).nullable().optional(), // Added email format validation
@@ -36,214 +29,116 @@ const dealerSchema = z.object({
   state: z.string().nullable().optional(), // This is correct for optional
   country: z.string().nullable().optional(), // This is correct for optional
   creditlimit: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'Credit limit cannot be negative.' })
-  ).nullable().optional(),
+    (val) => {
+      if (typeof val === 'string') {
+        const trimmedVal = val.trim();
+        if (trimmedVal === '') return undefined;
+        const num = parseFloat(trimmedVal);
+        return isNaN(num) ? trimmedVal : num;
+      }
+      return val;
+    },
+    z.coerce.number().min(0, { message: 'Credit limit cannot be negative.' }).default(0)
+  ),
   allottedcreditdays: z.preprocess(
-    (val) => Number(val),
-    z.number().int().min(0, { message: 'Allotted credit days cannot be negative.' })
-  ).nullable().optional(),
+    (val) => {
+      if (typeof val === 'string') {
+        const trimmedVal = val.trim();
+        if (trimmedVal === '') return undefined;
+        const num = parseFloat(trimmedVal);
+        return isNaN(num) ? trimmedVal : num;
+      }
+      return val;
+    },
+    z.coerce.number().int().min(0, { message: 'Allotted credit days cannot be negative.' }).default(0)
+  ),
   openingbalance: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'Opening balance cannot be negative.' })
-  ).nullable().optional(),
+    (val) => {
+      if (typeof val === 'string') {
+        const trimmedVal = val.trim();
+        if (trimmedVal === '') return undefined;
+        const num = parseFloat(trimmedVal);
+        return isNaN(num) ? trimmedVal : num;
+      }
+      return val;
+    },
+    z.coerce.number().min(0, { message: 'Opening balance cannot be negative.' }).default(0)
+  ),
   salesperson: z.string().nullable().optional(),
 });
 
-// Define display headers for the preview table
-const displayHeaders = [
-  "Dealer Name", "Contact Person", "Email", "Phone Number", "Address", "City", "State", "Country", 
-  "Credit Limit", "Allotted Credit Days", "Opening Balance", "Sales Person"
+// Define display headers for the ExcelUpload component
+const dealerDisplayHeaders = [
+  { key: 'name', label: 'Dealer Name' },
+  { key: 'contactperson', label: 'Contact Person' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone Number' },
+  { key: 'address', label: 'Address' },
+  { key: 'city', label: 'City' },
+  { key: 'state', label: 'State' },
+  { key: 'country', label: 'Country' },
+  { key: 'creditlimit', label: 'Credit Limit' },
+  { key: 'allottedcreditdays', label: 'Allotted Credit Days' },
+  { key: 'openingbalance', label: 'Opening Balance' },
+  { key: 'salesperson', label: 'Sales Person' },
 ];
 
-// Map Excel headers to schema keys (case-insensitive and cleaned)
-const excelHeaderToSchemaKeyMap: { [key: string]: keyof z.infer<typeof dealerSchema> } = {
-  "dealer name": "name",
-  "contact person": "contactperson",
-  "email": "email",
-  "phone number": "phone",
-  "address": "address",
-  "city": "city",
-  "state": "state",
-  "country": "country",
-  "credit limit": "creditlimit",
-  "allotted credit days": "allottedcreditdays",
-  "opening balance": "openingbalance",
-  "sales person": "salesperson",
-};
-
+// Sample data for the ExcelUpload component
+const dealerSampleData = [
+  {
+    "Dealer Name": 'Global Distributors',
+    "Contact Person": 'John Doe',
+    "Email": 'john@gd.com',
+    "Phone Number": '+1234567890',
+    "Address": '123 Business St',
+    "City": 'New York',
+    "State": 'NY',
+    "Country": 'USA',
+    "Credit Limit": 50000,
+    "Allotted Credit Days": 30,
+    "Opening Balance": 10000,
+    "Sales Person": 'Sales Person Name'
+  },
+  {
+    "Dealer Name": 'Regional Traders',
+    "Contact Person": '', // Empty contact person
+    "Email": '', // Empty email
+    "Phone Number": '', // Empty phone number
+    "Address": '456 Trade Ave',
+    "City": '', // Empty city
+    "State": '', // Empty state
+    "Country": '', // Empty country
+    "Credit Limit": 30000,
+    "Allotted Credit Days": 45,
+    "Opening Balance": 5000,
+    "Sales Person": '' // Empty sales person
+  }
+];
 
 const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete }) => {
   const { user } = useSession();
-  const [file, setFile] = useState<File | null>(null);
-  const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [parsedExcelHeaders, setParsedExcelHeaders] = useState<string[]>([]); // Store original Excel headers
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loadingUpload, setLoadingUpload] = useState(false); // Internal loading state for this component's upload action
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("[DealerExcelUpload] File selected:", event.target.files?.[0]?.name);
-    const selectedFile = event.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      setParsedData([]);
-      setParsedExcelHeaders([]);
-    } else {
-      setFile(null);
-    }
-  };
-
-  const handleParseExcel = () => {
-    console.log("[DealerExcelUpload] handleParseExcel called.");
-    if (!file) {
-      showError('Please select an Excel file to upload.');
-      console.error("[DealerExcelUpload] No file selected.");
-      return;
-    }
-    setLoading(true);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      console.log("[DealerExcelUpload] FileReader onload triggered.");
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        const firstSheetName = workbook.SheetNames[0];
-        console.log(`[DealerExcelUpload] First sheet name: ${firstSheetName}`);
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        console.log(`[DealerExcelUpload] Raw JSON data from sheet:`, jsonData);
-
-        if (jsonData.length < 1) {
-          showError('Excel file is empty.');
-          console.error("[DealerExcelUpload] Excel file is empty.");
-          setLoading(false);
-          return;
-        }
-        
-        const excelHeaders = (jsonData[0] as string[]).map(h => String(h).trim());
-        console.log("[DealerExcelUpload] Detected Excel Headers:", excelHeaders);
-        setParsedExcelHeaders(excelHeaders); // Store original headers for rawData display
-        
-        const parsedRows: ParsedRow[] = [];
-        const schemaKeys = Object.keys(dealerSchema.shape) as (keyof z.infer<typeof dealerSchema>)[];
-        
-        // Start from row 1 (after headers) if headers exist, otherwise from row 0
-        const startRowIndex = excelHeaders.length > 0 ? 1 : 0;
-
-        for (let i = startRowIndex; i < jsonData.length; i++) {
-          const row = jsonData[i] as any[];
-          
-          if (!row || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
-            console.log(`[DealerExcelUpload] Skipping empty row at index ${i}.`);
-            continue;
-          }
-          
-          const rawRowObject: { [key: string]: any } = {};
-          excelHeaders.forEach((header, index) => {
-            rawRowObject[header] = row[index];
-          });
-          
-          const transformedRowObject: Partial<z.infer<typeof dealerSchema>> = {};
-          
-          // Explicitly map all schema keys, defaulting to null if not found in rawRowObject
-          schemaKeys.forEach(schemaKey => {
-            // Find the corresponding Excel header using the map
-            const excelHeader = excelHeaders.find(h => excelHeaderToSchemaKeyMap[h.toLowerCase()] === schemaKey);
-            const rawValue = excelHeader ? rawRowObject[excelHeader] : undefined;
-
-            // Apply preprocessing for numbers, otherwise use rawValue or null
-            if (schemaKey === 'creditlimit' || schemaKey === 'openingbalance') {
-              transformedRowObject[schemaKey] = parseFloat(rawValue) || 0;
-            } else if (schemaKey === 'allottedcreditdays') {
-              transformedRowObject[schemaKey] = parseInt(rawValue) || 0;
-            } else {
-              // Preserve empty strings as empty strings, null/undefined as null
-              transformedRowObject[schemaKey] = (rawValue !== undefined && rawValue !== null) ? String(rawValue).trim() : null;
-            }
-          });
-
-          const validationResult = dealerSchema.safeParse(transformedRowObject);
-          if (validationResult.success) {
-            parsedRows.push({
-              originalRow: i + 1,
-              isValid: true,
-              errors: [],
-              data: validationResult.data,
-              rawData: rawRowObject, // Keep raw data for display
-            });
-          } else {
-            const zodErrors = validationResult.error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
-            console.error(`[DealerExcelUpload] Validation failed for row ${i + 1}:`, transformedRowObject, zodErrors);
-            parsedRows.push({
-              originalRow: i + 1,
-              isValid: false,
-              errors: zodErrors,
-              data: transformedRowObject as z.infer<typeof dealerSchema>, // Cast to full schema type for consistency
-              rawData: rawRowObject, // Keep raw data for display
-            });
-          }
-        }
-        
-        setParsedData(parsedRows);
-        console.log("[DealerExcelUpload] Parsed Data after Zod validation:", parsedRows);
-        if (parsedRows.some(row => !row.isValid)) {
-          showError('Some rows contain invalid data. Please correct them before uploading.');
-          console.error("[DealerExcelUpload] Some rows contain invalid data after parsing.");
-        } else if (parsedRows.length > 0) {
-          showSuccess(`Parsed ${parsedRows.length} rows from Excel file. All valid.`);
-          console.log(`[DealerExcelUpload] Parsed ${parsedRows.length} rows. All valid.`);
-        } else {
-          showError('No valid data found in the Excel file.');
-          console.error("[DealerExcelUpload] No valid data found in the Excel file.");
-        }
-      } catch (error: any) {
-        console.error('[DealerExcelUpload] Error during Excel parsing:', error);
-        showError(`Error parsing Excel file: ${error.message}`);
-      } finally {
-        setLoading(false);
-        console.log("[DealerExcelUpload] handleParseExcel finished.");
-      }
-    };
-    reader.onerror = (errorEvent) => {
-      console.error('[DealerExcelUpload] FileReader onerror triggered:', errorEvent);
-      showError('Error reading file. Please try again.');
-      setLoading(false);
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const handleUpload = async () => {
-    console.log("[DealerExcelUpload] handleUpload called.");
+  const handleUpload = async (dealersToUpload: z.infer<typeof dealerSchema>[]) => {
     if (!user) {
       showError('You must be logged in to add dealers.');
-      console.error("[DealerExcelUpload] User not logged in.");
       return;
     }
     
-    const validParsedData = parsedData.filter(p => p.isValid);
-    if (validParsedData.length === 0) {
-      showError('No valid data to upload.');
-      console.error("[DealerExcelUpload] No valid data to upload after all checks.");
-      return;
-    }
-    
-    setLoading(true);
+    setLoadingUpload(true);
     try {
-      console.log(`[DealerExcelUpload] Attempting to insert ${validParsedData.length} dealers.`);
-      const dealersToInsert = validParsedData.map((row: ParsedRow) => ({
+      const dealersToInsert = dealersToUpload.map((row) => ({
         user_id: user.id,
-        name: row.data.name,
-        contact_person: row.data.contactperson,
-        email: row.data.email,
-        phone: row.data.phone,
-        address: row.data.address,
-        city: row.data.city,
-        state: row.data.state,
-        country: row.data.country,
-        credit_limit: row.data.creditlimit,
-        allotted_credit_days: row.data.allottedcreditdays,
+        name: row.name,
+        contact_person: row.contactperson,
+        email: row.email,
+        phone: row.phone,
+        address: row.address,
+        city: row.city,
+        state: row.state,
+        country: row.country,
+        credit_limit: row.creditlimit,
+        allotted_credit_days: row.allottedcreditdays,
       }));
       
       const { data: insertedDealers, error: insertError } = await supabase
@@ -254,12 +149,11 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       if (insertError) {
         throw insertError;
       }
-      console.log("[DealerExcelUpload] Dealers inserted:", insertedDealers);
       
       const balancesToInsert = insertedDealers.map((dealer, index) => ({
         dealer_id: dealer.id,
-        opening_balance: validParsedData[index].data.openingbalance || 0,
-        closing_balance: validParsedData[index].data.openingbalance || 0,
+        opening_balance: dealersToUpload[index].openingbalance || 0,
+        closing_balance: dealersToUpload[index].openingbalance || 0,
       }));
       
       const { error: balanceInsertError } = await supabase
@@ -269,18 +163,17 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       if (balanceInsertError) {
         throw balanceInsertError;
       }
-      console.log("[DealerExcelUpload] Dealer balances inserted.");
       
       const assignmentsToInsert: { dealer_id: string; sales_person_id: string }[] = [];
-      for (let i = 0; i < validParsedData.length; i++) {
-        const row = validParsedData[i];
+      for (let i = 0; i < dealersToUpload.length; i++) {
+        const row = dealersToUpload[i];
         const dealerId = insertedDealers[i].id;
         
-        if (row.data.salesperson && row.data.salesperson !== 'N/A') {
+        if (row.salesperson) {
           const { data: salesPerson, error: salesPersonError } = await supabase
             .from('profiles')
             .select('id')
-            .or(`first_name.ilike.%${row.data.salesperson}%,last_name.ilike.%${row.data.salesperson}%`)
+            .or(`first_name.ilike.%${row.salesperson}%,last_name.ilike.%${row.salesperson}%`)
             .eq('user_type', 'sales_person')
             .single();
           
@@ -290,7 +183,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
               sales_person_id: salesPerson.id
             });
           } else {
-            console.warn(`[DealerExcelUpload] Sales person '${row.data.salesperson}' not found for dealer '${row.data.name}'. Skipping assignment.`);
+            console.warn(`[DealerExcelUpload] Sales person '${row.salesperson}' not found for dealer '${row.name}'. Skipping assignment.`);
           }
         }
       }
@@ -303,185 +196,28 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         if (assignmentError) {
           throw assignmentError;
         }
-        console.log("[DealerExcelUpload] Dealer assignments inserted.");
       }
       
       showSuccess(`Successfully uploaded ${insertedDealers.length} dealers!`);
-      setParsedData([]);
-      setFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
       onUploadComplete();
     } catch (error: any) {
       console.error('Error uploading dealers:', error);
       showError(`Failed to upload dealers: ${error.message}`);
     } finally {
-      setLoading(false);
-      console.log("[DealerExcelUpload] handleUpload finished.");
-    }
-  };
-
-  const handleDownloadSample = () => {
-    try {
-      const sampleData = [
-        {
-          "Dealer Name": 'Global Distributors',
-          "Contact Person": 'John Doe',
-          "Email": 'john@gd.com',
-          "Phone Number": '+1234567890',
-          "Address": '123 Business St',
-          "City": 'New York',
-          "State": 'NY',
-          "Country": 'USA',
-          "Credit Limit": 50000,
-          "Allotted Credit Days": 30,
-          "Opening Balance": 10000,
-          "Sales Person": 'Sales Person Name'
-        },
-        {
-          "Dealer Name": 'Regional Traders',
-          "Contact Person": '', // Empty contact person
-          "Email": '', // Empty email
-          "Phone Number": '', // Empty phone number
-          "Address": '456 Trade Ave',
-          "City": '', // Empty city
-          "State": '', // Empty state
-          "Country": '', // Empty country
-          "Credit Limit": 30000,
-          "Allotted Credit Days": 45,
-          "Opening Balance": 5000,
-          "Sales Person": '' // Empty sales person
-        }
-      ];
-      
-      const ws = XLSX.utils.json_to_sheet(sampleData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Sample Data');
-      XLSX.writeFile(wb, 'sample_dealers.xlsx');
-      showSuccess('Sample Excel file downloaded successfully!');
-    } catch (error: any) {
-      console.error('Error creating sample file:', error);
-      showError(`Failed to create sample file: ${error.message}`);
+      setLoadingUpload(false);
     }
   };
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <UploadIcon className="h-5 w-5" />
-          Bulk Upload Dealers
-        </CardTitle>
-        <CardDescription>
-          Upload an Excel sheet to add multiple dealers at once
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col sm:flex-row items-center gap-4">
-          <div className="grid w-full max-w-sm items-center gap-1.5">
-            <Label htmlFor="excel-file">Excel File</Label>
-            <Input
-              id="excel-file"
-              type="file"
-              accept=".xlsx, .xls"
-              onChange={handleFileChange}
-              ref={fileInputRef}
-              disabled={loading}
-            />
-          </div>
-          <Button
-            onClick={handleParseExcel}
-            disabled={!file || loading}
-            className="w-full sm:w-auto"
-          >
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadIcon className="mr-2 h-4 w-4" />}
-            {loading ? 'Parsing...' : 'Parse Excel'}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleDownloadSample}
-            disabled={loading}
-            className="w-full sm:w-auto"
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Download Sample
-          </Button>
-        </div>
-        
-        {parsedData.length > 0 && (
-          <div className="space-y-4">
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Row</TableHead>
-                    <TableHead>Status</TableHead>
-                    {displayHeaders.map((header, index) => (
-                      <TableHead key={index}>{header}</TableHead>
-                    ))}
-                    <TableHead>Errors</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {parsedData.slice(0, 10).map((row, rowIndex) => ( // Show first 10 rows
-                    <TableRow
-                      key={rowIndex}
-                      className={cn(
-                        row.isValid ? "" : "bg-red-50/50 hover:bg-red-100/50"
-                      )}
-                    >
-                      <TableCell className="font-medium">{row.originalRow}</TableCell>
-                      <TableCell>
-                        {row.isValid ? (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                        )}
-                      </TableCell>
-                      {displayHeaders.map((header, colIndex) => {
-                        // Map display header to schema key (e.g., "Dealer Name" -> "name")
-                        const schemaKey = excelHeaderToSchemaKeyMap[header.toLowerCase()];
-                        const value = schemaKey ? row.data[schemaKey] : 'N/A'; // Use row.data (validated data)
-                        return (
-                          <TableCell key={colIndex}>
-                            {value !== undefined && value !== null && String(value).trim() !== '' ? String(value) : 'N/A'}
-                          </TableCell>
-                        );
-                      })}
-                      <TableCell className="text-yellow-600 dark:text-yellow-400 text-sm">
-                        {row.errors.length > 0 ? row.errors.join('; ') : 'None'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {parsedData.length > 10 && (
-                    <TableRow>
-                      <TableCell colSpan={displayHeaders.length + 3} className="text-center">
-                        ... and {parsedData.length - 10} more rows
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            
-            <div className="flex justify-between items-center">
-              <p className="text-sm text-muted-foreground">
-                {parsedData.filter(p => p.isValid).length} valid rows, {parsedData.filter(p => !p.isValid).length} invalid rows
-              </p>
-              <Button
-                onClick={handleUpload}
-                disabled={loading || parsedData.some(row => !row.isValid) || parsedData.length === 0}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadIcon className="mr-2 h-4 w-4" />}
-                {loading ? 'Uploading...' : 'Upload Dealers'}
-              </Button>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <ExcelUpload
+      onUpload={handleUpload}
+      sampleData={dealerSampleData}
+      sampleFileName="sample_dealers.xlsx"
+      uploadButtonText="Upload Dealers"
+      displayHeaders={dealerDisplayHeaders}
+      validationSchema={dealerSchema}
+      // No excluded headers for dealers, as all are relevant
+    />
   );
 };
 
