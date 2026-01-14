@@ -23,7 +23,7 @@ export const dealerSchema = z.object({
   name: z.string().min(1, { message: 'Dealer Name is required.' }), // Made required
   contactperson: z.string().nullable().optional(),
   email: z.string().email({ message: 'Invalid email format.' }).or(z.literal('')).nullable().optional(), // Modified to allow empty string or valid email
-  phone: z.coerce.string().nullable().optional(), // Changed to coerce to string
+  phone: z.coerce.string().nullable().optional(),
   address: z.string().min(1, { message: 'Address is required.' }), // Made required
   city: z.string().nullable().optional(), // This is correct for optional
   state: z.string().nullable().optional(), // This is correct for optional
@@ -127,7 +127,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
     
     setLoadingUpload(true);
     try {
-      const dealersToInsert = dealersToUpload.map((row) => ({
+      const dealersToUpsert = dealersToUpload.map((row) => ({
         user_id: user.id,
         name: row.name,
         contact_person: row.contactperson,
@@ -141,33 +141,35 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         allotted_credit_days: row.allottedcreditdays,
       }));
       
-      const { data: insertedDealers, error: insertError } = await supabase
+      // Use upsert with onConflict on 'name, phone'
+      const { data: upsertedDealers, error: upsertError } = await supabase
         .from('dealers')
-        .insert(dealersToInsert)
+        .upsert(dealersToUpsert, { onConflict: 'name, phone' }) // Use name and phone as conflict target
         .select();
       
-      if (insertError) {
-        throw insertError;
+      if (upsertError) {
+        throw upsertError;
       }
       
-      const balancesToInsert = insertedDealers.map((dealer, index) => ({
+      // For each upserted dealer, update or insert their balance and assignments
+      const balancesToUpsert = upsertedDealers.map((dealer, index) => ({
         dealer_id: dealer.id,
         opening_balance: dealersToUpload[index].openingbalance || 0,
         closing_balance: dealersToUpload[index].openingbalance || 0,
       }));
       
-      const { error: balanceInsertError } = await supabase
+      const { error: balanceUpsertError } = await supabase
         .from('dealer_balances')
-        .insert(balancesToInsert);
+        .upsert(balancesToUpsert, { onConflict: 'dealer_id' }); // Upsert on dealer_id for balances
       
-      if (balanceInsertError) {
-        throw balanceInsertError;
+      if (balanceUpsertError) {
+        throw balanceUpsertError;
       }
       
       const assignmentsToInsert: { dealer_id: string; sales_person_id: string }[] = [];
       for (let i = 0; i < dealersToUpload.length; i++) {
         const row = dealersToUpload[i];
-        const dealerId = insertedDealers[i].id;
+        const dealerId = upsertedDealers[i].id; // Use the ID from the upserted dealer
         
         if (row.salesperson) {
           const { data: salesPerson, error: salesPersonError } = await supabase
@@ -189,16 +191,26 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       }
       
       if (assignmentsToInsert.length > 0) {
+        // For assignments, we need to handle existing assignments carefully.
+        // A simple insert might cause duplicates if a dealer is already assigned to a sales person.
+        // For now, we'll insert, and if there's a unique constraint on (dealer_id, sales_person_id), it will fail.
+        // A more robust solution would be to fetch existing assignments and then determine what to insert/delete.
         const { error: assignmentError } = await supabase
           .from('dealer_sales_persons')
           .insert(assignmentsToInsert);
         
         if (assignmentError) {
-          throw assignmentError;
+          // If the error is a duplicate key violation, we can log a warning and continue.
+          // Otherwise, re-throw the error.
+          if (assignmentError.code === '23505') { // PostgreSQL unique_violation error code
+            console.warn(`[DealerExcelUpload] Duplicate sales person assignment detected and skipped: ${assignmentError.message}`);
+          } else {
+            throw assignmentError;
+          }
         }
       }
       
-      showSuccess(`Successfully uploaded ${insertedDealers.length} dealers!`);
+      showSuccess(`Successfully uploaded ${upsertedDealers.length} dealers!`);
       onUploadComplete();
     } catch (error: any) {
       console.error('Error uploading dealers:', error);
