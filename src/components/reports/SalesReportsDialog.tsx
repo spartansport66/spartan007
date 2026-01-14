@@ -195,7 +195,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
     setFilterDealerId('');
     setFilterProductId('');
     setFilterFromSaleDate('');
-    setFilterToDate('');
+    setFilterToSaleDate('');
   };
 
   const handlePrint = () => {
@@ -334,8 +334,8 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
             <Input 
               id="filterToSaleDate" 
               type="date" 
-              value={filterToDate} 
-              onChange={(e) => setFilterToDate(e.target.value)} 
+              value={filterToSaleDate} 
+              onChange={(e) => setFilterToSaleDate(e.target.value)} 
               className="w-full" 
             />
           </div>
