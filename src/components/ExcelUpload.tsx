@@ -399,7 +399,11 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                         );
                       })}
                       <TableCell className="text-yellow-600 dark:text-yellow-400 text-sm">
-                        {row.errors.length > 0 ? row.errors.join('; ') : 'None'}
+                        {row.isValid ? (
+                          'None'
+                        ) : (
+                          row.errors.length > 0 ? row.errors.join('; ') : 'Validation failed, but no specific errors reported.' // Fallback message
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

@@ -281,7 +281,7 @@ const AddProduct = () => {
                       <FormItem>
                         <FormLabel>GST (%)</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., 18 or Exempt" {...field} />
+                          <Input placeholder="e.g., 18 or Exempt" {...field} /> {/* Changed type to text */}
                         </FormControl>
                         <FormMessage />
                       </FormItem>
