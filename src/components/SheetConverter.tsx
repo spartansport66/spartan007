@@ -78,7 +78,11 @@ const SheetConverter: React.FC = () => {
         }
         
         // Safely get headers from the first row, ensuring it's an array
-        const excelHeaders = Array.isArray(jsonData[0]) ? (jsonData[0] as string[]).map(h => String(h).trim()) : [];
+        // Filter out any empty strings that might result from trimming or empty cells
+        const excelHeaders = Array.isArray(jsonData[0]) 
+          ? (jsonData[0] as string[]).map(h => String(h || '').trim()).filter(h => h !== '') 
+          : [];
+
         if (excelHeaders.length === 0 && jsonData.length > 1) {
           showError('Could not detect headers in the first row. Please ensure your Excel file has headers.');
           setLoading(false);
