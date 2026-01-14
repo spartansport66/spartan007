@@ -17,7 +17,7 @@ import { useSession } from '@/contexts/SessionContext';
 import ExcelUpload from '@/components/ExcelUpload'; // Updated import
 
 // Zod schema for product validation
-const productSchema = z.object({
+export const productSchema = z.object({
   code: z.string().min(1, { message: 'Product Code is required.' }),
   name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }),
   description: z.string().nullable().optional(),
