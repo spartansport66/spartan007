@@ -33,6 +33,7 @@ interface ExcelUploadProps<T extends z.ZodTypeAny> {
   uploadButtonText: string;
   displayHeaders: { key: string; label: string }[]; // Headers for display in the table
   validationSchema: T;
+  excludedSourceHeaders?: string[]; // New prop to exclude specific source headers
 }
 
 const ExcelUpload = <T extends z.ZodTypeAny>({
@@ -42,6 +43,7 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
   uploadButtonText,
   displayHeaders,
   validationSchema,
+  excludedSourceHeaders = [], // Initialize with an empty array
 }: ExcelUploadProps<T>) => {
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<ParsedRow<z.infer<T>>[]>([]);
@@ -85,7 +87,13 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
           return;
         }
         
-        const detectedHeaders = (jsonData[0] as string[]).map(h => String(h).trim()).filter(h => h !== ''); // Filter out empty headers
+        let detectedHeaders = (jsonData[0] as string[]).map(h => String(h).trim()).filter(h => h !== ''); // Filter out empty headers
+        
+        // Filter out excluded headers
+        detectedHeaders = detectedHeaders.filter(header => 
+          !excludedSourceHeaders.some(excluded => excluded.toLowerCase() === header.toLowerCase())
+        );
+
         setExcelHeaders(detectedHeaders);
 
         // Initialize column mappings with detected headers and empty target keys
@@ -169,7 +177,9 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
           }
 
           const rawRowObject: { [key: string]: any } = {};
-          excelHeaders.forEach((header, index) => {
+          // Use original detected headers to build rawRowObject, then filter later
+          const originalDetectedHeaders = (jsonData[0] as string[]).map(h => String(h).trim()).filter(h => h !== '');
+          originalDetectedHeaders.forEach((header, index) => {
             rawRowObject[header] = row[index];
           });
 

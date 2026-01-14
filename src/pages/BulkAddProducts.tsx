@@ -149,6 +149,8 @@ const BulkAddProducts = () => {
           uploadButtonText="Upload Products"
           displayHeaders={productDisplayHeaders}
           validationSchema={productSchema}
+          // Exclude 'MRP' from mapping
+          excludedSourceHeaders={['MRP']}
         />
       </div>
       <MadeWithDyad />

@@ -314,6 +314,8 @@ const AddProduct = () => {
               uploadButtonText="Upload Products"
               displayHeaders={productDisplayHeaders}
               validationSchema={productSchema}
+              // Exclude 'MRP' from mapping
+              excludedSourceHeaders={['MRP']}
             />
             
             <Card className="bg-card text-card-foreground shadow-lg">
