@@ -14,38 +14,65 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { ArrowLeft, Loader2, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import ItemExcelUpload from '@/components/ItemExcelUpload'; // Changed from ExcelUpload
+import ExcelUpload from '@/components/ExcelUpload'; // Updated import
 
-const formSchema = z.object({
+// Zod schema for product validation
+const productSchema = z.object({
   code: z.string().min(1, { message: 'Product Code is required.' }),
   name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }),
-  description: z.string().optional(),
-  size: z.string().optional(),
-  hsn: z.string().optional(),
-  gst: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' })
-  ),
-  dp: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0.01, { message: 'Dealer Price must be a positive number.' })
-  ),
-  mrp: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0.01, { message: 'MRP must be a positive number.' })
-  ),
-  stock: z.preprocess(
-    (val) => Number(val),
-    z.number().int().min(0, { message: 'Stock cannot be negative.' })
-  ),
+  description: z.string().nullable().optional(),
+  size: z.string().nullable().optional(),
+  hsn: z.string().nullable().optional(),
+  gst: z.coerce.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' }).default(0).optional().nullable(),
+  dp: z.coerce.number().min(0.01, { message: 'Dealer Price must be a positive number.' }),
+  mrp: z.coerce.number().min(0.01, { message: 'MRP must be a positive number.' }),
+  stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }),
 });
+
+// Define display headers for the ExcelUpload component
+const productDisplayHeaders = [
+  { key: 'code', label: 'Product Code' },
+  { key: 'name', label: 'Product Name' },
+  { key: 'description', label: 'Description' },
+  { key: 'size', label: 'Size' },
+  { key: 'hsn', label: 'HSN' },
+  { key: 'gst', label: 'GST (%)' },
+  { key: 'dp', label: 'Dealer Price (DP)' },
+  { key: 'mrp', label: 'MRP' },
+  { key: 'stock', label: 'Stock' },
+];
+
+// Sample data for the ExcelUpload component
+const productSampleData = [
+  {
+    "Product Code": 'P001',
+    "Product Name": 'Laptop Pro X',
+    "Description": 'High-performance laptop for professionals.',
+    "Size": '15 inch',
+    "HSN": '8471',
+    "GST (%)": 18,
+    "Dealer Price (DP)": 1000.00,
+    "MRP": 1200.00,
+    "Stock": 50
+  },
+  {
+    "Product Code": 'P002',
+    "Product Name": 'Wireless Mouse',
+    "Description": 'Ergonomic wireless mouse.',
+    "Size": 'Small',
+    "HSN": '8471',
+    "GST (%)": 18,
+    "Dealer Price (DP)": 15.00,
+    "MRP": 20.00,
+    "Stock": 200
+  }
+];
 
 const AddProduct = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
-  const [isUploading, setIsUploading] = useState(false);
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<z.infer<typeof productSchema>>({
+    resolver: zodResolver(productSchema),
     defaultValues: {
       code: '',
       name: '',
@@ -68,7 +95,7 @@ const AddProduct = () => {
     }
   }, [sessionLoading, user, isAdmin, navigate]);
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: z.infer<typeof productSchema>) => {
     if (!user) {
       showError('You must be logged in to add a product.');
       navigate('/login');
@@ -104,10 +131,35 @@ const AddProduct = () => {
     }
   };
 
-  const handleBulkUploadComplete = () => {
-    // This function is called by ItemExcelUpload when its upload is complete.
-    // It will trigger a navigation to the manage products page.
-    navigate('/manage-products');
+  const handleBulkUpload = async (productsToUpload: z.infer<typeof productSchema>[]) => {
+    if (!user) {
+      showError('You must be logged in to bulk add products.');
+      return;
+    }
+
+    const itemsToInsert = productsToUpload.map(product => ({
+      user_id: user.id,
+      code: product.code,
+      name: product.name,
+      description: product.description,
+      size: product.size,
+      hsn: product.hsn,
+      gst: product.gst,
+      dp: product.dp,
+      mrp: product.mrp,
+      stock: product.stock,
+    }));
+
+    const { data: insertedItems, error: insertError } = await supabase
+      .from('products')
+      .insert(itemsToInsert)
+      .select();
+
+    if (insertError) {
+      throw insertError;
+    }
+    showSuccess(`Successfully uploaded ${insertedItems.length} products!`);
+    navigate('/manage-products'); // Navigate after successful bulk upload
   };
 
   if (sessionLoading) {
@@ -270,7 +322,14 @@ const AddProduct = () => {
           </Card>
           
           <div className="space-y-6">
-            <ItemExcelUpload onUploadComplete={handleBulkUploadComplete} /> {/* Using the dedicated ItemExcelUpload */}
+            <ExcelUpload
+              onUpload={handleBulkUpload}
+              sampleData={productSampleData}
+              sampleFileName="sample_products.xlsx"
+              uploadButtonText="Upload Products"
+              displayHeaders={productDisplayHeaders}
+              validationSchema={productSchema}
+            />
             
             <Card className="bg-card text-card-foreground shadow-lg">
               <CardHeader>
