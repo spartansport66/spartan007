@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Upload as UploadIcon, Download, CheckCircle, AlertTriangle } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
-import * as z from 'zod';
+import * as z from 'zod'; // Corrected import statement
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -39,22 +39,12 @@ const itemSchema = z.object({
   description: z.string().nullable().optional(),
   size: z.string().nullable().optional(),
   hsn: z.string().nullable().optional(),
-  gst: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' })
-  ).nullable().optional(),
-  dp: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0.01, { message: 'Dealer Price must be a positive number.' })
-  ),
-  mrp: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0.01, { message: 'MRP must be a positive number.' })
-  ),
-  stock: z.preprocess(
-    (val) => Number(val),
-    z.number().int().min(0, { message: 'Stock cannot be negative.' })
-  ),
+  // Use z.coerce.number for robust handling of string inputs that should be numbers
+  // .default(0) ensures it's 0 if not provided or invalid, and .optional().nullable() allows it to be absent
+  gst: z.coerce.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' }).default(0).optional().nullable(),
+  dp: z.coerce.number().min(0.01, { message: 'Dealer Price must be a positive number.' }),
+  mrp: z.coerce.number().min(0.01, { message: 'MRP must be a positive number.' }),
+  stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }),
 });
 
 // Define the required schema fields with their display labels - UPDATED
@@ -205,11 +195,10 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
           columnMappings.forEach(mapping => {
             if (mapping.targetKey) {
               const rawValue = rawRowObject[mapping.source];
-              // Apply preprocessing for numbers, otherwise use rawValue or null
-              if (mapping.targetKey === 'mrp' || mapping.targetKey === 'dp' || mapping.targetKey === 'gst') {
-                transformedRowObject[mapping.targetKey] = parseFloat(rawValue) || 0;
-              } else if (mapping.targetKey === 'stock') {
-                transformedRowObject[mapping.targetKey] = parseInt(rawValue) || 0;
+              // Use z.coerce.number for numeric fields, otherwise use rawValue or null
+              if (mapping.targetKey === 'mrp' || mapping.targetKey === 'dp' || mapping.targetKey === 'gst' || mapping.targetKey === 'stock') {
+                // z.coerce.number handles parsing, so just assign rawValue
+                transformedRowObject[mapping.targetKey] = rawValue;
               } else {
                 transformedRowObject[mapping.targetKey] = (rawValue !== undefined && rawValue !== null) ? String(rawValue).trim() : null;
               }
