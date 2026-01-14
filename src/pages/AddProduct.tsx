@@ -16,6 +16,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import ExcelUpload from '@/components/ExcelUpload'; // Updated import
 
+// Helper function to validate at most two decimal places
+const atMostTwoDecimalPlaces = (value: number) => {
+  const stringValue = value.toString();
+  const decimalPart = stringValue.split('.')[1];
+  return !decimalPart || decimalPart.length <= 2;
+};
+
 // Zod schema for product validation
 const productSchema = z.object({
   code: z.string().min(1, { message: 'Product Code is required.' }),
@@ -24,8 +31,14 @@ const productSchema = z.object({
   size: z.coerce.string().nullable().optional(), // Coerce size to string
   hsn: z.coerce.string().nullable().optional(), // Coerce HSN to string
   gst: z.coerce.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' }).default(0), // Default to 0
-  dp: z.coerce.number().min(0.01, { message: 'Dealer Price must be a positive number.' }).default(0.01), // Default to min value
-  mrp: z.coerce.number().min(0.01, { message: 'MRP must be a positive number.' }).default(0.01), // Default to min value
+  dp: z.coerce.number()
+    .min(0.01, { message: 'Dealer Price must be a positive number.' })
+    .refine(atMostTwoDecimalPlaces, { message: 'Dealer Price must have at most two decimal places.' })
+    .default(0.01), // Default to min value
+  mrp: z.coerce.number()
+    .min(0.01, { message: 'MRP must be a positive number.' })
+    .refine(atMostTwoDecimalPlaces, { message: 'MRP must have at most two decimal places.' })
+    .default(0.01), // Default to min value
   stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }).default(0), // Default to 0
 });
 

@@ -354,7 +354,7 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                 </TableBody>
               </Table>
             </div>
-            <Button onClick={processAndValidateData} disabled={loading} className="w-full">
+            <Button onClick={applyMappingsAndValidate} disabled={loading} className="w-full">
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Apply Mappings & Validate'}
             </Button>
           </div>
@@ -362,7 +362,7 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
         
         {parsedData.length > 0 && (
           <div className="space-y-4">
-            <div className="rounded-md border">
+            <div className="rounded-md border max-h-96 overflow-y-auto"> {/* Removed slice(0, 10) */}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -375,7 +375,7 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {parsedData.slice(0, 10).map((row, rowIndex) => (
+                  {parsedData.map((row, rowIndex) => (
                     <TableRow
                       key={rowIndex}
                       className={cn(
@@ -403,13 +403,6 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                       </TableCell>
                     </TableRow>
                   ))}
-                  {parsedData.length > 10 && (
-                    <TableRow>
-                      <TableCell colSpan={displayHeaders.length + 3} className="text-center">
-                        ... and {parsedData.length - 10} more rows
-                      </TableCell>
-                    </TableRow>
-                  )}
                 </TableBody>
               </Table>
             </div>
