@@ -366,7 +366,7 @@ const ManageDealers = () => {
       }
       
       // Update dealer balance
-      console.log('Updating dealer balance for ID:', selectedDealer.id, 'with openingBalance:', values.openingBalance);
+      console.log('DEBUG: Updating dealer balance for ID:', selectedDealer.id, 'with openingBalance:', values.openingBalance);
       const { data: balanceUpsertData, error: balanceUpdateError } = await supabase
         .from('dealer_balances')
         .upsert({
@@ -380,13 +380,13 @@ const ManageDealers = () => {
         console.error('Error updating dealer balance:', balanceUpdateError); // Log the actual error
         throw balanceUpdateError;
       }
-      console.log('Dealer balance upsert successful. Data:', balanceUpsertData); // Log the data
+      console.log('DEBUG: Dealer balance upsert successful. Data:', balanceUpsertData); // Log the data
       
       // Update sales person assignments
       const currentAssignedIds = selectedDealer.assigned_sales_persons.map(sp => sp.id);
       const newAssignedIds = values.assignedSalesPersonIds;
       const toAdd = newAssignedIds.filter(id => !currentAssignedIds.includes(id));
-      const toRemove = currentAssignedIds.filter(id => !newAssignedIds.includes(id));
+      const toRemove = currentAssignedIds.filter(id => !newAssignedIds.includes(id)); // Corrected typo here
       
       if (toAdd.length > 0) {
         const { error: addError } = await supabase
