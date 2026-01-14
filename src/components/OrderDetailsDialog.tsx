@@ -218,7 +218,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         .select(`
           quantity,
           total_price,
-          products (name, price)
+          products (name, dp)
         `)
         .eq('order_id', id);
 
@@ -227,7 +227,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       const items: OrderItemDetail[] = (salesItems || []).map((item: any) => ({
         product_name: item.products?.name || 'N/A',
         quantity: item.quantity,
-        unit_price: item.products?.price || 0,
+        unit_price: item.products?.dp || 0, // Use product.dp for unit price
         total_price: item.total_price,
       }));
 
