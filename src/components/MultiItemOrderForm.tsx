@@ -21,7 +21,7 @@ interface Product {
   id: string;
   code: string; // New
   name: string;
-  dp: number; // New
+  dp: number; // Changed from 'price' to 'dp'
   stock: number;
 }
 
@@ -142,7 +142,7 @@ const MultiItemOrderForm: React.FC = () => {
         // Fetch all products - UPDATED to include new fields
         const { data: productsData, error: productsError } = await supabase
           .from('products')
-          .select('id, code, name, dp, stock');
+          .select('id, code, name, dp, stock'); // Select 'dp'
 
         if (productsError) {
           console.error('Error fetching products:', productsError);
@@ -293,7 +293,7 @@ const MultiItemOrderForm: React.FC = () => {
 
       // Set payment amount to total order value if paid at order time
       if (isPaidAtOrderTime) {
-        setPaymentAmount(calculateTotalOrderValue());
+        setPaymentAmount(parseFloat(calculateTotalOrderValue().toFixed(2)));
       }
     };
 
@@ -318,7 +318,7 @@ const MultiItemOrderForm: React.FC = () => {
 
   const calculateItemTotal = (item: OrderItem) => {
     const product = products.find(p => p.id === item.product_id);
-    return product ? item.quantity * product.dp : 0; // Use product.dp for calculation
+    return product ? item.quantity * product.dp : 0; // Use product.dp
   };
 
   const calculateTotalOrderValue = () => {
