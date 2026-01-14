@@ -16,7 +16,7 @@ serve(async (req) => {
   }
 
   try {
-    const { productId, name, description, price, stock, userId: requesterId } = await req.json();
+    const { productId, name, description, mrp, stock, userId: requesterId, code, size, hsn, gst, dp } = await req.json();
 
     if (!productId) {
       return new Response(JSON.stringify({ error: 'Product ID is required.' }), {
@@ -44,37 +44,45 @@ serve(async (req) => {
 
     const hasSales = (salesCount || 0) > 0;
 
-    const updateData: { name?: string; description?: string; price?: number; stock?: number } = {};
+    const updateData: { name?: string; description?: string; mrp?: number; stock?: number; code?: string; size?: string; hsn?: string; gst?: string; dp?: number } = {};
     let attemptedRestrictedUpdate = false;
 
     if (hasSales) {
-      // If product has sales, only allow stock to be updated
-      if (stock !== undefined) {
-        updateData.stock = stock;
-      }
-      // Check if other fields were attempted to be updated
+      // If product has sales, only allow stock, code, size, hsn, gst, dp to be updated
+      if (stock !== undefined) updateData.stock = parseInt(stock);
+      if (code !== undefined) updateData.code = code;
+      if (size !== undefined) updateData.size = size;
+      if (hsn !== undefined) updateData.hsn = hsn;
+      if (gst !== undefined) updateData.gst = gst;
+      if (dp !== undefined) updateData.dp = parseInt(dp);
+
+      // Check if other fields (name, description, mrp) were attempted to be updated
       if (name !== undefined && name !== null) attemptedRestrictedUpdate = true;
       if (description !== undefined && description !== null) attemptedRestrictedUpdate = true;
-      if (price !== undefined && price !== null) attemptedRestrictedUpdate = true;
+      if (mrp !== undefined && mrp !== null) attemptedRestrictedUpdate = true;
 
       if (attemptedRestrictedUpdate && Object.keys(updateData).length === 0) {
-        // If only restricted fields were attempted and stock was not provided, reject
-        return new Response(JSON.stringify({ error: 'Product with associated sales can only have its stock updated. Name, description, and price cannot be changed.' }), {
+        // If only restricted fields were attempted and no allowed fields were provided, reject
+        return new Response(JSON.stringify({ error: 'Product with associated sales can only have its stock, code, size, HSN, GST, and Dealer Price updated. Name, description, and MRP cannot be changed.' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
-      } else if (attemptedRestrictedUpdate && Object.keys(updateData).length > 0 && updateData.stock !== undefined) {
-        // If stock was updated, but restricted fields were also attempted, warn but proceed with stock update
-        // This scenario is handled by the client-side disabling, but as a server-side safeguard.
-        console.warn(`Attempted to update restricted fields for product ${productId} with sales. Only stock will be updated.`);
+      } else if (attemptedRestrictedUpdate && Object.keys(updateData).length > 0) {
+        // If allowed fields were updated, but restricted fields were also attempted, warn but proceed with allowed updates
+        console.warn(`Attempted to update restricted fields for product ${productId} with sales. Only allowed fields will be updated.`);
       }
 
     } else {
       // If no sales, allow all fields to be updated
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
-      if (price !== undefined) updateData.price = price;
-      if (stock !== undefined) updateData.stock = stock;
+      if (mrp !== undefined) updateData.mrp = parseInt(mrp); // Changed to parseInt
+      if (stock !== undefined) updateData.stock = parseInt(stock);
+      if (code !== undefined) updateData.code = code;
+      if (size !== undefined) updateData.size = size;
+      if (hsn !== undefined) updateData.hsn = hsn;
+      if (gst !== undefined) updateData.gst = gst;
+      if (dp !== undefined) updateData.dp = parseInt(dp); // Changed to parseInt
     }
 
     if (Object.keys(updateData).length === 0) {

@@ -42,7 +42,7 @@ interface Product {
   description: string;
   size: string; // New
   hsn: string; // New
-  gst: number; // New
+  gst: string; // Changed to string
   dp: number; // New
   mrp: number; // Renamed from price
   stock: number;
@@ -60,17 +60,16 @@ const formSchema = z.object({
   description: z.string().optional(),
   size: z.string().optional(),
   hsn: z.string().optional(),
-  gst: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' })
-  ),
+  gst: z.string().optional(), // Changed to string
   dp: z.preprocess(
     (val) => Number(val),
-    z.number().min(0.01, { message: 'Dealer Price must be a positive number.' })
+    z.number().int({ message: 'Dealer Price must be a whole number.' }) // Changed to integer
+      .min(0, { message: 'Dealer Price cannot be negative.' })
   ),
   mrp: z.preprocess(
     (val) => Number(val),
-    z.number().min(0.01, { message: 'MRP must be a positive number.' })
+    z.number().int({ message: 'MRP must be a whole number.' }) // Changed to integer
+      .min(0, { message: 'MRP must be a positive number.' })
   ),
   stock: z.preprocess(
     (val) => Number(val),
@@ -97,9 +96,9 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
       description: '',
       size: '',
       hsn: '',
-      gst: 0,
-      dp: 0.01,
-      mrp: 0.01,
+      gst: '', // Default to empty string
+      dp: 0,
+      mrp: 0,
       stock: 0,
     },
   });
@@ -112,7 +111,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
         description: selectedProduct.description || '',
         size: selectedProduct.size || '',
         hsn: selectedProduct.hsn || '',
-        gst: selectedProduct.gst,
+        gst: selectedProduct.gst || '', // Handle as string
         dp: selectedProduct.dp,
         mrp: selectedProduct.mrp,
         stock: selectedProduct.stock,
@@ -281,9 +280,9 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                       <TableCell className="font-medium text-foreground">{product.name}</TableCell>
                       <TableCell className="text-muted-foreground">{product.size || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{product.hsn || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{product.gst.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground">₹{product.dp.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground">₹{product.mrp.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground">{product.gst || 'N/A'}</TableCell>
+                      <TableCell className="text-muted-foreground">₹{product.dp}</TableCell>
+                      <TableCell className="text-muted-foreground">₹{product.mrp}</TableCell>
                       <TableCell className="text-muted-foreground">{product.stock}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
@@ -330,7 +329,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 Make changes to the product here. Click save when you're done.
                 {selectedProduct.has_sales && (
                   <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-2">
-                    Note: This product has associated sales. Only 'Stock', 'Code', 'Size', 'HSN', 'GST' can be updated.
+                    Note: This product has associated sales. Only 'Stock', 'Code', 'Size', 'HSN', 'GST', 'Dealer Price (DP)', and 'MRP' can be updated.
                   </p>
                 )}
               </DialogDescription>
@@ -375,21 +374,21 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <Label htmlFor="gst" className="text-right">
                   GST (%)
                 </Label>
-                <Input id="gst" type="number" step="0.01" {...form.register('gst')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                <Input id="gst" {...form.register('gst')} className="col-span-3" disabled={selectedProduct.has_sales} />
                 {form.formState.errors.gst && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.gst.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="dp" className="text-right">
                   Dealer Price (DP)
                 </Label>
-                <Input id="dp" type="number" step="0.01" {...form.register('dp')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                <Input id="dp" type="number" {...form.register('dp')} className="col-span-3" disabled={selectedProduct.has_sales} /> {/* Changed type to number, removed step */}
                 {form.formState.errors.dp && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.dp.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="mrp" className="text-right">
                   MRP
                 </Label>
-                <Input id="mrp" type="number" step="0.01" {...form.register('mrp')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                <Input id="mrp" type="number" {...form.register('mrp')} className="col-span-3" disabled={selectedProduct.has_sales} /> {/* Changed type to number, removed step */}
                 {form.formState.errors.mrp && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.mrp.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">

@@ -14,13 +14,6 @@ import ExcelUpload from '@/components/ExcelUpload'; // Import the generic ExcelU
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const BULK_ADD_PRODUCTS_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/bulk-add-products";
 
-// Helper function to validate at most two decimal places
-const atMostTwoDecimalPlaces = (value: number) => {
-  const stringValue = value.toString();
-  const decimalPart = stringValue.split('.')[1];
-  return !decimalPart || decimalPart.length <= 2;
-};
-
 // Zod schema for product validation
 const productSchema = z.object({
   code: z.string().min(1, { message: 'Product Code is required.' }),
@@ -31,17 +24,15 @@ const productSchema = z.object({
   gst: z.coerce.string().nullable().optional(), // Changed to string for alphanumeric
   dp: z.preprocess(
     (val) => (val === "" ? undefined : val), // Convert empty string to undefined
-    z.coerce.number()
-      .min(0.01, { message: 'Dealer Price must be a positive number.' })
-      .refine(atMostTwoDecimalPlaces, { message: 'Dealer Price must have at most two decimal places.' })
-      .default(0.01) // Default to min value
+    z.coerce.number().int({ message: 'Dealer Price must be a whole number.' }) // Changed to integer
+      .min(0, { message: 'Dealer Price cannot be negative.' }) // Changed min to 0 for integer
+      .default(0) // Default to 0
   ),
   mrp: z.preprocess(
     (val) => (val === "" ? undefined : val), // Convert empty string to undefined
-    z.coerce.number()
-      .min(0.01, { message: 'MRP must be a positive number.' })
-      .refine(atMostTwoDecimalPlaces, { message: 'MRP must have at most two decimal places.' })
-      .default(0.01) // Default to min value
+    z.coerce.number().int({ message: 'MRP must be a whole number.' }) // Changed to integer
+      .min(0, { message: 'MRP must be a positive number.' }) // Changed min to 0 for integer
+      .default(0) // Default to 0
   ),
   stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }).default(0), // Default to 0
 });
@@ -67,9 +58,9 @@ const productSampleData = [
     "Description": 'High-performance laptop for professionals.',
     "Size": '15 inch',
     "HSN": '8471',
-    "GST (%)": "18", // Changed to string in sample
-    "Dealer Price (DP)": 1000.00,
-    "MRP": 1200.00,
+    "GST (%)": "18", 
+    "Dealer Price (DP)": 1000, // Changed to integer
+    "MRP": 1200, // Changed to integer
     "Stock": 50
   },
   {
@@ -78,9 +69,9 @@ const productSampleData = [
     "Description": 'Ergonomic wireless mouse.',
     "Size": 'Small',
     "HSN": '8471',
-    "GST (%)": "Exempt", // Changed to string in sample
-    "Dealer Price (DP)": 15.00,
-    "MRP": 20.00,
+    "GST (%)": "Exempt", 
+    "Dealer Price (DP)": 15, // Changed to integer
+    "MRP": 20, // Changed to integer
     "Stock": 200
   }
 ];

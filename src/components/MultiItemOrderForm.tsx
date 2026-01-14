@@ -540,7 +540,7 @@ const MultiItemOrderForm: React.FC = () => {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Opening Balance Outstanding</AlertTitle>
                 <AlertDescription>
-                  This dealer has an opening balance of ₹{dealerOpeningBalance.toFixed(2)} that must be settled before placing a new order.
+                  This dealer has an opening balance of ₹{dealerOpeningBalance} that must be settled before placing a new order.
                   <div className="mt-2 flex items-center">
                     <Checkbox
                       id="openingBalanceSettled"
@@ -561,7 +561,7 @@ const MultiItemOrderForm: React.FC = () => {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Overdue Payments</AlertTitle>
                 <AlertDescription>
-                  This dealer has overdue payments totaling ₹{totalPendingAmount.toFixed(2)}. Please clear all overdue payments before placing a new order.
+                  This dealer has overdue payments totaling ₹{totalPendingAmount}. Please clear all overdue payments before placing a new order.
                   <div className="mt-2 max-h-32 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -576,7 +576,7 @@ const MultiItemOrderForm: React.FC = () => {
                           <tr key={index} className="border-b">
                             <td>#{payment.order_number}</td>
                             <td>{payment.payment_due_date ? formatDate(payment.payment_due_date) : 'N/A'}</td>
-                            <td className="text-right">₹{payment.total_amount.toFixed(2)}</td>
+                            <td className="text-right">₹{payment.total_amount}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -590,26 +590,26 @@ const MultiItemOrderForm: React.FC = () => {
               <div className="mt-2 p-3 bg-muted rounded-md">
                 <div className="flex justify-between text-sm">
                   <span>Opening Balance:</span>
-                  <span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span>
+                  <span className="font-medium">₹{dealerOpeningBalance}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Credit Limit (Current Month):</span>
-                  <span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span>
+                  <span className="font-medium">₹{dealerCreditLimit}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Used Credit (Pending Orders):</span>
-                  <span className="font-medium">₹{dealerBalance !== null ? dealerBalance.toFixed(2) : '0.00'}</span>
+                  <span className="font-medium">₹{dealerBalance !== null ? dealerBalance : '0'}</span>
                 </div>
                 <div className="flex justify-between text-sm font-semibold">
                   <span>Total Used Credit (Opening + Pending):</span>
                   <span className={usedCredit !== null && usedCredit > dealerCreditLimit ? "text-destructive" : "text-primary"}>
-                    ₹{usedCredit !== null ? usedCredit.toFixed(2) : '0.00'}
+                    ₹{usedCredit !== null ? usedCredit : '0'}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Available Credit:</span>
                   <span className={availableCredit !== null && availableCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>
-                    ₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}
+                    ₹{availableCredit !== null ? availableCredit : '0'}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -646,7 +646,7 @@ const MultiItemOrderForm: React.FC = () => {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Insufficient Credit</AlertTitle>
                 <AlertDescription>
-                  Dealer's available credit is ₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}. Please clear the balance or increase the credit limit to add more items.
+                  Dealer's available credit is ₹{availableCredit !== null ? availableCredit : '0'}. Please clear the balance or increase the credit limit to add more items.
                 </AlertDescription>
               </Alert>
             )}
@@ -691,7 +691,7 @@ const MultiItemOrderForm: React.FC = () => {
                                 <div>
                                   <div>{product.name} ({product.code})</div>
                                   <div className="text-xs text-muted-foreground">
-                                    DP: ₹{product.dp.toFixed(2)} - MRP: ₹{product.mrp.toFixed(2)} - Stock: {product.stock}
+                                    DP: ₹{product.dp} - MRP: ₹{product.mrp} - Stock: {product.stock}
                                   </div>
                                 </div>
                               </CommandItem>
@@ -715,7 +715,7 @@ const MultiItemOrderForm: React.FC = () => {
                 </div>
                 <div className="col-span-3">
                   <Label>Item Total</Label>
-                  <div className="font-medium">₹{calculateItemTotal(item).toFixed(2)}</div>
+                  <div className="font-medium">₹{calculateItemTotal(item)}</div>
                 </div>
                 <div className="col-span-1">
                   {orderItems.length > 1 && (
@@ -738,7 +738,7 @@ const MultiItemOrderForm: React.FC = () => {
             <div className="p-4 bg-muted rounded-md">
               <div className="flex justify-between text-lg font-semibold">
                 <span>Total Order Value:</span>
-                <span>₹{totalOrderValue.toFixed(2)}</span>
+                <span>₹{totalOrderValue}</span>
               </div>
               {selectedDealer && dealerBalance !== null && (
                 <>
@@ -746,7 +746,7 @@ const MultiItemOrderForm: React.FC = () => {
                   <div className="flex justify-between text-sm">
                     <span>Remaining Credit After Order:</span>
                     <span className={remainingCredit !== null && remainingCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>
-                      ₹{remainingCredit !== null ? remainingCredit.toFixed(2) : '0.00'}
+                      ₹{remainingCredit !== null ? remainingCredit : '0'}
                     </span>
                   </div>
                 </>
@@ -808,9 +808,8 @@ const MultiItemOrderForm: React.FC = () => {
                   <Input
                     id="paymentAmount"
                     type="number"
-                    step="0.01"
                     value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => setPaymentAmount(parseInt(e.target.value) || 0)} // Changed to parseInt
                     className="w-full"
                   />
                 </div>

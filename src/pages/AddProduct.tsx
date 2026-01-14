@@ -16,13 +16,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import ExcelUpload from '@/components/ExcelUpload'; // Updated import
 
-// Helper function to validate at most two decimal places
-const atMostTwoDecimalPlaces = (value: number) => {
-  const stringValue = value.toString();
-  const decimalPart = stringValue.split('.')[1];
-  return !decimalPart || decimalPart.length <= 2;
-};
-
 // Zod schema for product validation
 const productSchema = z.object({
   code: z.string().min(1, { message: 'Product Code is required.' }),
@@ -33,17 +26,15 @@ const productSchema = z.object({
   gst: z.coerce.string().nullable().optional(), // Changed to string for alphanumeric
   dp: z.preprocess(
     (val) => (val === "" ? undefined : val), // Convert empty string to undefined
-    z.coerce.number()
-      .min(0.01, { message: 'Dealer Price must be a positive number.' })
-      .refine(atMostTwoDecimalPlaces, { message: 'Dealer Price must have at most two decimal places.' })
-      .default(0.01) // Default to min value
+    z.coerce.number().int({ message: 'Dealer Price must be a whole number.' }) // Changed to integer
+      .min(0, { message: 'Dealer Price cannot be negative.' }) // Changed min to 0 for integer
+      .default(0) // Default to 0
   ),
   mrp: z.preprocess(
     (val) => (val === "" ? undefined : val), // Convert empty string to undefined
-    z.coerce.number()
-      .min(0.01, { message: 'MRP must be a positive number.' })
-      .refine(atMostTwoDecimalPlaces, { message: 'MRP must have at most two decimal places.' })
-      .default(0.01) // Default to min value
+    z.coerce.number().int({ message: 'MRP must be a whole number.' }) // Changed to integer
+      .min(0, { message: 'MRP must be a positive number.' }) // Changed min to 0 for integer
+      .default(0) // Default to 0
   ),
   stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }).default(0), // Default to 0
 });
@@ -69,9 +60,9 @@ const productSampleData = [
     "Description": 'High-performance laptop for professionals.',
     "Size": '15 inch',
     "HSN": '8471',
-    "GST (%)": "18", // Changed to string in sample
-    "Dealer Price (DP)": 1000.00,
-    "MRP": 1200.00,
+    "GST (%)": "18", 
+    "Dealer Price (DP)": 1000, // Changed to integer
+    "MRP": 1200, // Changed to integer
     "Stock": 50
   },
   {
@@ -80,9 +71,9 @@ const productSampleData = [
     "Description": 'Ergonomic wireless mouse.',
     "Size": 'Small',
     "HSN": '8471',
-    "GST (%)": "Exempt", // Changed to string in sample
-    "Dealer Price (DP)": 15.00,
-    "MRP": 20.00,
+    "GST (%)": "Exempt", 
+    "Dealer Price (DP)": 15, // Changed to integer
+    "MRP": 20, // Changed to integer
     "Stock": 200
   }
 ];
@@ -99,8 +90,8 @@ const AddProduct = () => {
       size: '',
       hsn: '',
       gst: '', // Default to empty string
-      dp: 0.01,
-      mrp: 0.01,
+      dp: 0, // Default to 0
+      mrp: 0, // Default to 0
       stock: 0,
     },
   });
@@ -300,7 +291,7 @@ const AddProduct = () => {
                       <FormItem>
                         <FormLabel>Dealer Price (DP)</FormLabel>
                         <FormControl>
-                          <Input type="number" step="0.01" placeholder="e.g., 1000.00" {...field} />
+                          <Input type="number" placeholder="e.g., 1000" {...field} /> {/* Removed step="0.01" */}
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -313,7 +304,7 @@ const AddProduct = () => {
                       <FormItem>
                         <FormLabel>MRP</FormLabel>
                         <FormControl>
-                          <Input type="number" step="0.01" placeholder="e.g., 1200.00" {...field} />
+                          <Input type="number" placeholder="e.g., 1200" {...field} /> {/* Removed step="0.01" */}
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -362,7 +353,7 @@ const AddProduct = () => {
                   <li>Download the sample Excel file to see the required format</li>
                   <li>Required columns: Product Code, Product Name, Dealer Price (DP), MRP, Stock</li>
                   <li>Description, Size, HSN, GST are optional</li>
-                  <li>Prices (DP, MRP) should be numbers with at most two decimal places (e.g., 1000.00, 15.50)</li>
+                  <li>Prices (DP, MRP) should be whole numbers (e.g., 1000, 15)</li>
                   <li>GST can be a number or text (e.g., 18 or Exempt)</li>
                   <li>Stock should be a whole number (e.g., 100)</li>
                   <li>Save your file as .xlsx or .xls format</li>

@@ -113,8 +113,8 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
                         <AlertTriangle className="h-4 w-4 text-orange-500" /> {product.name}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-right">{product.stock}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{product.dp.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{product.mrp.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">₹{product.dp}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">₹{product.mrp}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

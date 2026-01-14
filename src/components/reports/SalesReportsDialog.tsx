@@ -21,7 +21,7 @@ interface SaleReportData {
   product_name: string;
   product_size: string; // New
   product_hsn: string; // New
-  product_gst: number; // New
+  product_gst: string; // Changed to string
   product_dp: number; // New
   product_mrp: number; // Renamed from unit_price
   quantity: number;
@@ -165,7 +165,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
           product_name: sale.products?.name || 'N/A',
           product_size: sale.products?.size || 'N/A', // New
           product_hsn: sale.products?.hsn || 'N/A', // New
-          product_gst: sale.products?.gst || 0, // New
+          product_gst: sale.products?.gst || 'N/A', // Changed to string
           product_dp: sale.products?.dp || 0, // New
           product_mrp: sale.products?.mrp || 0, // Renamed from unit_price
           quantity: sale.quantity,
@@ -217,11 +217,11 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
       sale.product_name,
       sale.product_size,
       sale.product_hsn,
-      sale.product_gst.toFixed(2),
-      `₹${sale.product_dp.toFixed(2)}`,
-      `₹${sale.product_mrp.toFixed(2)}`,
+      sale.product_gst, // Display GST as string
+      `₹${sale.product_dp}`, // Display as integer
+      `₹${sale.product_mrp}`, // Display as integer
       sale.quantity,
-      `₹${sale.total_price.toFixed(2)}`,
+      `₹${sale.total_price}`,
       sale.dealer_name,
       sale.sales_person_name,
     ]);
@@ -385,11 +385,11 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
                       <TableCell className="text-foreground">{sale.product_name}</TableCell>
                       <TableCell className="text-foreground">{sale.product_size || 'N/A'}</TableCell>
                       <TableCell className="text-foreground">{sale.product_hsn || 'N/A'}</TableCell>
-                      <TableCell className="text-foreground text-right">{sale.product_gst.toFixed(2)}</TableCell>
-                      <TableCell className="text-foreground text-right">₹{sale.product_dp.toFixed(2)}</TableCell>
-                      <TableCell className="text-foreground text-right">₹{sale.product_mrp.toFixed(2)}</TableCell>
+                      <TableCell className="text-foreground text-right">{sale.product_gst}</TableCell>
+                      <TableCell className="text-foreground text-right">₹{sale.product_dp}</TableCell>
+                      <TableCell className="text-foreground text-right">₹{sale.product_mrp}</TableCell>
                       <TableCell className="text-foreground text-right">{sale.quantity}</TableCell>
-                      <TableCell className="text-foreground text-right">₹{sale.total_price.toFixed(2)}</TableCell>
+                      <TableCell className="text-foreground text-right">₹{sale.total_price}</TableCell>
                       <TableCell className="text-foreground">{sale.dealer_name}</TableCell>
                       <TableCell className="text-foreground">{sale.sales_person_name}</TableCell>
                     </TableRow>
