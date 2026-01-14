@@ -20,11 +20,11 @@ const productSchema = z.object({
   name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }),
   description: z.string().nullable().optional(),
   size: z.string().nullable().optional(),
-  hsn: z.string().nullable().optional(),
-  gst: z.coerce.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' }).default(0).optional().nullable(),
-  dp: z.coerce.number().min(0.01, { message: 'Dealer Price must be a positive number.' }),
-  mrp: z.coerce.number().min(0.01, { message: 'MRP must be a positive number.' }),
-  stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }),
+  hsn: z.coerce.string().nullable().optional(), // Coerce HSN to string
+  gst: z.coerce.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' }).default(0), // Default to 0
+  dp: z.coerce.number().min(0.01, { message: 'Dealer Price must be a positive number.' }).default(0.01), // Default to min value
+  mrp: z.coerce.number().min(0.01, { message: 'MRP must be a positive number.' }).default(0.01), // Default to min value
+  stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }).default(0), // Default to 0
 });
 
 // Define display headers for the ExcelUpload component
