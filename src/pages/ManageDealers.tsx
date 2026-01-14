@@ -236,6 +236,11 @@ const ManageDealers = () => {
       }
       
       console.log('DEBUG: Raw dealersData from Supabase:', dealersData);
+      
+      // Add more specific logging for dealer_balances
+      dealersData?.forEach(d => {
+        console.log(`DEBUG: Dealer ${d.name} (ID: ${d.id}) raw dealer_balances:`, d.dealer_balances);
+      });
 
       // Create a map of dealer balances for easy lookup
       const balancesMap = new Map<string, DealerBalanceFromQuery>();
