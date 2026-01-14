@@ -16,7 +16,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import SalesPersonPerformanceCard from '@/components/SalesPersonPerformanceCard';
-import PaymentStatusCard from '@/components/PaymentStatusCard'; // Added import
 
 interface Product {
   id: string;
@@ -35,7 +34,7 @@ interface OrderItemDisplay {
   product_id: string;
   product_name: string;
   quantity: number;
-  unit_price: number;
+  unit_dp: number; // Changed from 'unit_price' to 'unit_dp'
   total_price: number;
 }
 
@@ -132,7 +131,7 @@ const Dashboard = () => {
         sales (
           quantity,
           total_price,
-          products (id, name, price)
+          products (id, name, dp)
         )
       `)
       .eq('user_id', user.id)
@@ -169,7 +168,7 @@ const Dashboard = () => {
           product_id: sale.products?.id || '',
           product_name: sale.products?.name || 'N/A',
           quantity: sale.quantity,
-          unit_price: sale.products?.price || 0,
+          unit_dp: sale.products?.dp || 0, // Changed from 'unit_price' to 'unit_dp'
           total_price: sale.total_price,
         })),
       }));
