@@ -30,12 +30,6 @@ const productSchema = z.object({
       .min(0, { message: 'Dealer Price cannot be negative.' }) // Changed min to 0 for integer
       .default(0) // Default to 0
   ),
-  mrp: z.preprocess(
-    (val) => (val === "" ? undefined : val), // Convert empty string to undefined
-    z.coerce.number().int({ message: 'MRP must be a whole number.' }) // Changed to integer
-      .min(0, { message: 'MRP must be a positive number.' }) // Changed min to 0 for integer
-      .default(0) // Default to 0
-  ),
   stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }).default(0), // Default to 0
 });
 
@@ -48,7 +42,6 @@ const productDisplayHeaders = [
   { key: 'hsn', label: 'HSN' },
   { key: 'gst', label: 'GST (%)' },
   { key: 'dp', label: 'Dealer Price (DP)' },
-  { key: 'mrp', label: 'MRP' },
   { key: 'stock', label: 'Stock' },
 ];
 
@@ -62,7 +55,6 @@ const productSampleData = [
     "HSN": '8471',
     "GST (%)": "18", 
     "Dealer Price (DP)": 1000, // Changed to integer
-    "MRP": 1200, // Changed to integer
     "Stock": 50
   },
   {
@@ -73,7 +65,6 @@ const productSampleData = [
     "HSN": '8471',
     "GST (%)": "Exempt", 
     "Dealer Price (DP)": 15, // Changed to integer
-    "MRP": 20, // Changed to integer
     "Stock": 200
   }
 ];
@@ -91,7 +82,6 @@ const AddProduct = () => {
       hsn: '',
       gst: '', // Default to empty string
       dp: 0, // Default to 0
-      mrp: 0, // Default to 0
       stock: 0,
     },
   });
@@ -124,7 +114,6 @@ const AddProduct = () => {
           hsn: values.hsn,
           gst: values.gst,
           dp: values.dp,
-          mrp: values.mrp,
           stock: values.stock,
         },
       ])
@@ -156,7 +145,6 @@ const AddProduct = () => {
       hsn: product.hsn,
       gst: product.gst,
       dp: product.dp,
-      mrp: product.mrp,
       stock: product.stock,
     }));
 
@@ -299,19 +287,6 @@ const AddProduct = () => {
                   />
                   <FormField
                     control={form.control}
-                    name="mrp"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>MRP</FormLabel>
-                        <FormControl>
-                          <Input type="number" placeholder="e.g., 1200" {...field} /> {/* Removed step="0.01" */}
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
                     name="stock"
                     render={({ field }) => (
                       <FormItem>
@@ -351,9 +326,9 @@ const AddProduct = () => {
               <CardContent>
                 <ul className="list-disc pl-5 space-y-2 text-sm">
                   <li>Download the sample Excel file to see the required format</li>
-                  <li>Required columns: Product Code, Product Name, Dealer Price (DP), MRP, Stock</li>
+                  <li>Required columns: Product Code, Product Name, Dealer Price (DP), Stock</li>
                   <li>Description, Size, HSN, GST are optional</li>
-                  <li>Prices (DP, MRP) should be whole numbers (e.g., 1000, 15)</li>
+                  <li>Prices (DP) should be whole numbers (e.g., 1000, 15)</li>
                   <li>GST can be a number or text (e.g., 18 or Exempt)</li>
                   <li>Stock should be a whole number (e.g., 100)</li>
                   <li>Save your file as .xlsx or .xls format</li>

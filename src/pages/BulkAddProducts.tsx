@@ -28,12 +28,6 @@ const productSchema = z.object({
       .min(0, { message: 'Dealer Price cannot be negative.' }) // Changed min to 0 for integer
       .default(0) // Default to 0
   ),
-  mrp: z.preprocess(
-    (val) => (val === "" ? undefined : val), // Convert empty string to undefined
-    z.coerce.number().int({ message: 'MRP must be a whole number.' }) // Changed to integer
-      .min(0, { message: 'MRP must be a positive number.' }) // Changed min to 0 for integer
-      .default(0) // Default to 0
-  ),
   stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }).default(0), // Default to 0
 });
 
@@ -46,7 +40,6 @@ const productDisplayHeaders = [
   { key: 'hsn', label: 'HSN' },
   { key: 'gst', label: 'GST (%)' },
   { key: 'dp', label: 'Dealer Price (DP)' },
-  { key: 'mrp', label: 'MRP' },
   { key: 'stock', label: 'Stock' },
 ];
 
@@ -60,7 +53,6 @@ const productSampleData = [
     "HSN": '8471',
     "GST (%)": "18", 
     "Dealer Price (DP)": 1000, // Changed to integer
-    "MRP": 1200, // Changed to integer
     "Stock": 50
   },
   {
@@ -71,7 +63,6 @@ const productSampleData = [
     "HSN": '8471',
     "GST (%)": "Exempt", 
     "Dealer Price (DP)": 15, // Changed to integer
-    "MRP": 20, // Changed to integer
     "Stock": 200
   }
 ];
@@ -108,7 +99,6 @@ const BulkAddProducts = () => {
           products: productsToUpload.map(p => ({
             name: p.name,
             description: p.description,
-            price: p.mrp, // Use MRP as price for the edge function
             stock: p.stock,
             user_id: user.id,
             code: p.code,

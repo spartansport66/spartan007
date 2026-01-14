@@ -14,7 +14,7 @@ const corsHeaders = {
 interface Product {
   id: string;
   name: string;
-  price: number;
+  price: number; // This will now represent DP
   stock: number;
 }
 
@@ -44,7 +44,7 @@ serve(async (req) => {
     const productIds = orderItems.map((item: any) => item.product_id);
     const { data: products, error: productsError } = await supabaseAdmin
       .from('products')
-      .select('id, name, price, stock')
+      .select('id, name, dp, stock') // Select dp instead of price/mrp
       .in('id', productIds);
     
     if (productsError) {
@@ -55,7 +55,7 @@ serve(async (req) => {
       throw new Error('One or more products not found.');
     }
     
-    const productMap = new Map(products.map(p => [p.id, p]));
+    const productMap = new Map(products.map(p => [p.id, { ...p, price: p.dp }])); // Map dp to price for consistency
     let totalOrderAmount = 0;
     const salesToInsert = [];
     

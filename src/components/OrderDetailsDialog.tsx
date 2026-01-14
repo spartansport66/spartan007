@@ -13,7 +13,7 @@ import 'jspdf-autotable';
 interface OrderItemDetail {
   product_name: string;
   quantity: number;
-  unit_price: number;
+  unit_price: number; // This is now DP
   total_price: number;
 }
 
@@ -29,9 +29,6 @@ interface OrderDetail {
   dealer_state: string; // Added
   dealer_country: string; // Added
   dealer_phone: string;
-  dealer_credit_limit: number;
-  dealer_consumed_credit: number;
-  dealer_pending_credit: number;
   sales_person_name: string;
   items: OrderItemDetail[];
   bill_no: string | null; // New
@@ -76,7 +73,6 @@ interface FetchedOrderData {
   dealers: {
     id: string;
     name: string;
-    credit_limit: number;
     address: string;
     phone: string;
     city: string;
@@ -148,7 +144,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
           dealers (
             id,
             name,
-            credit_limit,
             address,
             phone,
             city,
@@ -181,19 +176,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         showError('Order not found.');
         setOrderDetails(null);
         return;
-      }
-
-      const dealerId = orderData.dealers?.id;
-      let dealerConsumedCredit = 0;
-      if (dealerId) {
-        const { data: totalSpentData, error: totalSpentError } = await supabase
-          .from('orders')
-          .select('total_amount')
-          .eq('dealer_id', dealerId)
-          .eq('payment_status', 'pending'); // Only count pending orders for consumed credit
-
-        if (totalSpentError) throw totalSpentError;
-        dealerConsumedCredit = totalSpentData.reduce((sum, order) => sum + order.total_amount, 0);
       }
 
       // Fetch sales person name
@@ -245,9 +227,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         dealer_state: orderData.dealers?.state || 'N/A', // Added
         dealer_country: orderData.dealers?.country || 'N/A', // Added
         dealer_phone: orderData.dealers?.phone || 'N/A',
-        dealer_credit_limit: orderData.dealers?.credit_limit || 0,
-        dealer_consumed_credit: dealerConsumedCredit,
-        dealer_pending_credit: (orderData.dealers?.credit_limit || 0) - dealerConsumedCredit,
         sales_person_name: salesPersonName,
         items: items,
         bill_no: orderData.bill_no, // New
@@ -447,10 +426,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         <p><strong>Total Order Amount:</strong> <span class="text-right">₹${orderDetails.total_amount.toFixed(2)}</span></p>
       </div>
       ${paymentDetailsHtml}
-      <h2>Dealer Credit Information</h2>
-      <p><strong>Credit Limit:</strong> <span class="text-right">₹${orderDetails.dealer_credit_limit.toFixed(2)}</span></p>
-      <p><strong>Consumed Credit (Pending Orders):</strong> <span class="text-right">₹${orderDetails.dealer_consumed_credit.toFixed(2)}</span></p>
-      <p><strong>Available Credit:</strong> <span class="${orderDetails.dealer_pending_credit < 0 ? 'text-red-600' : ''}">₹${orderDetails.dealer_pending_credit.toFixed(2)}</span></p>
     `;
 
     const printWindow = window.open('', '_blank');
@@ -499,14 +474,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                 <p><span className="font-semibold">Dealer Name:</span> {orderDetails.dealer_name}</p>
                 <p><span className="font-semibold">Address:</span> {orderDetails.dealer_address}, {orderDetails.dealer_city}, {orderDetails.dealer_state}, {orderDetails.dealer_country}</p>
                 <p><span className="font-semibold">Phone:</span> {orderDetails.dealer_phone}</p>
-                <p><span className="font-semibold">Credit Limit:</span> ₹{orderDetails.dealer_credit_limit.toFixed(2)}</p>
-                <p><span className="font-semibold">Consumed Credit (Pending Orders):</span> ₹{orderDetails.dealer_consumed_credit.toFixed(2)}</p>
-                <p>
-                  <span className="font-semibold">Available Credit:</span>{' '}
-                  <span className={orderDetails.dealer_pending_credit < 0 ? 'text-destructive' : ''}>
-                    ₹{orderDetails.dealer_pending_credit.toFixed(2)}
-                  </span>
-                </p>
               </div>
             </div>
             {(orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') && orderDetails.payment_method && (

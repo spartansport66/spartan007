@@ -22,7 +22,6 @@ interface Product {
   code: string; // New
   name: string;
   dp: number; // New
-  mrp: number; // Renamed from price
   stock: number;
 }
 
@@ -143,7 +142,7 @@ const MultiItemOrderForm: React.FC = () => {
         // Fetch all products - UPDATED to include new fields
         const { data: productsData, error: productsError } = await supabase
           .from('products')
-          .select('id, code, name, dp, mrp, stock');
+          .select('id, code, name, dp, stock');
 
         if (productsError) {
           console.error('Error fetching products:', productsError);
@@ -561,7 +560,7 @@ const MultiItemOrderForm: React.FC = () => {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Overdue Payments</AlertTitle>
                 <AlertDescription>
-                  This dealer has overdue payments totaling ₹{totalPendingAmount}. Please clear all overdue payments before placing a new order.
+                  This dealer has overdue payments totaling ₹${totalPendingAmount.toFixed(2)}. Please clear all overdue payments before placing a new order.
                   <div className="mt-2 max-h-32 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -691,7 +690,7 @@ const MultiItemOrderForm: React.FC = () => {
                                 <div>
                                   <div>{product.name} ({product.code})</div>
                                   <div className="text-xs text-muted-foreground">
-                                    DP: ₹{product.dp} - MRP: ₹{product.mrp} - Stock: {product.stock}
+                                    DP: ₹{product.dp} - Stock: {product.stock}
                                   </div>
                                 </div>
                               </CommandItem>

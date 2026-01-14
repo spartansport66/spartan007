@@ -14,7 +14,6 @@ interface ProductCardProps {
     hsn: string; // New
     gst: string; // Changed to string
     dp: number; // New
-    mrp: number; // Renamed from price
     stock: number;
   };
   onAddToCart?: (productId: string) => void;
@@ -32,7 +31,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart }) => {
         <p className="text-lg text-muted-foreground">HSN: {product.hsn || 'N/A'}</p>
         <p className="text-lg text-muted-foreground">GST: {product.gst || 'N/A'}%</p> {/* Display GST as string */}
         <p className="text-2xl font-bold text-accent-foreground mb-2">DP: ₹{product.dp}</p> {/* Display as integer */}
-        <p className="text-lg text-muted-foreground line-through">MRP: ₹{product.mrp}</p> {/* Display as integer */}
         <p className="text-sm text-muted-foreground">In Stock: {product.stock}</p>
       </CardContent>
       {onAddToCart && (

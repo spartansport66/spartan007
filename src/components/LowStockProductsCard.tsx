@@ -15,7 +15,6 @@ interface Product {
   name: string;
   stock: number;
   dp: number; // New
-  mrp: number; // Renamed from price
 }
 
 interface LowStockProductsCardProps {
@@ -35,7 +34,7 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
     setError(null);
     const { data, error } = await supabase
       .from('products')
-      .select('id, code, name, stock, dp, mrp') // Select new fields
+      .select('id, code, name, stock, dp') // Select new fields
       .lte('stock', LOW_STOCK_THRESHOLD)
       .order('stock', { ascending: true });
 
@@ -102,7 +101,6 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
                     <TableHead className="text-muted-foreground">Product Name</TableHead>
                     <TableHead className="text-muted-foreground text-right">Stock</TableHead>
                     <TableHead className="text-muted-foreground text-right">DP</TableHead>
-                    <TableHead className="text-muted-foreground text-right">MRP</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -114,7 +112,6 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
                       </TableCell>
                       <TableCell className="text-muted-foreground text-right">{product.stock}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{product.dp}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{product.mrp}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

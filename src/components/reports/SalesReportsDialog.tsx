@@ -23,7 +23,6 @@ interface SaleReportData {
   product_hsn: string; // New
   product_gst: string; // Changed to string
   product_dp: number; // New
-  product_mrp: number; // Renamed from unit_price
   quantity: number;
   total_price: number;
   dealer_name: string;
@@ -98,7 +97,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
       // Fetch products - UPDATED to include new fields
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, code, name, size, hsn, gst, dp, mrp');
+        .select('id, code, name, size, hsn, gst, dp');
       if (productsError) throw productsError;
       setAllProducts((productsData || []).map(p => ({ value: p.id, label: `${p.name} (${p.code})` })));
 
@@ -118,7 +117,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
           quantity,
           total_price,
           sale_date,
-          products (id, code, name, size, hsn, gst, dp, mrp),
+          products (id, code, name, size, hsn, gst, dp),
           orders!inner (
             order_number,
             dealer_id,
@@ -167,7 +166,6 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
           product_hsn: sale.products?.hsn || 'N/A', // New
           product_gst: sale.products?.gst || 'N/A', // Changed to string
           product_dp: sale.products?.dp || 0, // New
-          product_mrp: sale.products?.mrp || 0, // Renamed from unit_price
           quantity: sale.quantity,
           total_price: sale.total_price,
           dealer_name: sale.orders?.dealers?.name || 'N/A',
@@ -208,7 +206,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
     doc.setTextColor(100);
 
     const tableColumn = [
-      "Order No.", "Sale Date", "Code", "Product", "Size", "HSN", "GST (%)", "DP", "MRP", "Qty", "Total Price", "Dealer", "Sales Person"
+      "Order No.", "Sale Date", "Code", "Product", "Size", "HSN", "GST (%)", "DP", "Qty", "Total Price", "Dealer", "Sales Person"
     ];
     const tableRows = sales.map(sale => [
       sale.order_number,
@@ -219,7 +217,6 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
       sale.product_hsn,
       sale.product_gst, // Display GST as string
       `₹${sale.product_dp}`, // Display as integer
-      `₹${sale.product_mrp}`, // Display as integer
       sale.quantity,
       `₹${sale.total_price}`,
       sale.dealer_name,
@@ -247,11 +244,10 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
         5: { cellWidth: 15 }, // HSN
         6: { cellWidth: 15, halign: 'right' }, // GST (%)
         7: { cellWidth: 15, halign: 'right' }, // DP
-        8: { cellWidth: 15, halign: 'right' }, // MRP
-        9: { cellWidth: 10, halign: 'right' }, // Quantity
-        10: { cellWidth: 20, halign: 'right' }, // Total Price
-        11: { cellWidth: 25 }, // Dealer
-        12: { cellWidth: 25 }, // Sales Person
+        8: { cellWidth: 10, halign: 'right' }, // Quantity
+        9: { cellWidth: 20, halign: 'right' }, // Total Price
+        10: { cellWidth: 25 }, // Dealer
+        11: { cellWidth: 25 }, // Sales Person
       }
     });
 
@@ -369,7 +365,6 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
                     <TableHead className="text-muted-foreground font-bold">HSN</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">GST (%)</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">DP</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-right">MRP</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Qty</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Total Price</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Dealer</TableHead>
@@ -387,7 +382,6 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
                       <TableCell className="text-foreground">{sale.product_hsn || 'N/A'}</TableCell>
                       <TableCell className="text-foreground text-right">{sale.product_gst}</TableCell>
                       <TableCell className="text-foreground text-right">₹{sale.product_dp}</TableCell>
-                      <TableCell className="text-foreground text-right">₹{sale.product_mrp}</TableCell>
                       <TableCell className="text-foreground text-right">{sale.quantity}</TableCell>
                       <TableCell className="text-foreground text-right">₹{sale.total_price}</TableCell>
                       <TableCell className="text-foreground">{sale.dealer_name}</TableCell>

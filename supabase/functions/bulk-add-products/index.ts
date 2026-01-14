@@ -31,14 +31,13 @@ serve(async (req) => {
     const productsToInsert = productData.map((product: any) => ({
       name: product.name,
       description: product.description || null,
-      mrp: parseInt(product.mrp), // Changed to parseInt
       stock: parseInt(product.stock),
       user_id: product.user_id,
       code: product.code,
       size: product.size || null,
       hsn: product.hsn || null,
       gst: product.gst || null, // Handled as text
-      dp: parseInt(product.dp), // Changed to parseInt
+      dp: parseInt(product.dp),
     }));
 
     const { data, error } = await supabaseAdmin

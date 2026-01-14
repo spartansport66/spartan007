@@ -16,7 +16,7 @@ serve(async (req) => {
   }
 
   try {
-    const { productId, name, description, mrp, stock, userId: requesterId, code, size, hsn, gst, dp } = await req.json();
+    const { productId, name, description, stock, userId: requesterId, code, size, hsn, gst, dp } = await req.json();
 
     if (!productId) {
       return new Response(JSON.stringify({ error: 'Product ID is required.' }), {
@@ -44,7 +44,7 @@ serve(async (req) => {
 
     const hasSales = (salesCount || 0) > 0;
 
-    const updateData: { name?: string; description?: string; mrp?: number; stock?: number; code?: string; size?: string; hsn?: string; gst?: string; dp?: number } = {};
+    const updateData: { name?: string; description?: string; stock?: number; code?: string; size?: string; hsn?: string; gst?: string; dp?: number } = {};
     let attemptedRestrictedUpdate = false;
 
     if (hasSales) {
@@ -56,14 +56,13 @@ serve(async (req) => {
       if (gst !== undefined) updateData.gst = gst;
       if (dp !== undefined) updateData.dp = parseInt(dp);
 
-      // Check if other fields (name, description, mrp) were attempted to be updated
+      // Check if other fields (name, description) were attempted to be updated
       if (name !== undefined && name !== null) attemptedRestrictedUpdate = true;
       if (description !== undefined && description !== null) attemptedRestrictedUpdate = true;
-      if (mrp !== undefined && mrp !== null) attemptedRestrictedUpdate = true;
 
       if (attemptedRestrictedUpdate && Object.keys(updateData).length === 0) {
         // If only restricted fields were attempted and no allowed fields were provided, reject
-        return new Response(JSON.stringify({ error: 'Product with associated sales can only have its stock, code, size, HSN, GST, and Dealer Price updated. Name, description, and MRP cannot be changed.' }), {
+        return new Response(JSON.stringify({ error: 'Product with associated sales can only have its stock, code, size, HSN, GST, and Dealer Price updated. Name and description cannot be changed.' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -76,13 +75,12 @@ serve(async (req) => {
       // If no sales, allow all fields to be updated
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
-      if (mrp !== undefined) updateData.mrp = parseInt(mrp); // Changed to parseInt
       if (stock !== undefined) updateData.stock = parseInt(stock);
       if (code !== undefined) updateData.code = code;
       if (size !== undefined) updateData.size = size;
       if (hsn !== undefined) updateData.hsn = hsn;
       if (gst !== undefined) updateData.gst = gst;
-      if (dp !== undefined) updateData.dp = parseInt(dp); // Changed to parseInt
+      if (dp !== undefined) updateData.dp = parseInt(dp);
     }
 
     if (Object.keys(updateData).length === 0) {
