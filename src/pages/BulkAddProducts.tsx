@@ -33,9 +33,8 @@ const productSchema = z.object({
       return val;
     },
     z.coerce.number()
+      .min(0, { message: 'Dealer Price cannot be negative.' }) // Apply min before transform
       .transform(val => Math.round(val)) // Round to nearest integer first
-      .int({ message: 'Dealer Price must be a whole number.' }) // Then validate it's an integer
-      .min(0, { message: 'Dealer Price cannot be negative.' })
       .default(0) // Default to 0
   ),
   stock: z.preprocess(
@@ -49,9 +48,8 @@ const productSchema = z.object({
       return val;
     },
     z.coerce.number()
+      .min(0, { message: 'Stock cannot be negative.' }) // Apply min before transform
       .transform(val => Math.round(val)) // Round to nearest integer first
-      .int() // Then validate it's an integer
-      .min(0, { message: 'Stock cannot be negative.' })
       .default(0) // Default to 0
   ),
 });

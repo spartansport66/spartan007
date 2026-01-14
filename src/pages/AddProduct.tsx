@@ -17,7 +17,7 @@ import { useSession } from '@/contexts/SessionContext';
 import ExcelUpload from '@/components/ExcelUpload'; // Updated import
 
 // Zod schema for product validation
-export const productSchema = z.object({
+const productSchema = z.object({
   code: z.string().min(1, { message: 'Product Code is required.' }),
   name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }),
   description: z.string().nullable().optional(),
@@ -35,9 +35,8 @@ export const productSchema = z.object({
       return val;
     },
     z.coerce.number()
+      .min(0, { message: 'Dealer Price cannot be negative.' }) // Apply min before transform
       .transform(val => Math.round(val)) // Round to nearest integer first
-      .int({ message: 'Dealer Price must be a whole number.' }) // Then validate it's an integer
-      .min(0, { message: 'Dealer Price cannot be negative.' })
       .default(0) // Default to 0
   ),
   stock: z.preprocess(
@@ -51,9 +50,8 @@ export const productSchema = z.object({
       return val;
     },
     z.coerce.number()
+      .min(0, { message: 'Stock cannot be negative.' }) // Apply min before transform
       .transform(val => Math.round(val)) // Round to nearest integer first
-      .int() // Then validate it's an integer
-      .min(0, { message: 'Stock cannot be negative.' })
       .default(0) // Default to 0
   ),
 });
