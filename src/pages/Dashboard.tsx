@@ -16,11 +16,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import SalesPersonPerformanceCard from '@/components/SalesPersonPerformanceCard';
+import PaymentStatusCard from '@/components/PaymentStatusCard';
 
 interface Product {
   id: string;
   name: string;
-  price: number;
+  dp: number; // Changed from 'price' to 'dp'
   stock: number;
   description: string;
 }
@@ -34,7 +35,7 @@ interface OrderItemDisplay {
   product_id: string;
   product_name: string;
   quantity: number;
-  unit_dp: number; // Changed from 'unit_price' to 'unit_dp'
+  unit_dp: number;
   total_price: number;
 }
 
@@ -168,7 +169,7 @@ const Dashboard = () => {
           product_id: sale.products?.id || '',
           product_name: sale.products?.name || 'N/A',
           quantity: sale.quantity,
-          unit_dp: sale.products?.dp || 0, // Changed from 'unit_price' to 'unit_dp'
+          unit_dp: sale.products?.dp || 0,
           total_price: sale.total_price,
         })),
       }));
