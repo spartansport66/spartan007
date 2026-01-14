@@ -367,19 +367,20 @@ const ManageDealers = () => {
       
       // Update dealer balance
       console.log('Updating dealer balance for ID:', selectedDealer.id, 'with openingBalance:', values.openingBalance);
-      const { error: balanceUpdateError } = await supabase
+      const { data: balanceUpsertData, error: balanceUpdateError } = await supabase
         .from('dealer_balances')
         .upsert({
           dealer_id: selectedDealer.id,
           opening_balance: values.openingBalance,
           closing_balance: values.openingBalance, // Initially same as opening, will be dynamically calculated for display
-        }, { onConflict: 'dealer_id' });
+        }, { onConflict: 'dealer_id' })
+        .select(); // Select the updated data to log it
       
       if (balanceUpdateError) {
         console.error('Error updating dealer balance:', balanceUpdateError); // Log the actual error
         throw balanceUpdateError;
       }
-      console.log('Dealer balance upsert successful.');
+      console.log('Dealer balance upsert successful. Data:', balanceUpsertData); // Log the data
       
       // Update sales person assignments
       const currentAssignedIds = selectedDealer.assigned_sales_persons.map(sp => sp.id);
