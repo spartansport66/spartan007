@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx'; // Keep for type definitions if needed
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +10,7 @@ import { Loader2, Upload as UploadIcon, Download, CheckCircle, AlertTriangle } f
 import { showError, showSuccess } from '@/utils/toast';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { parseExcelFile, downloadExcelFile } from '@/utils/excel'; // Import new utilities
 
 interface ColumnMapping {
   source: string;
@@ -19,8 +20,8 @@ interface ColumnMapping {
 const SheetConverter: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [parsedData, setParsedData] = useState<any[]>([]);
-  const [headers, setHeaders] = useState<string[]>([]);
+  const [parsedRawData, setParsedRawData] = useState<any[]>([]); // Store raw data from parseExcelFile
+  const [headers, setHeaders] = useState<string[]>([]); // Original Excel headers
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);
   const [convertedData, setConvertedData] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,7 +44,7 @@ const SheetConverter: React.FC = () => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
-      setParsedData([]);
+      setParsedRawData([]);
       setHeaders([]);
       setColumnMappings([]);
       setConvertedData([]);
@@ -56,73 +57,27 @@ const SheetConverter: React.FC = () => {
     }
   };
 
-  const handleParseExcel = () => {
+  const handleParseExcel = async () => {
     if (!file) {
-      showError('Please select an Excel file to upload.');
+      showError('[SheetConverter] Please select an Excel file to upload.');
       return;
     }
     setLoading(true);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        if (!Array.isArray(jsonData) || jsonData.length < 1) {
-          showError('Excel file is empty or malformed.');
-          setLoading(false);
-          return;
-        }
-        
-        // Safely get headers from the first row, ensuring it's an array
-        // Filter out any empty strings that might result from trimming or empty cells
-        const excelHeaders = Array.isArray(jsonData[0]) 
-          ? (jsonData[0] as string[]).map(h => String(h || '').trim()).filter(h => h !== '') 
-          : [];
-
-        if (excelHeaders.length === 0 && jsonData.length > 1) {
-          showError('Could not detect headers in the first row. Please ensure your Excel file has headers.');
-          setLoading(false);
-          return;
-        }
-        
-        console.log("[SheetConverter] Filtered Excel Headers (before setHeaders):", excelHeaders); // Added log
-        setHeaders(excelHeaders);
-        const initialMappings: ColumnMapping[] = excelHeaders.map(header => ({ source: header, target: '' }));
-        setColumnMappings(initialMappings);
-        
-        const dataRows = jsonData.slice(1);
-        const formattedData: any[] = dataRows.map((row: any, index: number) => {
-          const rowData: any = {};
-          // Ensure row is an array before iterating
-          if (Array.isArray(row)) {
-            excelHeaders.forEach((header, i) => {
-              rowData[header] = row[i] !== undefined ? row[i] : '';
-            });
-          } else {
-            // If row is not an array, treat it as an empty row for parsing purposes
-            excelHeaders.forEach((header) => {
-              rowData[header] = '';
-            });
-          }
-          return { originalRow: index + 2, ...rowData };
-        }).filter(row => Object.values(row).some(val => String(val).trim() !== '')); // Filter out completely empty rows
-        setParsedData(formattedData);
-      } catch (error: any) {
-        console.error('Error parsing Excel file:', error);
-        showError(`Error parsing Excel file: ${error.message}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-    reader.onerror = () => {
-      showError('Error reading file. Please try again.');
+    try {
+      const { headers: detectedHeaders, data: rawData } = await parseExcelFile(file);
+      
+      setHeaders(detectedHeaders);
+      const initialMappings: ColumnMapping[] = detectedHeaders.map(header => ({ source: header, target: '' }));
+      setColumnMappings(initialMappings);
+      setParsedRawData(rawData); // Store the raw parsed data
+      
+      showSuccess('[SheetConverter] Excel file parsed. Please map your columns.');
+    } catch (error: any) {
+      console.error('[SheetConverter] Error parsing Excel file:', error);
+      showError(`[SheetConverter] Error parsing Excel file: ${error.message}`);
+    } finally {
       setLoading(false);
-    };
-    reader.readAsArrayBuffer(file);
+    }
   };
 
   const handleMappingChange = (sourceIndex: number, targetValue: string) => {
@@ -140,8 +95,8 @@ const SheetConverter: React.FC = () => {
   };
 
   const handleConvert = () => {
-    if (parsedData.length === 0) {
-      showError('No data to convert.');
+    if (parsedRawData.length === 0) {
+      showError('[SheetConverter] No data to convert. Please parse an Excel file first.');
       return;
     }
     
@@ -153,7 +108,7 @@ const SheetConverter: React.FC = () => {
         }
       });
       
-      const converted = parsedData.map(row => {
+      const converted = parsedRawData.map(row => {
         const newRow: any = {};
         requiredHeaders.forEach(header => {
           newRow[header] = ''; // Initialize all required headers
@@ -199,28 +154,25 @@ const SheetConverter: React.FC = () => {
       });
       
       setConvertedData(converted);
-      showSuccess(`Converted ${converted.length} rows successfully!`);
+      showSuccess(`[SheetConverter] Converted ${converted.length} rows successfully!`);
     } catch (error: any) {
-      console.error('Error converting data:', error);
-      showError(`Error converting data: ${error.message}`);
+      console.error('[SheetConverter] Error converting data:', error);
+      showError(`[SheetConverter] Error converting data: ${error.message}`);
     }
   };
 
   const handleDownloadConverted = () => {
     if (convertedData.length === 0) {
-      showError('No converted data to download.');
+      showError('[SheetConverter] No converted data to download.');
       return;
     }
     
     try {
-      const ws = XLSX.utils.json_to_sheet(convertedData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Converted Data');
-      XLSX.writeFile(wb, 'converted_dealers.xlsx');
-      showSuccess('Converted Excel file downloaded successfully!');
+      downloadExcelFile(convertedData, 'converted_dealers.xlsx', 'Converted Data');
+      showSuccess('[SheetConverter] Converted Excel file downloaded successfully!');
     } catch (error: any) {
-      console.error('Error creating converted file:', error);
-      showError(`Failed to create converted file: ${error.message}`);
+      console.error('[SheetConverter] Error creating converted file:', error);
+      showError(`[SheetConverter] Failed to create converted file: ${error.message}`);
     }
   };
 
@@ -257,24 +209,21 @@ const SheetConverter: React.FC = () => {
         }
       ];
       
-      const ws = XLSX.utils.json_to_sheet(sampleData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Sample Data');
-      XLSX.writeFile(wb, 'sample_dealers_format.xlsx');
-      showSuccess('Sample Excel file downloaded successfully!');
+      downloadExcelFile(sampleData, 'sample_dealers_format.xlsx', 'Sample Data');
+      showSuccess('[SheetConverter] Sample Excel file downloaded successfully!');
     } catch (error: any) {
-      console.error('Error creating sample file:', error);
-      showError(`Failed to create sample file: ${error.message}`);
+      console.error('[SheetConverter] Error creating sample file:', error);
+      showError(`[SheetConverter] Failed to create sample file: ${error.message}`);
     }
   };
 
   // Memoized preview of split data for the first row
   const splitPreview = useMemo(() => {
-    if (!columnToSplitSourceHeader || !splitDelimiter || parsedData.length === 0) {
+    if (!columnToSplitSourceHeader || !splitDelimiter || parsedRawData.length === 0) {
       return null;
     }
     
-    const firstRowValue = parsedData[0][columnToSplitSourceHeader];
+    const firstRowValue = parsedRawData[0][columnToSplitSourceHeader];
     if (!firstRowValue) return null;
     
     const parts = String(firstRowValue).split(splitDelimiter).map(p => p.trim());
@@ -288,7 +237,7 @@ const SheetConverter: React.FC = () => {
         ))}
       </div>
     );
-  }, [columnToSplitSourceHeader, splitDelimiter, parsedData]);
+  }, [columnToSplitSourceHeader, splitDelimiter, parsedRawData]);
 
   // Update splitTargetHeaders based on selected columnToSplitSourceHeader
   useEffect(() => {
@@ -373,7 +322,6 @@ const SheetConverter: React.FC = () => {
                             {/* Use "__NONE__" instead of "" for the value */}
                             <SelectItem value="__NONE__">Do not map</SelectItem>
                             {requiredHeaders.map((header, idx) => {
-                              console.log(`[SheetConverter] requiredHeaders SelectItem value: "${header}" (key: "${idx}")`);
                               return (
                                 <SelectItem key={idx} value={header}>
                                   {header}
@@ -413,7 +361,6 @@ const SheetConverter: React.FC = () => {
                     {/* Use "__NONE__" instead of "" for the value */}
                     <SelectItem value="__NONE__">Do not split any column</SelectItem>
                     {headers.map((header, index) => {
-                      console.log(`[SheetConverter] headers SelectItem value: "${header}" (key: "${index}")`);
                       return (
                         <SelectItem key={index} value={header}>
                           {header}
@@ -437,7 +384,7 @@ const SheetConverter: React.FC = () => {
             
             {splitPreview}
             
-            {columnToSplitSourceHeader && splitDelimiter && parsedData.length > 0 && (
+            {columnToSplitSourceHeader && splitDelimiter && parsedRawData.length > 0 && (
               <div className="space-y-2 mt-4">
                 <Label>Map Split Parts to Required Columns</Label>
                 <p className="text-sm text-muted-foreground mb-2">
@@ -454,7 +401,6 @@ const SheetConverter: React.FC = () => {
                     <TableBody>
                       {requiredHeaders.map((header) => {
                         const partIndexValue = splitPartMapping[header] || '__NONE__';
-                        console.log(`[SheetConverter] splitPartMapping SelectItem value: "${partIndexValue}" (header: "${header}")`);
                         return (
                           <TableRow key={`split-map-${header}`}>
                             <TableCell className="font-medium">{header}</TableCell>
@@ -470,7 +416,6 @@ const SheetConverter: React.FC = () => {
                                   {/* Use "__NONE__" instead of "" for the value */}
                                   <SelectItem value="__NONE__">Do not map</SelectItem>
                                   {Array.from({ length: 10 }, (_, i) => i.toString()).map(index => {
-                                    console.log(`[SheetConverter] split parts SelectItem value: "${index.toString()}"`);
                                     return (
                                       <SelectItem key={index} value={index.toString()}>{`Part ${parseInt(index) + 1} (Index ${index})`}</SelectItem>
                                     );
@@ -495,7 +440,7 @@ const SheetConverter: React.FC = () => {
           </Button>
         )}
         
-        {parsedData.length > 0 && headers.length > 0 && (
+        {parsedRawData.length > 0 && headers.length > 0 && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Preview Original Data</h3>
             <div className="rounded-md border max-h-60 overflow-y-auto">
@@ -509,7 +454,7 @@ const SheetConverter: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {parsedData.slice(0, 5).map((row, rowIndex) => (
+                  {parsedRawData.slice(0, 5).map((row, rowIndex) => (
                     <TableRow key={rowIndex}>
                       <TableCell className="font-medium">{row.originalRow}</TableCell>
                       {headers.map((header, colIndex) => (
@@ -517,10 +462,10 @@ const SheetConverter: React.FC = () => {
                       ))}
                     </TableRow>
                   ))}
-                  {parsedData.length > 5 && (
+                  {parsedRawData.length > 5 && (
                     <TableRow>
                       <TableCell colSpan={headers.length + 1} className="text-center">
-                        ... and {parsedData.length - 5} more rows
+                        ... and {parsedRawData.length - 5} more rows
                       </TableCell>
                     </TableRow>
                   )}
