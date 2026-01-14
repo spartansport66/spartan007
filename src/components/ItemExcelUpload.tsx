@@ -108,10 +108,14 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
         setExcelHeaders(detectedHeaders);
 
         // Initialize column mappings with detected headers and empty target keys
-        const initialMappings: ColumnMapping[] = detectedHeaders.map(header => ({
-          source: header,
-          targetKey: '',
-        }));
+        const initialMappings: ColumnMapping[] = detectedHeaders.map(header => {
+          // Attempt to auto-map if the detected header matches a required field's label
+          const matchedField = requiredSchemaFields.find(field => field.label.toLowerCase() === header.toLowerCase());
+          return {
+            source: header,
+            targetKey: matchedField ? matchedField.key : '', // Auto-map if found, otherwise empty
+          };
+        });
         setColumnMappings(initialMappings);
 
         // Clear parsed data until mappings are applied
@@ -332,7 +336,7 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
 
       const ws = XLSX.utils.json_to_sheet(sampleData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Sample Data'); // Corrected line
+      XLSX.utils.book_append_sheet(wb, ws, 'Sample Data');
       XLSX.writeFile(wb, 'sample_items.xlsx');
       showSuccess('Sample Excel file downloaded successfully!');
     } catch (error: any) {
