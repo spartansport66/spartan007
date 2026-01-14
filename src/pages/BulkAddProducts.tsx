@@ -19,7 +19,7 @@ const productSchema = z.object({
   code: z.string().min(1, { message: 'Product Code is required.' }),
   name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }),
   description: z.string().nullable().optional(),
-  size: z.string().nullable().optional(),
+  size: z.coerce.string().nullable().optional(), // Coerce size to string
   hsn: z.coerce.string().nullable().optional(), // Coerce HSN to string
   gst: z.coerce.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' }).default(0), // Default to 0
   dp: z.coerce.number().min(0.01, { message: 'Dealer Price must be a positive number.' }).default(0.01), // Default to min value
