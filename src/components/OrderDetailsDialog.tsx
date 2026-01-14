@@ -6,15 +6,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Separator } from '@/components/ui/separator';
 import { Loader2, Download, Printer, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { showError } from '@/utils/toast';
+import { showError, showSuccess } from '@/utils/toast'; // Added showSuccess
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable'; // Explicitly imported autoTable
 
 interface OrderItemDetail {
   product_name: string;
   quantity: number;
   unit_price: number; // This is now DP
   total_price: number;
+  product_code: string; // New
+  product_size: string; // New
+  product_hsn: string; // New
+  product_gst: string; // New
 }
 
 interface OrderDetail {
@@ -194,13 +198,13 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         }
       }
 
-      // Fetch order items
+      // Fetch order items, including new product details
       const { data: salesItems, error: salesError } = await supabase
         .from('sales')
         .select(`
           quantity,
           total_price,
-          products (name, dp)
+          products (name, dp, code, size, hsn, gst)
         `)
         .eq('order_id', id);
 
@@ -211,6 +215,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         quantity: item.quantity,
         unit_price: item.products?.dp || 0, // Use product.dp for unit price
         total_price: item.total_price,
+        product_code: item.products?.code || 'N/A', // New
+        product_size: item.products?.size || 'N/A', // New
+        product_hsn: item.products?.hsn || 'N/A', // New
+        product_gst: item.products?.gst || 'N/A', // New
       }));
 
       const paymentInfo = orderData.payments && orderData.payments.length > 0 ? orderData.payments[0] : null;
@@ -341,101 +349,92 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       `;
     }
 
-    const printContent = `
-      <style>
-        body {
-          font-family: sans-serif;
-          margin: 20px;
-        }
-        h1 {
-          font-size: 24px;
-          margin-bottom: 15px;
-        }
-        h2 {
-          font-size: 18px;
-          margin-top: 20px;
-          margin-bottom: 10px;
-        }
-        p {
-          margin-bottom: 5px;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 10px;
-        }
-        th, td {
-          border: 1px solid #ddd;
-          padding: 8px;
-          text-align: left;
-        }
-        th {
-          background-color: #f2f2f2;
-        }
-        .text-right {
-          text-align: right;
-        }
-        .summary {
-          margin-top: 20px;
-          padding-top: 10px;
-          border-top: 1px solid #eee;
-        }
-        .text-red-600 {
-          color: #dc2626;
-        } /* Tailwind red-600 */
-      </style>
-      <h1>Order Details</h1>
-      <p><strong>Order Number:</strong> ${orderDetails.order_number}</p>
-      <p><strong>Order Date:</strong> ${formatDate(orderDetails.order_date)}</p>
-      <p><strong>Order Status:</strong> ${orderDetails.status}</p>
-      <p><strong>Payment Status:</strong> ${orderDetails.payment_status}</p>
-      <p><strong>Payment Due Date:</strong> ${formatDate(orderDetails.payment_due_date)}</p>
-      <p><strong>Sales Person:</strong> ${orderDetails.sales_person_name}</p>
-      ${orderDetails.dispatched ? `
-        <h2>Dispatch Information</h2>
-        <p><strong>Dispatch Number:</strong> ${orderDetails.dispatch_number || 'N/A'}</p>
-        <p><strong>Dispatch Date:</strong> ${formatDate(orderDetails.dispatch_date)}</p>
-        <p><strong>Bill Number:</strong> ${orderDetails.bill_no || 'N/A'}</p>
-      ` : ''}
-      <h2>Dealer Information</h2>
-      <p><strong>Name:</strong> ${orderDetails.dealer_name}</p>
-      <p><strong>Address:</strong> ${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}</p>
-      <p><strong>Phone:</strong> ${orderDetails.dealer_phone}</p>
-      <h2>Order Items</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Product Name</th>
-            <th class="text-right">Quantity</th>
-            <th class="text-right">Unit Price</th>
-            <th class="text-right">Total Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${orderDetails.items.map(item => `
-            <tr>
-              <td>${item.product_name}</td>
-              <td class="text-right">${item.quantity}</td>
-              <td class="text-right">₹${item.unit_price.toFixed(2)}</td>
-              <td class="text-right">₹${item.total_price.toFixed(2)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      <div class="summary">
-        <p><strong>Total Order Amount:</strong> <span class="text-right">₹${orderDetails.total_amount.toFixed(2)}</span></p>
-      </div>
-      ${paymentDetailsHtml}
-    `;
+    const doc = new jsPDF({
+      orientation: 'landscape'
+    });
+    doc.setFontSize(18);
+    doc.text("Order Details", 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
 
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.print();
-    } else {
-      showError('Failed to open print window. Please allow pop-ups.');
+    const tableColumn = [
+      "Code", "Product Name", "Size", "HSN", "GST (%)", "Quantity", "Unit Price", "Total Price"
+    ];
+    const tableRows = orderDetails.items.map(item => [
+      item.product_code,
+      item.product_name,
+      item.product_size,
+      item.product_hsn,
+      item.product_gst,
+      item.quantity,
+      `₹${item.unit_price.toFixed(2)}`,
+      `₹${item.total_price.toFixed(2)}`,
+    ]);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 100, // Adjust startY to accommodate header info
+      styles: {
+        fontSize: 7
+      },
+      headStyles: {
+        fillColor: [200, 200, 200],
+        textColor: [0, 0, 0]
+      },
+      margin: { top: 25, left: 10, right: 10 },
+      columnStyles: {
+        0: { cellWidth: 20 }, // Code
+        1: { cellWidth: 30 }, // Product Name
+        2: { cellWidth: 20 }, // Size
+        3: { cellWidth: 20 }, // HSN
+        4: { cellWidth: 20, halign: 'right' }, // GST (%)
+        5: { cellWidth: 15, halign: 'right' }, // Quantity
+        6: { cellWidth: 20, halign: 'right' }, // Unit Price
+        7: { cellWidth: 25, halign: 'right' }, // Total Price
+      }
+    });
+
+    let finalY = (doc as any).lastAutoTable.finalY;
+
+    doc.setFontSize(10);
+    doc.text(`Order Number: ${orderDetails.order_number}`, 14, 35);
+    doc.text(`Order Date: ${formatDate(orderDetails.order_date)}`, 14, 40);
+    doc.text(`Order Status: ${orderDetails.status}`, 14, 45);
+    doc.text(`Payment Status: ${orderDetails.payment_status}`, 14, 50);
+    doc.text(`Payment Due Date: ${formatDate(orderDetails.payment_due_date)}`, 14, 55);
+    doc.text(`Sales Person: ${orderDetails.sales_person_name}`, 14, 60);
+
+    if (orderDetails.dispatched) {
+      doc.text(`Dispatch Number: ${orderDetails.dispatch_number || 'N/A'}`, 14, 65);
+      doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, 14, 70);
+      doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, 14, 75);
     }
+
+    doc.text(`Dealer Name: ${orderDetails.dealer_name}`, 150, 35);
+    doc.text(`Address: ${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}`, 150, 40);
+    doc.text(`Phone: ${orderDetails.dealer_phone}`, 150, 45);
+
+    doc.setFontSize(12);
+    doc.text(`Total Order Amount: ₹${orderDetails.total_amount.toFixed(2)}`, 270, finalY + 10, { align: 'right' });
+
+    if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
+      doc.setFontSize(10);
+      doc.text("Payment Details:", 14, finalY + 20);
+      doc.text(`Payment Method: ${orderDetails.payment_method || 'N/A'}`, 14, finalY + 25);
+      doc.text(`Amount: ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}`, 14, finalY + 30);
+      doc.text(`Payment Date: ${formatDate(orderDetails.payment_date)}`, 14, finalY + 35);
+      if (orderDetails.payment_method === 'Cheque/DD') {
+        doc.text(`Cheque/DD No: ${orderDetails.cheque_dd_no || 'N/A'}`, 14, finalY + 40);
+        doc.text(`Cheque/DD Date: ${formatDate(orderDetails.cheque_dd_date)}`, 14, finalY + 45);
+      }
+      if (orderDetails.payment_method === 'Card' || orderDetails.payment_method === 'Bank Transfer' || orderDetails.payment_method === 'UPI') {
+        doc.text(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`, 14, finalY + 40);
+      }
+    }
+
+    doc.save(`order_${orderDetails.order_number}_details.pdf`);
+    showSuccess('Order details PDF generated successfully!');
   };
 
   return (
@@ -507,7 +506,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
+                      <TableHead>Code</TableHead>
                       <TableHead>Product Name</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead>HSN</TableHead>
+                      <TableHead className="text-right">GST (%)</TableHead>
                       <TableHead className="text-right">Quantity</TableHead>
                       <TableHead className="text-right">Unit Price</TableHead>
                       <TableHead className="text-right">Total Price</TableHead>
@@ -516,7 +519,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                   <TableBody>
                     {orderDetails.items.map((item, index) => (
                       <TableRow key={index}>
+                        <TableCell>{item.product_code}</TableCell>
                         <TableCell>{item.product_name}</TableCell>
+                        <TableCell>{item.product_size}</TableCell>
+                        <TableCell>{item.product_hsn}</TableCell>
+                        <TableCell className="text-right">{item.product_gst}</TableCell>
                         <TableCell className="text-right">{item.quantity}</TableCell>
                         <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
                         <TableCell className="text-right">₹{item.total_price.toFixed(2)}</TableCell>
