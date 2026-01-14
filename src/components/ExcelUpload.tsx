@@ -179,9 +179,8 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
           columnMappings.forEach(mapping => {
             if (mapping.targetKey) {
               const rawValue = rawRowObject[mapping.source];
-              // Use z.coerce.number for numeric fields, otherwise use rawValue or null
-              // This is a generic approach, specific coercions should ideally be handled by the schema itself
-              transformedRowObject[mapping.targetKey as keyof z.infer<T>] = (rawValue !== undefined && rawValue !== null) ? rawValue : null;
+              // Pass rawValue directly. Zod's coerce and default will handle null/undefined/empty strings.
+              transformedRowObject[mapping.targetKey as keyof z.infer<T>] = rawValue;
             }
           });
 
@@ -196,6 +195,11 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
             });
           } else {
             const zodErrors = validationResult.error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
+            console.error(`[ExcelUpload] Validation failed for row ${i + 1}:`, {
+              transformedData: transformedRowObject,
+              errors: zodErrors,
+              originalRawData: rawRowObject,
+            });
             processedRows.push({
               originalRow: i + 1,
               isValid: false,
