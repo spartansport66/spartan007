@@ -125,6 +125,24 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null); // New state for company name
+
+  const fetchCompanyInfo = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('company_info')
+        .select('company_name')
+        .limit(1)
+        .single();
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+      setCompanyName(data?.company_name || null);
+    } catch (error: any) {
+      console.error('Error fetching company name for PDF:', error.message);
+      setCompanyName(null);
+    }
+  }, []);
 
   const fetchOrderDetails = useCallback(async (id: string) => {
     setLoading(true);
@@ -270,11 +288,13 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   useEffect(() => {
     if (isOpen && orderId) {
       fetchOrderDetails(orderId);
+      fetchCompanyInfo(); // Fetch company info when dialog opens
     } else if (!isOpen) {
       setOrderDetails(null); // Clear details when dialog closes
       setShowPaymentDetails(false); // Reset payment details view
+      setCompanyName(null); // Clear company name
     }
-  }, [isOpen, orderId, fetchOrderDetails]);
+  }, [isOpen, orderId, fetchOrderDetails, fetchCompanyInfo]);
 
   useEffect(() => {
     if (isOpen && orderDetails && shouldPrintOnLoad) {
@@ -289,40 +309,44 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     return (
       <div className="space-y-2">
         <h3 className="text-lg font-semibold">Payment Details</h3>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <p><strong>Payment Method:</strong> {details.payment_method || 'N/A'}</p>
-          <p><strong>Amount:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
-          <p><strong>Payment Date:</strong> {formatDate(details.payment_date)}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div>
+            <p><strong>Payment Method:</strong> {details.payment_method || 'N/A'}</p>
+            <p><strong>Amount:</strong> ₹{details.payment_amount?.toFixed(2) || 'N/A'}</p>
+            <p><strong>Payment Date:</strong> {formatDate(details.payment_date)}</p>
+          </div>
           {details.payment_method === 'Cheque/DD' && (
-            <>
+            <div>
               <p><strong>Cheque/DD No:</strong> {details.cheque_dd_no || 'N/A'}</p>
               <p><strong>Cheque/DD Date:</strong> {formatDate(details.cheque_dd_date)}</p>
-            </>
+            </div>
           )}
           {details.payment_method === 'Card' && (
-            <>
+            <div>
               <p><strong>Card Number:</strong> {details.card_number ? `**** **** **** ${details.card_number.slice(-4)}` : 'N/A'}</p>
               <p><strong>Card Holder:</strong> {details.card_holder_name || 'N/A'}</p>
               <p><strong>Expiry Date:</strong> {details.expiry_date || 'N/A'}</p>
               <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
-            </>
+            </div>
           )}
           {details.payment_method === 'Bank Transfer' && (
-            <>
+            <div>
               <p><strong>Bank Name:</strong> {details.bank_name || 'N/A'}</p>
               <p><strong>Account Number:</strong> {details.account_number ? `****${details.account_number.slice(-4)}` : 'N/A'}</p>
               <p><strong>IFSC Code:</strong> {details.ifsc_code || 'N/A'}</p>
               <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
-            </>
+            </div>
           )}
           {details.payment_method === 'UPI' && (
-            <>
+            <div>
               <p><strong>UPI ID:</strong> {details.upi_id || 'N/A'}</p>
               <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
-            </>
+            </div>
           )}
           {details.payment_method === 'Cash' && (
-            <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
+            <div>
+              <p><strong>Transaction ID:</strong> {details.transaction_id || 'N/A'}</p>
+            </div>
           )}
         </div>
       </div>
@@ -330,111 +354,202 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   };
 
   const handlePrint = () => {
-    if (!orderDetails) return;
-
-    let paymentDetailsHtml = '';
-    if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
-      paymentDetailsHtml = `
-        <h2>Payment Details</h2>
-        <p><strong>Payment Method:</strong> ${orderDetails.payment_method || 'N/A'}</p>
-        <p><strong>Amount:</strong> ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}</p>
-        <p><strong>Payment Date:</strong> ${formatDate(orderDetails.payment_date)}</p>
-        ${orderDetails.payment_method === 'Cheque/DD' ? `
-          <p><strong>Cheque/DD No:</strong> ${orderDetails.cheque_dd_no || 'N/A'}</p>
-          <p><strong>Cheque/DD Date:</strong> ${formatDate(orderDetails.cheque_dd_date)}</p>
-        ` : ''}
-        ${(orderDetails.payment_method === 'Card' || orderDetails.payment_method === 'Bank Transfer' || orderDetails.payment_method === 'UPI') ? `
-          <p><strong>Transaction ID:</strong> ${orderDetails.transaction_id || 'N/A'}</p>
-        ` : ''}
-      `;
+    if (!orderDetails) {
+      showError('No order details to print.');
+      return;
     }
 
-    const doc = new jsPDF({
-      orientation: 'landscape'
-    });
-    doc.setFontSize(18);
-    doc.text("Order Details", 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait', // Changed to portrait for better fit of details
+        unit: 'mm',
+        format: 'a4'
+      });
 
-    const tableColumn = [
-      "Code", "Product Name", "Size", "HSN", "GST (%)", "Quantity", "Unit Price", "Total Price"
-    ];
-    const tableRows = orderDetails.items.map(item => [
-      item.product_code,
-      item.product_name,
-      item.product_size,
-      item.product_hsn,
-      item.product_gst,
-      item.quantity,
-      `₹${item.unit_price.toFixed(2)}`,
-      `₹${item.total_price.toFixed(2)}`,
-    ]);
+      const margin = 10;
+      let yPos = margin;
 
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 100, // Adjust startY to accommodate header info
-      styles: {
-        fontSize: 7
-      },
-      headStyles: {
-        fillColor: [200, 200, 200],
-        textColor: [0, 0, 0]
-      },
-      margin: { top: 25, left: 10, right: 10 },
-      columnStyles: {
-        0: { cellWidth: 20 }, // Code
-        1: { cellWidth: 30 }, // Product Name
-        2: { cellWidth: 20 }, // Size
-        3: { cellWidth: 20 }, // HSN
-        4: { cellWidth: 20, halign: 'right' }, // GST (%)
-        5: { cellWidth: 15, halign: 'right' }, // Quantity
-        6: { cellWidth: 20, halign: 'right' }, // Unit Price
-        7: { cellWidth: 25, halign: 'right' }, // Total Price
-      }
-    });
+      // Company Name
+      const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+      doc.setFontSize(18);
+      doc.text(companyNameText, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
+      yPos += 10;
 
-    let finalY = (doc as any).lastAutoTable.finalY;
+      // Report Title
+      doc.setFontSize(14);
+      doc.text("Order Details", doc.internal.pageSize.width / 2, yPos, { align: 'center' });
+      yPos += 8;
 
-    doc.setFontSize(10);
-    doc.text(`Order Number: ${orderDetails.order_number}`, 14, 35);
-    doc.text(`Order Date: ${formatDate(orderDetails.order_date)}`, 14, 40);
-    doc.text(`Order Status: ${orderDetails.status}`, 14, 45);
-    doc.text(`Payment Status: ${orderDetails.payment_status}`, 14, 50);
-    doc.text(`Payment Due Date: ${formatDate(orderDetails.payment_due_date)}`, 14, 55);
-    doc.text(`Sales Person: ${orderDetails.sales_person_name}`, 14, 60);
+      // Generated Date
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
+      yPos += 8;
 
-    if (orderDetails.dispatched) {
-      doc.text(`Dispatch Number: ${orderDetails.dispatch_number || 'N/A'}`, 14, 65);
-      doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, 14, 70);
-      doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, 14, 75);
-    }
+      doc.setTextColor(0); // Reset text color to black
 
-    doc.text(`Dealer Name: ${orderDetails.dealer_name}`, 150, 35);
-    doc.text(`Address: ${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}`, 150, 40);
-    doc.text(`Phone: ${orderDetails.dealer_phone}`, 150, 45);
-
-    doc.setFontSize(12);
-    doc.text(`Total Order Amount: ₹${orderDetails.total_amount.toFixed(2)}`, 270, finalY + 10, { align: 'right' });
-
-    if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
+      // Order Information (Left Column)
       doc.setFontSize(10);
-      doc.text("Payment Details:", 14, finalY + 20);
-      doc.text(`Payment Method: ${orderDetails.payment_method || 'N/A'}`, 14, finalY + 25);
-      doc.text(`Amount: ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}`, 14, finalY + 30);
-      doc.text(`Payment Date: ${formatDate(orderDetails.payment_date)}`, 14, finalY + 35);
-      if (orderDetails.payment_method === 'Cheque/DD') {
-        doc.text(`Cheque/DD No: ${orderDetails.cheque_dd_no || 'N/A'}`, 14, finalY + 40);
-        doc.text(`Cheque/DD Date: ${formatDate(orderDetails.cheque_dd_date)}`, 14, finalY + 45);
-      }
-      if (orderDetails.payment_method === 'Card' || orderDetails.payment_method === 'Bank Transfer' || orderDetails.payment_method === 'UPI') {
-        doc.text(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`, 14, finalY + 40);
-      }
-    }
+      doc.setFont("helvetica", "bold");
+      doc.text("Order Information:", margin, yPos);
+      doc.setFont("helvetica", "normal");
+      yPos += 5;
+      doc.text(`Order Number: ${orderDetails.order_number}`, margin, yPos);
+      yPos += 5;
+      doc.text(`Order Date: ${formatDate(orderDetails.order_date)}`, margin, yPos);
+      yPos += 5;
+      doc.text(`Order Status: ${orderDetails.status}`, margin, yPos);
+      yPos += 5;
+      doc.text(`Payment Status: ${orderDetails.payment_status.replace(/_/g, ' ').toUpperCase()}`, margin, yPos);
+      yPos += 5;
+      doc.text(`Payment Due Date: ${formatDate(orderDetails.payment_due_date)}`, margin, yPos);
+      yPos += 5;
+      doc.text(`Sales Person: ${orderDetails.sales_person_name}`, margin, yPos);
+      yPos += 5;
 
-    doc.save(`order_${orderDetails.order_number}_details.pdf`);
-    showSuccess('Order details PDF generated successfully!');
+      if (orderDetails.dispatched) {
+        doc.text(`Dispatch Number: ${orderDetails.dispatch_number || 'N/A'}`, margin, yPos);
+        yPos += 5;
+        doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, margin, yPos);
+        yPos += 5;
+        doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, margin, yPos);
+        yPos += 5;
+      }
+
+      // Dealer Information (Right Column)
+      const rightColX = doc.internal.pageSize.width / 2 + 10;
+      let dealerYPos = yPos - (orderDetails.dispatched ? 35 : 20); // Align with order info
+      if (dealerYPos < (margin + 20)) dealerYPos = margin + 20; // Ensure it doesn't go too high
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Dealer Information:", rightColX, dealerYPos);
+      doc.setFont("helvetica", "normal");
+      dealerYPos += 5;
+      doc.text(`Dealer Name: ${orderDetails.dealer_name}`, rightColX, dealerYPos);
+      dealerYPos += 5;
+      doc.text(`Address: ${orderDetails.dealer_address}`, rightColX, dealerYPos);
+      dealerYPos += 5;
+      doc.text(`${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}`, rightColX, dealerYPos);
+      dealerYPos += 5;
+      doc.text(`Phone: ${orderDetails.dealer_phone}`, rightColX, dealerYPos);
+      dealerYPos += 5;
+
+      yPos = Math.max(yPos, dealerYPos) + 10; // Ensure next section starts below both columns
+
+      // Order Items Table
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Order Items:", margin, yPos);
+      yPos += 5;
+
+      const tableColumn = [
+        "Code", "Product Name", "Size", "HSN", "GST (%)", "Qty", "Unit Price", "Total Price"
+      ];
+      const tableRows = orderDetails.items.map(item => [
+        item.product_code,
+        item.product_name,
+        item.product_size,
+        item.product_hsn,
+        item.product_gst,
+        item.quantity.toString(),
+        `₹${item.unit_price.toFixed(2)}`,
+        `₹${item.total_price.toFixed(2)}`,
+      ]);
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: yPos,
+        styles: {
+          fontSize: 7,
+          cellPadding: 1,
+          valign: 'middle',
+          overflow: 'linebreak'
+        },
+        headStyles: {
+          fillColor: [30, 58, 138], // Dark blue
+          textColor: [255, 255, 255], // White
+          fontStyle: 'bold',
+          halign: 'center',
+        },
+        bodyStyles: {
+          textColor: [0, 0, 0],
+        },
+        margin: { top: 0, left: margin, right: margin },
+        columnStyles: {
+          0: { cellWidth: 18 }, // Code
+          1: { cellWidth: 35 }, // Product Name
+          2: { cellWidth: 18 }, // Size
+          3: { cellWidth: 18 }, // HSN
+          4: { cellWidth: 18, halign: 'right' }, // GST (%)
+          5: { cellWidth: 12, halign: 'right' }, // Quantity
+          6: { cellWidth: 20, halign: 'right' }, // Unit Price
+          7: { cellWidth: 25, halign: 'right' }, // Total Price
+        }
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 5;
+
+      // Total Order Amount
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Total Order Amount: ₹${orderDetails.total_amount.toFixed(2)}`, doc.internal.pageSize.width - margin, yPos, { align: 'right' });
+      yPos += 10;
+
+      // Payment Details Section
+      if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("Payment Details:", margin, yPos);
+        doc.setFont("helvetica", "normal");
+        yPos += 5;
+
+        const paymentDetailsLines = [
+          `Payment Method: ${orderDetails.payment_method || 'N/A'}`,
+          `Amount: ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}`,
+          `Payment Date: ${formatDate(orderDetails.payment_date)}`,
+        ];
+
+        if (orderDetails.payment_method === 'Cheque/DD') {
+          paymentDetailsLines.push(`Cheque/DD No: ${orderDetails.cheque_dd_no || 'N/A'}`);
+          paymentDetailsLines.push(`Cheque/DD Date: ${formatDate(orderDetails.cheque_dd_date)}`);
+        }
+        if (orderDetails.payment_method === 'Card') {
+          paymentDetailsLines.push(`Card Number: ${orderDetails.card_number ? `**** **** **** ${orderDetails.card_number.slice(-4)}` : 'N/A'}`);
+          paymentDetailsLines.push(`Card Holder: ${orderDetails.card_holder_name || 'N/A'}`);
+          paymentDetailsLines.push(`Expiry Date: ${orderDetails.expiry_date || 'N/A'}`);
+          paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
+        }
+        if (orderDetails.payment_method === 'Bank Transfer') {
+          paymentDetailsLines.push(`Bank Name: ${orderDetails.bank_name || 'N/A'}`);
+          paymentDetailsLines.push(`Account Number: ${orderDetails.account_number ? `****${orderDetails.account_number.slice(-4)}` : 'N/A'}`);
+          paymentDetailsLines.push(`IFSC Code: ${orderDetails.ifsc_code || 'N/A'}`);
+          paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
+        }
+        if (orderDetails.payment_method === 'UPI') {
+          paymentDetailsLines.push(`UPI ID: ${orderDetails.upi_id || 'N/A'}`);
+          paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
+        }
+        if (orderDetails.payment_method === 'Cash') {
+          paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
+        }
+
+        paymentDetailsLines.forEach(line => {
+          if (yPos + 5 > doc.internal.pageSize.height - margin) {
+            doc.addPage();
+            yPos = margin;
+          }
+          doc.text(line, margin, yPos);
+          yPos += 5;
+        });
+      }
+
+      doc.save(`order_${orderDetails.order_number}_details.pdf`);
+      showSuccess('Order details PDF generated successfully!');
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      showError(`Failed to generate order details PDF: ${error.message || 'An unknown error occurred.'}`);
+    }
   };
 
   return (
@@ -453,7 +568,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
           </div>
         ) : orderDetails ? (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
                 <p><span className="font-semibold">Order Number:</span> {orderDetails.order_number}</p>
                 <p><span className="font-semibold">Order Date:</span> {formatDate(orderDetails.order_date)}</p>
