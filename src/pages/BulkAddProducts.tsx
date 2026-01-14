@@ -24,11 +24,20 @@ const productSchema = z.object({
   gst: z.coerce.string().nullable().optional(), // Changed to string for alphanumeric
   dp: z.preprocess(
     (val) => (val === "" ? undefined : val), // Convert empty string to undefined
-    z.coerce.number().int({ message: 'Dealer Price must be a whole number.' }) // Changed to integer
+    z.coerce.number()
+      .int({ message: 'Dealer Price must be a whole number.' }) // Moved .int() here
+      .transform(val => Math.round(val)) // Round to nearest integer
       .min(0, { message: 'Dealer Price cannot be negative.' }) // Changed min to 0 for integer
       .default(0) // Default to 0
   ),
-  stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }).default(0), // Default to 0
+  stock: z.preprocess(
+    (val) => (val === "" ? undefined : val), // Convert empty string to undefined
+    z.coerce.number()
+      .int() // Moved .int() here
+      .transform(val => Math.round(val)) // Round to nearest integer
+      .min(0, { message: 'Stock cannot be negative.' })
+      .default(0) // Default to 0
+  ),
 });
 
 // Define display headers for the ExcelUpload component
