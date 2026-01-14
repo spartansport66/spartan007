@@ -372,7 +372,7 @@ const ManageDealers = () => {
         .upsert({
           dealer_id: selectedDealer.id,
           opening_balance: values.openingBalance,
-          closing_balance: values.openingBalance, // Initially same as opening, will be dynamically calculated for display
+          // Removed closing_balance from here, as it should be dynamically calculated
         }, { onConflict: 'dealer_id' })
         .select(); // Select the updated data to log it
       
