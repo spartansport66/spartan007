@@ -235,11 +235,11 @@ const ManageDealers = () => {
         throw dealersError;
       }
       
-      console.log('DEBUG: Raw dealersData from Supabase:', dealersData);
+      console.log('[ManageDealers] Raw dealersData from Supabase:', dealersData);
       
       // Add more specific logging for dealer_balances
       dealersData?.forEach(d => {
-        console.log(`DEBUG: Dealer ${d.name} (ID: ${d.id}) raw dealer_balances:`, d.dealer_balances);
+        console.log(`[ManageDealers] Dealer ${d.name} (ID: ${d.id}) raw dealer_balances:`, d.dealer_balances);
       });
 
       // Create a map of dealer balances for easy lookup
@@ -277,7 +277,7 @@ const ManageDealers = () => {
 
         // Calculate current balance
         let currentBalance = balance.opening_balance || 0;
-        console.log(`[fetchDealers] Dealer ${d.name} (ID: ${d.id}) initial currentBalance from opening_balance:`, currentBalance);
+        console.log(`[ManageDealers] Dealer ${d.name} (ID: ${d.id}) initial currentBalance from opening_balance:`, currentBalance);
 
         (d.orders || []).forEach(order => {
           // All orders are debits (increase amount owed)
@@ -297,7 +297,7 @@ const ManageDealers = () => {
           opening_balance: balance.opening_balance || 0,
           current_balance: currentBalance, // Use calculated current balance
         };
-        console.log('DEBUG: Formatted dealer with opening_balance:', dealerObject.opening_balance);
+        console.log(`[ManageDealers] Dealer ${dealerObject.name} (ID: ${dealerObject.id}) - Opening Balance: ${dealerObject.opening_balance}, Current Balance: ${dealerObject.current_balance}`);
         return dealerObject;
       });
       
