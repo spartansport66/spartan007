@@ -88,14 +88,11 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
         showError('Failed to load dealer opening balances.');
         setDealers([]);
       } else {
-        const formattedDealers: DealerOpeningBalance[] = (data || []).map((d: any) => {
-          console.log(`DEBUG: Dealer ${d.name} (ID: ${d.id}) raw dealer_balances:`, d.dealer_balances); // Added log
-          return {
-            id: d.id,
-            name: d.name,
-            opening_balance: d.dealer_balances?.[0]?.opening_balance || 0,
-          };
-        });
+        const formattedDealers: DealerOpeningBalance[] = (data || []).map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          opening_balance: d.dealer_balances?.opening_balance || 0, // Corrected access here
+        }));
         setDealers(formattedDealers);
       }
     } catch (error: any) {
