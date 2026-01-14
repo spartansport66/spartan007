@@ -488,8 +488,8 @@ const MultiItemOrderForm: React.FC = () => {
 
   // Filter products based on search value - improved matching
   const filteredProducts = useMemo(() => {
-    if (searchValue.length < 3) { // Only start filtering after 3 characters
-      return products; // Return all products if search value is too short
+    if (searchValue.length < 3) {
+      return []; // Return an empty array until 3 characters are typed
     }
 
     const lowerCaseSearchValue = searchValue.toLowerCase();
