@@ -22,7 +22,7 @@ interface DealerExcelUploadProps {
 export const dealerSchema = z.object({
   name: z.string().min(1, { message: 'Dealer Name is required.' }), // Made required
   contactperson: z.string().nullable().optional(),
-  email: z.string().email({ message: 'Invalid email format.' }).nullable().optional(), // Added email format validation
+  email: z.string().email({ message: 'Invalid email format.' }).or(z.literal('')).nullable().optional(), // Modified to allow empty string or valid email
   phone: z.string().nullable().optional(),
   address: z.string().min(1, { message: 'Address is required.' }), // Made required
   city: z.string().nullable().optional(), // This is correct for optional
