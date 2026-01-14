@@ -14,7 +14,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { ArrowLeft, Loader2, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import ExcelUpload from '@/components/ExcelUpload';
+import ItemExcelUpload from '@/components/ItemExcelUpload'; // Changed from ExcelUpload
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }),
@@ -83,41 +83,10 @@ const AddProduct = () => {
     }
   };
 
-  const handleBulkUpload = async (data: any[]) => {
-    if (!user) {
-      showError('You must be logged in to add products.');
-      navigate('/login');
-      return;
-    }
-
-    setIsUploading(true);
-    try {
-      // Transform data to match product schema
-      const productsToInsert = data.map((row: any) => ({
-        user_id: user.id,
-        name: row.name,
-        description: row.description,
-        price: row.price,
-        stock: row.stock,
-      }));
-
-      const { data: insertedData, error } = await supabase
-        .from('products')
-        .insert(productsToInsert)
-        .select();
-
-      if (error) {
-        throw error;
-      }
-
-      showSuccess(`Successfully uploaded ${insertedData?.length || 0} products!`);
-      navigate('/manage-products');
-    } catch (error: any) {
-      console.error('Error uploading products:', error);
-      showError(`Failed to upload products: ${error.message}`);
-    } finally {
-      setIsUploading(false);
-    }
+  const handleBulkUploadComplete = () => {
+    // This function is called by ItemExcelUpload when its upload is complete.
+    // It will trigger a navigation to the manage products page.
+    navigate('/manage-products');
   };
 
   if (sessionLoading) {
@@ -132,36 +101,6 @@ const AddProduct = () => {
   if (!isAdmin) {
     return null; // Render nothing if not admin, as they are redirected
   }
-
-  const sampleProductData = [
-    {
-      name: 'Product A',
-      description: 'Description for Product A',
-      price: 29.99,
-      stock: 100
-    },
-    {
-      name: 'Product B',
-      description: 'Description for Product B',
-      price: 39.99,
-      stock: 50
-    },
-    {
-      name: 'Product C',
-      description: 'Description for Product C',
-      price: 19.99,
-      stock: 200
-    }
-  ];
-
-  const productColumnMap = {
-    "name": "name",
-    "description": "description",
-    "price": "price",
-    "stock": "stock",
-  };
-
-  const productDisplayHeaders = ['Name', 'Description', 'Price', 'Stock'];
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -241,15 +180,7 @@ const AddProduct = () => {
           </Card>
           
           <div className="space-y-6">
-            <ExcelUpload
-              onUpload={handleBulkUpload}
-              sampleData={sampleProductData}
-              sampleFileName="sample_products.xlsx"
-              uploadButtonText="Upload Products"
-              displayHeaders={productDisplayHeaders}
-              columnMap={productColumnMap}
-              validationSchema={formSchema}
-            />
+            <ItemExcelUpload onUploadComplete={handleBulkUploadComplete} /> {/* Using the dedicated ItemExcelUpload */}
             
             <Card className="bg-card text-card-foreground shadow-lg">
               <CardHeader>
@@ -261,7 +192,7 @@ const AddProduct = () => {
               <CardContent>
                 <ul className="list-disc pl-5 space-y-2 text-sm">
                   <li>Download the sample Excel file to see the required format</li>
-                  <li>Required columns: Name, Price, Stock</li>
+                  <li>Required columns: Item Name, Price, Stock</li>
                   <li>Description is optional</li>
                   <li>Price should be a number (e.g., 29.99)</li>
                   <li>Stock should be a whole number (e.g., 100)</li>
