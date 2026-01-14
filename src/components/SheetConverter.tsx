@@ -89,6 +89,7 @@ const SheetConverter: React.FC = () => {
           return;
         }
         
+        console.log("[SheetConverter] Filtered Excel Headers:", excelHeaders); // Added log
         setHeaders(excelHeaders);
         const initialMappings: ColumnMapping[] = excelHeaders.map(header => ({ source: header, target: '' }));
         setColumnMappings(initialMappings);
@@ -372,7 +373,9 @@ const SheetConverter: React.FC = () => {
                             {/* Use "__NONE__" instead of "" for the value */}
                             <SelectItem value="__NONE__">Do not map</SelectItem>
                             {requiredHeaders.map((header) => (
-                              <SelectItem key={header} value={header}>{header}</SelectItem>
+                              <SelectItem key={header || `empty-header-${header}`} value={header || `empty-header-${header}`}> {/* Defensive change */}
+                                {header}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -406,8 +409,10 @@ const SheetConverter: React.FC = () => {
                   <SelectContent>
                     {/* Use "__NONE__" instead of "" for the value */}
                     <SelectItem value="__NONE__">Do not split any column</SelectItem>
-                    {headers.map((header) => (
-                      <SelectItem key={header} value={header}>{header}</SelectItem>
+                    {headers.map((header, index) => (
+                      <SelectItem key={header || `empty-header-${index}`} value={header || `empty-header-${index}`}> {/* Defensive change */}
+                        {header}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
