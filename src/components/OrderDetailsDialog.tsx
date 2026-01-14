@@ -490,10 +490,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
       yPos = (doc as any).lastAutoTable.finalY + 5;
 
-      // Total Order Amount
+      // Total Order Amount - Centered
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text(`Total Order Amount: ₹${orderDetails.total_amount.toFixed(2)}`, doc.internal.pageSize.width - margin, yPos, { align: 'right' });
+      doc.text(`Total Order Amount: ₹${orderDetails.total_amount.toFixed(2)}`, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
       yPos += 10;
 
       // Payment Details Section
