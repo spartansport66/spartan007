@@ -25,19 +25,35 @@ const productSchema = z.object({
   hsn: z.coerce.string().nullable().optional(), // Coerce HSN to string
   gst: z.coerce.string().nullable().optional(), // Changed to string for alphanumeric
   dp: z.preprocess(
-    (val) => (val === "" ? undefined : val), // Convert empty string to undefined
+    (val) => {
+      if (typeof val === 'string') {
+        const trimmedVal = val.trim();
+        if (trimmedVal === '') return undefined;
+        const num = parseFloat(trimmedVal);
+        return isNaN(num) ? trimmedVal : num; // Pass number if valid, else original string for Zod to error on
+      }
+      return val;
+    },
     z.coerce.number()
-      .int({ message: 'Dealer Price must be a whole number.' }) // Apply .int() first
-      .min(0, { message: 'Dealer Price cannot be negative.' }) // Apply .min() next
-      .transform(val => Math.round(val)) // Then transform
+      .transform(val => Math.round(val)) // Round to nearest integer first
+      .int({ message: 'Dealer Price must be a whole number.' }) // Then validate it's an integer
+      .min(0, { message: 'Dealer Price cannot be negative.' })
       .default(0) // Default to 0
   ),
   stock: z.preprocess(
-    (val) => (val === "" ? undefined : val), // Convert empty string to undefined
+    (val) => {
+      if (typeof val === 'string') {
+        const trimmedVal = val.trim();
+        if (trimmedVal === '') return undefined;
+        const num = parseFloat(trimmedVal);
+        return isNaN(num) ? trimmedVal : num; // Pass number if valid, else original string for Zod to error on
+      }
+      return val;
+    },
     z.coerce.number()
-      .int() // Apply .int() first
-      .min(0, { message: 'Stock cannot be negative.' }) // Apply .min() next
-      .transform(val => Math.round(val)) // Then transform
+      .transform(val => Math.round(val)) // Round to nearest integer first
+      .int() // Then validate it's an integer
+      .min(0, { message: 'Stock cannot be negative.' })
       .default(0) // Default to 0
   ),
 });
