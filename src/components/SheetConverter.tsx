@@ -89,7 +89,7 @@ const SheetConverter: React.FC = () => {
           return;
         }
         
-        console.log("[SheetConverter] Filtered Excel Headers:", excelHeaders); // Added log
+        console.log("[SheetConverter] Filtered Excel Headers (before setHeaders):", excelHeaders); // Added log
         setHeaders(excelHeaders);
         const initialMappings: ColumnMapping[] = excelHeaders.map(header => ({ source: header, target: '' }));
         setColumnMappings(initialMappings);
@@ -372,11 +372,14 @@ const SheetConverter: React.FC = () => {
                           <SelectContent>
                             {/* Use "__NONE__" instead of "" for the value */}
                             <SelectItem value="__NONE__">Do not map</SelectItem>
-                            {requiredHeaders.map((header) => (
-                              <SelectItem key={header || `empty-header-${header}`} value={header || `empty-header-${header}`}> {/* Defensive change */}
-                                {header}
-                              </SelectItem>
-                            ))}
+                            {requiredHeaders.map((header, idx) => {
+                              console.log(`[SheetConverter] requiredHeaders SelectItem value: "${header}" (key: "${idx}")`);
+                              return (
+                                <SelectItem key={idx} value={header}>
+                                  {header}
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -409,11 +412,14 @@ const SheetConverter: React.FC = () => {
                   <SelectContent>
                     {/* Use "__NONE__" instead of "" for the value */}
                     <SelectItem value="__NONE__">Do not split any column</SelectItem>
-                    {headers.map((header, index) => (
-                      <SelectItem key={header || `empty-header-${index}`} value={header || `empty-header-${index}`}> {/* Defensive change */}
-                        {header}
-                      </SelectItem>
-                    ))}
+                    {headers.map((header, index) => {
+                      console.log(`[SheetConverter] headers SelectItem value: "${header}" (key: "${index}")`);
+                      return (
+                        <SelectItem key={index} value={header}>
+                          {header}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -446,29 +452,35 @@ const SheetConverter: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {requiredHeaders.map((header) => (
-                        <TableRow key={`split-map-${header}`}>
-                          <TableCell className="font-medium">{header}</TableCell>
-                          <TableCell>
-                            <Select
-                              value={splitPartMapping[header] || '__NONE__'} // Default to __NONE__ if not mapped
-                              onValueChange={(value) => handleSplitPartMappingChange(header, value)}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select part index" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {/* Use "__NONE__" instead of "" for the value */}
-                                <SelectItem value="__NONE__">Do not map</SelectItem>
-                                {Array.from({ length: 10 }, (_, i) => i.toString()).map(index => (
-                                  // Max 10 parts for now
-                                  <SelectItem key={index} value={index.toString()}>{`Part ${parseInt(index) + 1} (Index ${index})`}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {requiredHeaders.map((header) => {
+                        const partIndexValue = splitPartMapping[header] || '__NONE__';
+                        console.log(`[SheetConverter] splitPartMapping SelectItem value: "${partIndexValue}" (header: "${header}")`);
+                        return (
+                          <TableRow key={`split-map-${header}`}>
+                            <TableCell className="font-medium">{header}</TableCell>
+                            <TableCell>
+                              <Select
+                                value={partIndexValue}
+                                onValueChange={(value) => handleSplitPartMappingChange(header, value)}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="Select part index" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {/* Use "__NONE__" instead of "" for the value */}
+                                  <SelectItem value="__NONE__">Do not map</SelectItem>
+                                  {Array.from({ length: 10 }, (_, i) => i.toString()).map(index => {
+                                    console.log(`[SheetConverter] split parts SelectItem value: "${index.toString()}"`);
+                                    return (
+                                      <SelectItem key={index} value={index.toString()}>{`Part ${parseInt(index) + 1} (Index ${index})`}</SelectItem>
+                                    );
+                                  })}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
