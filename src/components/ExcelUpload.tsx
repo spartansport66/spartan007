@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useMemo } from 'react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx'; // Keep for type definitions if needed, but parsing logic moves
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import * as z from 'zod';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { parseExcelFile, downloadExcelFile } from '@/utils/excel'; // Import new utilities
 
 interface ColumnMapping {
   source: string; // Original Excel header
@@ -69,67 +70,39 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
     }
   };
 
-  const handleParseExcel = () => {
+  const handleParseExcel = async () => {
     if (!file) {
-      showError('Please select an Excel file to upload.');
+      showError('[ExcelUpload] Please select an Excel file to upload.');
       return;
     }
     setLoading(true);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    try {
+      const { headers: detectedHeaders, data: rawParsedData } = await parseExcelFile(file);
+      
+      let filteredHeaders = detectedHeaders.filter(header => 
+        !excludedSourceHeaders.some(excluded => excluded.toLowerCase() === header.toLowerCase())
+      );
 
-        if (jsonData.length < 1) {
-          showError('Excel file is empty.');
-          setLoading(false);
-          return;
-        }
-        
-        let detectedHeaders = (jsonData[0] as string[]).map(h => String(h).trim()).filter(h => h !== ''); // Filter out empty headers
-        
-        // Filter out excluded headers
-        detectedHeaders = detectedHeaders.filter(header => 
-          !excludedSourceHeaders.some(excluded => excluded.toLowerCase() === header.toLowerCase())
-        );
+      setExcelHeaders(filteredHeaders);
 
-        setExcelHeaders(detectedHeaders);
+      const initialMappings: ColumnMapping[] = filteredHeaders.map(header => {
+        const matchedField = displayHeaders.find(field => field.label.toLowerCase() === header.toLowerCase());
+        return {
+          source: header,
+          targetKey: matchedField ? matchedField.key : '',
+        };
+      });
+      setColumnMappings(initialMappings);
 
-        // Initialize column mappings with detected headers and empty target keys
-        const initialMappings: ColumnMapping[] = detectedHeaders.map(header => {
-          // Attempt to auto-map if the detected header matches a required field's label
-          const matchedField = displayHeaders.find(field => field.label.toLowerCase() === header.toLowerCase());
-          return {
-            source: header,
-            targetKey: matchedField ? matchedField.key : '', // Auto-map if found, otherwise empty
-          };
-        });
-        setColumnMappings(initialMappings);
+      setParsedData([]); // Clear parsed data until mappings are applied
+      showSuccess('[ExcelUpload] Excel file parsed. Please map your columns.');
 
-        // Clear parsed data until mappings are applied
-        setParsedData([]);
-        showSuccess('Excel file parsed. Please map your columns.');
-
-      } catch (error: any) {
-        console.error('Error during Excel parsing:', error);
-        showError(`Error parsing Excel file: ${error.message}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    reader.onerror = () => {
-      showError('Error reading file. Please try again.');
+    } catch (error: any) {
+      console.error('[ExcelUpload] Error during Excel parsing:', error);
+      showError(`[ExcelUpload] Error parsing Excel file: ${error.message}`);
+    } finally {
       setLoading(false);
-    };
-
-    reader.readAsArrayBuffer(file);
+    }
   };
 
   const handleMappingChange = (sourceHeader: string, targetValue: string) => {
@@ -142,7 +115,7 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
 
   const applyMappingsAndValidate = () => {
     if (!file || excelHeaders.length === 0) {
-      showError('Please parse an Excel file first.');
+      showError('[ExcelUpload] Please parse an Excel file first.');
       return;
     }
     processAndValidateData();
@@ -156,107 +129,85 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
     }));
   }, [displayHeaders]);
 
-  const processAndValidateData = () => {
+  const processAndValidateData = async () => {
     if (!file || excelHeaders.length === 0) {
-      showError('Please parse an Excel file first.');
+      showError('[ExcelUpload] Please parse an Excel file first.');
       return;
     }
 
     setLoading(true);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    try {
+      const { data: rawParsedData } = await parseExcelFile(file); // Re-parse to get raw data rows
 
-        const startRowIndex = excelHeaders.length > 0 ? 1 : 0;
-        const processedRows: ParsedRow<z.infer<T>>[] = [];
+      const processedRows: ParsedRow<z.infer<T>>[] = [];
 
-        for (let i = startRowIndex; i < jsonData.length; i++) {
-          const row = jsonData[i] as any[];
-          if (!row || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
-            continue;
+      for (const rawRow of rawParsedData) {
+        const transformedRowObject: Partial<z.infer<T>> = {};
+
+        // Apply mappings to transform raw data into schema-compatible object
+        columnMappings.forEach(mapping => {
+          if (mapping.targetKey) {
+            const rawValue = rawRow[mapping.source];
+            transformedRowObject[mapping.targetKey as keyof z.infer<T>] = rawValue;
           }
+        });
 
-          const rawRowObject: { [key: string]: any } = {};
-          // Use original detected headers to build rawRowObject, then filter later
-          const originalDetectedHeaders = (jsonData[0] as string[]).map(h => String(h).trim()).filter(h => h !== '');
-          originalDetectedHeaders.forEach((header, index) => {
-            rawRowObject[header] = row[index];
+        const validationResult = validationSchema.safeParse(transformedRowObject);
+        if (validationResult.success) {
+          processedRows.push({
+            originalRow: rawRow.originalRow,
+            isValid: true,
+            errors: [],
+            data: validationResult.data,
+            rawData: rawRow,
           });
-
-          const transformedRowObject: Partial<z.infer<T>> = {};
-
-          // Apply mappings to transform raw data into schema-compatible object
-          columnMappings.forEach(mapping => {
-            if (mapping.targetKey) {
-              const rawValue = rawRowObject[mapping.source];
-              // Pass rawValue directly. Zod's coerce and default will handle null/undefined/empty strings.
-              transformedRowObject[mapping.targetKey as keyof z.infer<T>] = rawValue;
-            }
-          });
-
-          const validationResult = validationSchema.safeParse(transformedRowObject);
-          if (validationResult.success) {
-            processedRows.push({
-              originalRow: i + 1,
-              isValid: true,
-              errors: [],
-              data: validationResult.data,
-              rawData: rawRowObject,
-            });
-          } else {
-            const zodErrors = validationResult.error.errors.map(err => {
-              const path = err.path.join('.');
-              const displayLabel = schemaKeyToLabelMap.get(path) || path; // Get display label or fallback to path
-              return `${displayLabel}: ${err.message}`;
-            });
-            console.error(`[ExcelUpload] Validation failed for row ${i + 1}:`, {
-              transformedData: transformedRowObject,
-              errors: zodErrors,
-              originalRawData: rawRowObject,
-            });
-            processedRows.push({
-              originalRow: i + 1,
-              isValid: false,
-              errors: zodErrors,
-              data: transformedRowObject as z.infer<T>, // Cast to full schema type for consistency
-              rawData: rawRowObject,
-            });
-          }
-        }
-
-        setParsedData(processedRows);
-
-        if (processedRows.some(row => !row.isValid)) {
-          showError('Some rows contain invalid data. Please correct them before uploading.');
-        } else if (processedRows.length > 0) {
-          showSuccess(`Processed ${processedRows.length} rows. Review the data below.`);
         } else {
-          showError('No valid data found in the Excel file after applying mappings.');
+          const zodErrors = validationResult.error.errors.map(err => {
+            const path = err.path.join('.');
+            const displayLabel = schemaKeyToLabelMap.get(path) || path; // Get display label or fallback to path
+            return `${displayLabel}: ${err.message}`;
+          });
+          console.error(`[ExcelUpload] Validation failed for row ${rawRow.originalRow}:`, {
+            transformedData: transformedRowObject,
+            errors: zodErrors,
+            originalRawData: rawRow,
+          });
+          processedRows.push({
+            originalRow: rawRow.originalRow,
+            isValid: false,
+            errors: zodErrors,
+            data: transformedRowObject as z.infer<T>, // Cast to full schema type for consistency
+            rawData: rawRow,
+          });
         }
-      } catch (error: any) {
-        console.error('Error during data processing and validation:', error);
-        showError(`Error processing data: ${error.message}`);
-      } finally {
-        setLoading(false);
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      setParsedData(processedRows);
+
+      if (processedRows.some(row => !row.isValid)) {
+        showError('[ExcelUpload] Some rows contain invalid data. Please correct them before uploading.');
+      } else if (processedRows.length > 0) {
+        showSuccess(`[ExcelUpload] Processed ${processedRows.length} rows. Review the data below.`);
+      } else {
+        showError('[ExcelUpload] No valid data found in the Excel file after applying mappings.');
+      }
+    } catch (error: any) {
+      console.error('[ExcelUpload] Error during data processing and validation:', error);
+      showError(`[ExcelUpload] Error processing data: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpload = async () => {
     const validParsedData = parsedData.filter(p => p.isValid);
     if (validParsedData.length === 0) {
-      showError('No valid data to upload.');
+      showError('[ExcelUpload] No valid data to upload.');
       return;
     }
 
     if (parsedData.some(row => !row.isValid)) {
-      showError('Cannot upload. Please correct all invalid rows first.');
+      showError('[ExcelUpload] Cannot upload. Please correct all invalid rows first.');
       return;
     }
 
@@ -271,8 +222,8 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
         fileInputRef.current.value = '';
       }
     } catch (error: any) {
-      console.error('Error uploading items:', error);
-      showError(`Failed to upload items: ${error.message}`);
+      console.error('[ExcelUpload] Error uploading items:', error);
+      showError(`[ExcelUpload] Failed to upload items: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -280,14 +231,11 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
 
   const handleDownloadSample = () => {
     try {
-      const ws = XLSX.utils.json_to_sheet(sampleData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Sample Data');
-      XLSX.writeFile(wb, sampleFileName);
-      showSuccess('Sample Excel file downloaded successfully!');
+      downloadExcelFile(sampleData, sampleFileName, 'Sample Data');
+      showSuccess('[ExcelUpload] Sample Excel file downloaded successfully!');
     } catch (error: any) {
-      console.error('Error creating sample file:', error);
-      showError(`Failed to create sample file: ${error.message}`);
+      console.error('[ExcelUpload] Error creating sample file:', error);
+      showError(`[ExcelUpload] Failed to create sample file: ${error.message}`);
     }
   };
 
