@@ -356,8 +356,9 @@ const SheetConverter: React.FC = () => {
                     <TableRow key={index}>
                       <TableCell className="font-medium">{mapping.source}</TableCell>
                       <TableCell>
+                        {/* Fix: Default to __NONE__ if target is empty */}
                         <Select
-                          value={mapping.target || "__NONE__"} {/* Fix: Default to __NONE__ if target is empty */}
+                          value={mapping.target || "__NONE__"}
                           onValueChange={(value) => handleMappingChange(index, value)}
                         >
                           <SelectTrigger className="w-full">
@@ -390,8 +391,9 @@ const SheetConverter: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="columnToSplit">Select Column to Split</Label>
+                {/* Fix: Default to __NONE__ if empty */}
                 <Select
-                  value={columnToSplitSourceHeader || "__NONE__"} {/* Fix: Default to __NONE__ if empty */}
+                  value={columnToSplitSourceHeader || "__NONE__"}
                   onValueChange={(value) => setColumnToSplitSourceHeader(value === "__NONE__" ? "" : value)}
                 >
                   <SelectTrigger id="columnToSplit" className="w-full">

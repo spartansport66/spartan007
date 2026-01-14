@@ -49,8 +49,8 @@ const DealerDataParser: React.FC = () => {
         
         // Read all data as array of arrays
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        if (jsonData.length < 1) {
-          showError('Excel file is empty.');
+        if (!Array.isArray(jsonData) || jsonData.length < 1) {
+          showError('Excel file is empty or malformed.');
           setLoading(false);
           return;
         }
@@ -61,46 +61,43 @@ const DealerDataParser: React.FC = () => {
         for (let i = 0; i < jsonData.length; i++) {
           const row = jsonData[i] as any[];
           
-          // Skip empty rows
-          if (!row || row.length === 0 || !row[0]) {
+          // Ensure row is an array and not completely empty
+          if (!Array.isArray(row) || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
             continue;
           }
           
-          // Check if this looks like a dealer name row (has content in first column)
-          const firstCell = String(row[0] || '').trim();
+          const firstCellContent = String(row[0] || '').trim();
           
-          // Skip rows that look like address lines (no city in parentheses)
-          if (!firstCell.includes('(') && !firstCell.includes(')')) {
+          // Heuristic: A dealer name row is expected to have content in the first cell
+          // and potentially a city in parentheses. If it doesn't, it might be an address line or empty.
+          if (!firstCellContent) {
+            continue; // Skip if the first cell is empty
+          }
+
+          // Check if this row is likely a dealer name row (contains parentheses for city)
+          const cityMatch = firstCellContent.match(/\(([^)]+)\)/);
+          if (!cityMatch) {
+            // If no city in parentheses, it's likely an address line or other non-dealer-name row.
+            // We need to advance the row index to skip these, but only if we're sure it's not a dealer name.
+            // For now, let's assume if it has content and no city, it's not a dealer name row for this parser.
+            // This is a very specific parsing logic.
             continue;
           }
           
-          // Extract dealer name and city from first column
-          let dealerName = firstCell; // Keep the original cell content as the base name
-          let city = '';
+          let dealerName = firstCellContent;
+          let city = cityMatch[1].trim();
           
-          // Extract city from parentheses
-          const cityMatch = firstCell.match(/\(([^)]+)\)/);
-          if (cityMatch) {
-            // If a city in parentheses is found, extract it
-            city = cityMatch[1].trim();
-            // IMPORTANT: Do NOT modify dealerName here. Keep the original string including parentheses.
-            // The user's request "set as add () in the dealer name if it is in the name"
-            // implies retaining the parentheses in the name itself.
-            // If the user wants the name *without* the city in parentheses,
-            // they should use the SheetConverter's column splitting feature.
-          }
-          
-          // Get address from next row if it exists
           let address = '';
+          // Get address from next row if it exists
           if (i + 1 < jsonData.length) {
             const nextRow = jsonData[i + 1] as any[];
-            if (nextRow && nextRow[0]) {
+            if (Array.isArray(nextRow) && nextRow[0]) {
               address = String(nextRow[0] || '').trim();
               
-              // Add second address line if it exists
+              // Add second address line if it exists (i.e., the row after nextRow)
               if (i + 2 < jsonData.length) {
                 const thirdRow = jsonData[i + 2] as any[];
-                if (thirdRow && thirdRow[0]) {
+                if (Array.isArray(thirdRow) && thirdRow[0]) {
                   const secondAddressLine = String(thirdRow[0] || '').trim();
                   if (secondAddressLine) {
                     address += ', ' + secondAddressLine;
@@ -110,11 +107,11 @@ const DealerDataParser: React.FC = () => {
             }
           }
           
-          // Extract phone number from column B if it exists
-          const phone = row[1] ? String(row[1]).trim() : '';
+          // Extract phone number from column B (index 1) if it exists
+          const phone = (Array.isArray(row) && row[1]) ? String(row[1]).trim() : '';
           
-          // Extract sales person from column C if it exists
-          const salesPerson = row[2] ? String(row[2]).trim() : '';
+          // Extract sales person from column C (index 2) if it exists
+          const salesPerson = (Array.isArray(row) && row[2]) ? String(row[2]).trim() : '';
           
           parsedDealers.push({
             name: dealerName,
@@ -123,6 +120,23 @@ const DealerDataParser: React.FC = () => {
             phone: phone,
             salesPerson: salesPerson
           });
+          
+          // Advance the loop index to skip the address rows that were just consumed
+          // This is crucial for multi-row record parsing.
+          // If we consumed 2 address lines, we need to skip 2 rows.
+          // If only 1 address line, skip 1 row.
+          // If no address lines, don't skip any extra rows.
+          let rowsConsumedForAddress = 0;
+          if (address) {
+            rowsConsumedForAddress = 1; // At least one address line was found
+            if (i + 2 < jsonData.length) {
+              const thirdRow = jsonData[i + 2] as any[];
+              if (Array.isArray(thirdRow) && thirdRow[0] && String(thirdRow[0] || '').trim()) {
+                rowsConsumedForAddress = 2; // A second address line was found
+              }
+            }
+          }
+          i += rowsConsumedForAddress; // Increment i by the number of address rows consumed
         }
         
         setParsedData(parsedDealers);
