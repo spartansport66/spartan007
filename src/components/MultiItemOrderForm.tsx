@@ -14,7 +14,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger }
+  from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
 interface Product {
@@ -489,11 +490,20 @@ const MultiItemOrderForm: React.FC = () => {
   const filteredProducts = useMemo(() => {
     if (!searchValue) return products;
 
-    const searchTerms = searchValue.toLowerCase().split(' ').filter(term => term.length > 0);
+    const lowerCaseSearchValue = searchValue.toLowerCase();
+    const searchTerms = lowerCaseSearchValue.split(' ').filter(term => term.length > 0);
+
     return products.filter(product => {
       const productName = product.name.toLowerCase();
       const productCode = product.code.toLowerCase();
-      return searchTerms.every(term => productName.includes(term) || productCode.includes(term));
+
+      // If no specific search terms, just check if the whole search value is in name or code
+      if (searchTerms.length === 0) {
+        return productName.includes(lowerCaseSearchValue) || productCode.includes(lowerCaseSearchValue);
+      }
+
+      // Check if ANY of the search terms are present in either product name or product code
+      return searchTerms.some(term => productName.includes(term) || productCode.includes(term));
     });
   }, [products, searchValue]);
 
@@ -636,7 +646,7 @@ const MultiItemOrderForm: React.FC = () => {
             </div>
 
             {disableAddItem && (
-              <Alert variant="destructive">
+              <Alert variant="destructive" className="mt-2">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Insufficient Credit</AlertTitle>
                 <AlertDescription>
