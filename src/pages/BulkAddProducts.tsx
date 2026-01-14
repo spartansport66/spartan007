@@ -25,17 +25,17 @@ const productSchema = z.object({
   dp: z.preprocess(
     (val) => (val === "" ? undefined : val), // Convert empty string to undefined
     z.coerce.number()
-      .int({ message: 'Dealer Price must be a whole number.' }) // Moved .int() here
-      .transform(val => Math.round(val)) // Round to nearest integer
-      .min(0, { message: 'Dealer Price cannot be negative.' }) // Changed min to 0 for integer
+      .int({ message: 'Dealer Price must be a whole number.' }) // Apply .int() first
+      .min(0, { message: 'Dealer Price cannot be negative.' }) // Apply .min() next
+      .transform(val => Math.round(val)) // Then transform
       .default(0) // Default to 0
   ),
   stock: z.preprocess(
     (val) => (val === "" ? undefined : val), // Convert empty string to undefined
     z.coerce.number()
-      .int() // Moved .int() here
-      .transform(val => Math.round(val)) // Round to nearest integer
-      .min(0, { message: 'Stock cannot be negative.' })
+      .int() // Apply .int() first
+      .min(0, { message: 'Stock cannot be negative.' }) // Apply .min() next
+      .transform(val => Math.round(val)) // Then transform
       .default(0) // Default to 0
   ),
 });
