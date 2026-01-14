@@ -69,9 +69,10 @@ const SheetConverter: React.FC = () => {
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
+        
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        if (jsonData.length < 1) {
-          showError('Excel file is empty.');
+        if (!Array.isArray(jsonData) || jsonData.length < 1) {
+          showError('Excel file is empty or malformed.');
           setLoading(false);
           return;
         }
@@ -91,11 +92,19 @@ const SheetConverter: React.FC = () => {
         const dataRows = jsonData.slice(1);
         const formattedData: any[] = dataRows.map((row: any, index: number) => {
           const rowData: any = {};
-          excelHeaders.forEach((header, i) => {
-            rowData[header] = row[i] !== undefined ? row[i] : '';
-          });
+          // Ensure row is an array before iterating
+          if (Array.isArray(row)) {
+            excelHeaders.forEach((header, i) => {
+              rowData[header] = row[i] !== undefined ? row[i] : '';
+            });
+          } else {
+            // If row is not an array, treat it as an empty row for parsing purposes
+            excelHeaders.forEach((header) => {
+              rowData[header] = '';
+            });
+          }
           return { originalRow: index + 2, ...rowData };
-        });
+        }).filter(row => Object.values(row).some(val => String(val).trim() !== '')); // Filter out completely empty rows
         setParsedData(formattedData);
       } catch (error: any) {
         console.error('Error parsing Excel file:', error);
@@ -156,7 +165,7 @@ const SheetConverter: React.FC = () => {
         // Apply split column logic, potentially overwriting one-to-one mappings
         if (columnToSplitSourceHeader && splitTargetHeaders.length > 0 && splitDelimiter) {
           const combinedValue = row[columnToSplitSourceHeader];
-          if (combinedValue) {
+          if (combinedValue !== undefined && combinedValue !== null) { // Ensure value exists before splitting
             const parts = String(combinedValue).split(splitDelimiter).map(p => p.trim());
             splitTargetHeaders.forEach(targetHeader => {
               const partIndexStr = splitPartMapping[targetHeader];
