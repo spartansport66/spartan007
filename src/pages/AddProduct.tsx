@@ -31,14 +31,20 @@ const productSchema = z.object({
   size: z.coerce.string().nullable().optional(), // Coerce size to string
   hsn: z.coerce.string().nullable().optional(), // Coerce HSN to string
   gst: z.coerce.string().nullable().optional(), // Changed to string for alphanumeric
-  dp: z.coerce.number()
-    .min(0.01, { message: 'Dealer Price must be a positive number.' })
-    .refine(atMostTwoDecimalPlaces, { message: 'Dealer Price must have at most two decimal places.' })
-    .default(0.01), // Default to min value
-  mrp: z.coerce.number()
-    .min(0.01, { message: 'MRP must be a positive number.' })
-    .refine(atMostTwoDecimalPlaces, { message: 'MRP must have at most two decimal places.' })
-    .default(0.01), // Default to min value
+  dp: z.preprocess(
+    (val) => (val === "" ? undefined : val), // Convert empty string to undefined
+    z.coerce.number()
+      .min(0.01, { message: 'Dealer Price must be a positive number.' })
+      .refine(atMostTwoDecimalPlaces, { message: 'Dealer Price must have at most two decimal places.' })
+      .default(0.01) // Default to min value
+  ),
+  mrp: z.preprocess(
+    (val) => (val === "" ? undefined : val), // Convert empty string to undefined
+    z.coerce.number()
+      .min(0.01, { message: 'MRP must be a positive number.' })
+      .refine(atMostTwoDecimalPlaces, { message: 'MRP must have at most two decimal places.' })
+      .default(0.01) // Default to min value
+  ),
   stock: z.coerce.number().int().min(0, { message: 'Stock cannot be negative.' }).default(0), // Default to 0
 });
 
