@@ -30,7 +30,7 @@ const productSchema = z.object({
   description: z.string().nullable().optional(),
   size: z.coerce.string().nullable().optional(), // Coerce size to string
   hsn: z.coerce.string().nullable().optional(), // Coerce HSN to string
-  gst: z.coerce.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' }).default(0), // Default to 0
+  gst: z.coerce.string().nullable().optional(), // Changed to string for alphanumeric
   dp: z.coerce.number()
     .min(0.01, { message: 'Dealer Price must be a positive number.' })
     .refine(atMostTwoDecimalPlaces, { message: 'Dealer Price must have at most two decimal places.' })
@@ -63,7 +63,7 @@ const productSampleData = [
     "Description": 'High-performance laptop for professionals.',
     "Size": '15 inch',
     "HSN": '8471',
-    "GST (%)": 18,
+    "GST (%)": "18", // Changed to string in sample
     "Dealer Price (DP)": 1000.00,
     "MRP": 1200.00,
     "Stock": 50
@@ -74,7 +74,7 @@ const productSampleData = [
     "Description": 'Ergonomic wireless mouse.',
     "Size": 'Small',
     "HSN": '8471',
-    "GST (%)": 18,
+    "GST (%)": "Exempt", // Changed to string in sample
     "Dealer Price (DP)": 15.00,
     "MRP": 20.00,
     "Stock": 200
@@ -92,7 +92,7 @@ const AddProduct = () => {
       description: '',
       size: '',
       hsn: '',
-      gst: 0,
+      gst: '', // Default to empty string
       dp: 0.01,
       mrp: 0.01,
       stock: 0,
@@ -281,7 +281,7 @@ const AddProduct = () => {
                       <FormItem>
                         <FormLabel>GST (%)</FormLabel>
                         <FormControl>
-                          <Input type="number" step="0.01" placeholder="e.g., 18.00" {...field} />
+                          <Input placeholder="e.g., 18 or Exempt" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -356,7 +356,8 @@ const AddProduct = () => {
                   <li>Download the sample Excel file to see the required format</li>
                   <li>Required columns: Product Code, Product Name, Dealer Price (DP), MRP, Stock</li>
                   <li>Description, Size, HSN, GST are optional</li>
-                  <li>Prices (DP, MRP) and GST should be numbers (e.g., 1000.00, 18)</li>
+                  <li>Prices (DP, MRP) should be numbers with at most two decimal places (e.g., 1000.00, 15.50)</li>
+                  <li>GST can be a number or text (e.g., 18 or Exempt)</li>
                   <li>Stock should be a whole number (e.g., 100)</li>
                   <li>Save your file as .xlsx or .xls format</li>
                 </ul>

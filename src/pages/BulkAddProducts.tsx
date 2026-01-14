@@ -28,7 +28,7 @@ const productSchema = z.object({
   description: z.string().nullable().optional(),
   size: z.coerce.string().nullable().optional(), // Coerce size to string
   hsn: z.coerce.string().nullable().optional(), // Coerce HSN to string
-  gst: z.coerce.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' }).default(0), // Default to 0
+  gst: z.coerce.string().nullable().optional(), // Changed to string for alphanumeric
   dp: z.coerce.number()
     .min(0.01, { message: 'Dealer Price must be a positive number.' })
     .refine(atMostTwoDecimalPlaces, { message: 'Dealer Price must have at most two decimal places.' })
@@ -61,7 +61,7 @@ const productSampleData = [
     "Description": 'High-performance laptop for professionals.',
     "Size": '15 inch',
     "HSN": '8471',
-    "GST (%)": 18,
+    "GST (%)": "18", // Changed to string in sample
     "Dealer Price (DP)": 1000.00,
     "MRP": 1200.00,
     "Stock": 50
@@ -72,7 +72,7 @@ const productSampleData = [
     "Description": 'Ergonomic wireless mouse.',
     "Size": 'Small',
     "HSN": '8471',
-    "GST (%)": 18,
+    "GST (%)": "Exempt", // Changed to string in sample
     "Dealer Price (DP)": 15.00,
     "MRP": 20.00,
     "Stock": 200
