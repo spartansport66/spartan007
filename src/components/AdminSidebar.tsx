@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from 'react-router-dom';
-import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home } from 'lucide-react';
+import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign } from 'lucide-react'; // Added DollarSign icon
 import { cn } from '@/lib/utils';
 
 interface AdminSidebarProps {
@@ -17,7 +17,8 @@ interface AdminSidebarProps {
   setIsPaymentsReportOpen: (isOpen: boolean) => void;
   setIsSalesReportsDialogOpen: (isOpen: boolean) => void;
   setIsCompanyInfoDialogOpen: (isOpen: boolean) => void;
-  setIsDealerLedgerReportOpen: (isOpen: boolean) => void; // New prop
+  setIsDealerLedgerReportOpen: (isOpen: boolean) => void;
+  setIsOpeningBalanceReportOpen: (isOpen: boolean) => void; // New prop for Opening Balance Report
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -29,7 +30,8 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsPaymentsReportOpen,
   setIsSalesReportsDialogOpen,
   setIsCompanyInfoDialogOpen,
-  setIsDealerLedgerReportOpen, // Use new prop
+  setIsDealerLedgerReportOpen,
+  setIsOpeningBalanceReportOpen, // Use new prop
 }) => {
   const navigate = useNavigate();
 
@@ -130,8 +132,13 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </DropdownMenuItem>
           </SheetClose>
           <SheetClose asChild>
-            <DropdownMenuItem onClick={() => setIsDealerLedgerReportOpen(true)}> {/* New menu item */}
+            <DropdownMenuItem onClick={() => setIsDealerLedgerReportOpen(true)}>
               Dealer Ledger Report
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsOpeningBalanceReportOpen(true)}> {/* New menu item */}
+              Opening Balance Report
             </DropdownMenuItem>
           </SheetClose>
         </DropdownMenuContent>
