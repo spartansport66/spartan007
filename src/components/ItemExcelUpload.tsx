@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,13 +13,19 @@ import * as z from 'zod';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+interface ColumnMapping {
+  source: string; // Original Excel header
+  targetKey: keyof z.infer<typeof itemSchema> | ''; // Mapped schema key, or empty string if not mapped
+}
 
 interface ParsedRow {
   originalRow: number;
   isValid: boolean;
   errors: string[];
   data: z.infer<typeof itemSchema>;
-  rawData: { [key: string]: any };
+  rawData: { [key: string]: any }; // The raw object from the Excel row (original keys)
 }
 
 interface ItemExcelUploadProps {
@@ -40,28 +46,21 @@ const itemSchema = z.object({
   ),
 });
 
-// Define display headers for the preview table
-const displayHeaders = [
-  "Item Name",
-  "Description",
-  "Price",
-  "Stock"
+// Define the required schema fields with their display labels
+const requiredSchemaFields = [
+  { key: 'name', label: 'Item Name' },
+  { key: 'description', label: 'Description' },
+  { key: 'price', label: 'Price' },
+  { key: 'stock', label: 'Stock' },
 ];
 
-// Map Excel headers to schema keys (case-insensitive and cleaned)
-const excelHeaderToSchemaKeyMap: { [key: string]: keyof z.infer<typeof itemSchema> } = {
-  "item name": "name",
-  "description": "description",
-  "price": "price",
-  "stock": "stock"
-};
-
 const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) => {
-  const { user, isAdmin } = useSession();
+  const { user } = useSession();
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [parsedExcelHeaders, setParsedExcelHeaders] = useState<string[]>([]);
+  const [excelHeaders, setExcelHeaders] = useState<string[]>([]); // Original Excel headers
+  const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]); // User-defined mappings
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,7 +68,8 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
     if (selectedFile) {
       setFile(selectedFile);
       setParsedData([]);
-      setParsedExcelHeaders([]);
+      setExcelHeaders([]);
+      setColumnMappings([]);
     } else {
       setFile(null);
     }
@@ -86,8 +86,10 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
+        
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
+        
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
         if (jsonData.length < 1) {
@@ -95,76 +97,21 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
           setLoading(false);
           return;
         }
+        
+        const detectedHeaders = (jsonData[0] as string[]).map(h => String(h).trim());
+        setExcelHeaders(detectedHeaders);
 
-        const excelHeaders = (jsonData[0] as string[]).map(h => String(h).trim());
-        setParsedExcelHeaders(excelHeaders);
+        // Initialize column mappings with detected headers and empty target keys
+        const initialMappings: ColumnMapping[] = detectedHeaders.map(header => ({
+          source: header,
+          targetKey: '',
+        }));
+        setColumnMappings(initialMappings);
 
-        const parsedRows: ParsedRow[] = [];
-        const schemaKeys = Object.keys(itemSchema.shape) as (keyof z.infer<typeof itemSchema>)[];
+        // Clear parsed data until mappings are applied
+        setParsedData([]);
+        showSuccess('Excel file parsed. Please map your columns.');
 
-        // Start from row 1 (after headers) if headers exist, otherwise from row 0
-        const startRowIndex = excelHeaders.length > 0 ? 1 : 0;
-
-        for (let i = startRowIndex; i < jsonData.length; i++) {
-          const row = jsonData[i] as any[];
-          if (!row || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
-            continue;
-          }
-
-          const rawRowObject: { [key: string]: any } = {};
-          excelHeaders.forEach((header, index) => {
-            rawRowObject[header] = row[index];
-          });
-
-          const transformedRowObject: Partial<z.infer<typeof itemSchema>> = {};
-          
-          // Explicitly map all schema keys, defaulting to null if not found in rawRowObject
-          schemaKeys.forEach(schemaKey => {
-            // Find the corresponding Excel header using the map
-            const excelHeader = excelHeaders.find(h => excelHeaderToSchemaKeyMap[h.toLowerCase()] === schemaKey);
-            const rawValue = excelHeader ? rawRowObject[excelHeader] : undefined;
-
-            // Apply preprocessing for numbers, otherwise use rawValue or null
-            if (schemaKey === 'price') {
-              transformedRowObject[schemaKey] = parseFloat(rawValue) || 0;
-            } else if (schemaKey === 'stock') {
-              transformedRowObject[schemaKey] = parseInt(rawValue) || 0;
-            } else {
-              // Preserve empty strings as empty strings, null/undefined as null
-              transformedRowObject[schemaKey] = (rawValue !== undefined && rawValue !== null) ? String(rawValue).trim() : null;
-            }
-          });
-
-          const validationResult = itemSchema.safeParse(transformedRowObject);
-          if (validationResult.success) {
-            parsedRows.push({
-              originalRow: i + 1,
-              isValid: true,
-              errors: [],
-              data: validationResult.data,
-              rawData: rawRowObject
-            });
-          } else {
-            const zodErrors = validationResult.error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
-            parsedRows.push({
-              originalRow: i + 1,
-              isValid: false,
-              errors: zodErrors,
-              data: transformedRowObject as z.infer<typeof itemSchema>,
-              rawData: rawRowObject
-            });
-          }
-        }
-
-        setParsedData(parsedRows);
-
-        if (parsedRows.some(row => !row.isValid)) {
-          showError('Some rows contain invalid data. Please correct them before uploading.');
-        } else if (parsedRows.length > 0) {
-          showSuccess(`Parsed ${parsedRows.length} rows from Excel file. All valid.`);
-        } else {
-          showError('No valid data found in the Excel file.');
-        }
       } catch (error: any) {
         console.error('Error during Excel parsing:', error);
         showError(`Error parsing Excel file: ${error.message}`);
@@ -181,6 +128,116 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
     reader.readAsArrayBuffer(file);
   };
 
+  const handleMappingChange = (sourceHeader: string, targetKey: keyof z.infer<typeof itemSchema> | '') => {
+    setColumnMappings(prevMappings =>
+      prevMappings.map(mapping =>
+        mapping.source === sourceHeader ? { ...mapping, targetKey: targetKey } : mapping
+      )
+    );
+  };
+
+  const applyMappingsAndValidate = () => {
+    if (parsedData.length > 0) { // Only re-validate if data was already parsed
+      processAndValidateData();
+    }
+  };
+
+  // Memoize the options for the target select dropdown
+  const targetKeyOptions = useMemo(() => {
+    return requiredSchemaFields.map(field => ({
+      value: field.key,
+      label: field.label,
+    }));
+  }, []);
+
+  const processAndValidateData = () => {
+    if (!file || excelHeaders.length === 0) {
+      showError('Please parse an Excel file first.');
+      return;
+    }
+
+    setLoading(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        const startRowIndex = excelHeaders.length > 0 ? 1 : 0;
+        const processedRows: ParsedRow[] = [];
+
+        for (let i = startRowIndex; i < jsonData.length; i++) {
+          const row = jsonData[i] as any[];
+          if (!row || row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')) {
+            continue;
+          }
+
+          const rawRowObject: { [key: string]: any } = {};
+          excelHeaders.forEach((header, index) => {
+            rawRowObject[header] = row[index];
+          });
+
+          const transformedRowObject: Partial<z.infer<typeof itemSchema>> = {};
+          const errors: string[] = [];
+
+          // Apply mappings to transform raw data into schema-compatible object
+          columnMappings.forEach(mapping => {
+            if (mapping.targetKey) {
+              const rawValue = rawRowObject[mapping.source];
+              // Apply preprocessing for numbers, otherwise use rawValue or null
+              if (mapping.targetKey === 'price') {
+                transformedRowObject[mapping.targetKey] = parseFloat(rawValue) || 0;
+              } else if (mapping.targetKey === 'stock') {
+                transformedRowObject[mapping.targetKey] = parseInt(rawValue) || 0;
+              } else {
+                transformedRowObject[mapping.targetKey] = (rawValue !== undefined && rawValue !== null) ? String(rawValue).trim() : null;
+              }
+            }
+          });
+
+          const validationResult = itemSchema.safeParse(transformedRowObject);
+          if (validationResult.success) {
+            processedRows.push({
+              originalRow: i + 1,
+              isValid: true,
+              errors: [],
+              data: validationResult.data,
+              rawData: rawRowObject,
+            });
+          } else {
+            const zodErrors = validationResult.error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
+            processedRows.push({
+              originalRow: i + 1,
+              isValid: false,
+              errors: zodErrors,
+              data: transformedRowObject as z.infer<typeof itemSchema>,
+              rawData: rawRowObject,
+            });
+          }
+        }
+
+        setParsedData(processedRows);
+
+        if (processedRows.some(row => !row.isValid)) {
+          showError('Some rows contain invalid data. Please correct them before uploading.');
+        } else if (processedRows.length > 0) {
+          showSuccess(`Processed ${processedRows.length} rows. Review the data below.`);
+        } else {
+          showError('No valid data found in the Excel file after applying mappings.');
+        }
+      } catch (error: any) {
+        console.error('Error during data processing and validation:', error);
+        showError(`Error processing data: ${error.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const handleUpload = async () => {
     if (!user) {
       showError('You must be logged in to add items.');
@@ -190,6 +247,11 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
     const validParsedData = parsedData.filter(p => p.isValid);
     if (validParsedData.length === 0) {
       showError('No valid data to upload.');
+      return;
+    }
+
+    if (parsedData.some(row => !row.isValid)) {
+      showError('Cannot upload. Please correct all invalid rows first.');
       return;
     }
 
@@ -215,6 +277,8 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
       showSuccess(`Successfully uploaded ${insertedItems.length} items!`);
       setParsedData([]);
       setFile(null);
+      setExcelHeaders([]);
+      setColumnMappings([]);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -231,16 +295,16 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
     try {
       const sampleData = [
         {
-          "Item Name": 'Product A',
+          "Product Name": 'Product A',
           "Description": 'Description for Product A',
-          "Price": 29.99,
-          "Stock": 100
+          "Unit Price": 29.99,
+          "Quantity in Stock": 100
         },
         {
-          "Item Name": 'Product B',
+          "Product Name": 'Product B',
           "Description": 'Description for Product B',
-          "Price": 39.99,
-          "Stock": 50
+          "Unit Price": 39.99,
+          "Quantity in Stock": 50
         }
       ];
 
@@ -298,6 +362,55 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
           </Button>
         </div>
 
+        {excelHeaders.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Map Your Columns</h3>
+            <p className="text-sm text-muted-foreground">
+              Match your Excel file's columns to the required fields for product data.
+            </p>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Your Excel Column</TableHead>
+                    <TableHead>Required Field</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {columnMappings.map((mapping, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{mapping.source}</TableCell>
+                      <TableCell>
+                        <Select
+                          value={mapping.targetKey}
+                          onValueChange={(value: keyof z.infer<typeof itemSchema> | '') =>
+                            handleMappingChange(mapping.source, value)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select required field" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">Do not map</SelectItem>
+                            {targetKeyOptions.map(option => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <Button onClick={processAndValidateData} disabled={loading} className="w-full">
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Apply Mappings & Validate'}
+            </Button>
+          </div>
+        )}
+        
         {parsedData.length > 0 && (
           <div className="space-y-4">
             <div className="rounded-md border">
@@ -306,8 +419,8 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
                   <TableRow>
                     <TableHead>Row</TableHead>
                     <TableHead>Status</TableHead>
-                    {displayHeaders.map((header, index) => (
-                      <TableHead key={index}>{header}</TableHead>
+                    {requiredSchemaFields.map((field, index) => (
+                      <TableHead key={index}>{field.label}</TableHead>
                     ))}
                     <TableHead>Errors</TableHead>
                   </TableRow>
@@ -328,12 +441,8 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
                           <AlertTriangle className="h-4 w-4 text-yellow-500" />
                         )}
                       </TableCell>
-                      {displayHeaders.map((header, colIndex) => {
-                        // Map display header to schema key (e.g., "Item Name" -> "name")
-                        const schemaKey = excelHeaderToSchemaKeyMap[header.toLowerCase()];
-                        const value = schemaKey ? row.data[schemaKey] : 'N/A';
-                        
-                        // Use row.data (validated data)
+                      {requiredSchemaFields.map((field, colIndex) => {
+                        const value = row.data[field.key];
                         return (
                           <TableCell key={colIndex}>
                             {value !== undefined && value !== null && String(value).trim() !== '' ? String(value) : 'N/A'}
@@ -347,7 +456,7 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
                   ))}
                   {parsedData.length > 10 && (
                     <TableRow>
-                      <TableCell colSpan={displayHeaders.length + 3} className="text-center">
+                      <TableCell colSpan={requiredSchemaFields.length + 3} className="text-center">
                         ... and {parsedData.length - 10} more rows
                       </TableCell>
                     </TableRow>
