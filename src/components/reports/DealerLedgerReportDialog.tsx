@@ -12,6 +12,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 
 interface LedgerEntry {
   date: string; // YYYY-MM-DD
@@ -33,6 +37,13 @@ interface DealerLedgerReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const editBalanceFormSchema = z.object({
+  openingBalance: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Opening balance cannot be negative.' })
+  ),
+});
+
 const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const [transactions, setTransactions] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +52,13 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
   const [companyName, setCompanyName] = useState<string | null>(null);
+
+  const editForm = useForm<z.infer<typeof editBalanceFormSchema>>({
+    resolver: zodResolver(editBalanceFormSchema),
+    defaultValues: {
+      openingBalance: 0,
+    },
+  });
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -153,7 +171,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       // 3. Fetch payments within the date range
       let paymentsQuery = supabase
         .from('payments')
-        .select('id, amount, payment_date, payment_method, orders(order_number)')
+        .select('id, amount, payment_date, payment_method, transaction_id, orders(order_number)') // Added transaction_id
         .eq('orders.dealer_id', dealerId) // Filter by dealer_id from the joined orders table
         .eq('status', 'completed'); // Only completed payments are credits
 
@@ -164,9 +182,11 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       if (paymentsError) throw paymentsError;
 
       (paymentsData || []).forEach(payment => {
+        const orderNumber = payment.orders?.[0]?.order_number || 'N/A';
+        const transactionDetail = payment.transaction_id ? ` (Txn: ${payment.transaction_id})` : '';
         ledgerEntries.push({
           date: payment.payment_date.split('T')[0],
-          description: `Payment for Order #${payment.orders?.[0]?.order_number || 'N/A'} (${payment.payment_method})`,
+          description: `Payment for Order #${orderNumber} (${payment.payment_method})${transactionDetail}`,
           debit: 0,
           credit: payment.amount,
           balance: 0, // Will be calculated later
