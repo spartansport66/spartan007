@@ -11,7 +11,6 @@ import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loa
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
-import PaymentStatusCard from '@/components/PaymentStatusCard';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -66,10 +65,11 @@ const Dashboard = () => {
   const [salesPersonName, setSalesPersonName] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>(() => {
-    const today = new Date();
-    const day = String(today.getDate()).padStart(2, '0');
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const year = today.getFullYear();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29); // Go back 29 days to include today, making it 30 days total
+    const day = String(thirtyDaysAgo.getDate()).padStart(2, '0');
+    const month = String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0');
+    const year = thirtyDaysAgo.getFullYear();
     return `${year}-${month}-${day}`;
   });
   const [filterToDate, setFilterToDate] = useState<string>(() => {
@@ -209,8 +209,16 @@ const Dashboard = () => {
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const year = today.getFullYear();
     const todayString = `${year}-${month}-${day}`;
-    setFilterFromDate(todayString);
-    setFilterToDate(todayString);
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+    const thirtyDaysAgoDay = String(thirtyDaysAgo.getDate()).padStart(2, '0');
+    const thirtyDaysAgoMonth = String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0');
+    const thirtyDaysAgoYear = thirtyDaysAgo.getFullYear();
+    const thirtyDaysAgoString = `${thirtyDaysAgoYear}-${thirtyDaysAgoMonth}-${thirtyDaysAgoDay}`;
+
+    setFilterFromDate(thirtyDaysAgoString); // Reset to 30 days ago
+    setFilterToDate(todayString); // Reset to today
   };
 
   const handleViewOrderDetails = (orderId: string) => {
