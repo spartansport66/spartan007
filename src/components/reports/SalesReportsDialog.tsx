@@ -17,9 +17,14 @@ interface SaleReportData {
   id: string; // Sale ID
   order_number: number;
   sale_date: string;
+  product_code: string; // New
   product_name: string;
+  product_size: string; // New
+  product_hsn: string; // New
+  product_gst: number; // New
+  product_dp: number; // New
+  product_mrp: number; // Renamed from unit_price
   quantity: number;
-  unit_price: number;
   total_price: number;
   dealer_name: string;
   sales_person_name: string;
@@ -90,12 +95,12 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
         setAllDealers((dealersData || []).map(d => ({ value: d.id, label: d.name })));
       }
 
-      // Fetch products
+      // Fetch products - UPDATED to include new fields
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, name');
+        .select('id, code, name, size, hsn, gst, dp, mrp');
       if (productsError) throw productsError;
-      setAllProducts((productsData || []).map(p => ({ value: p.id, label: p.name })));
+      setAllProducts((productsData || []).map(p => ({ value: p.id, label: `${p.name} (${p.code})` })));
 
     } catch (error: any) {
       console.error('Error fetching filter options:', error.message);
@@ -113,7 +118,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
           quantity,
           total_price,
           sale_date,
-          products (name, price),
+          products (id, code, name, size, hsn, gst, dp, mrp),
           orders!inner (
             order_number,
             dealer_id,
@@ -156,9 +161,14 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
           id: sale.id,
           order_number: sale.orders?.order_number || 'N/A',
           sale_date: sale.sale_date,
+          product_code: sale.products?.code || 'N/A', // New
           product_name: sale.products?.name || 'N/A',
+          product_size: sale.products?.size || 'N/A', // New
+          product_hsn: sale.products?.hsn || 'N/A', // New
+          product_gst: sale.products?.gst || 0, // New
+          product_dp: sale.products?.dp || 0, // New
+          product_mrp: sale.products?.mrp || 0, // Renamed from unit_price
           quantity: sale.quantity,
-          unit_price: sale.products?.price || 0,
           total_price: sale.total_price,
           dealer_name: sale.orders?.dealers?.name || 'N/A',
           sales_person_name: `${sale.orders?.profiles?.first_name || ''} ${sale.orders?.profiles?.last_name || ''}`.trim() || 'N/A',
@@ -185,7 +195,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
     setFilterDealerId('');
     setFilterProductId('');
     setFilterFromSaleDate('');
-    setFilterToSaleDate('');
+    setFilterToDate('');
   };
 
   const handlePrint = () => {
@@ -198,14 +208,19 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
     doc.setTextColor(100);
 
     const tableColumn = [
-      "Order No.", "Sale Date", "Product", "Quantity", "Unit Price", "Total Price", "Dealer", "Sales Person"
+      "Order No.", "Sale Date", "Code", "Product", "Size", "HSN", "GST (%)", "DP", "MRP", "Qty", "Total Price", "Dealer", "Sales Person"
     ];
     const tableRows = sales.map(sale => [
       sale.order_number,
       new Date(sale.sale_date).toLocaleDateString(),
+      sale.product_code,
       sale.product_name,
+      sale.product_size,
+      sale.product_hsn,
+      sale.product_gst.toFixed(2),
+      `₹${sale.product_dp.toFixed(2)}`,
+      `₹${sale.product_mrp.toFixed(2)}`,
       sale.quantity,
-      `₹${sale.unit_price.toFixed(2)}`,
       `₹${sale.total_price.toFixed(2)}`,
       sale.dealer_name,
       sale.sales_person_name,
@@ -216,7 +231,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
       body: tableRows,
       startY: 30,
       styles: {
-        fontSize: 7
+        fontSize: 6
       },
       headStyles: {
         fillColor: [200, 200, 200],
@@ -224,14 +239,19 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
       },
       margin: { top: 25, left: 10, right: 10 },
       columnStyles: {
-        0: { cellWidth: 20 }, // Order No.
-        1: { cellWidth: 25 }, // Sale Date
-        2: { cellWidth: 40 }, // Product
-        3: { cellWidth: 15, halign: 'right' }, // Quantity
-        4: { cellWidth: 25, halign: 'right' }, // Unit Price
-        5: { cellWidth: 25, halign: 'right' }, // Total Price
-        6: { cellWidth: 40 }, // Dealer
-        7: { cellWidth: 40 }, // Sales Person
+        0: { cellWidth: 15 }, // Order No.
+        1: { cellWidth: 20 }, // Sale Date
+        2: { cellWidth: 15 }, // Code
+        3: { cellWidth: 30 }, // Product
+        4: { cellWidth: 15 }, // Size
+        5: { cellWidth: 15 }, // HSN
+        6: { cellWidth: 15, halign: 'right' }, // GST (%)
+        7: { cellWidth: 15, halign: 'right' }, // DP
+        8: { cellWidth: 15, halign: 'right' }, // MRP
+        9: { cellWidth: 10, halign: 'right' }, // Quantity
+        10: { cellWidth: 20, halign: 'right' }, // Total Price
+        11: { cellWidth: 25 }, // Dealer
+        12: { cellWidth: 25 }, // Sales Person
       }
     });
 
@@ -314,8 +334,8 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
             <Input 
               id="filterToSaleDate" 
               type="date" 
-              value={filterToSaleDate} 
-              onChange={(e) => setFilterToSaleDate(e.target.value)} 
+              value={filterToDate} 
+              onChange={(e) => setFilterToDate(e.target.value)} 
               className="w-full" 
             />
           </div>
@@ -343,9 +363,14 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground font-bold">Order No.</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Sale Date</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Code</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Product</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-right">Quantity</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-right">Unit Price</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Size</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">HSN</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-right">GST (%)</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-right">DP</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-right">MRP</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-right">Qty</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Total Price</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Dealer</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Sales Person</TableHead>
@@ -356,9 +381,14 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
                     <TableRow key={sale.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">#{sale.order_number}</TableCell>
                       <TableCell className="text-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-foreground">{sale.product_code}</TableCell>
                       <TableCell className="text-foreground">{sale.product_name}</TableCell>
+                      <TableCell className="text-foreground">{sale.product_size || 'N/A'}</TableCell>
+                      <TableCell className="text-foreground">{sale.product_hsn || 'N/A'}</TableCell>
+                      <TableCell className="text-foreground text-right">{sale.product_gst.toFixed(2)}</TableCell>
+                      <TableCell className="text-foreground text-right">₹{sale.product_dp.toFixed(2)}</TableCell>
+                      <TableCell className="text-foreground text-right">₹{sale.product_mrp.toFixed(2)}</TableCell>
                       <TableCell className="text-foreground text-right">{sale.quantity}</TableCell>
-                      <TableCell className="text-foreground text-right">₹{sale.unit_price.toFixed(2)}</TableCell>
                       <TableCell className="text-foreground text-right">₹{sale.total_price.toFixed(2)}</TableCell>
                       <TableCell className="text-foreground">{sale.dealer_name}</TableCell>
                       <TableCell className="text-foreground">{sale.sales_person_name}</TableCell>

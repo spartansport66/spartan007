@@ -37,12 +37,17 @@ import * as z from 'zod';
 
 interface Product {
   id: string;
+  code: string; // New
   name: string;
   description: string;
-  price: number;
+  size: string; // New
+  hsn: string; // New
+  gst: number; // New
+  dp: number; // New
+  mrp: number; // Renamed from price
   stock: number;
   user_id: string;
-  has_sales: boolean; // Add this field
+  has_sales: boolean;
 }
 
 interface ProductTableManagerProps {
@@ -50,11 +55,22 @@ interface ProductTableManagerProps {
 }
 
 const formSchema = z.object({
+  code: z.string().min(1, { message: 'Product Code is required.' }),
   name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }),
   description: z.string().optional(),
-  price: z.preprocess(
+  size: z.string().optional(),
+  hsn: z.string().optional(),
+  gst: z.preprocess(
     (val) => Number(val),
-    z.number().min(0.01, { message: 'Price must be a positive number.' })
+    z.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' })
+  ),
+  dp: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0.01, { message: 'Dealer Price must be a positive number.' })
+  ),
+  mrp: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0.01, { message: 'MRP must be a positive number.' })
   ),
   stock: z.preprocess(
     (val) => Number(val),
@@ -76,9 +92,14 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      code: '',
       name: '',
       description: '',
-      price: 0.01,
+      size: '',
+      hsn: '',
+      gst: 0,
+      dp: 0.01,
+      mrp: 0.01,
       stock: 0,
     },
   });
@@ -86,9 +107,14 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
   useEffect(() => {
     if (selectedProduct) {
       form.reset({
+        code: selectedProduct.code,
         name: selectedProduct.name,
         description: selectedProduct.description || '',
-        price: selectedProduct.price,
+        size: selectedProduct.size || '',
+        hsn: selectedProduct.hsn || '',
+        gst: selectedProduct.gst,
+        dp: selectedProduct.dp,
+        mrp: selectedProduct.mrp,
         stock: selectedProduct.stock,
       });
     }
@@ -107,12 +133,17 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
       .from('products')
       .select(`
         id,
+        code,
         name,
         description,
-        price,
+        size,
+        hsn,
+        gst,
+        dp,
+        mrp,
         stock,
         user_id,
-        sales(count) // Fetch count of sales for each product
+        sales(count)
       `);
 
     if (error) {
@@ -147,9 +178,14 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
     try {
       const payload = {
         productId: selectedProduct.id,
+        code: values.code,
         name: values.name,
         description: values.description,
-        price: values.price,
+        size: values.size,
+        hsn: values.hsn,
+        gst: values.gst,
+        dp: values.dp,
+        mrp: values.mrp,
         stock: values.stock,
         userId: user.id, // Pass user ID for potential admin check in Edge Function
       };
@@ -227,9 +263,13 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="text-muted-foreground">Code</TableHead>
                     <TableHead className="text-muted-foreground">Name</TableHead>
-                    <TableHead className="text-muted-foreground">Description</TableHead>
-                    <TableHead className="text-muted-foreground">Price</TableHead>
+                    <TableHead className="text-muted-foreground">Size</TableHead>
+                    <TableHead className="text-muted-foreground">HSN</TableHead>
+                    <TableHead className="text-muted-foreground">GST (%)</TableHead>
+                    <TableHead className="text-muted-foreground">DP</TableHead>
+                    <TableHead className="text-muted-foreground">MRP</TableHead>
                     <TableHead className="text-muted-foreground">Stock</TableHead>
                     <TableHead className="text-muted-foreground">Actions</TableHead>
                   </TableRow>
@@ -237,9 +277,13 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <TableBody>
                   {products.map((product) => (
                     <TableRow key={product.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{product.code}</TableCell>
                       <TableCell className="font-medium text-foreground">{product.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{product.description}</TableCell>
-                      <TableCell className="text-muted-foreground">₹{product.price.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground">{product.size || 'N/A'}</TableCell>
+                      <TableCell className="text-muted-foreground">{product.hsn || 'N/A'}</TableCell>
+                      <TableCell className="text-muted-foreground">{product.gst.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground">₹{product.dp.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground">₹{product.mrp.toFixed(2)}</TableCell>
                       <TableCell className="text-muted-foreground">{product.stock}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
@@ -286,12 +330,19 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 Make changes to the product here. Click save when you're done.
                 {selectedProduct.has_sales && (
                   <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-2">
-                    Note: This product has associated sales. Only 'Stock' can be updated.
+                    Note: This product has associated sales. Only 'Stock', 'Code', 'Size', 'HSN', 'GST' can be updated.
                   </p>
                 )}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={form.handleSubmit(handleUpdateProduct)} className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="code" className="text-right">
+                  Code
+                </Label>
+                <Input id="code" {...form.register('code')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                {form.formState.errors.code && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.code.message}</p>}
+              </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="name" className="text-right">
                   Name
@@ -307,11 +358,39 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 {form.formState.errors.description && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.description.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="price" className="text-right">
-                  Price
+                <Label htmlFor="size" className="text-right">
+                  Size
                 </Label>
-                <Input id="price" type="number" step="0.01" {...form.register('price')} className="col-span-3" disabled={selectedProduct.has_sales} />
-                {form.formState.errors.price && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.price.message}</p>}
+                <Input id="size" {...form.register('size')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                {form.formState.errors.size && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.size.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="hsn" className="text-right">
+                  HSN
+                </Label>
+                <Input id="hsn" {...form.register('hsn')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                {form.formState.errors.hsn && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.hsn.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="gst" className="text-right">
+                  GST (%)
+                </Label>
+                <Input id="gst" type="number" step="0.01" {...form.register('gst')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                {form.formState.errors.gst && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.gst.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="dp" className="text-right">
+                  Dealer Price (DP)
+                </Label>
+                <Input id="dp" type="number" step="0.01" {...form.register('dp')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                {form.formState.errors.dp && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.dp.message}</p>}
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="mrp" className="text-right">
+                  MRP
+                </Label>
+                <Input id="mrp" type="number" step="0.01" {...form.register('mrp')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                {form.formState.errors.mrp && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.mrp.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="stock" className="text-right">

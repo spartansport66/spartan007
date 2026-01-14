@@ -32,13 +32,24 @@ interface ItemExcelUploadProps {
   onUploadComplete: () => void;
 }
 
-// Zod schema for item validation
+// Zod schema for item validation - UPDATED with new fields
 const itemSchema = z.object({
-  name: z.string().min(1, { message: 'Item Name is required.' }),
+  code: z.string().min(1, { message: 'Product Code is required.' }),
+  name: z.string().min(1, { message: 'Product Name is required.' }),
   description: z.string().nullable().optional(),
-  price: z.preprocess(
+  size: z.string().nullable().optional(),
+  hsn: z.string().nullable().optional(),
+  gst: z.preprocess(
     (val) => Number(val),
-    z.number().min(0.01, { message: 'Price must be a positive number.' })
+    z.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' })
+  ).nullable().optional(),
+  dp: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0.01, { message: 'Dealer Price must be a positive number.' })
+  ),
+  mrp: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0.01, { message: 'MRP must be a positive number.' })
   ),
   stock: z.preprocess(
     (val) => Number(val),
@@ -46,11 +57,16 @@ const itemSchema = z.object({
   ),
 });
 
-// Define the required schema fields with their display labels
+// Define the required schema fields with their display labels - UPDATED
 const requiredSchemaFields = [
-  { key: 'name', label: 'Item Name' },
+  { key: 'code', label: 'Product Code' },
+  { key: 'name', label: 'Product Name' },
   { key: 'description', label: 'Description' },
-  { key: 'price', label: 'Price' },
+  { key: 'size', label: 'Size' },
+  { key: 'hsn', label: 'HSN' },
+  { key: 'gst', label: 'GST (%)' },
+  { key: 'dp', label: 'Dealer Price (DP)' },
+  { key: 'mrp', label: 'MRP' },
   { key: 'stock', label: 'Stock' },
 ];
 
@@ -137,9 +153,11 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
   };
 
   const applyMappingsAndValidate = () => {
-    if (parsedData.length > 0) { // Only re-validate if data was already parsed
-      processAndValidateData();
+    if (!file || excelHeaders.length === 0) {
+      showError('Please parse an Excel file first.');
+      return;
     }
+    processAndValidateData();
   };
 
   // Memoize the options for the target select dropdown
@@ -188,7 +206,7 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
             if (mapping.targetKey) {
               const rawValue = rawRowObject[mapping.source];
               // Apply preprocessing for numbers, otherwise use rawValue or null
-              if (mapping.targetKey === 'price') {
+              if (mapping.targetKey === 'mrp' || mapping.targetKey === 'dp' || mapping.targetKey === 'gst') {
                 transformedRowObject[mapping.targetKey] = parseFloat(rawValue) || 0;
               } else if (mapping.targetKey === 'stock') {
                 transformedRowObject[mapping.targetKey] = parseInt(rawValue) || 0;
@@ -259,9 +277,14 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
     try {
       const itemsToInsert = validParsedData.map((row: ParsedRow) => ({
         user_id: user.id,
+        code: row.data.code,
         name: row.data.name,
         description: row.data.description,
-        price: row.data.price,
+        size: row.data.size,
+        hsn: row.data.hsn,
+        gst: row.data.gst,
+        dp: row.data.dp,
+        mrp: row.data.mrp,
         stock: row.data.stock,
       }));
 
@@ -295,16 +318,26 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
     try {
       const sampleData = [
         {
-          "Product Name": 'Product A',
-          "Description": 'Description for Product A',
-          "Unit Price": 29.99,
-          "Quantity in Stock": 100
+          "Product Code": 'P001',
+          "Product Name": 'Laptop Pro X',
+          "Description": 'High-performance laptop for professionals.',
+          "Size": '15 inch',
+          "HSN": '8471',
+          "GST (%)": 18,
+          "Dealer Price (DP)": 1000.00,
+          "MRP": 1200.00,
+          "Stock": 50
         },
         {
-          "Product Name": 'Product B',
-          "Description": 'Description for Product B',
-          "Unit Price": 39.99,
-          "Quantity in Stock": 50
+          "Product Code": 'P002',
+          "Product Name": 'Wireless Mouse',
+          "Description": 'Ergonomic wireless mouse.',
+          "Size": 'Small',
+          "HSN": '8471',
+          "GST (%)": 18,
+          "Dealer Price (DP)": 15.00,
+          "MRP": 20.00,
+          "Stock": 200
         }
       ];
 

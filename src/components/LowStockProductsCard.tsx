@@ -11,9 +11,11 @@ import { useNavigate } from 'react-router-dom';
 
 interface Product {
   id: string;
+  code: string; // New
   name: string;
   stock: number;
-  price: number;
+  dp: number; // New
+  mrp: number; // Renamed from price
 }
 
 interface LowStockProductsCardProps {
@@ -33,7 +35,7 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
     setError(null);
     const { data, error } = await supabase
       .from('products')
-      .select('id, name, stock, price')
+      .select('id, code, name, stock, dp, mrp') // Select new fields
       .lte('stock', LOW_STOCK_THRESHOLD)
       .order('stock', { ascending: true });
 
@@ -96,19 +98,23 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="text-muted-foreground">Code</TableHead>
                     <TableHead className="text-muted-foreground">Product Name</TableHead>
                     <TableHead className="text-muted-foreground text-right">Stock</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Price</TableHead>
+                    <TableHead className="text-muted-foreground text-right">DP</TableHead>
+                    <TableHead className="text-muted-foreground text-right">MRP</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {lowStockProducts.map((product) => (
                     <TableRow key={product.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{product.code}</TableCell>
                       <TableCell className="font-medium text-foreground flex items-center gap-2">
                         <AlertTriangle className="h-4 w-4 text-orange-500" /> {product.name}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-right">{product.stock}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{product.price.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">₹{product.dp.toFixed(2)}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">₹{product.mrp.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

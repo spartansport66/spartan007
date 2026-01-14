@@ -17,11 +17,22 @@ import { useSession } from '@/contexts/SessionContext';
 import ItemExcelUpload from '@/components/ItemExcelUpload'; // Changed from ExcelUpload
 
 const formSchema = z.object({
+  code: z.string().min(1, { message: 'Product Code is required.' }),
   name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }),
   description: z.string().optional(),
-  price: z.preprocess(
+  size: z.string().optional(),
+  hsn: z.string().optional(),
+  gst: z.preprocess(
     (val) => Number(val),
-    z.number().min(0.01, { message: 'Price must be a positive number.' })
+    z.number().min(0, { message: 'GST cannot be negative.' }).max(100, { message: 'GST cannot exceed 100.' })
+  ),
+  dp: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0.01, { message: 'Dealer Price must be a positive number.' })
+  ),
+  mrp: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0.01, { message: 'MRP must be a positive number.' })
   ),
   stock: z.preprocess(
     (val) => Number(val),
@@ -36,9 +47,14 @@ const AddProduct = () => {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      code: '',
       name: '',
       description: '',
-      price: 0.01,
+      size: '',
+      hsn: '',
+      gst: 0,
+      dp: 0.01,
+      mrp: 0.01,
       stock: 0,
     },
   });
@@ -64,9 +80,14 @@ const AddProduct = () => {
       .insert([
         {
           user_id: user.id, // Creator of the product (admin)
+          code: values.code,
           name: values.name,
           description: values.description,
-          price: values.price,
+          size: values.size,
+          hsn: values.hsn,
+          gst: values.gst,
+          dp: values.dp,
+          mrp: values.mrp,
           stock: values.stock,
         },
       ])
@@ -105,7 +126,11 @@ const AddProduct = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-4xl">
-        <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="mb-6 flex items-center gap-2">
+        <Button 
+          variant="outline" 
+          onClick={() => navigate('/admin-dashboard')} 
+          className="mb-6 flex items-center gap-2"
+        >
           <ArrowLeft className="h-4 w-4" />
           Back to Admin Dashboard
         </Button>
@@ -119,6 +144,19 @@ const AddProduct = () => {
             <CardContent>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="code"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Product Code</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., P001" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={form.control}
                     name="name"
@@ -137,7 +175,7 @@ const AddProduct = () => {
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Description</FormLabel>
+                        <FormLabel>Description (Optional)</FormLabel>
                         <FormControl>
                           <Textarea placeholder="e.g., High-performance laptop for professionals." {...field} />
                         </FormControl>
@@ -147,10 +185,62 @@ const AddProduct = () => {
                   />
                   <FormField
                     control={form.control}
-                    name="price"
+                    name="size"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Price</FormLabel>
+                        <FormLabel>Size (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., 15 inch" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="hsn"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>HSN (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., 8471" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="gst"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>GST (%)</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" placeholder="e.g., 18.00" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="dp"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Dealer Price (DP)</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.01" placeholder="e.g., 1000.00" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="mrp"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>MRP</FormLabel>
                         <FormControl>
                           <Input type="number" step="0.01" placeholder="e.g., 1200.00" {...field} />
                         </FormControl>
@@ -192,9 +282,9 @@ const AddProduct = () => {
               <CardContent>
                 <ul className="list-disc pl-5 space-y-2 text-sm">
                   <li>Download the sample Excel file to see the required format</li>
-                  <li>Required columns: Item Name, Price, Stock</li>
-                  <li>Description is optional</li>
-                  <li>Price should be a number (e.g., 29.99)</li>
+                  <li>Required columns: Product Code, Product Name, Dealer Price (DP), MRP, Stock</li>
+                  <li>Description, Size, HSN, GST are optional</li>
+                  <li>Prices (DP, MRP) and GST should be numbers (e.g., 1000.00, 18)</li>
                   <li>Stock should be a whole number (e.g., 100)</li>
                   <li>Save your file as .xlsx or .xls format</li>
                 </ul>

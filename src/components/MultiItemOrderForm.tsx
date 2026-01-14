@@ -19,8 +19,10 @@ import { cn } from '@/lib/utils';
 
 interface Product {
   id: string;
+  code: string; // New
   name: string;
-  price: number;
+  dp: number; // New
+  mrp: number; // Renamed from price
   stock: number;
 }
 
@@ -138,10 +140,10 @@ const MultiItemOrderForm: React.FC = () => {
 
         setDealers(formattedDealers);
 
-        // Fetch all products
+        // Fetch all products - UPDATED to include new fields
         const { data: productsData, error: productsError } = await supabase
           .from('products')
-          .select('id, name, price, stock');
+          .select('id, code, name, dp, mrp, stock');
 
         if (productsError) {
           console.error('Error fetching products:', productsError);
@@ -308,7 +310,7 @@ const MultiItemOrderForm: React.FC = () => {
 
   const calculateItemTotal = (item: OrderItem) => {
     const product = products.find(p => p.id === item.product_id);
-    return product ? item.quantity * product.price : 0;
+    return product ? item.quantity * product.dp : 0; // Use product.dp for calculation
   };
 
   const calculateTotalOrderValue = () => {
@@ -435,7 +437,7 @@ const MultiItemOrderForm: React.FC = () => {
           account_number: paymentMethod === 'Bank Transfer' ? accountNumber : null,
           ifsc_code: paymentMethod === 'Bank Transfer' ? ifscCode : null,
           upi_id: paymentMethod === 'UPI' ? upiId : null,
-          transaction_id: (paymentMethod === 'Bank Transfer' || paymentMethod === 'UPI') ? transactionId : null,
+          transaction_id: (paymentMethod === 'Bank Transfer' || paymentMethod === 'UPI' || paymentMethod === 'Cash') ? transactionId : null, // Added Cash
         };
       }
 
@@ -496,7 +498,8 @@ const MultiItemOrderForm: React.FC = () => {
     const searchTerms = searchValue.toLowerCase().split(' ').filter(term => term.length > 0);
     return products.filter(product => {
       const productName = product.name.toLowerCase();
-      return searchTerms.every(term => productName.includes(term));
+      const productCode = product.code.toLowerCase();
+      return searchTerms.every(term => productName.includes(term) || productCode.includes(term));
     });
   }, [products, searchValue]);
 
@@ -686,9 +689,9 @@ const MultiItemOrderForm: React.FC = () => {
                                 }}
                               >
                                 <div>
-                                  <div>{product.name}</div>
+                                  <div>{product.name} ({product.code})</div>
                                   <div className="text-xs text-muted-foreground">
-                                    ₹{product.price.toFixed(2)} - Stock: {product.stock}
+                                    DP: ₹{product.dp.toFixed(2)} - MRP: ₹{product.mrp.toFixed(2)} - Stock: {product.stock}
                                   </div>
                                 </div>
                               </CommandItem>
@@ -960,6 +963,19 @@ const MultiItemOrderForm: React.FC = () => {
                       />
                     </div>
                   </>
+                )}
+                {paymentMethod === 'Cash' && (
+                  <div>
+                    <Label htmlFor="transactionId">Transaction ID (Optional)</Label>
+                    <Input
+                      id="transactionId"
+                      type="text"
+                      value={transactionId}
+                      onChange={(e) => setTransactionId(e.target.value)}
+                      className="w-full"
+                      placeholder="Cash transaction reference"
+                    />
+                  </div>
                 )}
               </div>
             )}
