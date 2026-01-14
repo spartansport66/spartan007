@@ -1,7 +1,5 @@
 "use client";
-
 import React, { useState, useRef, useMemo } from 'react';
-import * as XLSX from 'xlsx'; // Keep for type definitions if needed, but parsing logic moves
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +10,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import * as z from 'zod';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { parseExcelFile, downloadExcelFile } from '@/utils/excel'; // Import new utilities
+import { parseExcelFile, downloadExcelFile } from '@/utils/excel';
 
 interface ColumnMapping {
   source: string; // Original Excel header
@@ -79,24 +77,35 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
     try {
       const { headers: detectedHeaders, data: rawParsedData } = await parseExcelFile(file);
       
+      // Filter out excluded headers
       let filteredHeaders = detectedHeaders.filter(header => 
         !excludedSourceHeaders.some(excluded => excluded.toLowerCase() === header.toLowerCase())
       );
-
+      
       setExcelHeaders(filteredHeaders);
-
+      
+      // Create initial mappings by trying to match headers by name
       const initialMappings: ColumnMapping[] = filteredHeaders.map(header => {
-        const matchedField = displayHeaders.find(field => field.label.toLowerCase() === header.toLowerCase());
+        // Try to find an exact match first (case insensitive)
+        const exactMatch = displayHeaders.find(field => 
+          field.label.toLowerCase() === header.toLowerCase()
+        );
+        
+        // If no exact match, try partial matching
+        const partialMatch = exactMatch ? null : displayHeaders.find(field => 
+          header.toLowerCase().includes(field.label.toLowerCase()) ||
+          field.label.toLowerCase().includes(header.toLowerCase())
+        );
+        
         return {
           source: header,
-          targetKey: matchedField ? matchedField.key : '',
+          targetKey: exactMatch?.key || partialMatch?.key || '',
         };
       });
+      
       setColumnMappings(initialMappings);
-
       setParsedData([]); // Clear parsed data until mappings are applied
       showSuccess('[ExcelUpload] Excel file parsed. Please map your columns.');
-
     } catch (error: any) {
       console.error('[ExcelUpload] Error during Excel parsing:', error);
       showError(`[ExcelUpload] Error parsing Excel file: ${error.message}`);
@@ -106,9 +115,11 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
   };
 
   const handleMappingChange = (sourceHeader: string, targetValue: string) => {
-    setColumnMappings(prevMappings =>
-      prevMappings.map(mapping =>
-        mapping.source === sourceHeader ? { ...mapping, targetKey: targetValue === "__NONE__" ? "" : targetValue } : mapping
+    setColumnMappings(prevMappings => 
+      prevMappings.map(mapping => 
+        mapping.source === sourceHeader 
+          ? { ...mapping, targetKey: targetValue === "__NONE__" ? "" : targetValue } 
+          : mapping
       )
     );
   };
@@ -134,16 +145,16 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
       showError('[ExcelUpload] Please parse an Excel file first.');
       return;
     }
-
     setLoading(true);
     try {
       const { data: rawParsedData } = await parseExcelFile(file); // Re-parse to get raw data rows
 
       const processedRows: ParsedRow<z.infer<T>>[] = [];
-
+      
       for (const rawRow of rawParsedData) {
+        // Create transformed object based on column mappings
         const transformedRowObject: Partial<z.infer<T>> = {};
-
+        
         // Apply mappings to transform raw data into schema-compatible object
         columnMappings.forEach(mapping => {
           if (mapping.targetKey) {
@@ -151,8 +162,10 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
             transformedRowObject[mapping.targetKey as keyof z.infer<T>] = rawValue;
           }
         });
-
+        
+        // Validate the transformed object against the schema
         const validationResult = validationSchema.safeParse(transformedRowObject);
+        
         if (validationResult.success) {
           processedRows.push({
             originalRow: rawRow.originalRow,
@@ -167,11 +180,13 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
             const displayLabel = schemaKeyToLabelMap.get(path) || path; // Get display label or fallback to path
             return `${displayLabel}: ${err.message}`;
           });
+          
           console.error(`[ExcelUpload] Validation failed for row ${rawRow.originalRow}:`, {
             transformedData: transformedRowObject,
             errors: zodErrors,
             originalRawData: rawRow,
           });
+          
           processedRows.push({
             originalRow: rawRow.originalRow,
             isValid: false,
@@ -181,9 +196,9 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
           });
         }
       }
-
+      
       setParsedData(processedRows);
-
+      
       if (processedRows.some(row => !row.isValid)) {
         showError('[ExcelUpload] Some rows contain invalid data. Please correct them before uploading.');
       } else if (processedRows.length > 0) {
@@ -205,12 +220,12 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
       showError('[ExcelUpload] No valid data to upload.');
       return;
     }
-
+    
     if (parsedData.some(row => !row.isValid)) {
       showError('[ExcelUpload] Cannot upload. Please correct all invalid rows first.');
       return;
     }
-
+    
     setLoading(true);
     try {
       await onUpload(validParsedData.map(p => p.data));
@@ -254,26 +269,26 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
         <div className="flex flex-col sm:flex-row items-center gap-4">
           <div className="grid w-full max-w-sm items-center gap-1.5">
             <Label htmlFor="excel-file">Excel File</Label>
-            <Input
-              id="excel-file"
-              type="file"
-              accept=".xlsx, .xls"
-              onChange={handleFileChange}
+            <Input 
+              id="excel-file" 
+              type="file" 
+              accept=".xlsx, .xls" 
+              onChange={handleFileChange} 
               ref={fileInputRef}
               disabled={loading}
             />
           </div>
-          <Button
-            onClick={handleParseExcel}
+          <Button 
+            onClick={handleParseExcel} 
             disabled={!file || loading}
             className="w-full sm:w-auto"
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadIcon className="mr-2 h-4 w-4" />}
             {loading ? 'Parsing...' : 'Parse Excel'}
           </Button>
-          <Button
-            variant="outline"
-            onClick={handleDownloadSample}
+          <Button 
+            variant="outline" 
+            onClick={handleDownloadSample} 
             disabled={loading}
             className="w-full sm:w-auto"
           >
@@ -303,9 +318,7 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                       <TableCell>
                         <Select
                           value={mapping.targetKey || "__NONE__"} // Use __NONE__ for empty targetKey
-                          onValueChange={(value: string) =>
-                            handleMappingChange(mapping.source, value)
-                          }
+                          onValueChange={(value: string) => handleMappingChange(mapping.source, value)}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Select required field" />
@@ -325,17 +338,21 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                 </TableBody>
               </Table>
             </div>
-            <Button onClick={applyMappingsAndValidate} disabled={loading} className="w-full">
+            <Button 
+              onClick={applyMappingsAndValidate} 
+              disabled={loading}
+              className="w-full"
+            >
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Apply Mappings & Validate'}
             </Button>
           </div>
         )}
-        
+
         {parsedData.length > 0 && (
           <div className="space-y-4">
-            <div className="rounded-md border max-h-96 overflow-y-auto"> {/* Removed slice(0, 10) */}
+            <div className="rounded-md border max-h-96 overflow-y-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead>Row</TableHead>
                     <TableHead>Status</TableHead>
@@ -347,7 +364,7 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                 </TableHeader>
                 <TableBody>
                   {parsedData.map((row, rowIndex) => (
-                    <TableRow
+                    <TableRow 
                       key={rowIndex}
                       className={cn(
                         row.isValid ? "" : "bg-red-50/50 hover:bg-red-100/50"
@@ -365,7 +382,9 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                         const value = row.data[field.key as keyof z.infer<T>];
                         return (
                           <TableCell key={colIndex}>
-                            {value !== undefined && value !== null && String(value).trim() !== '' ? String(value) : 'N/A'}
+                            {value !== undefined && value !== null && String(value).trim() !== '' 
+                              ? String(value) 
+                              : 'N/A'}
                           </TableCell>
                         );
                       })}
@@ -373,7 +392,9 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                         {row.isValid ? (
                           'None'
                         ) : (
-                          row.errors.length > 0 ? row.errors.join('; ') : 'Validation failed, but no specific errors reported.' // Fallback message
+                          row.errors.length > 0 
+                            ? row.errors.join('; ') 
+                            : 'Validation failed, but no specific errors reported.' // Fallback message
                         )}
                       </TableCell>
                     </TableRow>
@@ -381,13 +402,12 @@ const ExcelUpload = <T extends z.ZodTypeAny>({
                 </TableBody>
               </Table>
             </div>
-
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground">
                 {parsedData.filter(p => p.isValid).length} valid rows, {parsedData.filter(p => !p.isValid).length} invalid rows
               </p>
-              <Button
-                onClick={handleUpload}
+              <Button 
+                onClick={handleUpload} 
                 disabled={loading || parsedData.some(row => !row.isValid) || parsedData.length === 0}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
