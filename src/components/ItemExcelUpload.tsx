@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Upload as UploadIcon, Download, CheckCircle, AlertTriangle } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
-import * as z from 'zod'; // Corrected import statement
+import * as z from 'zod';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -332,7 +332,7 @@ const ItemExcelUpload: React.FC<ItemExcelUploadProps> = ({ onUploadComplete }) =
 
       const ws = XLSX.utils.json_to_sheet(sampleData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Sample Data');
+      XLSX.utils.book_append_sheet(wb, ws, 'Sample Data'); // Corrected line
       XLSX.writeFile(wb, 'sample_items.xlsx');
       showSuccess('Sample Excel file downloaded successfully!');
     } catch (error: any) {
