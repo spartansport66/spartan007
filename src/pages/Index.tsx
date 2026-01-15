@@ -46,21 +46,22 @@ const Index = () => {
   const handleForceLogout = async () => {
     setForceLogoutLoading(true);
     try {
-      if (session) { // Only attempt to sign out if a session exists
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          showError(`Failed to log out: ${error.message}`);
-        } else {
-          showSuccess('Logged out successfully!');
-          navigate('/login');
-        }
+      // Attempt to sign out. Even if it fails with 403, the session is likely invalid on server.
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.warn('Logout API call failed, but proceeding with client-side logout as session might be invalid:', error.message);
+        showError(`Logout failed: ${error.message}. You are being redirected.`);
       } else {
-        // If no session, user is already logged out
-        showSuccess('You were already logged out.');
-        navigate('/login');
+        showSuccess('Logged out successfully!');
       }
+      // Regardless of API success/failure, redirect to login.
+      // The SessionContext's onAuthStateChange will handle clearing local state.
+      navigate('/login');
     } catch (error: any) {
-      showError(`Unexpected error during logout: ${error.message}`);
+      console.error('Unexpected error during logout:', error);
+      showError(`An unexpected error occurred during logout: ${error.message}. Redirecting.`);
+      navigate('/login');
     } finally {
       setForceLogoutLoading(false);
     }
