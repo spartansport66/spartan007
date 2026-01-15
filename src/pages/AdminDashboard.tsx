@@ -31,7 +31,7 @@ import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceRepor
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, isAdmin, userType } = useSession();
+  const { user, loading: sessionLoading, isAdmin, userType, session } = useSession(); // Added session here
   const [loadingData, setLoadingData] = useState(true);
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
@@ -138,12 +138,18 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Error logging out:', error.message);
-        showError(`Failed to log out: ${error.message}`);
+      if (session) { // Only attempt to sign out if a session exists
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.error('Error logging out:', error.message);
+          showError(`Failed to log out: ${error.message}`);
+        } else {
+          showSuccess('Logged out successfully!');
+          navigate('/login');
+        }
       } else {
-        showSuccess('Logged out successfully!');
+        // If no session, user is already logged out
+        showSuccess('You were already logged out.');
         navigate('/login');
       }
     } catch (error: any) {
