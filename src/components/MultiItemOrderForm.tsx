@@ -64,8 +64,7 @@ const MultiItemOrderForm: React.FC = () => {
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
   const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
-  const [dealerHasPositiveOpeningBalance, setDealerHasPositiveOpeningBalance] = useState<boolean>(false);
-  const [openingBalanceSettled, setOpeningBalanceSettled] = useState<boolean>(false);
+  // Removed dealerHasPositiveOpeningBalance and openingBalanceSettled states
 
   // Payment at order time states
   const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
@@ -167,8 +166,7 @@ const MultiItemOrderForm: React.FC = () => {
       if (!selectedDealer) {
         setPendingPayments([]);
         setTotalPendingAmount(0);
-        setDealerHasPositiveOpeningBalance(false);
-        setOpeningBalanceSettled(false);
+        // Removed dealerHasPositiveOpeningBalance and openingBalanceSettled logic
         return;
       }
 
@@ -196,20 +194,7 @@ const MultiItemOrderForm: React.FC = () => {
         const total = pendingData.reduce((sum, order) => sum + order.total_amount, 0);
         setTotalPendingAmount(total);
 
-        // Check if dealer has positive opening balance
-        const selectedDealerData = dealers.find(d => d.id === selectedDealer);
-        if (selectedDealerData) {
-          const hasPositiveBalance = selectedDealerData.opening_balance > 0;
-          setDealerHasPositiveOpeningBalance(hasPositiveBalance);
-
-          // If no positive balance, consider it settled by default
-          if (!hasPositiveBalance) {
-            setOpeningBalanceSettled(true);
-          } else {
-            // If there is a positive balance, ensure it's not marked as settled initially
-            setOpeningBalanceSettled(false);
-          }
-        }
+        // Removed dealerHasPositiveOpeningBalance and openingBalanceSettled logic
       } catch (error: any) {
         console.error('Error checking pending payments:', error);
         showError(`Failed to check pending payments: ${error.message}`);
@@ -351,11 +336,7 @@ const MultiItemOrderForm: React.FC = () => {
       return;
     }
 
-    // Check if dealer has positive opening balance and it's not settled
-    if (dealerHasPositiveOpeningBalance && !openingBalanceSettled) {
-      showError('Cannot place order. Dealer has an outstanding opening balance that must be settled first.');
-      return;
-    }
+    // Removed check for dealerHasPositiveOpeningBalance and openingBalanceSettled
 
     // Check if dealer has any overdue pending payments
     if (totalPendingAmount > 0) {
@@ -474,7 +455,7 @@ const MultiItemOrderForm: React.FC = () => {
       setPaymentDueDate(null);
       setPendingPayments([]);
       setTotalPendingAmount(0);
-      setOpeningBalanceSettled(false);
+      // Removed openingBalanceSettled reset
     } catch (error: any) {
       console.error('Error placing order:', error);
       showError(`Failed to place order: ${error.message}`);
@@ -540,26 +521,7 @@ const MultiItemOrderForm: React.FC = () => {
               </SelectContent>
             </Select>
 
-            {selectedDealer && dealerHasPositiveOpeningBalance && !openingBalanceSettled && (
-              <Alert variant="destructive" className="mt-2">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Opening Balance Outstanding</AlertTitle>
-                <AlertDescription>
-                  This dealer has an opening balance of ₹{dealerOpeningBalance} that must be settled before placing a new order.
-                  <div className="mt-2 flex items-center">
-                    <Checkbox
-                      id="openingBalanceSettled"
-                      checked={openingBalanceSettled}
-                      onCheckedChange={(checked) => setOpeningBalanceSettled(!!checked)}
-                      className="mr-2"
-                    />
-                    <Label htmlFor="openingBalanceSettled">
-                      I confirm the opening balance has been settled
-                    </Label>
-                  </div>
-                </AlertDescription>
-              </Alert>
-            )}
+            {/* Removed Opening Balance Outstanding Alert and Checkbox */}
 
             {selectedDealer && totalPendingAmount > 0 && (
               <Alert variant="destructive" className="mt-2">
@@ -914,7 +876,6 @@ const MultiItemOrderForm: React.FC = () => {
               !selectedDealer ||
               (remainingCredit !== null && remainingCredit < 0) ||
               totalPendingAmount > 0 ||
-              (dealerHasPositiveOpeningBalance && !openingBalanceSettled) ||
               (orderItems.some(item => !item.product_id || item.quantity <= 0)) || // Added check for valid order items
               (!isPaidAtOrderTime && !paymentDueDate) || // Ensure paymentDueDate is set if not paid at order time
               (isPaidAtOrderTime && (!paymentMethod || paymentAmount <= 0 || (paymentMethod === 'Cheque/DD' && (!chequeDdNo || !chequeDdDate)) || (paymentMethod !== 'Cheque/DD' && paymentMethod !== 'Cash' && !transactionId))) // Payment validation
