@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
@@ -17,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import SalesPersonPerformanceCard from '@/components/SalesPersonPerformanceCard';
 import PaymentStatusCard from '@/components/PaymentStatusCard';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'; // Added import
 
 interface Product {
   id: string;
@@ -60,7 +60,7 @@ const formatDate = (dateString: string) => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, isAdmin } = useSession();
+  const { user, loading: sessionLoading, isAdmin, session } = useSession(); // Added session here
   const [orders, setOrders] = useState<OrderDisplay[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [salesPersonName, setSalesPersonName] = useState<string>('');
@@ -193,13 +193,24 @@ const Dashboard = () => {
   }, [user, sessionLoading, isAdmin, fetchDashboardData, navigate]);
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error('Error logging out:', error.message);
-      showError(`Failed to log out: ${error.message}`);
-    } else {
-      showSuccess('Logged out successfully!');
-      navigate('/login');
+    try {
+      if (session) { // Only attempt to sign out if a session exists
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.error('Error logging out:', error.message);
+          showError(`Failed to log out: ${error.message}`);
+        } else {
+          showSuccess('Logged out successfully!');
+          navigate('/login');
+        }
+      } else {
+        // If no session, user is already logged out
+        showSuccess('You were already logged out.');
+        navigate('/login');
+      }
+    } catch (error: any) {
+      console.error('Unexpected error during logout:', error);
+      showError(`Unexpected error during logout: ${error.message}`);
     }
   };
 
