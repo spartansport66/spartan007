@@ -653,7 +653,6 @@ const MultiItemOrderForm: React.FC = () => {
                   Dealer's available credit is ₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}. Please clear the balance or increase the credit limit to add more items.
                 </AlertDescription>
               </Alert>
-            </Alert>
             )}
 
             {orderItems.map((item, index) => (
