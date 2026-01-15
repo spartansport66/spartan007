@@ -114,7 +114,7 @@ const SheetConverter: React.FC = () => {
           newRow[header] = ''; // Initialize all required headers
         });
         
-        // Apply one-to-one mappings first
+        // 1. Apply one-to-one mappings first
         Object.keys(row).forEach(sourceHeader => {
           const targetHeader = sourceToTargetMap[sourceHeader];
           if (targetHeader) {
@@ -122,7 +122,8 @@ const SheetConverter: React.FC = () => {
           }
         });
         
-        // Apply split column logic, potentially overwriting one-to-one mappings
+        // 2. Apply split column logic, potentially overwriting one-to-one mappings
+        // This means if a field is mapped both directly and via splitting, the split value takes precedence.
         if (columnToSplitSourceHeader && splitTargetHeaders.length > 0 && splitDelimiter) {
           const combinedValue = row[columnToSplitSourceHeader];
           if (combinedValue !== undefined && combinedValue !== null) { // Ensure value exists before splitting
@@ -195,17 +196,17 @@ const SheetConverter: React.FC = () => {
         },
         {
           "Dealer Name": 'Regional Traders',
-          "Contact Person": 'Jane Smith',
-          "Email": 'jane@rt.com',
-          "Phone Number": '+1987654321',
+          "Contact Person": '', // Empty contact person
+          "Email": '', // Empty email
+          "Phone Number": '', // Empty phone number
           "Address": '456 Trade Ave',
-          "City": 'Los Angeles',
-          "State": 'CA',
-          "Country": 'USA',
+          "City": '', // Empty city
+          "State": '', // Empty state
+          "Country": '', // Empty country
           "Credit Limit": 30000,
           "Allotted Credit Days": 45,
           "Opening Balance": 5000,
-          "Sales Person": 'Sales Person Name'
+          "Sales Person": '' // Empty sales person
         }
       ];
       
