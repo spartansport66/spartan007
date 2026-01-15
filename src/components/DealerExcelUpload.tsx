@@ -158,6 +158,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         .select();
       
       if (upsertError) {
+        console.error('[DealerExcelUpload] Error during dealer upsert:', upsertError.message);
         throw upsertError;
       }
       
@@ -173,6 +174,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         .upsert(balancesToUpsert, { onConflict: 'dealer_id' }); // Upsert on dealer_id for balances
       
       if (balanceUpsertError) {
+        console.error('[DealerExcelUpload] Error upserting dealer balances:', balanceUpsertError.message);
         throw balanceUpsertError;
       }
       
@@ -182,20 +184,53 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         const dealerId = upsertedDealers[i].id; // Use the ID from the upserted dealer
         
         if (row.salesperson) {
-          const { data: salesPerson, error: salesPersonError } = await supabase
-            .from('profiles')
-            .select('id')
-            .or(`first_name.ilike.%${row.salesperson}%,last_name.ilike.%${row.salesperson}%`)
-            .eq('user_type', 'sales_person')
-            .single();
+          const trimmedSalespersonName = row.salesperson.trim();
           
-          if (!salesPersonError && salesPerson) {
-            assignmentsToInsert.push({
-              dealer_id: dealerId,
-              sales_person_id: salesPerson.id
-            });
+          // Fetch all sales persons that *partially* match the name
+          const { data: salesPersons, error: salesPersonError } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name')
+            .eq('user_type', 'sales_person')
+            .or(`
+              first_name.ilike.%${trimmedSalespersonName}%,
+              last_name.ilike.%${trimmedSalespersonName}%
+            `);
+
+          if (salesPersonError) {
+            console.error(`[DealerExcelUpload] Error fetching sales persons for '${trimmedSalespersonName}':`, salesPersonError.message);
+            // Continue, don't throw, just log and skip assignment
+          } else if (salesPersons && salesPersons.length > 0) {
+            let matchedSalesPerson = null;
+
+            // Prioritize exact full name match
+            matchedSalesPerson = salesPersons.find(sp =>
+              `${sp.first_name || ''} ${sp.last_name || ''}`.trim().toLowerCase() === trimmedSalespersonName.toLowerCase()
+            );
+
+            // If no exact full name match, try exact first name or last name match
+            if (!matchedSalesPerson) {
+              matchedSalesPerson = salesPersons.find(sp =>
+                (sp.first_name || '').toLowerCase() === trimmedSalespersonName.toLowerCase() ||
+                (sp.last_name || '').toLowerCase() === trimmedSalespersonName.toLowerCase()
+              );
+            }
+
+            // If still no match, and there's only one partial match, use that
+            if (!matchedSalesPerson && salesPersons.length === 1) {
+              matchedSalesPerson = salesPersons[0];
+            }
+
+            if (matchedSalesPerson) {
+              assignmentsToInsert.push({
+                dealer_id: dealerId,
+                sales_person_id: matchedSalesPerson.id
+              });
+              console.log(`[DealerExcelUpload] Assigned dealer '${row.name}' to sales person '${matchedSalesPerson.first_name} ${matchedSalesPerson.last_name}' (ID: ${matchedSalesPerson.id}).`);
+            } else {
+              console.warn(`[DealerExcelUpload] Sales person '${trimmedSalespersonName}' not found or ambiguous for dealer '${row.name}'. Skipping assignment.`);
+            }
           } else {
-            console.warn(`[DealerExcelUpload] Sales person '${row.salesperson}' not found for dealer '${row.name}'. Skipping assignment.`);
+            console.warn(`[DealerExcelUpload] Sales person '${trimmedSalespersonName}' not found for dealer '${row.name}'. Skipping assignment.`);
           }
         }
       }
