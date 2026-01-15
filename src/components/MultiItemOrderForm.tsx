@@ -512,7 +512,7 @@ const MultiItemOrderForm: React.FC = () => {
   // Condition to disable "Add Item" button
   const disableAddItem = selectedDealer && availableCredit !== null && availableCredit <= 0;
 
-  console.log("[MultiItemOrderForm Render] dealers:", dealers, "loading:", loading);
+  console.log("[MultiItemOrderForm Render] dealers.length:", dealers.length, "local loading:", loading, "sessionLoading:", sessionLoading);
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -529,7 +529,7 @@ const MultiItemOrderForm: React.FC = () => {
             <Select
               value={selectedDealer}
               onValueChange={setSelectedDealer}
-              disabled={dealers.length === 0 || loading} // Disable if loading or no dealers
+              disabled={dealers.length === 0 || loading || sessionLoading} // Combined disabled conditions
             >
               <SelectTrigger id="dealer" className="w-full">
                 <SelectValue placeholder={dealers.length === 0 ? "No dealers available" : "Select a dealer"} />
@@ -543,7 +543,7 @@ const MultiItemOrderForm: React.FC = () => {
               </SelectContent>
             </Select>
             {/* Conditional message if no dealers are available after loading */}
-            {!loading && dealers.length === 0 && (
+            {!loading && !sessionLoading && dealers.length === 0 && (
               <p className="text-sm text-muted-foreground mt-2">
                 No dealers assigned to your account. Please contact an administrator to assign dealers.
               </p>
