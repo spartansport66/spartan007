@@ -104,7 +104,13 @@ const MultiItemOrderForm: React.FC = () => {
   // Fetch dealers and products
   useEffect(() => {
     const fetchData = async () => {
-      if (!user) return;
+      setLoading(true); // Start loading
+      if (!user) {
+        setDealers([]);
+        setProducts([]);
+        setLoading(false); // End loading even if no user
+        return;
+      }
 
       try {
         // Fetch dealers assigned to the current user
@@ -126,20 +132,17 @@ const MultiItemOrderForm: React.FC = () => {
           console.error('Error fetching assigned dealers:', assignedDealersError);
           showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
           setDealers([]);
-          return;
+        } else {
+          const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => {
+            // Corrected access: dealer_balances is a single object, not an array
+            const openingBalance = item.dealers.dealer_balances?.opening_balance || 0;
+            return {
+              ...item.dealers,
+              opening_balance: openingBalance
+            };
+          });
+          setDealers(formattedDealers);
         }
-
-        // Format dealers with their opening balances
-        const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => {
-          // Corrected access: dealer_balances is a single object, not an array
-          const openingBalance = item.dealers.dealer_balances?.opening_balance || 0;
-          return {
-            ...item.dealers,
-            opening_balance: openingBalance
-          };
-        });
-
-        setDealers(formattedDealers);
 
         // Fetch all products - UPDATED to include new fields
         const { data: productsData, error: productsError } = await supabase
@@ -149,17 +152,31 @@ const MultiItemOrderForm: React.FC = () => {
         if (productsError) {
           console.error('Error fetching products:', productsError);
           showError(`Failed to load products: ${productsError.message}`);
+          setProducts([]);
         } else {
           setProducts(productsData || []);
         }
       } catch (error: any) {
         console.error('Error in fetchData:', error);
         showError(`Failed to load data: ${error.message}`);
+        setDealers([]); // Ensure state is cleared on error
+        setProducts([]); // Ensure state is cleared on error
+      } finally {
+        setLoading(false); // Always set loading to false
       }
     };
 
-    fetchData();
-  }, [user]);
+    // Only call fetchData if user is available
+    if (user) {
+      fetchData();
+    } else {
+      // If user is not available (e.g., during initial session loading),
+      // ensure dealers and products are cleared and loading is false.
+      setDealers([]);
+      setProducts([]);
+      setLoading(false);
+    }
+  }, [user]); // Depend only on user, as loading is handled internally.
 
   // Check for pending payments when dealer is selected
   useEffect(() => {
@@ -503,7 +520,7 @@ const MultiItemOrderForm: React.FC = () => {
             <Select
               value={selectedDealer}
               onValueChange={setSelectedDealer}
-              disabled={dealers.length === 0}
+              disabled={dealers.length === 0 || loading} // Disable if loading
             >
               <SelectTrigger id="dealer" className="w-full">
                 <SelectValue placeholder={dealers.length === 0 ? "No dealers available" : "Select a dealer"} />
