@@ -73,7 +73,7 @@ const MultiItemOrderForm: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
 
   // Cheque/DD fields
-  const [chequeDdNo, setChequeDdNo] = useState<string>('');
+  const [chequeDdNo, setChequeDdNo, ] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
 
   // Card fields (only transaction ID)
@@ -488,8 +488,9 @@ const MultiItemOrderForm: React.FC = () => {
 
   // Filter products based on search value - improved matching
   const filteredProducts = useMemo(() => {
-    if (searchValue.length < 3) {
-      return []; // Return an empty array until 3 characters are typed
+    // Always return all products if no search value, or if search value is less than 3 characters
+    if (!searchValue) {
+      return products;
     }
 
     const lowerCaseSearchValue = searchValue.toLowerCase();
@@ -652,6 +653,7 @@ const MultiItemOrderForm: React.FC = () => {
                   Dealer's available credit is ₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}. Please clear the balance or increase the credit limit to add more items.
                 </AlertDescription>
               </Alert>
+            </Alert>
             )}
 
             {orderItems.map((item, index) => (
@@ -674,38 +676,34 @@ const MultiItemOrderForm: React.FC = () => {
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                       <Command>
                         <CommandInput
-                          placeholder="Search product (min 3 chars)..."
+                          placeholder="Search product..." // Removed min 3 chars hint
                           value={searchValue}
                           onValueChange={setSearchValue}
                         />
                         <CommandList>
-                          {searchValue.length < 3 ? (
-                            <CommandEmpty>Type at least 3 characters to search for products.</CommandEmpty>
+                          {filteredProducts.length === 0 ? (
+                            <CommandEmpty>No product found.</CommandEmpty>
                           ) : (
-                            filteredProducts.length === 0 ? (
-                              <CommandEmpty>No product found matching your search.</CommandEmpty>
-                            ) : (
-                              <CommandGroup>
-                                {filteredProducts.map((product) => (
-                                  <CommandItem
-                                    key={product.id}
-                                    value={product.id}
-                                    onSelect={(currentValue) => {
-                                      updateOrderItem(item.id, 'product_id', currentValue === item.product_id ? '' : currentValue);
-                                      setOpen(false);
-                                      setSearchValue("");
-                                    }}
-                                  >
-                                    <div>
-                                      <div>{product.name} ({product.code})</div>
-                                      <div className="text-xs text-muted-foreground">
-                                        DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}
-                                      </div>
+                            <CommandGroup>
+                              {filteredProducts.map((product) => (
+                                <CommandItem
+                                  key={product.id}
+                                  value={product.id}
+                                  onSelect={(currentValue) => {
+                                    updateOrderItem(item.id, 'product_id', currentValue === item.product_id ? '' : currentValue);
+                                    setOpen(false);
+                                    setSearchValue("");
+                                  }}
+                                >
+                                  <div>
+                                    <div>{product.name} ({product.code})</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}
                                     </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            )
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
                           )}
                         </CommandList>
                       </Command>
