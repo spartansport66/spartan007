@@ -51,12 +51,12 @@ interface PendingPayment {
 const CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-multi-item-order";
 
 const MultiItemOrderForm: React.FC = () => {
-  const { user } = useSession();
+  const { user, loading: sessionLoading } = useSession(); // Get session loading state
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Local loading state for this component's data
   const [dealerBalance, setDealerBalance] = useState<number | null>(null);
   const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
@@ -64,7 +64,6 @@ const MultiItemOrderForm: React.FC = () => {
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
   const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
-  // Removed dealerHasPositiveOpeningBalance and openingBalanceSettled states
 
   // Payment at order time states
   const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
@@ -104,11 +103,12 @@ const MultiItemOrderForm: React.FC = () => {
   // Fetch dealers and products
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true); // Start loading
+      setLoading(true); // Start local loading
       if (!user) {
+        console.log("[MultiItemOrderForm] No user, clearing data and stopping local loading.");
         setDealers([]);
         setProducts([]);
-        setLoading(false); // End loading even if no user
+        setLoading(false); // End local loading if no user
         return;
       }
 
@@ -129,12 +129,11 @@ const MultiItemOrderForm: React.FC = () => {
           .order('name', { ascending: true }); // Sort dealers by name in ascending order
 
         if (assignedDealersError) {
-          console.error('Error fetching assigned dealers:', assignedDealersError);
+          console.error('[MultiItemOrderForm] Error fetching assigned dealers:', assignedDealersError);
           showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
           setDealers([]);
         } else {
           const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => {
-            // Corrected access: dealer_balances is a single object, not an array
             const openingBalance = item.dealers.dealer_balances?.opening_balance || 0;
             return {
               ...item.dealers,
@@ -142,41 +141,49 @@ const MultiItemOrderForm: React.FC = () => {
             };
           });
           setDealers(formattedDealers);
+          console.log("[MultiItemOrderForm] Fetched dealers:", formattedDealers);
         }
 
-        // Fetch all products - UPDATED to include new fields
+        // Fetch all products
         const { data: productsData, error: productsError } = await supabase
           .from('products')
-          .select('id, code, name, dp, stock'); // Select 'dp'
+          .select('id, code, name, dp, stock');
 
         if (productsError) {
-          console.error('Error fetching products:', productsError);
+          console.error('[MultiItemOrderForm] Error fetching products:', productsError);
           showError(`Failed to load products: ${productsError.message}`);
           setProducts([]);
         } else {
           setProducts(productsData || []);
+          console.log("[MultiItemOrderForm] Fetched products:", productsData);
         }
       } catch (error: any) {
-        console.error('Error in fetchData:', error);
+        console.error('[MultiItemOrderForm] Error in fetchData:', error);
         showError(`Failed to load data: ${error.message}`);
-        setDealers([]); // Ensure state is cleared on error
-        setProducts([]); // Ensure state is cleared on error
+        setDealers([]);
+        setProducts([]);
       } finally {
-        setLoading(false); // Always set loading to false
+        setLoading(false); // Always set local loading to false
+        console.log("[MultiItemOrderForm] fetchData completed. Local loading set to false.");
       }
     };
 
-    // Only call fetchData if user is available
-    if (user) {
+    // Only call fetchData if session is NOT loading AND user is available
+    if (!sessionLoading && user) {
+      console.log("[MultiItemOrderForm] Session loaded and user available. Calling fetchData.");
       fetchData();
-    } else {
-      // If user is not available (e.g., during initial session loading),
-      // ensure dealers and products are cleared and loading is false.
+    } else if (!sessionLoading && !user) {
+      // If session is loaded but no user (e.g., not logged in), ensure local state is clear and not loading
+      console.log("[MultiItemOrderForm] Session loaded but no user. Clearing local data.");
       setDealers([]);
       setProducts([]);
       setLoading(false);
+    } else if (sessionLoading) {
+      // If session is still loading, keep local loading true to show spinner
+      console.log("[MultiItemOrderForm] Session still loading. Keeping local loading true.");
+      setLoading(true);
     }
-  }, [user]); // Depend only on user, as loading is handled internally.
+  }, [user, sessionLoading]); // Depend on both user and sessionLoading
 
   // Check for pending payments when dealer is selected
   useEffect(() => {
@@ -505,6 +512,8 @@ const MultiItemOrderForm: React.FC = () => {
   // Condition to disable "Add Item" button
   const disableAddItem = selectedDealer && availableCredit !== null && availableCredit <= 0;
 
+  console.log("[MultiItemOrderForm Render] dealers:", dealers, "loading:", loading);
+
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
       <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
@@ -520,7 +529,7 @@ const MultiItemOrderForm: React.FC = () => {
             <Select
               value={selectedDealer}
               onValueChange={setSelectedDealer}
-              disabled={dealers.length === 0 || loading} // Disable if loading
+              disabled={dealers.length === 0 || loading} // Disable if loading or no dealers
             >
               <SelectTrigger id="dealer" className="w-full">
                 <SelectValue placeholder={dealers.length === 0 ? "No dealers available" : "Select a dealer"} />
@@ -533,6 +542,12 @@ const MultiItemOrderForm: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
+            {/* Conditional message if no dealers are available after loading */}
+            {!loading && dealers.length === 0 && (
+              <p className="text-sm text-muted-foreground mt-2">
+                No dealers assigned to your account. Please contact an administrator to assign dealers.
+              </p>
+            )}
 
             {selectedDealer && totalPendingAmount > 0 && (
               <Alert variant="destructive" className="mt-2">
@@ -649,7 +664,7 @@ const MultiItemOrderForm: React.FC = () => {
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                       <Command>
                         <CommandInput
-                          placeholder="Search product..." // Removed min 3 chars hint
+                          placeholder="Search product..."
                           value={searchValue}
                           onValueChange={setSearchValue}
                         />
