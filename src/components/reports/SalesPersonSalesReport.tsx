@@ -134,7 +134,7 @@ const SalesPersonSalesReport: React.FC<SalesPersonSalesReportProps> = ({ isOpen,
         query = query.gte('sale_date', startOfDay);
       }
       if (filterToSaleDate) {
-        const endOfDay = `${filterToDate}T23:59:59.999Z`;
+        const endOfDay = `${filterToSaleDate}T23:59:59.999Z`;
         query = query.lte('sale_date', endOfDay);
       }
 
@@ -167,7 +167,7 @@ const SalesPersonSalesReport: React.FC<SalesPersonSalesReportProps> = ({ isOpen,
     } finally {
       setLoading(false);
     }
-  }, [user?.id, filterDealerId, filterProductId, filterFromSaleDate, filterToDate]);
+  }, [user?.id, filterDealerId, filterProductId, filterFromSaleDate, filterToSaleDate]);
 
   useEffect(() => {
     if (isOpen) {
@@ -209,7 +209,7 @@ const SalesPersonSalesReport: React.FC<SalesPersonSalesReportProps> = ({ isOpen,
         if (productLabel) filterDetails.push(`Product: ${productLabel}`);
       }
       if (filterFromSaleDate) filterDetails.push(`From Date: ${new Date(filterFromSaleDate).toLocaleDateString()}`);
-      if (filterToSaleDate) filterDetails.push(`To Date: ${new Date(filterToDate).toLocaleDateString()}`);
+      if (filterToSaleDate) filterDetails.push(`To Date: ${new Date(filterToSaleDate).toLocaleDateString()}`);
 
       if (filterDetails.length > 0) {
         doc.setFontSize(9);
@@ -339,8 +339,8 @@ const SalesPersonSalesReport: React.FC<SalesPersonSalesReportProps> = ({ isOpen,
             <Input 
               id="filterToSaleDate" 
               type="date" 
-              value={filterToDate} 
-              onChange={(e) => setFilterToDate(e.target.value)} 
+              value={filterToSaleDate} 
+              onChange={(e) => setFilterToSaleDate(e.target.value)} 
               className="w-full" 
             />
           </div>
