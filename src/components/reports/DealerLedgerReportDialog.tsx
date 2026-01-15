@@ -210,7 +210,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         .eq('status', 'completed'); // Only completed payments are credits
 
       if (fromDateISO) paymentsQuery = paymentsQuery.gte('payment_date', fromDateISO);
-      if (toDateISO) paymentsQuery = payments.lte('payment_date', toDateISO);
+      if (toDateISO) paymentsQuery = paymentsQuery.lte('payment_date', toDateISO);
 
       const { data: paymentsData, error: paymentsError } = await paymentsQuery;
       if (paymentsError) throw paymentsError;
@@ -353,7 +353,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">Dealer Ledger Report</DialogTitle>
           <DialogDescription>
