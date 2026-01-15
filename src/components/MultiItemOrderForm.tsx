@@ -119,7 +119,8 @@ const MultiItemOrderForm: React.FC = () => {
               dealer_balances(opening_balance)
             )
           `)
-          .eq('sales_person_id', user.id);
+          .eq('sales_person_id', user.id)
+          .order('name', { ascending: true }); // Sort dealers by name in ascending order
 
         if (assignedDealersError) {
           console.error('Error fetching assigned dealers:', assignedDealersError);
@@ -166,7 +167,6 @@ const MultiItemOrderForm: React.FC = () => {
       if (!selectedDealer) {
         setPendingPayments([]);
         setTotalPendingAmount(0);
-        // Removed dealerHasPositiveOpeningBalance and openingBalanceSettled logic
         return;
       }
 
@@ -194,7 +194,6 @@ const MultiItemOrderForm: React.FC = () => {
         const total = pendingData.reduce((sum, order) => sum + order.total_amount, 0);
         setTotalPendingAmount(total);
 
-        // Removed dealerHasPositiveOpeningBalance and openingBalanceSettled logic
       } catch (error: any) {
         console.error('Error checking pending payments:', error);
         showError(`Failed to check pending payments: ${error.message}`);
@@ -336,8 +335,6 @@ const MultiItemOrderForm: React.FC = () => {
       return;
     }
 
-    // Removed check for dealerHasPositiveOpeningBalance and openingBalanceSettled
-
     // Check if dealer has any overdue pending payments
     if (totalPendingAmount > 0) {
       showError(`Cannot place order. Dealer has overdue payments of ₹${totalPendingAmount.toFixed(2)}. Please clear all overdue payments first.`);
@@ -455,7 +452,6 @@ const MultiItemOrderForm: React.FC = () => {
       setPaymentDueDate(null);
       setPendingPayments([]);
       setTotalPendingAmount(0);
-      // Removed openingBalanceSettled reset
     } catch (error: any) {
       console.error('Error placing order:', error);
       showError(`Failed to place order: ${error.message}`);
@@ -520,8 +516,6 @@ const MultiItemOrderForm: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-
-            {/* Removed Opening Balance Outstanding Alert and Checkbox */}
 
             {selectedDealer && totalPendingAmount > 0 && (
               <Alert variant="destructive" className="mt-2">
