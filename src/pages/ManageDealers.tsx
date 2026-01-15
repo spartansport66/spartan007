@@ -43,7 +43,7 @@ interface DealerWithRelations {
   allotted_credit_days: number;
   user_id: string;
   dealer_sales_persons: { sales_person_id: string; profiles: { id: string; first_name: string; last_name: string } }[];
-  dealer_balances: DealerBalanceFromQuery[]; // Array of balances
+  dealer_balances: { opening_balance: number | null } | null; // Corrected type to single object or null
   dealer_monthly_credit_limits: { dealer_id: string; credit_limit: number; month_year: string }[];
   orders: { 
     total_amount: number; 
@@ -196,7 +196,7 @@ const ManageDealers = () => {
         query = supabase
           .from('dealers')
           .select(`
-            *,
+            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id,
             dealer_sales_persons!inner(sales_person_id, profiles(id, first_name, last_name)),
             dealer_balances(opening_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
@@ -208,7 +208,7 @@ const ManageDealers = () => {
         query = supabase
           .from('dealers')
           .select(`
-            *,
+            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id,
             dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name)),
             dealer_balances(opening_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
@@ -243,14 +243,14 @@ const ManageDealers = () => {
       });
 
       // Create a map of dealer balances for easy lookup
-      const balancesMap = new Map<string, DealerBalanceFromQuery>();
+      const balancesMap = new Map<string, { opening_balance: number | null }>(); // Corrected type
       dealersData?.forEach(d => {
-        // Ensure d.dealer_balances is an array and has at least one element
-        if (Array.isArray(d.dealer_balances) && d.dealer_balances.length > 0) {
-          balancesMap.set(d.id, d.dealer_balances[0]);
+        // Ensure d.dealer_balances is an object or null
+        if (d.dealer_balances) {
+          balancesMap.set(d.id, d.dealer_balances);
         } else {
           // Default to zero balance if no balance record or unexpected format
-          balancesMap.set(d.id, { opening_balance: 0, closing_balance: 0 });
+          balancesMap.set(d.id, { opening_balance: 0 });
         }
       });
       
@@ -270,7 +270,7 @@ const ManageDealers = () => {
           last_name: dsp.profiles.last_name,
         }));
         
-        const balance = balancesMap.get(d.id) || { opening_balance: 0, closing_balance: 0 };
+        const balance = balancesMap.get(d.id) || { opening_balance: 0 }; // Corrected access
         const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) 
           ? monthlyLimitsMap.get(d.id)! 
           : d.credit_limit;
@@ -487,6 +487,7 @@ const ManageDealers = () => {
       doc.setFontSize(18);
       doc.text("Dealer Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
       doc.setFontSize(10);
+      doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
 
       const tableColumn = [
