@@ -162,6 +162,7 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
                 value={selectedDealerIds}
                 onChange={setSelectedDealerIds}
                 placeholder="Select dealers"
+                className="max-h-[120px] overflow-y-auto" {/* Added max-h and overflow-y-auto */}
                 disabled={isSending || filteredDealersForMultiSelect.length === 0}
               />
               {filteredDealersForMultiSelect.length === 0 && (
