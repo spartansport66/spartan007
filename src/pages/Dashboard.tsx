@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2, Search, Eye } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2, Search, Eye, FileText } from 'lucide-react'; // Added FileText icon
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
@@ -16,7 +16,11 @@ import { Label } from '@/components/ui/label';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import SalesPersonPerformanceCard from '@/components/SalesPersonPerformanceCard';
 import PaymentStatusCard from '@/components/PaymentStatusCard';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'; // Added import
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"; // Added DropdownMenu imports
+import SalesPersonSalesReport from '@/components/reports/SalesPersonSalesReport'; // New import
+import SalesPersonDealerReport from '@/components/reports/SalesPersonDealerReport'; // New import
+import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsReport'; // New import
 
 interface Product {
   id: string;
@@ -84,6 +88,11 @@ const Dashboard = () => {
 
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
+
+  // New states for salesperson reports
+  const [isSalesPersonSalesReportOpen, setIsSalesPersonSalesReportOpen] = useState(false);
+  const [isSalesPersonDealerReportOpen, setIsSalesPersonDealerReportOpen] = useState(false);
+  const [isSalesPersonPaymentsReportOpen, setIsSalesPersonPaymentsReportOpen] = useState(false);
 
   const fetchDashboardData = useCallback(async () => {
     if (!user) {
@@ -261,7 +270,28 @@ const Dashboard = () => {
         <h1 className="text-[5vw] sm:text-[2.5vw] md:text-2xl lg:text-3xl font-bold text-black dark:text-black text-center flex-grow mx-2">
           Sales Dashboard
         </h1>
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                My Reports
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56">
+              <DropdownMenuLabel>Select a Report</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setIsSalesPersonSalesReportOpen(true)}>
+                My Sales Report
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonDealerReportOpen(true)}>
+                My Dealer Report
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonPaymentsReportOpen(true)}>
+                My Payments Report
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button onClick={handleLogout} variant="ghost" size="icon" className="text-black hover:text-black p-2">
             <LogOut className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
@@ -386,6 +416,19 @@ const Dashboard = () => {
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}
         onOpenChange={setIsOrderDetailsDialogOpen}
+      />
+      {/* Salesperson Reports Dialogs */}
+      <SalesPersonSalesReport
+        isOpen={isSalesPersonSalesReportOpen}
+        onOpenChange={setIsSalesPersonSalesReportOpen}
+      />
+      <SalesPersonDealerReport
+        isOpen={isSalesPersonDealerReportOpen}
+        onOpenChange={setIsSalesPersonDealerReportOpen}
+      />
+      <SalesPersonPaymentsReport
+        isOpen={isSalesPersonPaymentsReportOpen}
+        onOpenChange={setIsSalesPersonPaymentsReportOpen}
       />
     </div>
   );
