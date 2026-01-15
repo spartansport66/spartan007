@@ -17,6 +17,7 @@ export const parseExcelFile = (file: File): Promise<ParseExcelResult> => {
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         
+        // Read all data as array of arrays, without header inference
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
         if (!Array.isArray(jsonData) || jsonData.length < 1) {
@@ -24,7 +25,8 @@ export const parseExcelFile = (file: File): Promise<ParseExcelResult> => {
           return;
         }
         
-        const headers = (jsonData[0] as string[]).map(h => String(h || '').trim()).filter(h => h !== '');
+        // Extract headers from the first row, ensuring they are trimmed strings
+        const headers = (jsonData[0] as any[]).map(h => String(h ?? '').trim()).filter(h => h !== '');
         
         if (headers.length === 0 && jsonData.length > 1) {
           reject(new Error('[parseExcelFile] Could not detect headers in the first row. Please ensure your Excel file has headers.'));
@@ -36,10 +38,11 @@ export const parseExcelFile = (file: File): Promise<ParseExcelResult> => {
           const rowData: any = { originalRow: index + 2 }; // Add original row number for debugging/display
           if (Array.isArray(row)) {
             headers.forEach((header, i) => {
-              rowData[header] = row[i] !== undefined ? row[i] : '';
+              // Ensure all values are treated as strings, converting null/undefined to empty string before trimming
+              rowData[header] = String(row[i] ?? '').trim();
             });
           } else {
-            // If row is not an array, treat it as an empty row for parsing purposes
+            // If row is not an array (e.g., empty row in sheet_to_json), treat it as an empty row
             headers.forEach((header) => {
               rowData[header] = '';
             });
