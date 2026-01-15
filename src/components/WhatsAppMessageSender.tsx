@@ -46,6 +46,17 @@ interface WhatsAppMessageSenderProps {
   handleClearFilters: () => void;
 }
 
+const indianStates = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
+  "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
+  "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+  "Uttar Pradesh", "Uttarakhand", "West Bengal",
+  "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
+  "Delhi", "Lakshadweep", "Puducherry"
+];
+
 const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
   allRawDealers,
   comboOffers,
@@ -121,13 +132,23 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
               </div>
               <div className="flex-1 min-w-[120px]">
                 <Label htmlFor="filterState">Filter by State</Label>
-                <Input
-                  id="filterState"
-                  placeholder="e.g., Maharashtra"
+                <Select
                   value={filterState}
-                  onChange={(e) => setFilterState(e.target.value)}
+                  onValueChange={setFilterState}
                   disabled={isSending}
-                />
+                >
+                  <SelectTrigger id="filterState" className="w-full">
+                    <SelectValue placeholder="Select a state" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All States</SelectItem>
+                    {indianStates.map((state) => (
+                      <SelectItem key={state} value={state}>
+                        {state}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <Button onClick={handleClearFilters} variant="outline" disabled={isSending}>
                 Clear Filters
