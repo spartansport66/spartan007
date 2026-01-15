@@ -27,11 +27,12 @@ import ProductionAlertsCard from '@/components/ProductionAlertsCard';
 import AllPendingPaymentsCard from '@/components/AllPendingPaymentsCard';
 import PaymentOverviewCard from '@/components/PaymentOverviewCard';
 import DealerLedgerReportDialog from '@/components/reports/DealerLedgerReportDialog';
-import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog'; // New import
+import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog';
+import SalesChart from '@/components/SalesChart'; // Import the SalesChart component
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, isAdmin, userType, session } = useSession(); // Added session here
+  const { user, loading: sessionLoading, isAdmin, userType, session } = useSession();
   const [loadingData, setLoadingData] = useState(true);
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
@@ -44,21 +45,20 @@ const AdminDashboard = () => {
   const [isSalesReportsDialogOpen, setIsSalesReportsDialogOpen] = useState(false);
   const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false);
   const [isDealerLedgerReportOpen, setIsDealerLedgerReportOpen] = useState(false);
-  const [isOpeningBalanceReportOpen, setIsOpeningBalanceReportOpen] = useState(false); // New state
+  const [isOpeningBalanceReportOpen, setIsOpeningBalanceReportOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0); // Key to force re-fetch in child components
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // State for PaymentsReportDialog filters
   const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
   const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
   const [paymentsReportInitialToDate, setPaymentsReportInitialToDate] = useState<string>('');
-  const [paymentsReportDialogKey, setPaymentsReportDialogKey] = useState(0); // New key for PaymentsReportDialog
+  const [paymentsReportDialogKey, setPaymentsReportDialogKey] = useState(0);
 
-  // Simplified dashboard data
   const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [productsCount, setProductsCount] = useState<number>(0);
+  const [monthlySalesData, setMonthlySalesData] = useState<{ month: string; sales: number }[]>([]); // State for chart data
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -115,6 +115,31 @@ const AdminDashboard = () => {
         const total = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
         setTotalSalesValue(total);
       }
+
+      // Fetch monthly sales data for the chart
+      const { data: monthlySalesRaw, error: monthlySalesError } = await supabase
+        .from('sales')
+        .select('sale_date, total_price')
+        .order('sale_date', { ascending: true });
+
+      if (monthlySalesError) {
+        console.error('Error fetching monthly sales data:', monthlySalesError.message);
+        setMonthlySalesData([]);
+      } else {
+        const salesByMonth: { [key: string]: number } = {};
+        (monthlySalesRaw || []).forEach(sale => {
+          const date = new Date(sale.sale_date);
+          const monthYear = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
+          salesByMonth[monthYear] = (salesByMonth[monthYear] || 0) + sale.total_price;
+        });
+
+        const formattedMonthlySales = Object.keys(salesByMonth).map(month => ({
+          month,
+          sales: salesByMonth[month],
+        }));
+        setMonthlySalesData(formattedMonthlySales);
+      }
+
     } catch (error: any) {
       console.error('AdminDashboard: Error fetching dashboard data:', error);
     } finally {
@@ -138,7 +163,6 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => {
     try {
-      // Attempt to sign out. Even if it fails with 403, the session is likely invalid on server.
       const { error } = await supabase.auth.signOut();
       
       if (error) {
@@ -147,8 +171,6 @@ const AdminDashboard = () => {
       } else {
         showSuccess('Logged out successfully!');
       }
-      // Regardless of API success/failure, redirect to login.
-      // The SessionContext's onAuthStateChange will handle clearing local state.
       navigate('/login');
     } catch (error: any) {
       console.error('Unexpected error during logout:', error);
@@ -161,24 +183,22 @@ const AdminDashboard = () => {
     setSelectedOrderIdForDetails(dispatchedOrderId);
     setIsOrderDetailsDialogOpen(true);
     setShouldPrintOrderDetails(true);
-    fetchDashboardData(); // Refresh dashboard data
+    fetchDashboardData();
   };
 
   const handlePaymentAction = () => {
-    setRefreshKey(prev => prev + 1); // Increment key to trigger re-fetch in child components
-    fetchDashboardData(); // Also refresh main dashboard data
+    setRefreshKey(prev => prev + 1);
+    fetchDashboardData();
   };
 
-  // Modified to open PaymentsReportDialog with default filters
   const handleViewPaymentsReport = () => {
-    setPaymentsReportInitialStatus('all'); // Reset to default 'all'
-    setPaymentsReportInitialFromDate(''); // Clear date filters
-    setPaymentsReportInitialToDate(''); // Clear date filters
-    setPaymentsReportDialogKey(prev => prev + 1); // Increment key to force remount
+    setPaymentsReportInitialStatus('all');
+    setPaymentsReportInitialFromDate('');
+    setPaymentsReportInitialToDate('');
+    setPaymentsReportDialogKey(prev => prev + 1);
     setIsPaymentsReportOpen(true);
   };
 
-  // Show loading state with logout option if (sessionLoading || loadingData)
   if (sessionLoading || loadingData) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -192,7 +212,6 @@ const AdminDashboard = () => {
     );
   }
 
-  // If not admin, don't render anything (redirect will happen)
   if (userType !== 'admin') {
     return null;
   }
@@ -201,21 +220,21 @@ const AdminDashboard = () => {
     {
       title: "Total Sales Value",
       value: `₹${totalSalesValue.toFixed(2)}`,
-      change: "+20.1% from last month", // This is still a placeholder, can be made dynamic later
+      change: "+20.1% from last month",
       icon: <DollarSign className="h-4 w-4 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Total Orders",
       value: totalOrders.toString(),
-      change: "+180.1% from last month", // This is still a placeholder, can be made dynamic later
+      change: "+180.1% from last month",
       icon: <Package className="h-4 w-4 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
     {
       title: "Active Dealers",
       value: activeDealersCount.toString(),
-      change: "+19% from last month", // This is still a placeholder, can be made dynamic later
+      change: "+19% from last month",
       icon: <Building className="h-4 w-4 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
     },
@@ -231,7 +250,6 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex justify-between items-center mb-6">
-        {/* Left: Company Name */}
         <div className="text-left">
           {companyName && (
             <h2 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">
@@ -239,9 +257,7 @@ const AdminDashboard = () => {
             </h2>
           )}
         </div>
-        {/* Center: Admin Dashboard Title */}
         <h1 className="text-center text-3xl sm:text-4xl font-bold text-primary">Admin Dashboard</h1>
-        {/* Right: Sidebar Trigger */}
         <Sheet>
           <SheetTrigger asChild>
             <Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400">
@@ -262,7 +278,7 @@ const AdminDashboard = () => {
               setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen}
               setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen}
               setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen}
-              setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen} // Pass new setter
+              setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen}
             />
           </SheetContent>
         </Sheet>
@@ -288,17 +304,19 @@ const AdminDashboard = () => {
         <DispatchedOrdersCard />
       </div>
       
-      {/* New row for Production Alerts and Sales Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <ProductionAlertsCard />
         <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Payment Overview Card */}
         <PaymentOverviewCard onViewReport={handleViewPaymentsReport} />
-        {/* All Pending Payments Card */}
         <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
+      </div>
+
+      {/* New row for Sales Chart */}
+      <div className="grid grid-cols-1 mb-6">
+        <SalesChart data={monthlySalesData} />
       </div>
       
       <MadeWithDyad />
@@ -326,7 +344,7 @@ const AdminDashboard = () => {
         onOpenChange={setIsDealerReportOpen} 
       />
       <PaymentsReportDialog 
-        key={paymentsReportDialogKey} // Add key prop here
+        key={paymentsReportDialogKey}
         isOpen={isPaymentsReportOpen} 
         onOpenChange={setIsPaymentsReportOpen} 
         initialFilterStatus={paymentsReportInitialStatus}
@@ -346,7 +364,7 @@ const AdminDashboard = () => {
         isOpen={isDealerLedgerReportOpen} 
         onOpenChange={setIsDealerLedgerReportOpen} 
       />
-      <OpeningBalanceReportDialog // New component rendered here
+      <OpeningBalanceReportDialog
         isOpen={isOpeningBalanceReportOpen}
         onOpenChange={setIsOpeningBalanceReportOpen}
       />
