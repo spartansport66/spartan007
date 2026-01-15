@@ -126,13 +126,14 @@ const MultiItemOrderForm: React.FC = () => {
             )
           `)
           .eq('sales_person_id', user.id)
-          .order('name', { ascending: true }); // Sort dealers by name in ascending order
+          .order('dealers.name', { ascending: true }); // Corrected: Sort dealers by name in ascending order
 
         if (assignedDealersError) {
           console.error('[MultiItemOrderForm] Error fetching assigned dealers:', assignedDealersError);
           showError(`Failed to load assigned dealers: ${assignedDealersError.message}`);
           setDealers([]);
         } else {
+          console.log("[MultiItemOrderForm] Raw assignedDealersData:", assignedDealersData); // Log raw data
           const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => {
             const openingBalance = item.dealers.dealer_balances?.opening_balance || 0;
             return {
@@ -141,7 +142,7 @@ const MultiItemOrderForm: React.FC = () => {
             };
           });
           setDealers(formattedDealers);
-          console.log("[MultiItemOrderForm] Fetched dealers:", formattedDealers);
+          console.log("[MultiItemOrderForm] Formatted dealers:", formattedDealers);
         }
 
         // Fetch all products
