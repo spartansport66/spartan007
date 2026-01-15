@@ -15,11 +15,17 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Import Select components
 
 interface DealerOpeningBalance {
   id: string; // Dealer ID
   name: string; // Dealer Name
   opening_balance: number;
+}
+
+interface FilterOption {
+  value: string;
+  label: string;
 }
 
 interface OpeningBalanceReportDialogProps {
@@ -38,6 +44,8 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
   const [dealers, setDealers] = useState<DealerOpeningBalance[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDealerName, setFilterDealerName] = useState<string>('');
+  const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>(''); // New state for sales person filter
+  const [allSalesPersons, setAllSalesPersons] = useState<FilterOption[]>([]); // New state for sales person options
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [editingDealerId, setEditingDealerId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,18 +77,52 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
   const fetchOpeningBalances = useCallback(async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('dealers')
-        .select(`
-          id,
-          name,
-          dealer_balances(opening_balance)
-        `)
-        .order('name', { ascending: true });
+      // Fetch all sales persons first to populate the filter dropdown
+      const { data: salesPersonsData, error: salesPersonsError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('user_type', 'sales_person')
+        .order('first_name', { ascending: true });
+
+      if (salesPersonsError) {
+        console.error('Error fetching sales persons for filter:', salesPersonsError.message);
+        showError('Failed to load sales persons for filter.');
+        setAllSalesPersons([]);
+      } else {
+        setAllSalesPersons((salesPersonsData || []).map(sp => ({
+          value: sp.id,
+          label: `${sp.first_name} ${sp.last_name || ''}`.trim(),
+        })));
+      }
+
+      let query;
+      if (filterSalesPersonId) {
+        // If filtering by sales person, use !inner join to filter dealers that have this sales person
+        query = supabase
+          .from('dealers')
+          .select(`
+            id,
+            name,
+            dealer_balances(opening_balance),
+            dealer_sales_persons!inner(sales_person_id)
+          `)
+          .eq('dealer_sales_persons.sales_person_id', filterSalesPersonId);
+      } else {
+        // If not filtering by sales person, use a regular select to get all dealers
+        query = supabase
+          .from('dealers')
+          .select(`
+            id,
+            name,
+            dealer_balances(opening_balance)
+          `);
+      }
 
       if (filterDealerName) {
         query = query.ilike('name', `%${filterDealerName}%`);
       }
+
+      query = query.order('name', { ascending: true });
 
       const { data, error } = await query;
       if (error) {
@@ -91,7 +133,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
         const formattedDealers: DealerOpeningBalance[] = (data || []).map((d: any) => ({
           id: d.id,
           name: d.name,
-          opening_balance: d.dealer_balances?.opening_balance || 0, // Corrected access here
+          opening_balance: d.dealer_balances?.[0]?.opening_balance || 0,
         }));
         setDealers(formattedDealers);
       }
@@ -101,7 +143,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [filterDealerName]);
+  }, [filterDealerName, filterSalesPersonId]); // Add filterSalesPersonId to dependencies
 
   useEffect(() => {
     if (isOpen) {
@@ -112,6 +154,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
 
   const handleClearFilters = () => {
     setFilterDealerName('');
+    setFilterSalesPersonId(''); // Clear sales person filter
   };
 
   const handleEditClick = (dealer: DealerOpeningBalance) => {
@@ -131,17 +174,15 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
           {
             dealer_id: editingDealerId,
             opening_balance: values.openingBalance,
-            // Note: closing_balance is typically derived, not directly updated here.
-            // If it needs to be updated, ensure the logic is correct.
           },
-          { onConflict: 'dealer_id' } // Upsert based on dealer_id
+          { onConflict: 'dealer_id' }
         );
 
       if (error) throw error;
 
       showSuccess('Opening balance updated successfully!');
       setEditingDealerId(null);
-      fetchOpeningBalances(); // Refresh data
+      fetchOpeningBalances();
     } catch (error: any) {
       console.error('Error updating opening balance:', error);
       showError(`Failed to update opening balance: ${error.message}`);
@@ -171,6 +212,10 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
 
       let filterDetails = [];
       if (filterDealerName) filterDetails.push(`Dealer Name: ${filterDealerName}`);
+      if (filterSalesPersonId) {
+        const salesPersonLabel = allSalesPersons.find(sp => sp.value === filterSalesPersonId)?.label;
+        if (salesPersonLabel) filterDetails.push(`Sales Person: ${salesPersonLabel}`);
+      }
       
       if (filterDetails.length > 0) {
         doc.setFontSize(9);
@@ -250,6 +295,20 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
               onChange={(e) => setFilterDealerName(e.target.value)}
               className="w-full"
             />
+          </div>
+          <div className="flex-1 min-w-[180px]">
+            <Label htmlFor="filterSalesPerson">Sales Person</Label>
+            <Select value={filterSalesPersonId || "all"} onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}>
+              <SelectTrigger id="filterSalesPerson" className="w-full">
+                <SelectValue placeholder="All Sales Persons" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sales Persons</SelectItem>
+                {allSalesPersons.map(sp => (
+                  <SelectItem key={sp.value} value={sp.value}>{sp.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <Button onClick={fetchOpeningBalances} className="flex items-center gap-2 bg-primary hover:bg-primary/90">
             <Search className="h-4 w-4" /> Apply Filter
