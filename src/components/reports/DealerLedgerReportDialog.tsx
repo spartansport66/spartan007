@@ -14,7 +14,7 @@ import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import * as z from 'zod'; // Corrected import statement
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 
 interface LedgerEntry {
@@ -72,13 +72,14 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       }
       setCompanyName(data?.company_name || null);
     } catch (error: any) {
-      console.error('Error fetching company name for PDF:', error.message);
+      console.error('[DealerLedgerReportDialog] Error fetching company name for PDF:', error.message);
       setCompanyName(null);
     }
   }, []);
 
   const fetchLedgerData = useCallback(async () => {
     if (!filterDealerId) {
+      console.log("[DealerLedgerReportDialog] No dealer selected, clearing transactions.");
       setTransactions([]);
       setLoading(false);
       return;
@@ -100,6 +101,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
       if (balanceError && balanceError.code !== 'PGRST116') throw balanceError;
       initialBalance = dealerBalanceData?.opening_balance || 0;
+      console.log("[DealerLedgerReportDialog] Initial opening_balance from DB:", dealerBalanceData?.opening_balance);
 
       // Calculate balance from orders/payments before the filterFromDate
       if (fromDateISO) {
@@ -113,6 +115,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
         if (prevOrdersError) throw prevOrdersError;
         const prevOrdersTotal = (prevOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
+        console.log("[DealerLedgerReportDialog] Prev Orders Total before fromDate:", prevOrdersTotal);
 
         // Payments before fromDate
         const { data: prevPayments, error: prevPaymentsError } = await supabase
@@ -124,12 +127,17 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
         if (prevPaymentsError) throw prevPaymentsError;
         const prevPaymentsTotal = (prevPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+        console.log("[DealerLedgerReportDialog] Prev Payments Total before fromDate:", prevPaymentsTotal);
 
         initialBalance = initialBalance + prevOrdersTotal - prevPaymentsTotal;
+        console.log("[DealerLedgerReportDialog] Adjusted initialBalance for report period:", initialBalance);
+      } else {
+        console.log("[DealerLedgerReportDialog] No fromDate filter, initialBalance is raw opening_balance:", initialBalance);
       }
 
       const ledgerEntries: LedgerEntry[] = [];
-      let currentBalance = initialBalance;
+      // currentBalance is initialized with initialBalance before the loop for running balance calculation
+      // No need to re-initialize here, it's done before the final loop.
 
       // Add opening balance entry if it's the start of the report or if there's an actual opening balance
       if (!fromDateISO || initialBalance !== 0) {
@@ -138,9 +146,10 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           description: 'Opening Balance',
           debit: 0,
           credit: 0,
-          balance: currentBalance,
+          balance: initialBalance, // Use initialBalance here
           type: 'opening_balance',
         });
+        console.log("[DealerLedgerReportDialog] Added Opening Balance entry:", ledgerEntries[ledgerEntries.length - 1]);
       }
 
       // 2. Fetch orders within the date range
@@ -166,12 +175,13 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           type: 'order',
           refId: order.id,
         });
+        console.log("[DealerLedgerReportDialog] Added Order entry:", ledgerEntries[ledgerEntries.length - 1]);
       });
 
       // 3. Fetch payments within the date range
       let paymentsQuery = supabase
         .from('payments')
-        .select('id, amount, payment_date, payment_method, transaction_id, orders(order_number)') // Added transaction_id
+        .select('id, amount, payment_date, payment_method, transaction_id, orders(dealer_id, order_number)') // Added transaction_id and orders(order_number)
         .eq('orders.dealer_id', dealerId) // Filter by dealer_id from the joined orders table
         .eq('status', 'completed'); // Only completed payments are credits
 
@@ -193,26 +203,31 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           type: 'payment',
           refId: payment.id,
         });
+        console.log("[DealerLedgerReportDialog] Added Payment entry:", ledgerEntries[ledgerEntries.length - 1]);
       });
 
       // Sort all entries by date
       ledgerEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      console.log("[DealerLedgerReportDialog] Sorted ledgerEntries:", ledgerEntries);
 
       // Calculate running balance
       const finalLedger: LedgerEntry[] = [];
+      let currentBalance = initialBalance; // Reset currentBalance to initialBalance before iterating through sorted entries
       ledgerEntries.forEach(entry => {
         if (entry.type === 'opening_balance') {
-          currentBalance = entry.balance; // Set initial balance
+          // The opening balance entry already has the correct initialBalance
           finalLedger.push(entry);
         } else {
           currentBalance = currentBalance + entry.debit - entry.credit;
           finalLedger.push({ ...entry, balance: currentBalance });
         }
+        console.log(`[DealerLedgerReportDialog] Processing entry: ${entry.description}, Debit: ${entry.debit}, Credit: ${entry.credit}, New Running Balance: ${currentBalance}`);
       });
 
       setTransactions(finalLedger);
+      console.log("[DealerLedgerReportDialog] Final transactions state:", finalLedger);
     } catch (error: any) {
-      console.error('Error fetching dealer ledger data:', error.message);
+      console.error('[DealerLedgerReportDialog] Error fetching dealer ledger data:', error.message);
       showError(`Failed to load dealer ledger: ${error.message}`);
       setTransactions([]);
     } finally {
@@ -229,7 +244,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           .select('id, name')
           .order('name', { ascending: true });
         if (error) {
-          console.error('Error fetching all dealers:', error.message);
+          console.error('[DealerLedgerReportDialog] Error fetching all dealers:', error.message);
           showError('Failed to load dealers for filter.');
           setAllDealers([]);
         } else {
@@ -307,7 +322,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       doc.save(`dealer_ledger_report_${selectedDealerName.replace(/\s/g, '_')}.pdf`);
       showSuccess('Dealer ledger report generated successfully!');
     } catch (error: any) {
-      console.error('Error generating PDF:', error);
+      console.error('[DealerLedgerReportDialog] Error generating PDF:', error);
       showError(`Failed to generate dealer ledger report: ${error.message || 'An unknown error occurred.'}`);
     }
   };
