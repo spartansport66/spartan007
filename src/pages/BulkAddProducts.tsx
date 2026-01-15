@@ -16,12 +16,12 @@ const BULK_ADD_PRODUCTS_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supaba
 
 // Zod schema for product validation
 const productSchema = z.object({
-  code: z.string().min(1, { message: 'Product Code is required.' }),
-  name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }),
-  description: z.string().nullable().optional(),
-  size: z.coerce.string().nullable().optional(), // Coerce size to string
-  hsn: z.coerce.string().nullable().optional(), // Coerce HSN to string
-  gst: z.coerce.string().nullable().optional(), // Changed to string for alphanumeric
+  code: z.string().min(1, { message: 'Product Code is required.' }).trim(), // Added .trim()
+  name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }).trim(), // Added .trim()
+  description: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  size: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  hsn: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  gst: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
   dp: z.preprocess(
     (val) => {
       if (typeof val === 'string') {

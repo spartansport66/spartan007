@@ -20,14 +20,14 @@ interface DealerExcelUploadProps {
 
 // Zod schema for dealer validation
 export const dealerSchema = z.object({
-  name: z.string().min(1, { message: 'Dealer Name is required.' }), // Made required
-  contactperson: z.string().nullable().optional(),
-  email: z.string().email({ message: 'Invalid email format.' }).or(z.literal('')).nullable().optional(), // Modified to allow empty string or valid email
-  phone: z.coerce.string().nullable().optional(),
-  address: z.string().min(1, { message: 'Address is required.' }), // Made required
-  city: z.string().nullable().optional(), // This is correct for optional
-  state: z.string().nullable().optional(), // This is correct for optional
-  country: z.string().nullable().optional(), // This is correct for optional
+  name: z.string().min(1, { message: 'Dealer Name is required.' }).trim(), // Added .trim()
+  contactperson: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  email: z.string().email({ message: 'Invalid email format.' }).or(z.literal('')).nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  phone: z.coerce.string().nullable().optional().transform(val => val ? val.replace(/\D/g, '') : null), // Normalize phone number
+  address: z.string().min(1, { message: 'Address is required.' }).trim(), // Added .trim()
+  city: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  state: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  country: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
   creditlimit: z.preprocess(
     (val) => {
       if (typeof val === 'string') {
@@ -64,7 +64,7 @@ export const dealerSchema = z.object({
     },
     z.coerce.number().min(0, { message: 'Opening balance cannot be negative.' }).default(0)
   ),
-  salesperson: z.string().nullable().optional(),
+  salesperson: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
 });
 
 // Define display headers for the ExcelUpload component
@@ -203,7 +203,6 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       if (assignmentsToInsert.length > 0) {
         // For assignments, we need to handle existing assignments carefully.
         // A simple insert might cause duplicates if a dealer is already assigned to a sales person.
-        // For now, we'll insert, and if there's a unique constraint on (dealer_id, sales_person_id), it will fail.
         // A more robust solution would be to fetch existing assignments and then determine what to insert/delete.
         const { error: assignmentError } = await supabase
           .from('dealer_sales_persons')
