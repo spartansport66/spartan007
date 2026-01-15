@@ -157,12 +157,13 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
             {/* Multi-Select Dealers */}
             <div className="space-y-2">
               <Label htmlFor="selectDealers">Select Dealers</Label>
+              {/* Added max-h and overflow-y-auto for MultiSelect */}
               <MultiSelect
                 options={filteredDealersForMultiSelect.map(d => ({ value: d.value, label: d.label }))}
                 value={selectedDealerIds}
                 onChange={setSelectedDealerIds}
                 placeholder="Select dealers"
-                className="max-h-[120px] overflow-y-auto" {/* Added max-h and overflow-y-auto */}
+                className="max-h-[120px] overflow-y-auto" 
                 disabled={isSending || filteredDealersForMultiSelect.length === 0}
               />
               {filteredDealersForMultiSelect.length === 0 && (
