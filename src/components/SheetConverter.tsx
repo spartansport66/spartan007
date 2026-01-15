@@ -66,6 +66,9 @@ const SheetConverter: React.FC = () => {
     try {
       const { headers: detectedHeaders, data: rawData } = await parseExcelFile(file);
       
+      console.log('[SheetConverter] Detected headers from file:', detectedHeaders);
+      console.log('[SheetConverter] Raw parsed data (first 5 rows):', rawData.slice(0, 5));
+
       setHeaders(detectedHeaders);
       const initialMappings: ColumnMapping[] = detectedHeaders.map(header => ({ source: header, target: '' }));
       setColumnMappings(initialMappings);
@@ -85,6 +88,7 @@ const SheetConverter: React.FC = () => {
     // Convert "__NONE__" back to "" for application logic
     updatedMappings[sourceIndex].target = targetValue === "__NONE__" ? "" : targetValue;
     setColumnMappings(updatedMappings);
+    console.log('[SheetConverter] Updated column mappings:', updatedMappings);
   };
 
   const handleSplitPartMappingChange = (requiredHeader: string, partIndex: string) => {
@@ -92,6 +96,7 @@ const SheetConverter: React.FC = () => {
       ...prev,
       [requiredHeader]: partIndex === "__NONE__" ? "" : partIndex
     }));
+    console.log('[SheetConverter] Updated split part mapping:', { [requiredHeader]: partIndex });
   };
 
   const handleConvert = () => {
@@ -108,7 +113,9 @@ const SheetConverter: React.FC = () => {
         }
       });
       
-      const converted = parsedRawData.map(row => {
+      console.log('[SheetConverter] Applying one-to-one mappings:', sourceToTargetMap);
+
+      const converted = parsedRawData.map((row, rowIndex) => {
         const newRow: any = {};
         requiredHeaders.forEach(header => {
           newRow[header] = ''; // Initialize all required headers
@@ -151,10 +158,16 @@ const SheetConverter: React.FC = () => {
         if (!newRow["Allotted Credit Days"]) newRow["Allotted Credit Days"] = 0;
         if (!newRow["Opening Balance"]) newRow["Opening Balance"] = 0;
         
+        // Log the Sales Person field for debugging
+        if (rowIndex < 5) { // Log for first few rows
+          console.log(`[SheetConverter] Row ${row.originalRow} - Sales Person (after conversion):`, newRow["Sales Person"]);
+        }
+
         return newRow;
       });
       
       setConvertedData(converted);
+      console.log('[SheetConverter] Converted data (first 5 rows):', converted.slice(0, 5));
       showSuccess(`[SheetConverter] Converted ${converted.length} rows successfully!`);
     } catch (error: any) {
       console.error('[SheetConverter] Error converting data:', error);
@@ -298,6 +311,9 @@ const SheetConverter: React.FC = () => {
         {headers.length > 0 && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Map Columns (One-to-One)</h3>
+            <p className="text-sm text-muted-foreground">
+              Match your Excel file's columns to the required fields. **Ensure 'Sales Person' is mapped correctly.**
+            </p>
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
