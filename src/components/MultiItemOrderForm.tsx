@@ -125,8 +125,8 @@ const MultiItemOrderForm: React.FC = () => {
               dealer_balances(opening_balance)
             )
           `)
-          .eq('sales_person_id', user.id)
-          .order('dealers.name', { ascending: true }); // Corrected: Sort dealers by name in ascending order
+          .eq('sales_person_id', user.id);
+          // Removed .order('dealers.name', { ascending: true }) to fix PostgREST parsing error
 
         if (assignedDealersError) {
           console.error('[MultiItemOrderForm] Error fetching assigned dealers:', assignedDealersError);
@@ -134,15 +134,17 @@ const MultiItemOrderForm: React.FC = () => {
           setDealers([]);
         } else {
           console.log("[MultiItemOrderForm] Raw assignedDealersData:", assignedDealersData); // Log raw data
-          const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => {
+          let formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => {
             const openingBalance = item.dealers.dealer_balances?.opening_balance || 0;
             return {
               ...item.dealers,
               opening_balance: openingBalance
             };
           });
+          // Client-side sorting to ensure dealers are ordered by name
+          formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
           setDealers(formattedDealers);
-          console.log("[MultiItemOrderForm] Formatted dealers:", formattedDealers);
+          console.log("[MultiItemOrderForm] Formatted dealers (client-side sorted):", formattedDealers);
         }
 
         // Fetch all products
