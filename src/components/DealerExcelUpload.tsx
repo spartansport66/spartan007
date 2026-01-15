@@ -185,6 +185,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         
         if (row.salesperson) {
           const trimmedSalespersonName = row.salesperson.trim();
+          console.log(`[DealerExcelUpload] Attempting to match sales person: '${trimmedSalespersonName}' for dealer '${row.name}'`);
           
           // Fetch all sales persons that *partially* match the name
           const { data: salesPersons, error: salesPersonError } = await supabase
@@ -200,12 +201,16 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
             console.error(`[DealerExcelUpload] Error fetching sales persons for '${trimmedSalespersonName}':`, salesPersonError.message);
             // Continue, don't throw, just log and skip assignment
           } else if (salesPersons && salesPersons.length > 0) {
+            console.log(`[DealerExcelUpload] Found potential sales persons for '${trimmedSalespersonName}':`, salesPersons);
             let matchedSalesPerson = null;
 
             // Prioritize exact full name match
             matchedSalesPerson = salesPersons.find(sp =>
               `${sp.first_name || ''} ${sp.last_name || ''}`.trim().toLowerCase() === trimmedSalespersonName.toLowerCase()
             );
+            if (matchedSalesPerson) {
+              console.log(`[DealerExcelUpload] Exact full name match found: ${matchedSalesPerson.first_name} ${matchedSalesPerson.last_name}`);
+            }
 
             // If no exact full name match, try exact first name or last name match
             if (!matchedSalesPerson) {
@@ -213,11 +218,15 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
                 (sp.first_name || '').toLowerCase() === trimmedSalespersonName.toLowerCase() ||
                 (sp.last_name || '').toLowerCase() === trimmedSalespersonName.toLowerCase()
               );
+              if (matchedSalesPerson) {
+                console.log(`[DealerExcelUpload] Exact first/last name match found: ${matchedSalesPerson.first_name} ${matchedSalesPerson.last_name}`);
+              }
             }
 
             // If still no match, and there's only one partial match, use that
             if (!matchedSalesPerson && salesPersons.length === 1) {
               matchedSalesPerson = salesPersons[0];
+              console.log(`[DealerExcelUpload] Single partial match found: ${matchedSalesPerson.first_name} ${matchedSalesPerson.last_name}`);
             }
 
             if (matchedSalesPerson) {
@@ -230,7 +239,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
               console.warn(`[DealerExcelUpload] Sales person '${trimmedSalespersonName}' not found or ambiguous for dealer '${row.name}'. Skipping assignment.`);
             }
           } else {
-            console.warn(`[DealerExcelUpload] Sales person '${trimmedSalespersonName}' not found for dealer '${row.name}'. Skipping assignment.`);
+            console.warn(`[DealerExcelUpload] No sales person found in database for name '${trimmedSalespersonName}' for dealer '${row.name}'. Skipping assignment.`);
           }
         }
       }
