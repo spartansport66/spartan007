@@ -46,8 +46,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         onClick={onClick}
         className={cn(
           "w-full justify-start gap-2",
-          "bg-white text-black hover:bg-gray-100", // Enforce white background, black text, and subtle hover
-          "dark:bg-white dark:text-black dark:hover:bg-gray-100", // Dark mode override for fixed colors
+          "bg-background text-foreground hover:bg-accent hover:text-accent-foreground", // Use theme-aware colors
           className // Merge any additional custom classes
         )}
       >
@@ -90,8 +89,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <Button
             className={cn(
               "w-full justify-start gap-2",
-              "bg-white text-black hover:bg-gray-100", // Apply fixed styles to dropdown trigger
-              "dark:bg-white dark:text-black dark:hover:bg-gray-100"
+              "bg-background text-foreground hover:bg-accent hover:text-accent-foreground" // Apply theme-aware styles to dropdown trigger
             )}
           >
             <FileText className="h-4 w-4" />
