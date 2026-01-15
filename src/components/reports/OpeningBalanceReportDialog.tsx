@@ -277,7 +277,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">Dealer Opening Balance Report</DialogTitle>
           <DialogDescription>
@@ -314,7 +314,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
             <Search className="h-4 w-4" /> Apply Filter
           </Button>
           <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
-            Clear Filter
+            Clear Filters
           </Button>
         </div>
 
