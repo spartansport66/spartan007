@@ -16,6 +16,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Import Select components
+import { useSession } from '@/contexts/SessionContext'; // Import useSession
 
 interface DealerOpeningBalance {
   id: string; // Dealer ID
@@ -41,6 +42,7 @@ const editBalanceFormSchema = z.object({
 });
 
 const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({ isOpen, onOpenChange }) => {
+  const { user } = useSession(); // Use useSession to get the current user
   const [dealers, setDealers] = useState<DealerOpeningBalance[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDealerName, setFilterDealerName] = useState<string>('');
@@ -85,7 +87,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
         .order('first_name', { ascending: true });
 
       if (salesPersonsError) {
-        console.error('Error fetching sales persons for filter:', salesPersonsError.message);
+        console.error('[OpeningBalanceReportDialog] Error fetching sales persons for filter:', salesPersonsError.message);
         showError('Failed to load sales persons for filter.');
         setAllSalesPersons([]);
       } else {
@@ -126,15 +128,20 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
 
       const { data, error } = await query;
       if (error) {
-        console.error('Error fetching dealer opening balances:', error.message);
+        console.error('[OpeningBalanceReportDialog] Error fetching dealer opening balances:', error.message);
         showError('Failed to load dealer opening balances.');
         setDealers([]);
       } else {
-        const formattedDealers: DealerOpeningBalance[] = (data || []).map((d: any) => ({
-          id: d.id,
-          name: d.name,
-          opening_balance: d.dealer_balances?.[0]?.opening_balance || 0,
-        }));
+        console.log('[OpeningBalanceReportDialog] Raw data from Supabase:', data); // Added log
+        const formattedDealers: DealerOpeningBalance[] = (data || []).map((d: any) => {
+          const openingBalance = d.dealer_balances?.[0]?.opening_balance || 0;
+          console.log(`[OpeningBalanceReportDialog] Dealer: ${d.name}, Raw Balances:`, d.dealer_balances, `Formatted Opening Balance: ${openingBalance}`); // Added log
+          return {
+            id: d.id,
+            name: d.name,
+            opening_balance: openingBalance,
+          };
+        });
         setDealers(formattedDealers);
       }
     } catch (error: any) {
