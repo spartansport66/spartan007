@@ -133,15 +133,15 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
               <div className="flex-1 min-w-[120px]">
                 <Label htmlFor="filterState">Filter by State</Label>
                 <Select
-                  value={filterState}
-                  onValueChange={setFilterState}
+                  value={filterState || "all"} // Set default value to "all" if filterState is empty
+                  onValueChange={(value) => setFilterState(value === "all" ? "" : value)} // Convert "all" back to ""
                   disabled={isSending}
                 >
                   <SelectTrigger id="filterState" className="w-full">
                     <SelectValue placeholder="Select a state" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All States</SelectItem>
+                    <SelectItem value="all">All States</SelectItem> {/* Changed value to "all" */}
                     {indianStates.map((state) => (
                       <SelectItem key={state} value={state}>
                         {state}
