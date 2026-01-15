@@ -140,13 +140,13 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
       const dealersToUpsert = filteredDealersToUpload.map((row) => ({
         user_id: user.id,
         name: row.name,
-        contact_person: row.contactperson,
-        email: row.email,
-        phone: row.phone,
+        contact_person: row.contactperson || null, // Convert empty string to null
+        email: row.email || null, // Convert empty string to null
+        phone: row.phone || null, // Convert empty string to null
         address: row.address,
-        city: row.city,
-        state: row.state,
-        country: row.country,
+        city: row.city || null, // Convert empty string to null
+        state: row.state || null, // Convert empty string to null
+        country: row.country || null, // Convert empty string to null
         credit_limit: row.creditlimit,
         allotted_credit_days: row.allottedcreditdays,
       }));
