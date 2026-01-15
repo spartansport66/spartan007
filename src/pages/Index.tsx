@@ -46,11 +46,17 @@ const Index = () => {
   const handleForceLogout = async () => {
     setForceLogoutLoading(true);
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        showError(`Failed to log out: ${error.message}`);
+      if (session) { // Only attempt to sign out if a session exists
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          showError(`Failed to log out: ${error.message}`);
+        } else {
+          showSuccess('Logged out successfully!');
+          navigate('/login');
+        }
       } else {
-        showSuccess('Logged out successfully!');
+        // If no session, user is already logged out
+        showSuccess('You were already logged out.');
         navigate('/login');
       }
     } catch (error: any) {
