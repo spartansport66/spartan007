@@ -14,8 +14,9 @@ import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod'; // Corrected import statement
+import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { useSession } from '@/contexts/SessionContext'; // Import useSession
 
 interface LedgerEntry {
   date: string; // YYYY-MM-DD
@@ -45,6 +46,7 @@ const editBalanceFormSchema = z.object({
 });
 
 const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isOpen, onOpenChange }) => {
+  const { user } = useSession(); // Use useSession to get the current user
   const [transactions, setTransactions] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<FilterOption[]>([]);
@@ -84,6 +86,14 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       setLoading(false);
       return;
     }
+    if (!user?.id) { // Check if user ID is available
+      console.error("[DealerLedgerReportDialog] User not authenticated, cannot fetch ledger data.");
+      showError("User not authenticated. Please log in again.");
+      setTransactions([]);
+      setLoading(false);
+      return;
+    }
+    console.log("[DealerLedgerReportDialog] Authenticated User ID:", user.id); // Log user ID
 
     setLoading(true);
     try {
@@ -99,7 +109,11 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         .eq('dealer_id', dealerId)
         .single();
 
-      if (balanceError && balanceError.code !== 'PGRST116') throw balanceError;
+      if (balanceError && balanceError.code !== 'PGRST116') {
+        console.error("[DealerLedgerReportDialog] Error fetching dealer_balances:", balanceError.message);
+        throw balanceError;
+      }
+      console.log("[DealerLedgerReportDialog] Raw dealer_balances data:", dealerBalanceData); // Add this log
       initialBalance = dealerBalanceData?.opening_balance || 0;
       console.log("[DealerLedgerReportDialog] Initial opening_balance from DB:", dealerBalanceData?.opening_balance);
 
@@ -120,8 +134,11 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         // Payments before fromDate
         const { data: prevPayments, error: prevPaymentsError } = await supabase
           .from('payments')
-          .select('amount, orders(dealer_id)') // Select orders.dealer_id to filter
-          .eq('orders.dealer_id', dealerId) // Filter by dealer_id from the joined orders table
+          .select(`
+            amount,
+            orders!inner(dealer_id) // Explicit inner join
+          `)
+          .eq('orders.dealer_id', dealerId) // Filter directly on the joined orders table
           .lte('payment_date', fromDateISO)
           .eq('status', 'completed'); // Only completed payments are credits
 
@@ -181,18 +198,25 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       // 3. Fetch payments within the date range
       let paymentsQuery = supabase
         .from('payments')
-        .select('id, amount, payment_date, payment_method, transaction_id, orders(dealer_id, order_number)') // Added transaction_id and orders(order_number)
-        .eq('orders.dealer_id', dealerId) // Filter by dealer_id from the joined orders table
+        .select(`
+          id,
+          amount,
+          payment_date,
+          payment_method,
+          transaction_id,
+          orders!inner(dealer_id, order_number) // Explicit inner join
+        `)
+        .eq('orders.dealer_id', dealerId) // Filter directly on the joined orders table
         .eq('status', 'completed'); // Only completed payments are credits
 
       if (fromDateISO) paymentsQuery = paymentsQuery.gte('payment_date', fromDateISO);
-      if (toDateISO) paymentsQuery = paymentsQuery.lte('payment_date', toDateISO);
+      if (toDateISO) paymentsQuery = payments.lte('payment_date', toDateISO);
 
       const { data: paymentsData, error: paymentsError } = await paymentsQuery;
       if (paymentsError) throw paymentsError;
 
       (paymentsData || []).forEach(payment => {
-        const orderNumber = payment.orders?.[0]?.order_number || 'N/A';
+        const orderNumber = payment.orders?.order_number || 'N/A'; // Access order_number directly from the joined object
         const transactionDetail = payment.transaction_id ? ` (Txn: ${payment.transaction_id})` : '';
         ledgerEntries.push({
           date: payment.payment_date.split('T')[0],
@@ -233,7 +257,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     } finally {
       setLoading(false);
     }
-  }, [filterDealerId, filterFromDate, filterToDate]);
+  }, [filterDealerId, filterFromDate, filterToDate, user?.id]); // Added user.id to dependencies
 
   useEffect(() => {
     if (isOpen) {
