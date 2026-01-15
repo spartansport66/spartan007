@@ -215,6 +215,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
       doc.setFontSize(18);
       doc.text("Dealer Opening Balance Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
       doc.setFontSize(10);
+      doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
 
       let filterDetails = [];
