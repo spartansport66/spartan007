@@ -315,11 +315,19 @@ const MultiItemOrderForm: React.FC = () => {
 
   const addOrderItem = () => {
     setOrderItems([...orderItems, { id: Date.now().toString(), product_id: '', quantity: 1 }]);
+    // When adding a new item, ensure its popover is closed initially
+    setPopoverOpenStates(prev => ({ ...prev, [Date.now().toString()]: false }));
   };
 
   const removeOrderItem = (id: string) => {
     if (orderItems.length > 1) {
       setOrderItems(orderItems.filter(item => item.id !== id));
+      // Also remove its popover state
+      setPopoverOpenStates(prev => {
+        const newState = { ...prev };
+        delete newState[id];
+        return newState;
+      });
     }
   };
 
@@ -479,6 +487,8 @@ const MultiItemOrderForm: React.FC = () => {
       setPaymentDueDate(null);
       setPendingPayments([]);
       setTotalPendingAmount(0);
+      setPopoverOpenStates({}); // Clear all popover states
+      setSearchValue(""); // Clear global search value
     } catch (error: any) {
       console.error('Error placing order:', error);
       showError(`Failed to place order: ${error.message}`);
@@ -488,8 +498,8 @@ const MultiItemOrderForm: React.FC = () => {
   };
 
   // State for searchable product dropdown
-  const [open, setOpen] = useState(false);
-  const [searchValue, setSearchValue] = useState("");
+  const [popoverOpenStates, setPopoverOpenStates] = useState<Record<string, boolean>>({}); // Individual open states
+  const [searchValue, setSearchValue] = useState(""); // Global search for the currently active popover
 
   // Filter products based on search value - improved matching
   const filteredProducts = useMemo(() => {
@@ -651,12 +661,18 @@ const MultiItemOrderForm: React.FC = () => {
               <div key={item.id} className="grid grid-cols-12 gap-2 items-end">
                 <div className="col-span-5">
                   <Label htmlFor={`product-${item.id}`}>Product</Label>
-                  <Popover open={open} onOpenChange={setOpen}>
+                  <Popover 
+                    open={popoverOpenStates[item.id]} 
+                    onOpenChange={(openState) => {
+                      setPopoverOpenStates(prev => ({ ...prev, [item.id]: openState }));
+                      if (!openState) setSearchValue(""); // Clear search when popover closes
+                    }}
+                  >
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         role="combobox"
-                        aria-expanded={open}
+                        aria-expanded={popoverOpenStates[item.id]}
                         className="w-full justify-between"
                       >
                         {item.product_id
@@ -682,8 +698,8 @@ const MultiItemOrderForm: React.FC = () => {
                                   value={product.id}
                                   onSelect={(currentValue) => {
                                     updateOrderItem(item.id, 'product_id', currentValue === item.product_id ? '' : currentValue);
-                                    setOpen(false);
-                                    setSearchValue("");
+                                    setPopoverOpenStates(prev => ({ ...prev, [item.id]: false })); // Close this specific popover
+                                    setSearchValue(""); // Clear global search value
                                   }}
                                 >
                                   <div>
