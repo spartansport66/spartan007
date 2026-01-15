@@ -45,6 +45,24 @@ const editBalanceFormSchema = z.object({
   ),
 });
 
+// New interfaces for Supabase query results
+interface PrevPayment {
+  amount: number;
+  orders: { dealer_id: string } | null;
+}
+
+interface FetchedPayment {
+  id: string;
+  amount: number;
+  payment_date: string;
+  payment_method: string;
+  transaction_id: string | null;
+  orders: {
+    dealer_id: string;
+    order_number: number;
+  } | null;
+}
+
 const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const { user } = useSession(); // Use useSession to get the current user
   const [transactions, setTransactions] = useState<LedgerEntry[]>([]);
@@ -140,7 +158,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           `)
           .eq('orders.dealer_id', dealerId) // Filter directly on the joined orders table
           .lte('payment_date', fromDateISO)
-          .eq('status', 'completed'); // Only completed payments are credits
+          .eq('status', 'completed') as { data: PrevPayment[] | null; error: any }; // Cast here
 
         if (prevPaymentsError) throw prevPaymentsError;
         const prevPaymentsTotal = (prevPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
@@ -209,10 +227,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         .eq('orders.dealer_id', dealerId) // Filter directly on the joined orders table
         .eq('status', 'completed'); // Only completed payments are credits
 
-      if (fromDateISO) paymentsQuery = paymentsQuery.gte('payment_date', fromDateISO);
-      if (toDateISO) paymentsQuery = paymentsQuery.lte('payment_date', toDateISO);
-
-      const { data: paymentsData, error: paymentsError } = await paymentsQuery;
+      const { data: paymentsData, error: paymentsError } = await paymentsQuery as { data: FetchedPayment[] | null; error: any }; // Cast here
       if (paymentsError) throw paymentsError;
 
       (paymentsData || []).forEach(payment => {
