@@ -56,7 +56,11 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [editingDealerId, setEditingDealerId] = useState<string | null>(null);
   const [editingBillingDateDealerId, setEditingBillingDateDealerId] = useState<string | null>(null); // New state for editing billing date
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Separate loading states for different actions
+  const [isUpdatingBalance, setIsUpdatingBalance] = useState(false);
+  const [isUpdatingBillingDate, setIsUpdatingBillingDate] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false); // For future delete functionality if added
 
   const editBalanceForm = useForm<z.infer<typeof editBalanceFormSchema>>({
     resolver: zodResolver(editBalanceFormSchema),
@@ -191,7 +195,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
 
   const handleUpdateBalance = async (values: z.infer<typeof editBalanceFormSchema>) => {
     if (!editingDealerId) return;
-    setIsSubmitting(true);
+    setIsUpdatingBalance(true);
     try {
       const { error } = await supabase
         .from('dealer_balances')
@@ -212,7 +216,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
       console.error('Error updating opening balance:', error);
       showError(`Failed to update opening balance: ${error.message}`);
     } finally {
-      setIsSubmitting(false);
+      setIsUpdatingBalance(false);
     }
   };
 
@@ -230,7 +234,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
 
   const handleUpdateBillingDate = async (values: z.infer<typeof editBillingDateFormSchema>) => {
     if (!editingBillingDateDealerId) return;
-    setIsSubmitting(true);
+    setIsUpdatingBillingDate(true);
     try {
       const { error } = await supabase
         .from('dealers') // Update the dealers table directly
@@ -248,7 +252,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
       console.error('Error updating last billing date:', error);
       showError(`Failed to update last billing date: ${error.message}`);
     } finally {
-      setIsSubmitting(false);
+      setIsUpdatingBillingDate(false);
     }
   };
 
@@ -416,7 +420,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                                 render={({ field }) => (
                                   <FormItem className="mb-0">
                                     <FormControl>
-                                      <Input type="number" step="0.01" {...field} className="w-32 text-right" />
+                                      <Input type="number" step="0.01" {...field} className="w-32 text-right" disabled={isUpdatingBalance} />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
@@ -438,7 +442,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                                 render={({ field }) => (
                                   <FormItem className="mb-0">
                                     <FormControl>
-                                      <Input type="date" {...field} className="w-32 text-center" />
+                                      <Input type="date" {...field} className="w-32 text-center" disabled={isUpdatingBillingDate} />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
@@ -454,28 +458,28 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                         <div className="flex justify-center gap-2">
                           {editingDealerId === dealer.id ? (
                             <>
-                              <Button type="button" size="icon" onClick={editBalanceForm.handleSubmit(handleUpdateBalance)} disabled={isSubmitting} title="Save Opening Balance">
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                              <Button type="button" size="icon" onClick={editBalanceForm.handleSubmit(handleUpdateBalance)} disabled={isUpdatingBalance} title="Save Opening Balance">
+                                {isUpdatingBalance ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                               </Button>
-                              <Button type="button" variant="outline" size="icon" onClick={handleCancelEdit} disabled={isSubmitting} title="Cancel Edit Opening Balance">
+                              <Button type="button" variant="outline" size="icon" onClick={handleCancelEdit} disabled={isUpdatingBalance} title="Cancel Edit Opening Balance">
                                 <X className="h-4 w-4" />
                               </Button>
                             </>
                           ) : editingBillingDateDealerId === dealer.id ? (
                             <>
-                              <Button type="button" size="icon" onClick={editBillingDateForm.handleSubmit(handleUpdateBillingDate)} disabled={isSubmitting} title="Save Last Billing Date">
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                              <Button type="button" size="icon" onClick={editBillingDateForm.handleSubmit(handleUpdateBillingDate)} disabled={isUpdatingBillingDate} title="Save Last Billing Date">
+                                {isUpdatingBillingDate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                               </Button>
-                              <Button type="button" variant="outline" size="icon" onClick={handleCancelEditBillingDate} disabled={isSubmitting} title="Cancel Edit Last Billing Date">
+                              <Button type="button" variant="outline" size="icon" onClick={handleCancelEditBillingDate} disabled={isUpdatingBillingDate} title="Cancel Edit Last Billing Date">
                                 <X className="h-4 w-4" />
                               </Button>
                             </>
                           ) : (
                             <>
-                              <Button variant="ghost" size="icon" onClick={() => handleEditClick(dealer)} title="Edit Opening Balance">
+                              <Button variant="ghost" size="icon" onClick={() => handleEditClick(dealer)} title="Edit Opening Balance" disabled={isUpdatingBillingDate || isUpdatingBalance || isDeleting}>
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleEditBillingDateClick(dealer)} title="Edit Last Billing Date">
+                              <Button variant="ghost" size="icon" onClick={() => handleEditBillingDateClick(dealer)} title="Edit Last Billing Date" disabled={isUpdatingBillingDate || isUpdatingBalance || isDeleting}>
                                 <CalendarDays className="h-4 w-4" />
                               </Button>
                             </>
