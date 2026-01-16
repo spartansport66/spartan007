@@ -292,7 +292,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
       const tableRows = dealers.map(dealer => [
         dealer.name,
         dealer.opening_balance.toFixed(2),
-        dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A', // Format date
+        dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : '', // Changed 'N/A' to ''
       ]);
 
       const totalOpeningBalance = dealers.reduce((sum, dealer) => sum + dealer.opening_balance, 0);
@@ -451,7 +451,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                             </form>
                           </Form>
                         ) : (
-                          dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'
+                          dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : '' // Changed 'N/A' to ''
                         )}
                       </TableCell>
                       <TableCell className="text-center">
