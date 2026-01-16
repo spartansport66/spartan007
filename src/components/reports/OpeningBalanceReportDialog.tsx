@@ -22,6 +22,7 @@ interface DealerOpeningBalance {
   id: string; // Dealer ID
   name: string; // Dealer Name
   opening_balance: number;
+  last_billing_date: string | null; // New: Last order date for the dealer
 }
 
 interface FilterOption {
@@ -106,7 +107,8 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
             id,
             name,
             dealer_balances(opening_balance),
-            dealer_sales_persons!inner(sales_person_id)
+            dealer_sales_persons!inner(sales_person_id),
+            orders(order_date)
           `)
           .eq('dealer_sales_persons.sales_person_id', filterSalesPersonId);
       } else {
@@ -116,7 +118,8 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
           .select(`
             id,
             name,
-            dealer_balances(opening_balance)
+            dealer_balances(opening_balance),
+            orders(order_date)
           `);
       }
 
@@ -136,11 +139,21 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
         const formattedDealers: DealerOpeningBalance[] = (data || []).map((d: any) => {
           // Corrected access: d.dealer_balances is an object, not an array
           const openingBalance = d.dealer_balances?.opening_balance || 0;
-          console.log(`[OpeningBalanceReportDialog] Dealer: ${d.name}, Raw Balances:`, d.dealer_balances, `Formatted Opening Balance: ${openingBalance}`); // Added log
+          
+          // Calculate last_billing_date from the fetched orders
+          const lastBillingDate = d.orders && d.orders.length > 0
+            ? d.orders.reduce((latestDate: string | null, order: { order_date: string }) => {
+                if (!latestDate) return order.order_date;
+                return order.order_date > latestDate ? order.order_date : latestDate;
+              }, null)
+            : null;
+
+          console.log(`[OpeningBalanceReportDialog] Dealer: ${d.name}, Raw Balances:`, d.dealer_balances, `Formatted Opening Balance: ${openingBalance}, Last Billing Date: ${lastBillingDate}`); // Added log
           return {
             id: d.id,
             name: d.name,
             opening_balance: openingBalance,
+            last_billing_date: lastBillingDate, // Add this new field
           };
         });
         setDealers(formattedDealers);
@@ -231,10 +244,11 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
         doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
       }
 
-      const tableColumn = ["Dealer Name", "Opening Balance (₹)"];
+      const tableColumn = ["Dealer Name", "Opening Balance (₹)", "Last Billing Date"]; // Added Last Billing Date
       const tableRows = dealers.map(dealer => [
         dealer.name,
         dealer.opening_balance.toFixed(2),
+        dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A', // Format date
       ]);
 
       const totalOpeningBalance = dealers.reduce((sum, dealer) => sum + dealer.opening_balance, 0);
@@ -244,8 +258,9 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
         body: tableRows,
         foot: [
           [
-            { content: 'Total Opening Balance', styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: 'Total Opening Balance', styles: { halign: 'right', fontStyle: 'bold' }, colSpan: 2 }, // Adjusted colSpan
             `₹${totalOpeningBalance.toFixed(2)}`,
+            '', // Empty cell for Last Billing Date in footer
           ]
         ],
         startY: 45,
@@ -271,8 +286,9 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
         },
         margin: { top: 10, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 120 },
-          1: { cellWidth: 50, halign: 'right' },
+          0: { cellWidth: 80 }, // Dealer Name
+          1: { cellWidth: 40, halign: 'right' }, // Opening Balance
+          2: { cellWidth: 40, halign: 'center' }, // Last Billing Date
         }
       });
 
@@ -342,6 +358,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground font-bold">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Opening Balance (₹)</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-center">Last Billing Date</TableHead> {/* New Table Head */}
                     <TableHead className="text-muted-foreground font-bold text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -370,6 +387,9 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                         ) : (
                           `₹${dealer.opening_balance.toFixed(2)}`
                         )}
+                      </TableCell>
+                      <TableCell className="text-center text-muted-foreground">
+                        {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
