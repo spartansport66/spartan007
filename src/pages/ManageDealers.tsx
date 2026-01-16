@@ -44,7 +44,7 @@ interface DealerWithRelations {
   user_id: string;
   last_billing_date: string | null; // New: Directly from dealers table
   dealer_sales_persons: { sales_person_id: string; profiles: { id: string; first_name: string; last_name: string } }[];
-  dealer_balances: { opening_balance: number | null } | null; // Corrected type to single object or null
+  dealer_balances: { opening_balance: number | null }[] | null; // Corrected type to array
   dealer_monthly_credit_limits: { dealer_id: string; credit_limit: number; month_year: string }[];
   orders: { 
     total_amount: number; 
@@ -180,6 +180,7 @@ const ManageDealers = () => {
     if (error) {
       console.error('Error fetching all sales persons:', error);
       showError(`Failed to load sales persons: ${error.message}`);
+      setAllSalesPersons([]);
     } else {
       setAllSalesPersons(data || []);
     }
@@ -250,9 +251,9 @@ const ManageDealers = () => {
       // Create a map of dealer balances for easy lookup
       const balancesMap = new Map<string, { opening_balance: number | null }>(); // Corrected type
       dealersData?.forEach(d => {
-        // Ensure d.dealer_balances is an object or null
-        if (d.dealer_balances) {
-          balancesMap.set(d.id, d.dealer_balances);
+        // Ensure d.dealer_balances is an array, and get the first element
+        if (d.dealer_balances && d.dealer_balances.length > 0) {
+          balancesMap.set(d.id, d.dealer_balances[0]); // Store the first object from the array
         } else {
           // Default to zero balance if no balance record or unexpected format
           balancesMap.set(d.id, { opening_balance: 0 });
@@ -276,12 +277,14 @@ const ManageDealers = () => {
         }));
         
         const balance = balancesMap.get(d.id) || { opening_balance: 0 }; // Corrected access
+        const openingBalance = balance.opening_balance || 0; // This will now be correct because `balance` itself will be the object, not an array.
+        
         const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) 
           ? monthlyLimitsMap.get(d.id)! 
           : d.credit_limit;
 
         // Calculate current balance
-        let currentBalance = balance.opening_balance || 0;
+        let currentBalance = openingBalance;
         console.log(`[ManageDealers] Dealer ${d.name} (ID: ${d.id}) initial currentBalance from opening_balance:`, currentBalance);
 
         (d.orders || []).forEach(order => {
@@ -299,7 +302,7 @@ const ManageDealers = () => {
           ...d,
           assigned_sales_persons: assignedSalesPersons,
           current_month_credit_limit: currentMonthCreditLimit,
-          opening_balance: balance.opening_balance || 0,
+          opening_balance: openingBalance,
           current_balance: currentBalance, // Use calculated current balance
         };
         console.log(`[ManageDealers] Dealer ${dealerObject.name} (ID: ${dealerObject.id}) - Opening Balance: ${dealerObject.opening_balance}, Current Balance: ${dealerObject.current_balance}`);
