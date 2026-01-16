@@ -407,7 +407,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                       <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
                       <TableCell className="text-right">
                         {editingDealerId === dealer.id ? (
-                          <Form {...editBalanceForm}>
+                          <Form {...editBalanceForm} key={dealer.id + "-balance-edit"}>
                             <form onSubmit={editBalanceForm.handleSubmit(handleUpdateBalance)} className="flex items-center justify-end gap-2">
                               <FormField
                                 control={editBalanceForm.control}
@@ -429,7 +429,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                       </TableCell>
                       <TableCell className="text-center text-muted-foreground">
                         {editingBillingDateDealerId === dealer.id ? (
-                          <Form {...editBillingDateForm}>
+                          <Form {...editBillingDateForm} key={dealer.id + "-billing-date-edit"}>
                             <form onSubmit={editBillingDateForm.handleSubmit(handleUpdateBillingDate)} className="flex items-center justify-center gap-2">
                               <FormField
                                 control={editBillingDateForm.control}
