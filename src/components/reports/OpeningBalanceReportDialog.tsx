@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, Edit, Save, X } from 'lucide-react';
+import { Loader2, Search, Printer, Edit, Save, X, CalendarDays } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -22,7 +22,7 @@ interface DealerOpeningBalance {
   id: string; // Dealer ID
   name: string; // Dealer Name
   opening_balance: number;
-  last_billing_date: string | null; // New: Last order date for the dealer
+  last_billing_date: string | null; // Now directly from dealers table
 }
 
 interface FilterOption {
@@ -42,6 +42,10 @@ const editBalanceFormSchema = z.object({
   ),
 });
 
+const editBillingDateFormSchema = z.object({
+  lastBillingDate: z.string().nullable().optional(), // YYYY-MM-DD format
+});
+
 const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const { user } = useSession(); // Use useSession to get the current user
   const [dealers, setDealers] = useState<DealerOpeningBalance[]>([]);
@@ -51,12 +55,20 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
   const [allSalesPersons, setAllSalesPersons] = useState<FilterOption[]>([]); // New state for sales person options
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [editingDealerId, setEditingDealerId] = useState<string | null>(null);
+  const [editingBillingDateDealerId, setEditingBillingDateDealerId] = useState<string | null>(null); // New state for editing billing date
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const editForm = useForm<z.infer<typeof editBalanceFormSchema>>({
+  const editBalanceForm = useForm<z.infer<typeof editBalanceFormSchema>>({
     resolver: zodResolver(editBalanceFormSchema),
     defaultValues: {
       openingBalance: 0,
+    },
+  });
+
+  const editBillingDateForm = useForm<z.infer<typeof editBillingDateFormSchema>>({
+    resolver: zodResolver(editBillingDateFormSchema),
+    defaultValues: {
+      lastBillingDate: '',
     },
   });
 
@@ -106,9 +118,9 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
           .select(`
             id,
             name,
+            last_billing_date,
             dealer_balances(opening_balance),
-            dealer_sales_persons!inner(sales_person_id),
-            orders(order_date)
+            dealer_sales_persons!inner(sales_person_id)
           `)
           .eq('dealer_sales_persons.sales_person_id', filterSalesPersonId);
       } else {
@@ -118,8 +130,8 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
           .select(`
             id,
             name,
-            dealer_balances(opening_balance),
-            orders(order_date)
+            last_billing_date,
+            dealer_balances(opening_balance)
           `);
       }
 
@@ -137,23 +149,14 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
       } else {
         console.log('[OpeningBalanceReportDialog] Raw data from Supabase:', data); // Added log
         const formattedDealers: DealerOpeningBalance[] = (data || []).map((d: any) => {
-          // Corrected access: d.dealer_balances is an object, not an array
           const openingBalance = d.dealer_balances?.opening_balance || 0;
           
-          // Calculate last_billing_date from the fetched orders
-          const lastBillingDate = d.orders && d.orders.length > 0
-            ? d.orders.reduce((latestDate: string | null, order: { order_date: string }) => {
-                if (!latestDate) return order.order_date;
-                return order.order_date > latestDate ? order.order_date : latestDate;
-              }, null)
-            : null;
-
-          console.log(`[OpeningBalanceReportDialog] Dealer: ${d.name}, Raw Balances:`, d.dealer_balances, `Formatted Opening Balance: ${openingBalance}, Last Billing Date: ${lastBillingDate}`); // Added log
+          console.log(`[OpeningBalanceReportDialog] Dealer: ${d.name}, Raw Balances:`, d.dealer_balances, `Formatted Opening Balance: ${openingBalance}, Last Billing Date: ${d.last_billing_date}`); // Added log
           return {
             id: d.id,
             name: d.name,
             opening_balance: openingBalance,
-            last_billing_date: lastBillingDate, // Add this new field
+            last_billing_date: d.last_billing_date, // Directly from dealers table
           };
         });
         setDealers(formattedDealers);
@@ -180,7 +183,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
 
   const handleEditClick = (dealer: DealerOpeningBalance) => {
     setEditingDealerId(dealer.id);
-    editForm.reset({
+    editBalanceForm.reset({
       openingBalance: dealer.opening_balance,
     });
   };
@@ -214,7 +217,43 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
 
   const handleCancelEdit = () => {
     setEditingDealerId(null);
-    editForm.reset();
+    editBalanceForm.reset();
+  };
+
+  const handleEditBillingDateClick = (dealer: DealerOpeningBalance) => {
+    setEditingBillingDateDealerId(dealer.id);
+    editBillingDateForm.reset({
+      lastBillingDate: dealer.last_billing_date ? dealer.last_billing_date.split('T')[0] : '',
+    });
+  };
+
+  const handleUpdateBillingDate = async (values: z.infer<typeof editBillingDateFormSchema>) => {
+    if (!editingBillingDateDealerId) return;
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('dealers') // Update the dealers table directly
+        .update({
+          last_billing_date: values.lastBillingDate || null,
+        })
+        .eq('id', editingBillingDateDealerId);
+
+      if (error) throw error;
+
+      showSuccess('Last billing date updated successfully!');
+      setEditingBillingDateDealerId(null);
+      fetchOpeningBalances();
+    } catch (error: any) {
+      console.error('Error updating last billing date:', error);
+      showError(`Failed to update last billing date: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancelEditBillingDate = () => {
+    setEditingBillingDateDealerId(null);
+    editBillingDateForm.reset();
   };
 
   const handlePrint = () => {
@@ -368,10 +407,10 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                       <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
                       <TableCell className="text-right">
                         {editingDealerId === dealer.id ? (
-                          <Form {...editForm}>
-                            <form onSubmit={editForm.handleSubmit(handleUpdateBalance)} className="flex items-center justify-end gap-2">
+                          <Form {...editBalanceForm}>
+                            <form onSubmit={editBalanceForm.handleSubmit(handleUpdateBalance)} className="flex items-center justify-end gap-2">
                               <FormField
-                                control={editForm.control}
+                                control={editBalanceForm.control}
                                 name="openingBalance"
                                 render={({ field }) => (
                                   <FormItem className="mb-0">
@@ -389,23 +428,56 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                         )}
                       </TableCell>
                       <TableCell className="text-center text-muted-foreground">
-                        {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
+                        {editingBillingDateDealerId === dealer.id ? (
+                          <Form {...editBillingDateForm}>
+                            <form onSubmit={editBillingDateForm.handleSubmit(handleUpdateBillingDate)} className="flex items-center justify-center gap-2">
+                              <FormField
+                                control={editBillingDateForm.control}
+                                name="lastBillingDate"
+                                render={({ field }) => (
+                                  <FormItem className="mb-0">
+                                    <FormControl>
+                                      <Input type="date" {...field} className="w-32 text-center" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </form>
+                          </Form>
+                        ) : (
+                          dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'
+                        )}
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
                           {editingDealerId === dealer.id ? (
                             <>
-                              <Button type="button" size="icon" onClick={editForm.handleSubmit(handleUpdateBalance)} disabled={isSubmitting} title="Save Changes">
+                              <Button type="button" size="icon" onClick={editBalanceForm.handleSubmit(handleUpdateBalance)} disabled={isSubmitting} title="Save Opening Balance">
                                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                               </Button>
-                              <Button type="button" variant="outline" size="icon" onClick={handleCancelEdit} disabled={isSubmitting} title="Cancel Edit">
+                              <Button type="button" variant="outline" size="icon" onClick={handleCancelEdit} disabled={isSubmitting} title="Cancel Edit Opening Balance">
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : editingBillingDateDealerId === dealer.id ? (
+                            <>
+                              <Button type="button" size="icon" onClick={editBillingDateForm.handleSubmit(handleUpdateBillingDate)} disabled={isSubmitting} title="Save Last Billing Date">
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                              </Button>
+                              <Button type="button" variant="outline" size="icon" onClick={handleCancelEditBillingDate} disabled={isSubmitting} title="Cancel Edit Last Billing Date">
                                 <X className="h-4 w-4" />
                               </Button>
                             </>
                           ) : (
-                            <Button variant="ghost" size="icon" onClick={() => handleEditClick(dealer)} title="Edit Opening Balance">
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            <>
+                              <Button variant="ghost" size="icon" onClick={() => handleEditClick(dealer)} title="Edit Opening Balance">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleEditBillingDateClick(dealer)} title="Edit Last Billing Date">
+                                <CalendarDays className="h-4 w-4" />
+                              </Button>
+                            </>
                           )}
                         </div>
                       </TableCell>
