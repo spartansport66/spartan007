@@ -38,6 +38,7 @@ const formSchema = z.object({
     z.number().min(0, { message: 'Opening balance cannot be negative.' })
   ),
   assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }),
+  lastBillingDate: z.string().nullable().optional(), // New: Optional last billing date
 });
 
 interface SalesPerson {
@@ -67,6 +68,7 @@ const AddDealer = () => {
       allottedCreditDays: 0,
       openingBalance: 0,
       assignedSalesPersonIds: [],
+      lastBillingDate: '', // Default to empty string
     },
   });
 
@@ -130,6 +132,7 @@ const AddDealer = () => {
         country: values.country,
         credit_limit: values.creditLimit,
         allotted_credit_days: values.allottedCreditDays,
+        last_billing_date: values.lastBillingDate || null, // New: Insert last_billing_date
       };
       
       const { data: newDealer, error: dealerError } = await supabase
@@ -363,6 +366,20 @@ const AddDealer = () => {
                       <FormLabel>Opening Balance</FormLabel>
                       <FormControl>
                         <Input type="number" placeholder="e.g., 10000.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="lastBillingDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last Billing Date (Optional)</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

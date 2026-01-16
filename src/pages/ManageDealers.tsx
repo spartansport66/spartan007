@@ -42,6 +42,7 @@ interface DealerWithRelations {
   credit_limit: number;
   allotted_credit_days: number;
   user_id: string;
+  last_billing_date: string | null; // New: Directly from dealers table
   dealer_sales_persons: { sales_person_id: string; profiles: { id: string; first_name: string; last_name: string } }[];
   dealer_balances: { opening_balance: number | null } | null; // Corrected type to single object or null
   dealer_monthly_credit_limits: { dealer_id: string; credit_limit: number; month_year: string }[];
@@ -65,6 +66,7 @@ interface Dealer {
   credit_limit: number;
   allotted_credit_days: number;
   user_id: string;
+  last_billing_date: string | null; // New: Directly from dealers table
   assigned_sales_persons: { id: string; first_name: string; last_name: string }[];
   current_month_credit_limit: number;
   opening_balance: number;
@@ -99,6 +101,7 @@ const formSchema = z.object({
     z.number().min(0, { message: 'Opening balance cannot be negative.' })
   ),
   assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }),
+  lastBillingDate: z.string().nullable().optional(), // New: Optional last billing date
 });
 
 const ManageDealers = () => {
@@ -142,6 +145,7 @@ const ManageDealers = () => {
       allottedCreditDays: 0,
       openingBalance: 0,
       assignedSalesPersonIds: [],
+      lastBillingDate: '', // Default to empty string
     },
   });
 
@@ -161,6 +165,7 @@ const ManageDealers = () => {
         allottedCreditDays: selectedDealer.allotted_credit_days,
         openingBalance: selectedDealer.opening_balance || 0,
         assignedSalesPersonIds: selectedDealer.assigned_sales_persons.map(sp => sp.id),
+        lastBillingDate: selectedDealer.last_billing_date ? selectedDealer.last_billing_date.split('T')[0] : '', // New: Set lastBillingDate
       });
       console.log('DEBUG: Form reset with openingBalance:', selectedDealer.opening_balance || 0);
     }
@@ -196,7 +201,7 @@ const ManageDealers = () => {
         query = supabase
           .from('dealers')
           .select(`
-            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id,
+            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id, last_billing_date,
             dealer_sales_persons!inner(sales_person_id, profiles(id, first_name, last_name)),
             dealer_balances(opening_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
@@ -208,7 +213,7 @@ const ManageDealers = () => {
         query = supabase
           .from('dealers')
           .select(`
-            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id,
+            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id, last_billing_date,
             dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name)),
             dealer_balances(opening_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
@@ -365,6 +370,7 @@ const ManageDealers = () => {
         country: values.country,
         credit_limit: values.creditLimit,
         allotted_credit_days: values.allottedCreditDays,
+        last_billing_date: values.lastBillingDate || null, // New: Update last_billing_date
       };
       
       const { error: dealerUpdateError } = await supabase
@@ -492,7 +498,7 @@ const ManageDealers = () => {
 
       const tableColumn = [
         "Name", "Contact Person", "Email", "Phone", "Address", "City", "State", "Country",
-        "Opening Balance", "Current Balance", "Monthly Credit Limit", "Credit Days", "Assigned To"
+        "Opening Balance", "Current Balance", "Monthly Credit Limit", "Credit Days", "Last Billing Date", "Assigned To"
       ];
       const tableRows = dealers.map(dealer => [
         dealer.name,
@@ -507,6 +513,7 @@ const ManageDealers = () => {
         `₹${dealer.current_balance.toFixed(2)}`, // Use calculated current balance
         `₹${dealer.current_month_credit_limit.toFixed(2)}`,
         dealer.allotted_credit_days, 
+        dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A', // New: Display last_billing_date
         dealer.assigned_sales_persons.length > 0
           ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name || ''}`.trim()).join(', ')
           : 'Unassigned',
@@ -526,6 +533,7 @@ const ManageDealers = () => {
             `₹${totalCurrentBalance.toFixed(2)}`, // Display total current balance
             `₹${totalMonthlyCreditLimit.toFixed(2)}`,
             '', // Credit Days
+            '', // Last Billing Date
             '', // Assigned To
           ]
         ],
@@ -565,7 +573,8 @@ const ManageDealers = () => {
           9: { cellWidth: 20, halign: 'right' }, // Current Balance
           10: { cellWidth: 20, halign: 'right' }, // Monthly Credit Limit
           11: { cellWidth: 15, halign: 'right' }, // Credit Days
-          12: { cellWidth: 35 }, // Assigned To
+          12: { cellWidth: 20, halign: 'center' }, // Last Billing Date
+          13: { cellWidth: 35 }, // Assigned To
         }
       });
 
@@ -704,6 +713,7 @@ const ManageDealers = () => {
                         <TableHead className="text-muted-foreground">Current Balance</TableHead>
                         <TableHead className="text-muted-foreground">Monthly Credit Limit</TableHead>
                         <TableHead className="text-muted-foreground">Credit Days</TableHead>
+                        <TableHead className="text-muted-foreground">Last Billing Date</TableHead> {/* New Table Head */}
                         <TableHead className="text-muted-foreground">Assigned To</TableHead>
                         <TableHead className="text-muted-foreground">Actions</TableHead>
                       </TableRow>
@@ -726,6 +736,9 @@ const ManageDealers = () => {
                           </TableCell>
                           <TableCell className="text-muted-foreground">₹{dealer.current_month_credit_limit.toFixed(2)}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.allotted_credit_days}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
+                          </TableCell>
                           <TableCell className="text-muted-foreground">
                             {dealer.assigned_sales_persons.length > 0 
                               ? dealer.assigned_sales_persons.map(sp => `${sp.first_name} ${sp.last_name || ''}`.trim()).join(', ') 
@@ -947,6 +960,21 @@ const ManageDealers = () => {
                   />
                   {form.formState.errors.openingBalance && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.openingBalance.message}</p>}
                 </div>
+                <FormField
+                  control={form.control}
+                  name="lastBillingDate"
+                  render={({ field }) => (
+                    <FormItem className="grid grid-cols-4 items-center gap-4">
+                      <FormLabel htmlFor="lastBillingDate" className="text-right">
+                        Last Billing Date (Optional)
+                      </FormLabel>
+                      <FormControl className="col-span-3">
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage className="col-span-4 text-right" />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="assignedSalesPersonIds"

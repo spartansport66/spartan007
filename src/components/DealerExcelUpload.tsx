@@ -65,6 +65,7 @@ export const dealerSchema = z.object({
     z.coerce.number().min(0, { message: 'Opening balance cannot be negative.' }).default(0)
   ),
   salesperson: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  lastbillingdate: z.string().nullable().optional().transform(val => val ? val.trim() : null), // New: lastbillingdate
 });
 
 // Define display headers for the ExcelUpload component
@@ -81,6 +82,7 @@ const dealerDisplayHeaders = [
   { key: 'allottedcreditdays', label: 'Allotted Credit Days' },
   { key: 'openingbalance', label: 'Opening Balance' },
   { key: 'salesperson', label: 'Sales Person' },
+  { key: 'lastbillingdate', label: 'Last Billing Date' }, // New: Last Billing Date
 ];
 
 // Sample data for the ExcelUpload component
@@ -97,7 +99,8 @@ const dealerSampleData = [
     "Credit Limit": 50000,
     "Allotted Credit Days": 30,
     "Opening Balance": 10000,
-    "Sales Person": 'Sales Person Name'
+    "Sales Person": 'Sales Person Name',
+    "Last Billing Date": '2023-12-31', // New: Last Billing Date
   },
   {
     "Dealer Name": 'Regional Traders',
@@ -111,7 +114,8 @@ const dealerSampleData = [
     "Credit Limit": 30000,
     "Allotted Credit Days": 45,
     "Opening Balance": 5000,
-    "Sales Person": '' // Empty sales person
+    "Sales Person": '', // Empty sales person
+    "Last Billing Date": '', // New: Last Billing Date
   }
 ];
 
@@ -149,6 +153,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         country: row.country || null, // Convert empty string to null
         credit_limit: row.creditlimit,
         allotted_credit_days: row.allottedcreditdays,
+        last_billing_date: row.lastbillingdate || null, // New: Insert last_billing_date
       }));
       
       // Use upsert with onConflict on 'name, phone'
