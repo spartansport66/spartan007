@@ -149,8 +149,8 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
       } else {
         console.log('[OpeningBalanceReportDialog] Raw data from Supabase:', data); // Added log
         const formattedDealers: DealerOpeningBalance[] = (data || []).map((d: any) => {
-          // Corrected access: d.dealer_balances is an array, so access the first element
-          const openingBalance = d.dealer_balances?.[0]?.opening_balance || 0;
+          // Corrected access: d.dealer_balances is an object or null, not an array
+          const openingBalance = d.dealer_balances?.opening_balance || 0;
           
           console.log(`[OpeningBalanceReportDialog] Dealer: ${d.name}, Raw Balances:`, d.dealer_balances, `Formatted Opening Balance: ${openingBalance}, Last Billing Date: ${d.last_billing_date}`); // Added log
           return {

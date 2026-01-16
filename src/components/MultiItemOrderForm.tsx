@@ -135,8 +135,8 @@ const MultiItemOrderForm: React.FC = () => {
         } else {
           console.log("[MultiItemOrderForm] Raw assignedDealersData:", assignedDealersData); // Log raw data
           let formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => {
-            // Corrected access: item.dealers.dealer_balances is an array, so access the first element
-            const openingBalance = item.dealers.dealer_balances?.[0]?.opening_balance || 0;
+            // Corrected access: item.dealers.dealer_balances is an object or null, not an array
+            const openingBalance = item.dealers.dealer_balances?.opening_balance || 0;
             return {
               ...item.dealers,
               opening_balance: openingBalance
