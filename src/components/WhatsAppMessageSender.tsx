@@ -24,6 +24,8 @@ interface DealerOption {
   phone: string;
   city: string;
   state: string;
+  currentBalance: number; // Added for balance due filtering and message
+  oldestDueDate: string | null; // Added for balance due filtering and message
 }
 
 interface WhatsAppMessageSenderProps {
@@ -44,6 +46,10 @@ interface WhatsAppMessageSenderProps {
   initialLoading: boolean;
   filteredDealersForMultiSelect: DealerOption[];
   handleClearFilters: () => void;
+  messageType: 'combo_offer' | 'balance_due'; // New prop
+  setMessageType: (type: 'combo_offer' | 'balance_due') => void; // New prop
+  balanceDuePeriodFilter: 'all' | '1_month' | '3_months' | '6_months'; // New prop
+  setBalanceDuePeriodFilter: (filter: 'all' | '1_month' | '3_months' | '6_months') => void; // New prop
 }
 
 const indianStates = [
@@ -75,21 +81,31 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
   initialLoading,
   filteredDealersForMultiSelect,
   handleClearFilters,
+  messageType, // Destructure new props
+  setMessageType, // Destructure new props
+  balanceDuePeriodFilter, // Destructure new props
+  setBalanceDuePeriodFilter, // Destructure new props
 }) => {
-  // Dynamically generate WhatsApp message based on selected offer
+  // Dynamically generate WhatsApp message based on selected offer or balance due
   useEffect(() => {
-    if (selectedOfferId) {
-      const offer = comboOffers.find(o => o.id === selectedOfferId);
-      if (offer) {
-        const message = `Hello [DEALER_NAME],\n\n*${companyName || 'Our Company'}* is excited to announce a new Combo Offer: *"${offer.name}"*!\n\n${offer.description ? `Details: ${offer.description}\n\n` : ''}\n\nThank you!`;
-        setWhatsappMessage(message);
-      }
-    } else {
-      if (whatsappMessage.startsWith(`Hello [DEALER_NAME],\n\n*${companyName || 'Our Company'}*`)) {
+    if (messageType === 'combo_offer') {
+      if (selectedOfferId) {
+        const offer = comboOffers.find(o => o.id === selectedOfferId);
+        if (offer) {
+          const message = `Hello [DEALER_NAME],\n\n*${companyName || 'Our Company'}* is excited to announce a new Combo Offer: *"${offer.name}"*!\n\n${offer.description ? `Details: ${offer.description}\n\n` : ''}\n\nThank you!`;
+          setWhatsappMessage(message);
+        } else {
+          setWhatsappMessage('');
+        }
+      } else {
         setWhatsappMessage('');
       }
+    } else if (messageType === 'balance_due') {
+      // For balance due, the message will be personalized per dealer in handleIndividualSendWhatsApp
+      // Set a generic template here for preview
+      setWhatsappMessage(`Dear [DEALER_NAME],\n\nThis is a reminder from *${companyName || 'Our Company'}* that your current outstanding balance is *₹[CURRENT_BALANCE]*, due from *[OLDEST_DUE_DATE]*. Please clear your balance as soon as possible.\n\nThank you!`);
     }
-  }, [selectedOfferId, comboOffers, companyName, setWhatsappMessage]);
+  }, [selectedOfferId, comboOffers, companyName, setWhatsappMessage, messageType]);
 
   const handleSelectAll = () => {
     const allFilteredIds = filteredDealersForMultiSelect.map(d => d.value);
@@ -104,10 +120,10 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-blue-600 dark:bg-blue-800 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold flex items-center gap-2">
-          <MessageCircle className="h-6 w-6" /> Prepare WhatsApp Offer
+          <MessageCircle className="h-6 w-6" /> Prepare WhatsApp Message
         </CardTitle>
         <CardDescription className="text-blue-100 dark:text-blue-200">
-          Filter dealers, select an offer, and preview your personalized message.
+          Filter dealers, select message type, and preview your personalized message.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
@@ -118,6 +134,20 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
           </div>
         ) : (
           <>
+            {/* Message Type Selector */}
+            <div>
+              <Label htmlFor="messageType">Message Type</Label>
+              <Select value={messageType} onValueChange={setMessageType} disabled={isSending}>
+                <SelectTrigger id="messageType">
+                  <SelectValue placeholder="Select message type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="combo_offer">Combo Offer</SelectItem>
+                  <SelectItem value="balance_due">Balance Due Reminder</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Dealer Filters */}
             <div className="flex flex-wrap items-end gap-4 p-3 border rounded-md bg-muted/50">
               <div className="flex-1 min-w-[120px]">
@@ -150,6 +180,22 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
                   </SelectContent>
                 </Select>
               </div>
+              {messageType === 'balance_due' && (
+                <div className="flex-1 min-w-[150px]">
+                  <Label htmlFor="balanceDuePeriodFilter">Balance Due Period</Label>
+                  <Select value={balanceDuePeriodFilter} onValueChange={setBalanceDuePeriodFilter} disabled={isSending}>
+                    <SelectTrigger id="balanceDuePeriodFilter" className="w-full">
+                      <SelectValue placeholder="Select due period" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Dealers (with balance)</SelectItem>
+                      <SelectItem value="1_month">Over 1 Month Due</SelectItem>
+                      <SelectItem value="3_months">Over 3 Months Due</SelectItem>
+                      <SelectItem value="6_months">Over 6 Months Due</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Button onClick={handleClearFilters} variant="outline" disabled={isSending}>
                 Clear Filters
               </Button>
@@ -192,22 +238,24 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
               )}
             </div>
 
-            {/* Select Combo Offer */}
-            <div>
-              <Label htmlFor="selectOffer">Select Combo Offer</Label>
-              <Select value={selectedOfferId} onValueChange={setSelectedOfferId} disabled={comboOffers.length === 0 || isSending}>
-                <SelectTrigger id="selectOffer">
-                  <SelectValue placeholder={comboOffers.length === 0 ? "No active offers available" : "Select an offer"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {comboOffers.map(offer => (
-                    <SelectItem key={offer.id} value={offer.id}>
-                      {offer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Select Combo Offer (only if messageType is combo_offer) */}
+            {messageType === 'combo_offer' && (
+              <div>
+                <Label htmlFor="selectOffer">Select Combo Offer</Label>
+                <Select value={selectedOfferId} onValueChange={setSelectedOfferId} disabled={comboOffers.length === 0 || isSending}>
+                  <SelectTrigger id="selectOffer">
+                    <SelectValue placeholder={comboOffers.length === 0 ? "No active offers available" : "Select an offer"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {comboOffers.map(offer => (
+                      <SelectItem key={offer.id} value={offer.id}>
+                        {offer.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* WhatsApp Message Preview */}
             <div>
@@ -219,7 +267,7 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
                 rows={8}
                 placeholder="Your dynamic message will appear here..."
                 className="resize-y"
-                disabled={isSending || !selectedOfferId}
+                disabled={isSending || (messageType === 'combo_offer' && !selectedOfferId)}
               />
             </div>
           </>

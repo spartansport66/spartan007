@@ -40,6 +40,8 @@ interface DealerOption {
   phone: string;
   city: string;
   state: string;
+  currentBalance: number; // Added for balance due filtering and message
+  oldestDueDate: string | null; // Added for balance due filtering and message
 }
 
 const createOfferFormSchema = z.object({
@@ -108,6 +110,19 @@ const ComboOffersDashboard = () => {
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [filteredDealersForMultiSelect, setFilteredDealersForMultiSelect] = useState<DealerOption[]>([]);
+  const [messageType, setMessageType] = useState<'combo_offer' | 'balance_due'>(() => {
+    if (typeof window !== 'undefined') {
+      return (sessionStorage.getItem('whatsapp_messageType') as 'combo_offer' | 'balance_due') || 'combo_offer';
+    }
+    return 'combo_offer';
+  });
+  const [balanceDuePeriodFilter, setBalanceDuePeriodFilter] = useState<'all' | '1_month' | '3_months' | '6_months'>(() => {
+    if (typeof window !== 'undefined') {
+      return (sessionStorage.getItem('whatsapp_balanceDuePeriodFilter') as 'all' | '1_month' | '3_months' | '6_months') || 'all';
+    }
+    return 'all';
+  });
+
 
   // Forms
   const createForm = useForm<z.infer<typeof createOfferFormSchema>>({
@@ -163,6 +178,18 @@ const ComboOffersDashboard = () => {
     }
   }, [sentDealerIds]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_messageType', messageType);
+    }
+  }, [messageType]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('whatsapp_balanceDuePeriodFilter', balanceDuePeriodFilter);
+    }
+  }, [balanceDuePeriodFilter]);
+
   // Fetch initial data for Combo Offers List
   const fetchComboOffers = useCallback(async () => {
     setLoadingData(true);
@@ -201,18 +228,61 @@ const ComboOffersDashboard = () => {
   const fetchWhatsAppInitialData = useCallback(async () => {
     setInitialLoadingWhatsApp(true);
     try {
-      // Fetch all dealers
-      const { data: dealersData, error: dealersError } = await supabase
+      // Fetch all dealers with their balances, orders, and payments
+      const { data: dealersRawData, error: dealersError } = await supabase
         .from('dealers')
-        .select('id, name, phone, city, state');
+        .select(`
+          id, name, phone, city, state, last_billing_date,
+          dealer_balances(opening_balance),
+          orders(id, total_amount, payment_status, payment_due_date, payments(amount, status, payment_date, cheque_dd_date))
+        `);
+
       if (dealersError) throw dealersError;
-      setAllRawDealers((dealersData || []).map(d => ({ 
-        value: d.id, 
-        label: `${d.name} (${d.phone || 'No Phone'})`, 
-        phone: d.phone || '',
-        city: d.city || 'N/A',
-        state: d.state || 'N/A',
-      })));
+
+      const formattedDealers: DealerOption[] = (dealersRawData || []).map(d => {
+        const openingBalance = d.dealer_balances?.[0]?.opening_balance || 0;
+
+        let currentBalance = openingBalance;
+        let oldestDueDate: string | null = null;
+
+        // Process orders and payments to calculate current balance and oldest due date
+        (d.orders || []).forEach((order: any) => {
+          // All orders are debits (increase amount owed)
+          currentBalance += order.total_amount;
+
+          // If order is pending, consider its due date for oldestDueDate
+          if (order.payment_status === 'pending' && order.payment_due_date) {
+            if (!oldestDueDate || new Date(order.payment_due_date) < new Date(oldestDueDate)) {
+              oldestDueDate = order.payment_due_date;
+            }
+          }
+
+          // Iterate through payments associated with this order
+          (order.payments || []).forEach((payment: any) => {
+            if (payment.status === 'completed') {
+              currentBalance -= payment.amount;
+            }
+          });
+        });
+
+        // If there's an opening balance and no other specific due dates, consider last_billing_date
+        if (openingBalance > 0 && !oldestDueDate && d.last_billing_date) {
+           // If opening balance is the only outstanding, and last_billing_date exists, use it as a conceptual due date
+           oldestDueDate = d.last_billing_date;
+        }
+
+
+        return {
+          value: d.id,
+          label: `${d.name} (${d.phone || 'No Phone'})`,
+          phone: d.phone || '',
+          city: d.city || 'N/A',
+          state: d.state || 'N/A',
+          currentBalance: currentBalance,
+          oldestDueDate: oldestDueDate,
+        };
+      });
+      setAllRawDealers(formattedDealers);
 
       // Fetch company info
       const { data: companyInfo, error: companyInfoError } = await supabase
@@ -246,15 +316,39 @@ const ComboOffersDashboard = () => {
     }
   }, [sessionLoading, user, isAdmin, navigate, fetchComboOffers, fetchWhatsAppInitialData]);
 
-  // Effect to filter dealers for the MultiSelect options based on city/state filters
+  // Effect to filter dealers for the MultiSelect options based on city/state/balance filters
   useEffect(() => {
     const filtered = allRawDealers.filter(dealer => {
       const matchesCity = filterCity ? dealer.city.toLowerCase().includes(filterCity.toLowerCase()) : true;
       const matchesState = filterState ? dealer.state.toLowerCase().includes(filterState.toLowerCase()) : true;
-      return matchesCity && matchesState;
+      
+      let matchesBalanceDuePeriod = true;
+      if (messageType === 'balance_due' && balanceDuePeriodFilter !== 'all') {
+        if (dealer.currentBalance <= 0) { // Only consider dealers with positive outstanding balance
+          matchesBalanceDuePeriod = false;
+        } else if (dealer.oldestDueDate) {
+          const today = new Date();
+          const oldestDue = new Date(dealer.oldestDueDate);
+          const diffTime = Math.abs(today.getTime() - oldestDue.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          if (balanceDuePeriodFilter === '1_month') {
+            matchesBalanceDuePeriod = diffDays >= 30;
+          } else if (balanceDuePeriodFilter === '3_months') {
+            matchesBalanceDuePeriod = diffDays >= 90;
+          } else if (balanceDuePeriodFilter === '6_months') {
+            matchesBalanceDuePeriod = diffDays >= 180;
+          }
+        } else {
+          // If balance is positive but no specific oldestDueDate, it matches all due filters.
+          // This handles cases where only opening balance is due without a specific date.
+          matchesBalanceDuePeriod = true; 
+        }
+      }
+      return matchesCity && matchesState && matchesBalanceDuePeriod;
     });
     setFilteredDealersForMultiSelect(filtered);
-  }, [allRawDealers, filterCity, filterState]);
+  }, [allRawDealers, filterCity, filterState, messageType, balanceDuePeriodFilter]);
 
   useEffect(() => {
     if (selectedOffer) {
@@ -366,15 +460,34 @@ const ComboOffersDashboard = () => {
   const handleClearFilters = () => {
     setFilterCity('');
     setFilterState('');
+    setBalanceDuePeriodFilter('all'); // Clear balance due filter as well
   };
 
-  const handleIndividualSendWhatsApp = async (dealerId: string, dealerName: string, dealerPhone: string, personalizedMessage: string) => {
+  const handleIndividualSendWhatsApp = async (
+    dealerId: string, 
+    dealerName: string, 
+    dealerPhone: string, 
+    personalizedMessage: string,
+    currentBalance: number, // New
+    oldestDueDate: string | null // New
+  ) => {
     if (!user) {
       showError('You must be logged in to send WhatsApp messages.');
       return;
     }
     setIsSendingWhatsApp(true);
     try {
+      let finalMessage = personalizedMessage;
+      let finalComboOfferId = selectedOfferId; // Default to selectedOfferId
+
+      if (messageType === 'balance_due') {
+        // If message type is balance due, construct the message here
+        const formattedBalance = currentBalance.toFixed(2);
+        const formattedDueDate = oldestDueDate ? new Date(oldestDueDate).toLocaleDateString() : 'N/A';
+        finalMessage = `Dear ${dealerName},\n\nThis is a reminder from *${companyName || 'Our Company'}* that your current outstanding balance is *₹${formattedBalance}*, due from *${formattedDueDate}*. Please clear your balance as soon as possible.\n\nThank you!`;
+        finalComboOfferId = ''; // No combo offer ID for balance due message
+      }
+
       const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
@@ -382,9 +495,10 @@ const ComboOffersDashboard = () => {
         },
         body: JSON.stringify({
           dealerIds: [dealerId],
-          message: personalizedMessage, // Use the already personalized message
-          comboOfferId: selectedOfferId,
+          message: finalMessage,
+          comboOfferId: finalComboOfferId, // Pass the appropriate comboOfferId (or empty string)
           sentByUserId: user.id,
+          messageType: messageType, // Pass message type to Edge Function for logging
         }),
       });
 
@@ -396,7 +510,7 @@ const ComboOffersDashboard = () => {
 
       showSuccess('WhatsApp message prepared. A new tab may open, please ensure pop-ups are allowed.');
       
-      const encodedMessage = encodeURIComponent(personalizedMessage);
+      const encodedMessage = encodeURIComponent(finalMessage);
       const whatsappUrl = `https://web.whatsapp.com/send?phone=${dealerPhone}&text=${encodedMessage}`;
       window.open(whatsappUrl, '_blank');
       setSentDealerIds(prev => new Set([...prev, dealerId]));
@@ -538,11 +652,10 @@ const ComboOffersDashboard = () => {
                   )}
                 </Button>
               </form>
-            </Form>
-          </CardContent>
+            </CardContent>
         </Card>
 
-        {/* Card 2: WhatsApp Message Sender (now only filters and message prep) */}
+        {/* Card 2: WhatsApp Message Sender (now handles message type and filters) */}
         <WhatsAppMessageSender 
           allRawDealers={allRawDealers}
           comboOffers={comboOffersForSender}
@@ -561,6 +674,10 @@ const ComboOffersDashboard = () => {
           initialLoading={initialLoadingWhatsApp}
           filteredDealersForMultiSelect={filteredDealersForMultiSelect}
           handleClearFilters={handleClearFilters}
+          messageType={messageType} // Pass messageType
+          setMessageType={setMessageType} // Pass setMessageType
+          balanceDuePeriodFilter={balanceDuePeriodFilter} // Pass balanceDuePeriodFilter
+          setBalanceDuePeriodFilter={setBalanceDuePeriodFilter} // Pass setBalanceDuePeriodFilter
         />
 
         {/* Card 3: Selected Dealers List for WhatsApp */}
@@ -574,6 +691,7 @@ const ComboOffersDashboard = () => {
           companyName={companyName}
           onIndividualSend={handleIndividualSendWhatsApp}
           onResetSentStatus={handleResetSentStatus}
+          messageType={messageType} // Pass messageType
         />
       </div>
 

@@ -14,6 +14,8 @@ interface DealerOption {
   phone: string;
   city: string;
   state: string;
+  currentBalance: number; // Added
+  oldestDueDate: string | null; // Added
 }
 
 interface SelectedDealersListCardProps {
@@ -24,8 +26,16 @@ interface SelectedDealersListCardProps {
   selectedOfferId: string;
   whatsappMessage: string;
   companyName: string | null;
-  onIndividualSend: (dealerId: string, dealerName: string, dealerPhone: string, personalizedMessage: string) => Promise<void>;
+  onIndividualSend: (
+    dealerId: string, 
+    dealerName: string, 
+    dealerPhone: string, 
+    personalizedMessage: string,
+    currentBalance: number, // New
+    oldestDueDate: string | null // New
+  ) => Promise<void>;
   onResetSentStatus: () => void;
+  messageType: 'combo_offer' | 'balance_due'; // New prop
 }
 
 const SelectedDealersListCard: React.FC<SelectedDealersListCardProps> = ({
@@ -38,6 +48,7 @@ const SelectedDealersListCard: React.FC<SelectedDealersListCardProps> = ({
   companyName,
   onIndividualSend,
   onResetSentStatus,
+  messageType, // Destructure new prop
 }) => {
   const handleSendClick = async (dealerId: string) => {
     const dealer = allRawDealers.find(d => d.value === dealerId);
@@ -49,7 +60,7 @@ const SelectedDealersListCard: React.FC<SelectedDealersListCardProps> = ({
       showError(`Phone number not available for ${dealer.label.split('(')[0].trim()}.`);
       return;
     }
-    if (!selectedOfferId) {
+    if (messageType === 'combo_offer' && !selectedOfferId) {
       showError('Please select a combo offer first.');
       return;
     }
@@ -60,8 +71,17 @@ const SelectedDealersListCard: React.FC<SelectedDealersListCardProps> = ({
 
     // Extract dealer name from the label property
     const dealerName = dealer.label.split('(')[0].trim();
-    const personalizedMessage = whatsappMessage.replace('[DEALER_NAME]', dealerName);
-    await onIndividualSend(dealerId, dealerName, dealer.phone, personalizedMessage);
+    
+    // The personalized message will be constructed in ComboOffersDashboard's handleIndividualSendWhatsApp
+    // based on messageType. Here, we just pass the base whatsappMessage.
+    await onIndividualSend(
+      dealerId, 
+      dealerName, 
+      dealer.phone, 
+      whatsappMessage, // Pass the base message
+      dealer.currentBalance, // Pass currentBalance
+      dealer.oldestDueDate // Pass oldestDueDate
+    );
   };
 
   return (
@@ -86,6 +106,12 @@ const SelectedDealersListCard: React.FC<SelectedDealersListCardProps> = ({
                   <TableHead className="text-muted-foreground">Phone</TableHead>
                   <TableHead className="text-muted-foreground">City</TableHead>
                   <TableHead className="text-muted-foreground">State</TableHead>
+                  {messageType === 'balance_due' && (
+                    <>
+                      <TableHead className="text-muted-foreground text-right">Balance</TableHead>
+                      <TableHead className="text-muted-foreground text-center">Due Date</TableHead>
+                    </>
+                  )}
                   <TableHead className="text-muted-foreground text-center">Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -104,13 +130,19 @@ const SelectedDealersListCard: React.FC<SelectedDealersListCardProps> = ({
                       <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
                       <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
+                      {messageType === 'balance_due' && (
+                        <>
+                          <TableCell className="text-muted-foreground text-right">₹{dealer.currentBalance.toFixed(2)}</TableCell>
+                          <TableCell className="text-muted-foreground text-center">{dealer.oldestDueDate ? new Date(dealer.oldestDueDate).toLocaleDateString() : 'N/A'}</TableCell>
+                        </>
+                      )}
                       <TableCell className="text-center">
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleSendClick(dealer.value)}
                           title={isDealerSent ? "Already Sent" : `Send to ${dealer.label.split('(')[0].trim()}`}
-                          disabled={isSending || !dealer.phone || !selectedOfferId || !whatsappMessage.trim() || isDealerSent}
+                          disabled={isSending || !dealer.phone || (messageType === 'combo_offer' && !selectedOfferId) || !whatsappMessage.trim() || isDealerSent}
                         >
                           <Send className="h-4 w-4 text-blue-500" />
                         </Button>

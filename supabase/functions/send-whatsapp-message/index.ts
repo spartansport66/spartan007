@@ -17,10 +17,12 @@ serve(async (req) => {
   }
 
   try {
-    const { dealerIds, message, comboOfferId, sentByUserId } = await req.json(); // Added comboOfferId and sentByUserId
+    const { dealerIds, message, comboOfferId, sentByUserId, messageType } = await req.json(); // Added messageType
 
-    if (!dealerIds || !Array.isArray(dealerIds) || dealerIds.length === 0 || !message || !comboOfferId || !sentByUserId) {
-      return new Response(JSON.stringify({ error: 'Missing or invalid dealer IDs, message, combo offer ID, or sender user ID.' }), {
+    console.log("[send-whatsapp-message] Received request:", { dealerIds, message, comboOfferId, sentByUserId, messageType });
+
+    if (!dealerIds || !Array.isArray(dealerIds) || dealerIds.length === 0 || !message || !sentByUserId) {
+      return new Response(JSON.stringify({ error: 'Missing or invalid dealer IDs, message, or sender user ID.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -42,8 +44,8 @@ serve(async (req) => {
       throw new Error(`Failed to fetch dealer phone numbers: ${dealersError.message}`);
     }
 
-    const messagesSent: { dealerId: string; dealerName: string; phone: string; status: string; error?: string }[] = []; // Removed 'url' field
-    const logsToInsert: { combo_offer_id: string; dealer_id: string; message_content: string; sent_by: string }[] = [];
+    const messagesSent: { dealerId: string; dealerName: string; phone: string; status: string; error?: string }[] = [];
+    const logsToInsert: { combo_offer_id: string | null; dealer_id: string; message_content: string; sent_by: string; message_type: string }[] = []; // Added message_type
 
     for (const dealer of dealers) {
       if (dealer.phone) {
@@ -54,10 +56,11 @@ serve(async (req) => {
           status: 'success',
         });
         logsToInsert.push({
-          combo_offer_id: comboOfferId,
+          combo_offer_id: comboOfferId || null, // Allow null for balance due messages
           dealer_id: dealer.id,
           message_content: message,
           sent_by: sentByUserId,
+          message_type: messageType || 'unknown', // Log the message type
         });
       } else {
         messagesSent.push({
@@ -77,7 +80,7 @@ serve(async (req) => {
         .insert(logsToInsert);
 
       if (logError) {
-        console.error('Error inserting WhatsApp sent logs:', logError.message);
+        console.error('[send-whatsapp-message] Error inserting WhatsApp sent logs:', logError.message);
         // Continue to return message results even if logging fails
       }
     }
@@ -88,7 +91,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Edge Function error:', error.message);
+    console.error('[send-whatsapp-message] Edge Function error:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
