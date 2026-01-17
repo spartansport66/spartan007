@@ -325,40 +325,38 @@ const ComboOffersDashboard = () => {
       const matchesState = filterState ? dealer.state.toLowerCase().includes(filterState.toLowerCase()) : true;
       
       let matchesBalanceDuePeriod = true;
-      if (messageType === 'balance_due' && balanceDuePeriodFilter !== 'all') {
+      if (messageType === 'balance_due') {
         if (dealer.currentBalance <= 0) {
           matchesBalanceDuePeriod = false; // No balance, so no match for any due period
-        } else if (dealer.lastBillingDate) { // Use lastBillingDate for filtering
-          const today = new Date();
-          // Normalize today to start of day for consistent comparison
-          today.setHours(0, 0, 0, 0); 
-          const lastBilling = new Date(dealer.lastBillingDate);
-          lastBilling.setHours(0, 0, 0, 0); // Normalize lastBilling to start of day
-
-          // If lastBilling is in the future, it's not "overdue" for any period yet
-          if (lastBilling > today) {
-            matchesBalanceDuePeriod = false;
+        } else if (balanceDuePeriodFilter === 'all') {
+          matchesBalanceDuePeriod = true; // Show all dealers with a positive balance
+        } else { // Time-based filters: '1_month', '3_months', '6_months'
+          if (!dealer.oldestDueDate) {
+            matchesBalanceDuePeriod = false; // Cannot determine due period if no oldest due date
           } else {
-            // Calculate difference in days for past due dates
-            const diffTime = Math.abs(today.getTime() - lastBilling.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Normalize today to start of day UTC
+            const oldestDue = new Date(dealer.oldestDueDate);
+            oldestDue.setHours(0, 0, 0, 0); // Normalize oldestDue to start of day UTC
 
-            if (balanceDuePeriodFilter === '1_month') {
-              matchesBalanceDuePeriod = diffDays >= 30;
-            } else if (balanceDuePeriodFilter === '3_months') {
-              matchesBalanceDuePeriod = diffDays >= 90;
-            } else if (balanceDuePeriodFilter === '6_months') {
-              matchesBalanceDuePeriod = diffDays >= 180;
+            // If oldestDue is in the future, it's not "overdue" for any period yet
+            if (oldestDue > today) {
+              matchesBalanceDuePeriod = false;
+            } else {
+              // Calculate difference in days for past due dates
+              const diffTime = Math.abs(today.getTime() - oldestDue.getTime());
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+              if (balanceDuePeriodFilter === '1_month') {
+                matchesBalanceDuePeriod = diffDays >= 30;
+              } else if (balanceDuePeriodFilter === '3_months') {
+                matchesBalanceDuePeriod = diffDays >= 90;
+              } else if (balanceDuePeriodFilter === '6_months') {
+                matchesBalanceDuePeriod = diffDays >= 180;
+              }
             }
           }
-        } else {
-          // dealer.currentBalance > 0 but dealer.lastBillingDate is null.
-          // If a time-based filter is active, this dealer should NOT match.
-          matchesBalanceDuePeriod = false; 
         }
-      } else if (messageType === 'balance_due' && balanceDuePeriodFilter === 'all') {
-        // If 'all' is selected, only show dealers with a positive balance
-        matchesBalanceDuePeriod = dealer.currentBalance > 0;
       }
       // If messageType is not 'balance_due', matchesBalanceDuePeriod remains true.
 
@@ -501,7 +499,7 @@ const ComboOffersDashboard = () => {
         // If message type is balance due, construct the message here
         const formattedBalance = currentBalance.toFixed(2);
         const formattedDueDate = oldestDueDate ? new Date(oldestDueDate).toLocaleDateString() : 'N/A';
-        finalMessage = `Dear [DEALER_NAME],\n\nThis is a reminder from *${companyName || 'Our Company'}* that your current outstanding balance is *₹${formattedBalance}*, due from *${formattedDueDate}*. Please clear your balance as soon as possible.\n\nThank you!`;
+        finalMessage = `Dear ${dealerName},\n\nThis is a reminder from *${companyName || 'Our Company'}* that your current outstanding balance is *₹${formattedBalance}*, due from *${formattedDueDate}*. Please clear your balance as soon as possible.\n\nThank you!`;
         finalComboOfferId = ''; // No combo offer ID for balance due message
       }
 
