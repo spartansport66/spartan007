@@ -29,7 +29,8 @@ import PaymentOverviewCard from '@/components/PaymentOverviewCard';
 import DealerLedgerReportDialog from '@/components/reports/DealerLedgerReportDialog';
 import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog';
 import SalesChart from '@/components/SalesChart';
-import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog'; // New import
+import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog';
+import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog'; // New import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -47,7 +48,8 @@ const AdminDashboard = () => {
   const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false);
   const [isDealerLedgerReportOpen, setIsDealerLedgerReportOpen] = useState(false);
   const [isOpeningBalanceReportOpen, setIsOpeningBalanceReportOpen] = useState(false);
-  const [isDealerOverdueBalanceReportOpen, setIsDealerOverdueBalanceReportOpen] = useState(false); // New state for Overdue Balance Report
+  const [isDealerOverdueBalanceReportOpen, setIsDealerOverdueBalanceReportOpen] = useState(false);
+  const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false); // New state for Closing Balance Report
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -281,7 +283,8 @@ const AdminDashboard = () => {
               setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen}
               setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen}
               setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen}
-              setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen} // Pass new prop
+              setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen}
+              setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen} // Pass new prop
             />
           </SheetContent>
         </Sheet>
@@ -370,9 +373,13 @@ const AdminDashboard = () => {
         isOpen={isOpeningBalanceReportOpen}
         onOpenChange={setIsOpeningBalanceReportOpen}
       />
-      <DealerOverdueBalanceReportDialog // New dialog component
+      <DealerOverdueBalanceReportDialog
         isOpen={isDealerOverdueBalanceReportOpen}
         onOpenChange={setIsDealerOverdueBalanceReportOpen}
+      />
+      <DealerClosingBalanceReportDialog // New dialog component
+        isOpen={isDealerClosingBalanceReportOpen}
+        onOpenChange={setIsDealerClosingBalanceReportOpen}
       />
     </div>
   );
