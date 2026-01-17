@@ -324,27 +324,42 @@ const ComboOffersDashboard = () => {
       
       let matchesBalanceDuePeriod = true;
       if (messageType === 'balance_due' && balanceDuePeriodFilter !== 'all') {
-        if (dealer.currentBalance <= 0) { // Only consider dealers with positive outstanding balance
-          matchesBalanceDuePeriod = false;
+        if (dealer.currentBalance <= 0) {
+          matchesBalanceDuePeriod = false; // No balance, so no match for any due period
         } else if (dealer.oldestDueDate) {
           const today = new Date();
+          // Normalize today to start of day for consistent comparison
+          today.setHours(0, 0, 0, 0); 
           const oldestDue = new Date(dealer.oldestDueDate);
-          const diffTime = Math.abs(today.getTime() - oldestDue.getTime());
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          oldestDue.setHours(0, 0, 0, 0); // Normalize oldestDue to start of day
 
-          if (balanceDuePeriodFilter === '1_month') {
-            matchesBalanceDuePeriod = diffDays >= 30;
-          } else if (balanceDuePeriodFilter === '3_months') {
-            matchesBalanceDuePeriod = diffDays >= 90;
-          } else if (balanceDuePeriodFilter === '6_months') {
-            matchesBalanceDuePeriod = diffDays >= 180;
+          // If oldestDue is in the future, it's not "overdue" for any period yet
+          if (oldestDue > today) {
+            matchesBalanceDuePeriod = false;
+          } else {
+            // Calculate difference in days for past due dates
+            const diffTime = Math.abs(today.getTime() - oldestDue.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (balanceDuePeriodFilter === '1_month') {
+              matchesBalanceDuePeriod = diffDays >= 30;
+            } else if (balanceDuePeriodFilter === '3_months') {
+              matchesBalanceDuePeriod = diffDays >= 90;
+            } else if (balanceDuePeriodFilter === '6_months') {
+              matchesBalanceDuePeriod = diffDays >= 180;
+            }
           }
         } else {
-          // If balance is positive but no specific oldestDueDate, it matches all due filters.
-          // This handles cases where only opening balance is due without a specific date.
-          matchesBalanceDuePeriod = true; 
+          // dealer.currentBalance > 0 but dealer.oldestDueDate is null.
+          // If a time-based filter is active, this dealer should NOT match.
+          matchesBalanceDuePeriod = false; 
         }
+      } else if (messageType === 'balance_due' && balanceDuePeriodFilter === 'all') {
+        // If 'all' is selected, only show dealers with a positive balance
+        matchesBalanceDuePeriod = dealer.currentBalance > 0;
       }
+      // If messageType is not 'balance_due', matchesBalanceDuePeriod remains true.
+
       return matchesCity && matchesState && matchesBalanceDuePeriod;
     });
     setFilteredDealersForMultiSelect(filtered);
