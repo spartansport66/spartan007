@@ -417,7 +417,11 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
           </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterOverduePeriod">Overdue Period</Label>
-            <Select value={filterOverduePeriod} onValueChange={setFilterOverduePeriod} disabled={loading}>
+            <Select 
+              value={filterOverduePeriod} 
+              onValueChange={(value: string) => setFilterOverduePeriod(value as 'all' | '1_month' | '3_months' | '6_months')} 
+              disabled={loading}
+            >
               <SelectTrigger id="filterOverduePeriod" className="w-full">
                 <SelectValue placeholder="Select period" />
               </SelectTrigger>
