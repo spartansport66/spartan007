@@ -484,7 +484,7 @@ const ComboOffersDashboard = () => {
         // If message type is balance due, construct the message here
         const formattedBalance = currentBalance.toFixed(2);
         const formattedDueDate = oldestDueDate ? new Date(oldestDueDate).toLocaleDateString() : 'N/A';
-        finalMessage = `Dear ${dealerName},\n\nThis is a reminder from *${companyName || 'Our Company'}* that your current outstanding balance is *₹${formattedBalance}*, due from *${formattedDueDate}*. Please clear your balance as soon as possible.\n\nThank you!`;
+        finalMessage = `Dear [DEALER_NAME],\n\nThis is a reminder from *${companyName || 'Our Company'}* that your current outstanding balance is *₹${formattedBalance}*, due from *${formattedDueDate}*. Please clear your balance as soon as possible.\n\nThank you!`;
         finalComboOfferId = ''; // No combo offer ID for balance due message
       }
 
@@ -652,7 +652,8 @@ const ComboOffersDashboard = () => {
                   )}
                 </Button>
               </form>
-            </CardContent>
+            </Form>
+          </CardContent>
         </Card>
 
         {/* Card 2: WhatsApp Message Sender (now handles message type and filters) */}
