@@ -28,7 +28,8 @@ import AllPendingPaymentsCard from '@/components/AllPendingPaymentsCard';
 import PaymentOverviewCard from '@/components/PaymentOverviewCard';
 import DealerLedgerReportDialog from '@/components/reports/DealerLedgerReportDialog';
 import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog';
-import SalesChart from '@/components/SalesChart'; // Import the SalesChart component
+import SalesChart from '@/components/SalesChart';
+import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog'; // New import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -46,6 +47,7 @@ const AdminDashboard = () => {
   const [isCompanyInfoDialogOpen, setIsCompanyInfoDialogOpen] = useState(false);
   const [isDealerLedgerReportOpen, setIsDealerLedgerReportOpen] = useState(false);
   const [isOpeningBalanceReportOpen, setIsOpeningBalanceReportOpen] = useState(false);
+  const [isDealerOverdueBalanceReportOpen, setIsDealerOverdueBalanceReportOpen] = useState(false); // New state for Overdue Balance Report
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -58,7 +60,7 @@ const AdminDashboard = () => {
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [productsCount, setProductsCount] = useState<number>(0);
-  const [monthlySalesData, setMonthlySalesData] = useState<{ month: string; sales: number }[]>([]); // State for chart data
+  const [monthlySalesData, setMonthlySalesData] = useState<{ month: string; sales: number }[]>([]);
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -279,6 +281,7 @@ const AdminDashboard = () => {
               setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen}
               setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen}
               setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen}
+              setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen} // Pass new prop
             />
           </SheetContent>
         </Sheet>
@@ -314,7 +317,6 @@ const AdminDashboard = () => {
         <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
       </div>
 
-      {/* New row for Sales Chart */}
       <div className="grid grid-cols-1 mb-6">
         <SalesChart data={monthlySalesData} />
       </div>
@@ -367,6 +369,10 @@ const AdminDashboard = () => {
       <OpeningBalanceReportDialog
         isOpen={isOpeningBalanceReportOpen}
         onOpenChange={setIsOpeningBalanceReportOpen}
+      />
+      <DealerOverdueBalanceReportDialog // New dialog component
+        isOpen={isDealerOverdueBalanceReportOpen}
+        onOpenChange={setIsDealerOverdueBalanceReportOpen}
       />
     </div>
   );

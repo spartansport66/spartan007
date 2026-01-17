@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from 'react-router-dom';
-import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign } from 'lucide-react'; // Added DollarSign icon
+import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle } from 'lucide-react'; // Added AlertTriangle icon
 import { cn } from '@/lib/utils';
 
 interface AdminSidebarProps {
@@ -18,7 +18,8 @@ interface AdminSidebarProps {
   setIsSalesReportsDialogOpen: (isOpen: boolean) => void;
   setIsCompanyInfoDialogOpen: (isOpen: boolean) => void;
   setIsDealerLedgerReportOpen: (isOpen: boolean) => void;
-  setIsOpeningBalanceReportOpen: (isOpen: boolean) => void; // New prop for Opening Balance Report
+  setIsOpeningBalanceReportOpen: (isOpen: boolean) => void;
+  setIsDealerOverdueBalanceReportOpen: (isOpen: boolean) => void; // New prop for Overdue Balance Report
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -31,7 +32,8 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsSalesReportsDialogOpen,
   setIsCompanyInfoDialogOpen,
   setIsDealerLedgerReportOpen,
-  setIsOpeningBalanceReportOpen, // Use new prop
+  setIsOpeningBalanceReportOpen,
+  setIsDealerOverdueBalanceReportOpen, // Use new prop
 }) => {
   const navigate = useNavigate();
 
@@ -39,15 +41,15 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
     icon: React.ReactNode;
     label: string;
     onClick: () => void;
-    className?: string; // Removed variant prop
+    className?: string;
   }> = ({ icon, label, onClick, className }) => (
     <SheetClose asChild>
       <Button
         onClick={onClick}
         className={cn(
           "w-full justify-start gap-2",
-          "bg-background text-foreground hover:bg-accent hover:text-accent-foreground", // Use theme-aware colors
-          className // Merge any additional custom classes
+          "bg-background text-foreground hover:bg-accent hover:text-accent-foreground",
+          className
         )}
       >
         {icon}
@@ -89,7 +91,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <Button
             className={cn(
               "w-full justify-start gap-2",
-              "bg-background text-foreground hover:bg-accent hover:text-accent-foreground" // Apply theme-aware styles to dropdown trigger
+              "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
             )}
           >
             <FileText className="h-4 w-4" />
@@ -135,8 +137,14 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </DropdownMenuItem>
           </SheetClose>
           <SheetClose asChild>
-            <DropdownMenuItem onClick={() => setIsOpeningBalanceReportOpen(true)}> {/* New menu item */}
+            <DropdownMenuItem onClick={() => setIsOpeningBalanceReportOpen(true)}>
               Opening Balance Report
+            </DropdownMenuItem>
+          </SheetClose>
+          <DropdownMenuSeparator />
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsDealerOverdueBalanceReportOpen(true)} className="text-red-600 font-semibold">
+              <AlertTriangle className="h-4 w-4 mr-2 text-red-600" /> Overdue Balance Report
             </DropdownMenuItem>
           </SheetClose>
         </DropdownMenuContent>
