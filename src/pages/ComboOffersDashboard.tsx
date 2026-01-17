@@ -582,6 +582,15 @@ const ComboOffersDashboard = () => {
                         >
                           <Edit className="h-3 w-3" />
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleManageDealers(offer)} // Added Manage Dealers button
+                          title="Manage Assigned Dealers"
+                        >
+                          <Users className="h-3 w-3" />
+                        </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button
