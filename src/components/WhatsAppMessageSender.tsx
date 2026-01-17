@@ -26,6 +26,7 @@ interface DealerOption {
   state: string;
   currentBalance: number; // Added for balance due filtering and message
   oldestDueDate: string | null; // Added for balance due filtering and message
+  lastBillingDate: string | null; // New: last_billing_date from dealers table
 }
 
 interface WhatsAppMessageSenderProps {

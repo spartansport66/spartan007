@@ -16,6 +16,7 @@ interface DealerOption {
   state: string;
   currentBalance: number; // Added
   oldestDueDate: string | null; // Added
+  lastBillingDate: string | null; // New: last_billing_date from dealers table
 }
 
 interface SelectedDealersListCardProps {

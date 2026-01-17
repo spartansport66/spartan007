@@ -42,6 +42,7 @@ interface DealerOption {
   state: string;
   currentBalance: number; // Added for balance due filtering and message
   oldestDueDate: string | null; // Added for balance due filtering and message
+  lastBillingDate: string | null; // New: last_billing_date from dealers table
 }
 
 const createOfferFormSchema = z.object({
@@ -280,6 +281,7 @@ const ComboOffersDashboard = () => {
           state: d.state || 'N/A',
           currentBalance: currentBalance,
           oldestDueDate: oldestDueDate,
+          lastBillingDate: d.last_billing_date, // New: Populate lastBillingDate
         };
       });
       setAllRawDealers(formattedDealers);
@@ -326,19 +328,19 @@ const ComboOffersDashboard = () => {
       if (messageType === 'balance_due' && balanceDuePeriodFilter !== 'all') {
         if (dealer.currentBalance <= 0) {
           matchesBalanceDuePeriod = false; // No balance, so no match for any due period
-        } else if (dealer.oldestDueDate) {
+        } else if (dealer.lastBillingDate) { // Use lastBillingDate for filtering
           const today = new Date();
           // Normalize today to start of day for consistent comparison
           today.setHours(0, 0, 0, 0); 
-          const oldestDue = new Date(dealer.oldestDueDate);
-          oldestDue.setHours(0, 0, 0, 0); // Normalize oldestDue to start of day
+          const lastBilling = new Date(dealer.lastBillingDate);
+          lastBilling.setHours(0, 0, 0, 0); // Normalize lastBilling to start of day
 
-          // If oldestDue is in the future, it's not "overdue" for any period yet
-          if (oldestDue > today) {
+          // If lastBilling is in the future, it's not "overdue" for any period yet
+          if (lastBilling > today) {
             matchesBalanceDuePeriod = false;
           } else {
             // Calculate difference in days for past due dates
-            const diffTime = Math.abs(today.getTime() - oldestDue.getTime());
+            const diffTime = Math.abs(today.getTime() - lastBilling.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
             if (balanceDuePeriodFilter === '1_month') {
@@ -350,7 +352,7 @@ const ComboOffersDashboard = () => {
             }
           }
         } else {
-          // dealer.currentBalance > 0 but dealer.oldestDueDate is null.
+          // dealer.currentBalance > 0 but dealer.lastBillingDate is null.
           // If a time-based filter is active, this dealer should NOT match.
           matchesBalanceDuePeriod = false; 
         }
