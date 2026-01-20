@@ -14,7 +14,7 @@ import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import *s z from 'zod';
+import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { useSession } from '@/contexts/SessionContext'; // Import useSession
 
