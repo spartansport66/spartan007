@@ -3,29 +3,9 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from 'react-router-dom';
-import {
-  Gift,
-  Boxes,
-  Building,
-  UserCog,
-  FileText,
-  Info,
-  LogOut,
-  Home,
-  DollarSign,
-  AlertTriangle,
-  Scale,
-  Package
-} from 'lucide-react';
+import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale, Package } from 'lucide-react'; // Added Package icon for Product Management Console
 import { cn } from '@/lib/utils';
 
 interface AdminSidebarProps {
@@ -40,7 +20,7 @@ interface AdminSidebarProps {
   setIsDealerLedgerReportOpen: (isOpen: boolean) => void;
   setIsOpeningBalanceReportOpen: (isOpen: boolean) => void;
   setIsDealerOverdueBalanceReportOpen: (isOpen: boolean) => void;
-  setIsDealerClosingBalanceReportOpen: (isOpen: boolean) => void;
+  setIsDealerClosingBalanceReportOpen: (isOpen: boolean) => void; // New prop for Closing Balance Report
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -55,7 +35,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsDealerLedgerReportOpen,
   setIsOpeningBalanceReportOpen,
   setIsDealerOverdueBalanceReportOpen,
-  setIsDealerClosingBalanceReportOpen,
+  setIsDealerClosingBalanceReportOpen, // Use new prop
 }) => {
   const navigate = useNavigate();
 
@@ -93,9 +73,9 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         onClick={() => navigate('/combo-offers-dashboard')}
       />
       <NavButton
-        icon={<Package className="h-4 w-4" />}
-        label="Product Management Console"
-        onClick={() => navigate('/product-management-console')}
+        icon={<Package className="h-4 w-4" />} {/* Changed icon to Package */}
+        label="Product Management Console" {/* Changed label */}
+        onClick={() => navigate('/product-management-console')} {/* Changed route */}
       />
       <NavButton
         icon={<Building className="h-4 w-4" />}
@@ -120,74 +100,58 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
             Reports
           </Button>
         </DropdownMenuTrigger>
-
         <DropdownMenuContent className="w-56">
           <DropdownMenuLabel>Select a Report</DropdownMenuLabel>
           <DropdownMenuSeparator />
-
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsOrdersAwaitingDispatchReportOpen(true)}>
               Orders Awaiting Dispatch
             </DropdownMenuItem>
           </SheetClose>
-
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDispatchedOrdersReportOpen(true)}>
               Dispatched Orders
             </DropdownMenuItem>
           </SheetClose>
-
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsSalesPersonPerformanceReportOpen(true)}>
               Sales Person Performance
             </DropdownMenuItem>
           </SheetClose>
-
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDealerReportOpen(true)}>
               Dealer Report
             </DropdownMenuItem>
           </SheetClose>
-
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsPaymentsReportOpen(true)}>
               Payments Report
             </DropdownMenuItem>
           </SheetClose>
-
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsSalesReportsDialogOpen(true)}>
               Sales Report
             </DropdownMenuItem>
           </SheetClose>
-
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDealerLedgerReportOpen(true)}>
               Dealer Ledger Report
             </DropdownMenuItem>
           </SheetClose>
-
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsOpeningBalanceReportOpen(true)}>
               Opening Balance Report
             </DropdownMenuItem>
           </SheetClose>
-
           <SheetClose asChild>
-            <DropdownMenuItem onClick={() => setIsDealerClosingBalanceReportOpen(true)}>
-              <div className="flex items-center gap-2">
-                <Scale className="h-4 w-4" /> Dealer Closing Balance
-              </div>
+            <DropdownMenuItem onClick={() => setIsDealerClosingBalanceReportOpen(true)}> {/* New menu item */}
+              <Scale className="h-4 w-4 mr-2" /> Dealer Closing Balance
             </DropdownMenuItem>
           </SheetClose>
-
           <DropdownMenuSeparator />
-
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDealerOverdueBalanceReportOpen(true)} className="text-red-600 font-semibold">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-red-600" /> Overdue Balance Report
-              </div>
+              <AlertTriangle className="h-4 w-4 mr-2 text-red-600" /> Overdue Balance Report
             </DropdownMenuItem>
           </SheetClose>
         </DropdownMenuContent>
@@ -198,7 +162,6 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         label="Company Information"
         onClick={() => setIsCompanyInfoDialogOpen(true)}
       />
-
       <NavButton
         icon={<LogOut className="h-4 w-4" />}
         label="Logout"
