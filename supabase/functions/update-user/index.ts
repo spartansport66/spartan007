@@ -25,8 +25,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const isAdminUser = user_type === 'admin';
-
     // 1. Update auth.users table
     const userUpdateData: { email?: string; password?: string; ban_and_unverify?: boolean; user_metadata?: { first_name?: string; last_name?: string; user_type?: string; is_admin?: boolean } } = {};
     if (email) userUpdateData.email = email;
@@ -41,7 +39,7 @@ serve(async (req) => {
       ...(first_name !== undefined && { first_name }),
       ...(last_name !== undefined && { last_name }),
       ...(user_type !== undefined && { user_type }),
-      ...(user_type !== undefined && { is_admin: isAdminUser }), // Set is_admin based on user_type
+      ...(user_type !== undefined && { is_admin: user_type === 'admin' }),
     };
 
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.updateUserById(
@@ -62,7 +60,7 @@ serve(async (req) => {
     if (first_name !== undefined) profileUpdateData.first_name = first_name;
     if (last_name !== undefined) profileUpdateData.last_name = last_name;
     if (user_type !== undefined) profileUpdateData.user_type = user_type;
-    if (user_type !== undefined) profileUpdateData.is_admin = isAdminUser; // Set is_admin based on user_type
+    if (user_type !== undefined) profileUpdateData.is_admin = user_type === 'admin';
     if (must_reset_password !== undefined) profileUpdateData.must_reset_password = must_reset_password; // Update must_reset_password
     profileUpdateData.updated_at = new Date().toISOString();
 

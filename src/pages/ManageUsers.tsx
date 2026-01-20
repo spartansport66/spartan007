@@ -40,7 +40,7 @@ interface UserProfile {
   email: string;
   first_name: string | null;
   last_name: string | null;
-  user_type: 'admin' | 'sales_person' | 'item_manager'; // Added 'item_manager'
+  user_type: 'admin' | 'sales_person';
   is_admin: boolean;
   raw_app_meta_data: { provider?: string; providers?: string[]; };
   banned_until: string | null;
@@ -64,7 +64,7 @@ const userFormSchema = z.object({
   lastName: z.string().optional(), // Made optional
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional().or(z.literal('')),
-  userType: z.enum(['admin', 'sales_person', 'item_manager'], { message: 'Please select a user type.' }), // Added 'item_manager'
+  userType: z.enum(['admin', 'sales_person'], { message: 'Please select a user type.' }),
   assignedDealerIds: z.array(z.string().uuid()).optional(),
 });
 
@@ -108,7 +108,6 @@ const ManageUsers = () => {
   const fetchUsersAndDealers = useCallback(async () => {
     setLoadingData(true);
     try {
-      // Fetch all profiles (including sales_person and item_manager)
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select(`
@@ -117,7 +116,8 @@ const ManageUsers = () => {
           last_name,
           user_type,
           is_admin
-        `);
+        `)
+        .eq('user_type', 'sales_person');
       
       if (profilesError) {
         console.error('ManageUsers: Error fetching profiles:', profilesError.message);
@@ -400,7 +400,7 @@ const ManageUsers = () => {
         
         <Card className="bg-card text-card-foreground shadow-lg">
           <CardHeader>
-            <CardTitle className="text-2xl font-semibold text-primary">Manage Users</CardTitle>
+            <CardTitle className="text-2xl font-semibold text-primary">Manage Sales Persons</CardTitle>
             <CardDescription className="text-muted-foreground">
               View, edit, activate/deactivate users, and manage dealer assignments and monthly targets.
             </CardDescription>
@@ -408,19 +408,17 @@ const ManageUsers = () => {
           <CardContent>
             <div className="flex justify-end mb-4">
               <Button onClick={() => setIsCreateDialogOpen(true)} className="flex items-center gap-2">
-                <PlusCircle className="h-4 w-4" /> Create New User
+                <PlusCircle className="h-4 w-4" /> Create New Sales Person
               </Button>
             </div>
             <div className="overflow-x-auto">
               {users.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No users found.</p>
+                <p className="text-center text-muted-foreground py-8">No sales persons found.</p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead className="text-muted-foreground">Name</TableHead>
-                      <TableHead className="text-muted-foreground">Email</TableHead>
-                      <TableHead className="text-muted-foreground">User Type</TableHead>
                       <TableHead className="text-muted-foreground">Status</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
@@ -431,8 +429,6 @@ const ManageUsers = () => {
                         <TableCell className="font-medium text-foreground">
                           {userItem.first_name} {userItem.last_name}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{userItem.email}</TableCell>
-                        <TableCell className="text-muted-foreground capitalize">{userItem.user_type.replace('_', ' ')}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {userItem.banned_until ? (
                             <span className="text-red-500">Inactive</span>
@@ -453,19 +449,17 @@ const ManageUsers = () => {
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            {userItem.user_type === 'sales_person' && (
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => {
-                                  setTargetUser(userItem);
-                                  setIsTargetDialogOpen(true);
-                                }}
-                                title="Manage Monthly Targets" 
-                              >
-                                <span className="text-xs font-bold">₹</span>
-                              </Button>
-                            )}
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => {
+                                setTargetUser(userItem);
+                                setIsTargetDialogOpen(true);
+                              }}
+                              title="Manage Monthly Targets" 
+                            >
+                              <span className="text-xs font-bold">₹</span>
+                            </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button 
@@ -516,9 +510,9 @@ const ManageUsers = () => {
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Create New User</DialogTitle>
+            <DialogTitle>Create New Sales Person</DialogTitle>
             <DialogDescription>
-              Fill in the details to create a new user account.
+              Fill in the details to create a new sales person account.
             </DialogDescription>
           </DialogHeader>
           <Form {...createForm}>
@@ -571,28 +565,6 @@ const ManageUsers = () => {
                     <FormControl>
                       <Input type="password" placeholder="********" {...field} />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={createForm.control}
-                name="userType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>User Type</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a user type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="sales_person">Sales Person</SelectItem>
-                        <SelectItem value="item_manager">Item Manager</SelectItem> {/* Added Item Manager */}
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -671,51 +643,27 @@ const ManageUsers = () => {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={editForm.control}
-                  name="userType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>User Type</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <div className="grid gap-4 mt-4">
+                  <h3 className="text-lg font-semibold">Manage Assigned Dealers</h3>
+                  <FormField
+                    control={editForm.control}
+                    name="assignedDealerIds"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Assigned Dealers</FormLabel>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a user type" />
-                          </SelectTrigger>
+                          <MultiSelect 
+                            options={dealerOptions} 
+                            value={field.value || []} 
+                            onChange={field.onChange} 
+                            placeholder="Select dealers to assign" 
+                          />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="sales_person">Sales Person</SelectItem>
-                          <SelectItem value="item_manager">Item Manager</SelectItem> {/* Added Item Manager */}
-                          <SelectItem value="admin">Admin</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {editForm.watch('userType') === 'sales_person' && (
-                  <div className="grid gap-4 mt-4">
-                    <h3 className="text-lg font-semibold">Manage Assigned Dealers</h3>
-                    <FormField
-                      control={editForm.control}
-                      name="assignedDealerIds"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Assigned Dealers</FormLabel>
-                          <FormControl>
-                            <MultiSelect 
-                              options={dealerOptions} 
-                              value={field.value || []} 
-                              onChange={field.onChange} 
-                              placeholder="Select dealers to assign" 
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <DialogFooter>
                   <Button type="submit" disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}

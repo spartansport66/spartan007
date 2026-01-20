@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from 'react-router-dom';
-import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale, Package } from 'lucide-react'; // Added Package icon for Product Management Console
+import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale } from 'lucide-react'; // Added Scale icon for balance
 import { cn } from '@/lib/utils';
 
 interface AdminSidebarProps {
@@ -73,9 +73,9 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         onClick={() => navigate('/combo-offers-dashboard')}
       />
       <NavButton
-        icon={<Package className="h-4 w-4" />} {/* Changed icon to Package */}
-        label="Product Management Console" {/* Changed label */}
-        onClick={() => navigate('/product-management-console')} {/* Changed route */}
+        icon={<Boxes className="h-4 w-4" />}
+        label="Manage Products"
+        onClick={() => navigate('/product-management-console')}
       />
       <NavButton
         icon={<Building className="h-4 w-4" />}
