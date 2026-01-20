@@ -116,9 +116,15 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
           orders(id, total_amount, payment_status, payment_due_date, payments(amount, status))
         `);
 
-      if (dealersError) throw dealersError;
+      if (dealersError) {
+        console.error('[DealerOverdueBalanceReportDialog] Error fetching dealers with overdue balances:', dealersError.message);
+        throw dealersError;
+      }
+      
+      console.log('[DealerOverdueBalanceReportDialog] Raw data fetched:', dealersRawData);
 
       const formattedDealers: DealerOverdueData[] = (dealersRawData || []).map(d => {
+        // Safely access opening_balance, assuming d.dealer_balances is an array of one element or null
         const openingBalance = d.dealer_balances?.[0]?.opening_balance || 0;
 
         let currentBalance = openingBalance;
@@ -188,6 +194,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
         return a.name.localeCompare(b.name);
       });
 
+      console.log('[DealerOverdueBalanceReportDialog] Filtered data count:', filtered.length); // ADDED LOG
       setDealers(filtered);
     } catch (error: any) {
       console.error('[DealerOverdueBalanceReportDialog] Error fetching dealers with overdue balances:', error.message);
