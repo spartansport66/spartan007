@@ -25,12 +25,15 @@ const Index = () => {
       if (session) {
         // Only redirect if userType has been determined (is not null)
         if (userType !== null) { 
-          if (mustResetPassword && userType === 'sales_person') {
-            console.log('Redirecting sales person to force password reset.');
+          if (mustResetPassword && (userType === 'sales_person' || userType === 'item_manager')) { // Added item_manager
+            console.log('Redirecting sales person or item manager to force password reset.');
             navigate('/force-password-reset');
           } else if (isAdmin) {
             console.log('Redirecting to admin dashboard');
             navigate('/admin-dashboard');
+          } else if (userType === 'item_manager') { // New: Redirect item_manager to their dashboard
+            console.log('Redirecting to item manager dashboard');
+            navigate('/item-manager-dashboard');
           } else {
             console.log('Redirecting to user dashboard');
             navigate('/dashboard');

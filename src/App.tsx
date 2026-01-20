@@ -18,6 +18,7 @@ import BulkAddProducts from "./pages/BulkAddProducts";
 import ComboOffersDashboard from "./pages/ComboOffersDashboard";
 import SheetConverterPage from "./pages/SheetConverterPage";
 import ForcePasswordReset from "./pages/ForcePasswordReset"; // Import the new page
+import ItemManagerDashboard from "./pages/ItemManagerDashboard"; // New: Import ItemManagerDashboard
 import { SessionContextProvider } from "./contexts/SessionContext";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/admin-dashboard" element={<AdminDashboard />} />
+            <Route path="/item-manager-dashboard" element={<ItemManagerDashboard />} /> {/* New: Item Manager Dashboard Route */}
             <Route path="/add-dealer" element={<AddDealer />} />
             <Route path="/manage-dealers" element={<ManageDealers />} />
             <Route path="/add-product" element={<AddProduct />} />

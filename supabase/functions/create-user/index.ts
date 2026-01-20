@@ -31,6 +31,10 @@ serve(async (req) => {
     const emailConfirm = true;
     const emailConfirmedAt = new Date().toISOString();
 
+    // Determine if must_reset_password should be true
+    const mustResetPassword = (user_type === 'sales_person' || user_type === 'item_manager');
+    const isAdminUser = user_type === 'admin';
+
     // --- WORKAROUND: Fetch all users and filter manually by email ---
     console.log(`[create-user] Fetching all users to manually check for email: ${email}`);
     const { data: allUsersData, error: listAllUsersError } = await supabaseAdmin.auth.admin.listUsers();
@@ -58,7 +62,7 @@ serve(async (req) => {
             first_name,
             last_name,
             user_type,
-            is_admin: user_type === 'admin',
+            is_admin: isAdminUser, // Set is_admin based on user_type
           },
         }
       );
@@ -80,8 +84,8 @@ serve(async (req) => {
             first_name,
             last_name,
             user_type,
-            is_admin: user_type === 'admin',
-            must_reset_password: (user_type === 'sales_person'),
+            is_admin: isAdminUser, // Set is_admin based on user_type
+            must_reset_password: mustResetPassword, // Set must_reset_password
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'id' }
@@ -109,6 +113,7 @@ serve(async (req) => {
           first_name,
           last_name,
           user_type,
+          is_admin: isAdminUser, // Set is_admin based on user_type
         },
       });
 
@@ -118,6 +123,18 @@ serve(async (req) => {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
+
+      // After creating the user in auth.users, the handle_new_user trigger will create the profile.
+      // We need to explicitly update must_reset_password in the profile table.
+      const { error: profileUpdateError } = await supabaseAdmin
+        .from('profiles')
+        .update({ must_reset_password: mustResetPassword })
+        .eq('id', userResponse.user?.id);
+
+      if (profileUpdateError) {
+        console.error('[create-user] Error updating must_reset_password for new user profile:', profileUpdateError.message);
+        // Log error but don't block, as user is created.
       }
 
       return new Response(JSON.stringify({ message: 'User created successfully', user: userResponse.user }), {
