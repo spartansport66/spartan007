@@ -952,6 +952,7 @@ const ManageDealers = () => {
                   <Input
                     id="openingBalance"
                     type="number"
+                    step="0.01" // Added step for decimal input
                     placeholder="e.g., 10000.00"
                     {...form.register('openingBalance')}
                     className="col-span-3"
