@@ -926,6 +926,7 @@ const ManageDealers = () => {
                   <Input
                     id="creditLimit"
                     type="number"
+                    step="0.01"
                     placeholder="e.g., 5000.00"
                     {...form.register('creditLimit')}
                     className="col-span-3"

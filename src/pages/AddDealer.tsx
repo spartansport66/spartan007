@@ -337,7 +337,7 @@ const AddDealer = () => {
                     <FormItem>
                       <FormLabel>Credit Limit</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="e.g., 5000.00" {...field} />
+                        <Input type="number" step="0.01" placeholder="e.g., 5000.00" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -365,7 +365,7 @@ const AddDealer = () => {
                     <FormItem>
                       <FormLabel>Opening Balance</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="e.g., 10000.00" {...field} />
+                        <Input type="number" step="0.01" placeholder="e.g., 10000.00" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
