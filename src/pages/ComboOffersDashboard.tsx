@@ -117,9 +117,9 @@ const ComboOffersDashboard = () => {
     }
     return 'combo_offer';
   });
-  const [balanceDuePeriodFilter, setBalanceDuePeriodFilter] = useState<'all' | '0-30' | '31-60' | '61-90' | '90_plus'>(() => {
+  const [balanceDuePeriodFilter, setBalanceDuePeriodFilter] = useState<'all' | '1_month' | '3_months' | '6_months'>(() => {
     if (typeof window !== 'undefined') {
-      return (sessionStorage.getItem('whatsapp_balanceDuePeriodFilter') as 'all' | '0-30' | '31-60' | '61-90' | '90_plus') || 'all';
+      return (sessionStorage.getItem('whatsapp_balanceDuePeriodFilter') as 'all' | '1_month' | '3_months' | '6_months') || 'all';
     }
     return 'all';
   });
@@ -330,7 +330,7 @@ const ComboOffersDashboard = () => {
           matchesBalanceDuePeriod = false; // No balance, so no match for any due period
         } else if (balanceDuePeriodFilter === 'all') {
           matchesBalanceDuePeriod = true; // Show all dealers with a positive balance
-        } else { // Time-based filters: '0-30', '31-60', '61-90', '90_plus'
+        } else { // Time-based filters: '1_month', '3_months', '6_months'
           if (!dealer.oldestDueDate) {
             matchesBalanceDuePeriod = false; // Cannot determine due period if no oldest due date
           } else {
@@ -339,22 +339,20 @@ const ComboOffersDashboard = () => {
             const oldestDue = new Date(dealer.oldestDueDate);
             oldestDue.setHours(0, 0, 0, 0); // Normalize oldestDue to start of day UTC
 
-            // If oldestDue is today or in the future, it's not "overdue" yet
-            if (oldestDue >= today) { 
+            // If oldestDue is in the future, it's not "overdue" for any period yet
+            if (oldestDue > today) {
               matchesBalanceDuePeriod = false;
             } else {
               // Calculate difference in days for past due dates
               const diffTime = Math.abs(today.getTime() - oldestDue.getTime());
               const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-              if (balanceDuePeriodFilter === '0-30') {
-                matchesBalanceDuePeriod = diffDays > 0 && diffDays <= 30;
-              } else if (balanceDuePeriodFilter === '31-60') {
-                matchesBalanceDuePeriod = diffDays >= 31 && diffDays <= 60;
-              } else if (balanceDuePeriodFilter === '61-90') {
-                matchesBalanceDuePeriod = diffDays >= 61 && diffDays <= 90;
-              } else if (balanceDuePeriodFilter === '90_plus') {
-                matchesBalanceDuePeriod = diffDays > 90;
+              if (balanceDuePeriodFilter === '1_month') {
+                matchesBalanceDuePeriod = diffDays >= 30;
+              } else if (balanceDuePeriodFilter === '3_months') {
+                matchesBalanceDuePeriod = diffDays >= 90;
+              } else if (balanceDuePeriodFilter === '6_months') {
+                matchesBalanceDuePeriod = diffDays >= 180;
               }
             }
           }
@@ -678,8 +676,9 @@ const ComboOffersDashboard = () => {
                   )}
                 </Button>
               </form>
-            </CardContent>
-          </Card>
+            </Form>
+          </CardContent>
+        </Card>
 
         {/* Card 2: WhatsApp Message Sender (now handles message type and filters) */}
         <WhatsAppMessageSender 

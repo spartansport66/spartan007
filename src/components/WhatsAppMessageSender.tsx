@@ -49,8 +49,8 @@ interface WhatsAppMessageSenderProps {
   handleClearFilters: () => void;
   messageType: 'combo_offer' | 'balance_due'; // New prop
   setMessageType: (type: 'combo_offer' | 'balance_due') => void; // New prop
-  balanceDuePeriodFilter: 'all' | '0-30' | '31-60' | '61-90' | '90_plus'; // Updated type
-  setBalanceDuePeriodFilter: (filter: 'all' | '0-30' | '31-60' | '61-90' | '90_plus') => void; // Updated type
+  balanceDuePeriodFilter: 'all' | '1_month' | '3_months' | '6_months'; // New prop
+  setBalanceDuePeriodFilter: (filter: 'all' | '1_month' | '3_months' | '6_months') => void; // New prop
 }
 
 const indianStates = [
@@ -184,20 +184,15 @@ const WhatsAppMessageSender: React.FC<WhatsAppMessageSenderProps> = ({
               {messageType === 'balance_due' && (
                 <div className="flex-1 min-w-[150px]">
                   <Label htmlFor="balanceDuePeriodFilter">Balance Due Period</Label>
-                  <Select 
-                    value={balanceDuePeriodFilter} 
-                    onValueChange={(value: 'all' | '0-30' | '31-60' | '61-90' | '90_plus') => setBalanceDuePeriodFilter(value)} 
-                    disabled={isSending}
-                  >
+                  <Select value={balanceDuePeriodFilter} onValueChange={setBalanceDuePeriodFilter} disabled={isSending}>
                     <SelectTrigger id="balanceDuePeriodFilter" className="w-full">
                       <SelectValue placeholder="Select due period" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Dealers (with balance)</SelectItem>
-                      <SelectItem value="0-30">Up to 30 Days Overdue</SelectItem>
-                      <SelectItem value="31-60">31 to 60 Days Overdue</SelectItem>
-                      <SelectItem value="61-90">61 to 90 Days Overdue</SelectItem>
-                      <SelectItem value="90_plus">More than 90 Days Overdue</SelectItem>
+                      <SelectItem value="1_month">Over 1 Month Due</SelectItem>
+                      <SelectItem value="3_months">Over 3 Months Due</SelectItem>
+                      <SelectItem value="6_months">Over 6 Months Due</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
