@@ -26,7 +26,7 @@ interface DealerOverdueData {
   currentBalance: number;
   oldestDueDate: string | null; // ISO string
   lastBillingDate: string | null; // ISO string
-  overdueMonths: number; // Calculated
+  overdueDays: number; // Calculated in days
 }
 
 interface FilterOption {
@@ -50,6 +50,32 @@ const indianStates = [
   "Delhi", "Lakshadweep", "Puducherry"
 ];
 
+const calculateOverdueDays = (oldestDueDate: string | null, lastBillingDate: string | null, currentBalance: number): number => {
+    if (currentBalance <= 0) return 0; // Not overdue if balance is zero or negative
+
+    let effectiveDate: Date | null = null;
+
+    if (oldestDueDate) {
+      effectiveDate = new Date(oldestDueDate);
+    } else if (lastBillingDate) {
+      // If no specific order due date, but there's an opening balance, use last billing date as a proxy
+      effectiveDate = new Date(lastBillingDate);
+    }
+
+    if (!effectiveDate) return 0; // Cannot determine overdue period without a date
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize today to start of day UTC
+    effectiveDate.setHours(0, 0, 0, 0); // Normalize effectiveDate to start of day UTC
+
+    if (effectiveDate >= today) return 0; // Not overdue if due date is today or in the future
+
+    const diffTime = Math.abs(today.getTime() - effectiveDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    return diffDays;
+};
+
 const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const { user } = useSession();
   const [dealers, setDealers] = useState<DealerOverdueData[]>([]);
@@ -57,7 +83,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
   const [filterDealerName, setFilterDealerName] = useState<string>('');
   const [filterCity, setFilterCity] = useState<string>('');
   const [filterState, setFilterState] = useState<string>('');
-  const [filterOverduePeriod, setFilterOverduePeriod] = useState<'all' | '1_month' | '3_months' | '6_months'>('all');
+  const [filterOverduePeriod, setFilterOverduePeriod] = useState<'all' | '0-30' | '31-60' | '61-90' | '90_plus'>('all');
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
   const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(new Set());
@@ -78,32 +104,6 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
       setCompanyName(null);
     }
   }, []);
-
-  const calculateOverdueMonths = (oldestDueDate: string | null, lastBillingDate: string | null, currentBalance: number): number => {
-    if (currentBalance <= 0) return 0; // Not overdue if balance is zero or negative
-
-    let effectiveDate: Date | null = null;
-
-    if (oldestDueDate) {
-      effectiveDate = new Date(oldestDueDate);
-    } else if (lastBillingDate) {
-      // If no specific order due date, but there's an opening balance, use last billing date as a proxy
-      effectiveDate = new Date(lastBillingDate);
-    }
-
-    if (!effectiveDate) return 0; // Cannot determine overdue period without a date
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalize to start of day UTC
-    effectiveDate.setHours(0, 0, 0, 0); // Normalize to start of day UTC
-
-    if (effectiveDate >= today) return 0; // Not overdue if due date is today or in the future
-
-    const diffTime = Math.abs(today.getTime() - effectiveDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    return Math.floor(diffDays / 30); // Approximate months
-  };
 
   const fetchDealersWithOverdueBalances = useCallback(async () => {
     setLoading(true);
@@ -151,7 +151,8 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
           oldestDueDate = d.last_billing_date;
         }
 
-        const overdueMonths = calculateOverdueMonths(oldestDueDate, d.last_billing_date, currentBalance);
+        // Use the new calculation function
+        const overdueDays = calculateOverdueDays(oldestDueDate, d.last_billing_date, currentBalance);
 
         return {
           id: d.id,
@@ -162,7 +163,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
           currentBalance: currentBalance,
           oldestDueDate: oldestDueDate,
           lastBillingDate: d.last_billing_date,
-          overdueMonths: overdueMonths,
+          overdueDays: overdueDays, // Use overdueDays
         };
       });
 
@@ -173,28 +174,32 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
         const matchesState = filterState ? dealer.state.toLowerCase().includes(filterState.toLowerCase()) : true;
 
         let matchesOverduePeriod = true;
-        if (filterOverduePeriod === '1_month') {
-          matchesOverduePeriod = dealer.overdueMonths >= 1;
-        } else if (filterOverduePeriod === '3_months') {
-          matchesOverduePeriod = dealer.overdueMonths >= 3;
-        } else if (filterOverduePeriod === '6_months') {
-          matchesOverduePeriod = dealer.overdueMonths >= 6;
-        } else if (filterOverduePeriod === 'all') {
+        const overdueDays = dealer.overdueDays;
+
+        if (filterOverduePeriod === 'all') {
           matchesOverduePeriod = dealer.currentBalance > 0; // Only show dealers with positive balance
+        } else if (filterOverduePeriod === '0-30') {
+          matchesOverduePeriod = overdueDays > 0 && overdueDays <= 30;
+        } else if (filterOverduePeriod === '31-60') {
+          matchesOverduePeriod = overdueDays >= 31 && overdueDays <= 60;
+        } else if (filterOverduePeriod === '61-90') {
+          matchesOverduePeriod = overdueDays >= 61 && overdueDays <= 90;
+        } else if (filterOverduePeriod === '90_plus') {
+          matchesOverduePeriod = overdueDays > 90;
         }
 
         return matchesName && matchesCity && matchesState && matchesOverduePeriod;
       });
 
-      // Sort by overdue months (descending) then by name
+      // Sort by overdue days (descending) then by name
       filtered.sort((a, b) => {
-        if (b.overdueMonths !== a.overdueMonths) {
-          return b.overdueMonths - a.overdueMonths;
+        if (b.overdueDays !== a.overdueDays) {
+          return b.overdueDays - a.overdueDays;
         }
         return a.name.localeCompare(b.name);
       });
 
-      console.log('[DealerOverdueBalanceReportDialog] Filtered data count:', filtered.length); // ADDED LOG
+      console.log('[DealerOverdueBalanceReportDialog] Filtered data count:', filtered.length);
       setDealers(filtered);
     } catch (error: any) {
       console.error('[DealerOverdueBalanceReportDialog] Error fetching dealers with overdue balances:', error.message);
@@ -311,7 +316,8 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
         doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
       }
 
-      const tableColumn = ["Dealer Name", "Phone", "City", "State", "Current Balance (₹)", "Oldest Due Date", "Overdue (Months)"];
+      // Updated table column and rows
+      const tableColumn = ["Dealer Name", "Phone", "City", "State", "Current Balance (₹)", "Oldest Due Date", "Overdue (Days)"];
       const tableRows = dealers.map(dealer => [
         dealer.name,
         dealer.phone || 'N/A',
@@ -319,7 +325,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
         dealer.state || 'N/A',
         dealer.currentBalance.toFixed(2),
         dealer.oldestDueDate ? new Date(dealer.oldestDueDate).toLocaleDateString() : 'N/A',
-        dealer.overdueMonths.toString(),
+        dealer.overdueDays.toString(), // Use overdueDays
       ]);
 
       const totalOverdueBalance = dealers.reduce((sum, dealer) => sum + dealer.currentBalance, 0);
@@ -426,7 +432,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
             <Label htmlFor="filterOverduePeriod">Overdue Period</Label>
             <Select 
               value={filterOverduePeriod} 
-              onValueChange={(value: string) => setFilterOverduePeriod(value as 'all' | '1_month' | '3_months' | '6_months')} 
+              onValueChange={(value: string) => setFilterOverduePeriod(value as 'all' | '0-30' | '31-60' | '61-90' | '90_plus')} 
               disabled={loading}
             >
               <SelectTrigger id="filterOverduePeriod" className="w-full">
@@ -434,9 +440,10 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Overdue Balances</SelectItem>
-                <SelectItem value="1_month">More than 1 Month Due</SelectItem>
-                <SelectItem value="3_months">More than 3 Months Due</SelectItem>
-                <SelectItem value="6_months">More than 6 Months Due</SelectItem>
+                <SelectItem value="0-30">Up to 30 Days Overdue</SelectItem>
+                <SelectItem value="31-60">31 to 60 Days Overdue</SelectItem>
+                <SelectItem value="61-90">61 to 90 Days Overdue</SelectItem>
+                <SelectItem value="90_plus">More than 90 Days Overdue</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -467,7 +474,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
                     <TableHead className="text-muted-foreground font-bold">State</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Current Balance (₹)</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Oldest Due Date</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Overdue (Months)</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-center">Overdue (Days)</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -482,7 +489,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
                       <TableCell className="text-foreground text-center">
                         {dealer.oldestDueDate ? new Date(dealer.oldestDueDate).toLocaleDateString() : 'N/A'}
                       </TableCell>
-                      <TableCell className="text-foreground text-center">{dealer.overdueMonths}</TableCell>
+                      <TableCell className="text-foreground text-center">{dealer.overdueDays}</TableCell>
                       <TableCell className="text-center">
                         <Button
                           variant="ghost"
