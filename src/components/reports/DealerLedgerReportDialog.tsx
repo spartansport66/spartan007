@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer } from 'lucide-react';
+import { Loader2, Search, Printer, MessageCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -26,6 +26,8 @@ interface LedgerEntry {
   balance: number; // Running balance
   type: 'opening_balance' | 'order' | 'payment';
   refId?: string; // Order ID or Payment ID
+  order_number?: number; // New: For WhatsApp action
+  payment_due_date?: string | null; // New: For WhatsApp action
 }
 
 interface FilterOption {
@@ -72,6 +74,8 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null); // New state for dealer phone
+  const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null); // New state for dealer name
 
   const editForm = useForm<z.infer<typeof editBalanceFormSchema>>({
     resolver: zodResolver(editBalanceFormSchema),
@@ -104,20 +108,30 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       setLoading(false);
       return;
     }
-    if (!user?.id) { // Check if user ID is available
+    if (!user?.id) {
       console.error("[DealerLedgerReportDialog] User not authenticated, cannot fetch ledger data.");
       showError("User not authenticated. Please log in again.");
       setTransactions([]);
       setLoading(false);
       return;
     }
-    console.log("[DealerLedgerReportDialog] Authenticated User ID:", user.id); // Log user ID
 
     setLoading(true);
     try {
       const dealerId = filterDealerId;
       const fromDateISO = filterFromDate ? `${filterFromDate}T00:00:00.000Z` : null;
       const toDateISO = filterToDate ? `${filterToDate}T23:59:59.999Z` : null;
+
+      // Fetch dealer details (name and phone)
+      const { data: dealerDetails, error: dealerDetailsError } = await supabase
+        .from('dealers')
+        .select('name, phone')
+        .eq('id', dealerId)
+        .single();
+
+      if (dealerDetailsError) throw dealerDetailsError;
+      setSelectedDealerPhone(dealerDetails?.phone || null);
+      setSelectedDealerName(dealerDetails?.name || null);
 
       // 1. Get initial balance (opening balance + all transactions before fromDate)
       let initialBalance = 0;
@@ -131,9 +145,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         console.error("[DealerLedgerReportDialog] Error fetching dealer_balances:", balanceError.message);
         throw balanceError;
       }
-      console.log("[DealerLedgerReportDialog] Raw dealer_balances data:", dealerBalanceData); // Add this log
       initialBalance = dealerBalanceData?.opening_balance || 0;
-      console.log("[DealerLedgerReportDialog] Initial opening_balance from DB:", dealerBalanceData?.opening_balance);
 
       // Calculate balance from orders/payments before the filterFromDate
       if (fromDateISO) {
@@ -143,56 +155,48 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           .select('total_amount')
           .eq('dealer_id', dealerId)
           .lte('order_date', fromDateISO)
-          .in('payment_status', ['pending', 'pending_approval', 'paid']); // Consider all orders as debits
+          .in('payment_status', ['pending', 'pending_approval', 'paid']);
 
         if (prevOrdersError) throw prevOrdersError;
         const prevOrdersTotal = (prevOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
-        console.log("[DealerLedgerReportDialog] Prev Orders Total before fromDate:", prevOrdersTotal);
 
         // Payments before fromDate
         const { data: prevPayments, error: prevPaymentsError } = await supabase
           .from('payments')
           .select(`
             amount,
-            orders!inner(dealer_id) // Explicit inner join
+            orders!inner(dealer_id)
           `)
-          .eq('orders.dealer_id', dealerId) // Filter directly on the joined orders table
+          .eq('orders.dealer_id', dealerId)
           .lte('payment_date', fromDateISO)
-          .eq('status', 'completed') as { data: PrevPayment[] | null; error: any }; // Cast here
+          .eq('status', 'completed') as { data: PrevPayment[] | null; error: any };
 
         if (prevPaymentsError) throw prevPaymentsError;
         const prevPaymentsTotal = (prevPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
-        console.log("[DealerLedgerReportDialog] Prev Payments Total before fromDate:", prevPaymentsTotal);
 
         initialBalance = initialBalance + prevOrdersTotal - prevPaymentsTotal;
-        console.log("[DealerLedgerReportDialog] Adjusted initialBalance for report period:", initialBalance);
-      } else {
-        console.log("[DealerLedgerReportDialog] No fromDate filter, initialBalance is raw opening_balance:", initialBalance);
       }
 
       const ledgerEntries: LedgerEntry[] = [];
-      // currentBalance is initialized with initialBalance before the loop for running balance calculation
-      // No need to re-initialize here, it's done before the final loop.
 
       // Add opening balance entry if it's the start of the report or if there's an actual opening balance
       if (!fromDateISO || initialBalance !== 0) {
         ledgerEntries.push({
-          date: filterFromDate || new Date().toISOString().split('T')[0], // Use fromDate or today if no fromDate
+          date: filterFromDate || new Date().toISOString().split('T')[0],
           description: 'Opening Balance',
           debit: 0,
           credit: 0,
-          balance: initialBalance, // Use initialBalance here
+          balance: initialBalance,
           type: 'opening_balance',
         });
-        console.log("[DealerLedgerReportDialog] Added Opening Balance entry:", ledgerEntries[ledgerEntries.length - 1]);
       }
 
       // 2. Fetch orders within the date range
       let ordersQuery = supabase
         .from('orders')
-        .select('id, order_number, order_date, total_amount, payment_status')
+        .select('id, order_number, order_date, total_amount, payment_status, payment_due_date') // Fetch payment_due_date
         .eq('dealer_id', dealerId)
-        .in('payment_status', ['pending', 'pending_approval', 'paid']); // Include all orders as debits
+        .in('payment_status', ['pending', 'pending_approval', 'paid']);
 
       if (fromDateISO) ordersQuery = ordersQuery.gte('order_date', fromDateISO);
       if (toDateISO) ordersQuery = ordersQuery.lte('order_date', toDateISO);
@@ -209,8 +213,9 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           balance: 0, // Will be calculated later
           type: 'order',
           refId: order.id,
+          order_number: order.order_number, // Store order number
+          payment_due_date: order.payment_due_date, // Store due date
         });
-        console.log("[DealerLedgerReportDialog] Added Order entry:", ledgerEntries[ledgerEntries.length - 1]);
       });
 
       // 3. Fetch payments within the date range
@@ -222,16 +227,16 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           payment_date,
           payment_method,
           transaction_id,
-          orders!inner(dealer_id, order_number) // Explicit inner join
+          orders!inner(dealer_id, order_number)
         `)
-        .eq('orders.dealer_id', dealerId) // Filter directly on the joined orders table
-        .eq('status', 'completed'); // Only completed payments are credits
+        .eq('orders.dealer_id', dealerId)
+        .eq('status', 'completed');
 
-      const { data: paymentsData, error: paymentsError } = await paymentsQuery as { data: FetchedPayment[] | null; error: any }; // Cast here
+      const { data: paymentsData, error: paymentsError } = await paymentsQuery as { data: FetchedPayment[] | null; error: any };
       if (paymentsError) throw paymentsError;
 
       (paymentsData || []).forEach(payment => {
-        const orderNumber = payment.orders?.order_number || 'N/A'; // Access order_number directly from the joined object
+        const orderNumber = payment.orders?.order_number || 'N/A';
         const transactionDetail = payment.transaction_id ? ` (Txn: ${payment.transaction_id})` : '';
         ledgerEntries.push({
           date: payment.payment_date.split('T')[0],
@@ -242,29 +247,24 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           type: 'payment',
           refId: payment.id,
         });
-        console.log("[DealerLedgerReportDialog] Added Payment entry:", ledgerEntries[ledgerEntries.length - 1]);
       });
 
       // Sort all entries by date
       ledgerEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      console.log("[DealerLedgerReportDialog] Sorted ledgerEntries:", ledgerEntries);
 
       // Calculate running balance
       const finalLedger: LedgerEntry[] = [];
-      let currentBalance = initialBalance; // Reset currentBalance to initialBalance before iterating through sorted entries
+      let currentBalance = initialBalance;
       ledgerEntries.forEach(entry => {
         if (entry.type === 'opening_balance') {
-          // The opening balance entry already has the correct initialBalance
           finalLedger.push(entry);
         } else {
           currentBalance = currentBalance + entry.debit - entry.credit;
           finalLedger.push({ ...entry, balance: currentBalance });
         }
-        console.log(`[DealerLedgerReportDialog] Processing entry: ${entry.description}, Debit: ${entry.debit}, Credit: ${entry.credit}, New Running Balance: ${currentBalance}`);
       });
 
       setTransactions(finalLedger);
-      console.log("[DealerLedgerReportDialog] Final transactions state:", finalLedger);
     } catch (error: any) {
       console.error('[DealerLedgerReportDialog] Error fetching dealer ledger data:', error.message);
       showError(`Failed to load dealer ledger: ${error.message}`);
@@ -272,7 +272,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     } finally {
       setLoading(false);
     }
-  }, [filterDealerId, filterFromDate, filterToDate, user?.id]); // Added user.id to dependencies
+  }, [filterDealerId, filterFromDate, filterToDate, user?.id]);
 
   useEffect(() => {
     if (isOpen) {
@@ -302,6 +302,24 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     setFilterToDate('');
   };
 
+  const handleSendWhatsApp = (orderNumber: number, amountDue: number, dueDate: string | null) => {
+    if (!selectedDealerPhone) {
+      showError('Dealer phone number is not available.');
+      return;
+    }
+    if (!companyName) {
+      showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
+      return;
+    }
+    const dealerName = selectedDealerName || 'Dealer';
+    const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
+    const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
+    const encodedMessage = encodeURIComponent(message);
+    // Open WhatsApp Web in a new tab
+    window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
+    showSuccess('WhatsApp message drafted. Please check the new tab.');
+  };
+
   const handlePrint = () => {
     try {
       const doc = new jsPDF({
@@ -314,10 +332,11 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       doc.setFontSize(18);
       doc.text("Dealer Ledger Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
       doc.setFontSize(10);
+      doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
 
-      const selectedDealerName = allDealers.find(d => d.value === filterDealerId)?.label || 'N/A';
-      doc.text(`Dealer: ${selectedDealerName}`, 14, 40);
+      const dealerNameForPdf = allDealers.find(d => d.value === filterDealerId)?.label || 'N/A';
+      doc.text(`Dealer: ${dealerNameForPdf}`, 14, 40);
       doc.text(`Period: ${filterFromDate || 'Start'} to ${filterToDate || 'End'}`, 14, 45);
 
       const tableColumn = ["Date", "Description", "Debit (₹)", "Credit (₹)", "Balance (₹)"];
@@ -358,7 +377,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         }
       });
 
-      doc.save(`dealer_ledger_report_${selectedDealerName.replace(/\s/g, '_')}.pdf`);
+      doc.save(`dealer_ledger_report_${dealerNameForPdf.replace(/\s/g, '_')}.pdf`);
       showSuccess('Dealer ledger report generated successfully!');
     } catch (error: any) {
       console.error('[DealerLedgerReportDialog] Error generating PDF:', error);
@@ -436,6 +455,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                     <TableHead className="text-muted-foreground font-bold text-right">Debit (₹)</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Credit (₹)</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Balance (₹)</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -446,6 +466,19 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                       <TableCell className="text-foreground text-right">{entry.debit.toFixed(2)}</TableCell>
                       <TableCell className="text-foreground text-right">{entry.credit.toFixed(2)}</TableCell>
                       <TableCell className="text-foreground text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
+                      <TableCell className="text-center">
+                        {entry.type === 'order' && entry.order_number && entry.debit > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleSendWhatsApp(entry.order_number!, entry.debit, entry.payment_due_date || null)}
+                            title="Send WhatsApp Reminder for this Order"
+                            disabled={!selectedDealerPhone}
+                          >
+                            <MessageCircle className="h-4 w-4 text-blue-500" />
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
