@@ -7,18 +7,22 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, Scale } from 'lucide-react';
+import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
 
+// IMPORTANT: Replace with the actual URL of your deployed Edge Function
+const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
+
 interface DealerClosingBalance {
   id: string; // Dealer ID
   name: string; // Dealer Name
   closing_balance: number; // Calculated field
   last_billing_date: string | null; // Now directly from dealers table
+  phone: string; // Added phone number
 }
 
 interface FilterOption {
@@ -39,6 +43,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
   const [allSalesPersons, setAllSalesPersons] = useState<FilterOption[]>([]);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(new Set());
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -86,6 +92,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           .select(`
             id,
             name,
+            phone,
             last_billing_date,
             dealer_balances(opening_balance),
             orders(total_amount, payment_status, payments(amount, status)),
@@ -98,6 +105,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           .select(`
             id,
             name,
+            phone,
             last_billing_date,
             dealer_balances(opening_balance),
             orders(total_amount, payment_status, payments(amount, status))
@@ -140,10 +148,12 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           return {
             id: d.id,
             name: d.name,
+            phone: d.phone || '',
             closing_balance: closingBalance,
             last_billing_date: d.last_billing_date,
           };
-        });
+        }).filter(d => d.closing_balance > 0); // Only show dealers with positive closing balance
+        
         setDealers(formattedDealers);
       }
     } catch (error: any) {
@@ -158,12 +168,79 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     if (isOpen) {
       fetchCompanyInfo();
       fetchClosingBalances();
+    } else {
+      // Reset sent status when dialog closes
+      setSentDealerIds(new Set());
     }
   }, [isOpen, fetchCompanyInfo, fetchClosingBalances]);
 
   const handleClearFilters = () => {
     setFilterDealerName('');
     setFilterSalesPersonId('');
+  };
+
+  const handleResetSentStatus = () => {
+    setSentDealerIds(new Set());
+    showSuccess('Sent status reset for all dealers.');
+  };
+
+  const handleSendWhatsApp = async (dealer: DealerClosingBalance) => {
+    if (!user) {
+      showError('You must be logged in to send WhatsApp messages.');
+      return;
+    }
+    if (!dealer.phone) {
+      showError(`Phone number not available for ${dealer.name}.`);
+      return;
+    }
+    if (!companyName) {
+      showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
+      return;
+    }
+
+    setIsSendingWhatsApp(true);
+    try {
+      const formattedBalance = dealer.closing_balance.toFixed(2);
+      
+      // Draft a professional message
+      const message = `Hello ${dealer.name},\n\nThis is a friendly reminder from *${companyName}* regarding your account. Your current outstanding balance is *₹${formattedBalance}*.\n\nTo ensure your account remains active and to continue placing new orders without interruption, please clear this outstanding balance promptly.\n\nThank you for your cooperation.\n\nBest regards,\n${companyName} Team`;
+
+      // 1. Log the message send attempt via Edge Function
+      const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dealerIds: [dealer.id],
+          message: message,
+          comboOfferId: null,
+          sentByUserId: user.id,
+          messageType: 'closing_balance_reminder',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to log WhatsApp message send attempt');
+      }
+
+      // 2. Open WhatsApp Web/Desktop
+      showSuccess('WhatsApp message drafted. A new tab may open, please ensure pop-ups are allowed.');
+      
+      const encodedMessage = encodeURIComponent(message);
+      const whatsappUrl = `https://web.whatsapp.com/send?phone=${dealer.phone}&text=${encodedMessage}`;
+      window.open(whatsappUrl, '_blank');
+      
+      // 3. Update local state to mark as sent
+      setSentDealerIds(prev => new Set([...prev, dealer.id]));
+    } catch (error: any) {
+      console.error('[DealerClosingBalanceReportDialog] Error sending WhatsApp message:', error);
+      showError(`Failed to send WhatsApp message: ${error.message}`);
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
   };
 
   const handlePrint = () => {
@@ -193,11 +270,12 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
       }
 
-      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Last Billing Date"];
+      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Last Billing Date", "Phone"];
       const tableRows = dealers.map(dealer => [
         dealer.name,
         dealer.closing_balance.toFixed(2),
         dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : '',
+        dealer.phone || 'N/A',
       ]);
 
       const totalClosingBalance = dealers.reduce((sum, dealer) => sum + dealer.closing_balance, 0);
@@ -209,6 +287,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           [
             { content: 'Total Closing Balance', styles: { halign: 'right', fontStyle: 'bold' }, colSpan: 2 },
             `₹${totalClosingBalance.toFixed(2)}`,
+            '',
             '',
           ]
         ],
@@ -235,9 +314,10 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         },
         margin: { top: 10, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 80 }, // Dealer Name
+          0: { cellWidth: 60 }, // Dealer Name
           1: { cellWidth: 40, halign: 'right' }, // Closing Balance
-          2: { cellWidth: 40, halign: 'center' }, // Last Billing Date
+          2: { cellWidth: 30, halign: 'center' }, // Last Billing Date
+          3: { cellWidth: 30, halign: 'center' }, // Phone
         }
       });
 
@@ -251,11 +331,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">Dealer Closing Balance Report</DialogTitle>
           <DialogDescription>
-            View the calculated closing balances for all dealers (Opening Balance + Total Sales - Total Payments).
+            View and manage dealers with outstanding closing balances (Opening Balance + Total Sales - Total Payments).
           </DialogDescription>
         </DialogHeader>
 
@@ -308,33 +388,63 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                     <TableHead className="text-muted-foreground font-bold">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Closing Balance (₹)</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Last Billing Date</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-center">Phone</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dealers.map((dealer) => (
-                    <TableRow key={dealer.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                      <TableCell className="text-right">
-                        {`₹${dealer.closing_balance.toFixed(2)}`}
-                      </TableCell>
-                      <TableCell className="text-center text-muted-foreground">
-                        {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : ''}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center gap-2">
-                          <Button variant="ghost" size="icon" disabled title="Closing balance is calculated">
-                            <Scale className="h-4 w-4 text-gray-400" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {dealers.map((dealer) => {
+                    const isDealerSent = sentDealerIds.has(dealer.id);
+                    return (
+                      <TableRow key={dealer.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
+                        <TableCell className="text-right">
+                          {`₹${dealer.closing_balance.toFixed(2)}`}
+                        </TableCell>
+                        <TableCell className="text-center text-muted-foreground">
+                          {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : ''}
+                        </TableCell>
+                        <TableCell className="text-center text-muted-foreground">
+                          {dealer.phone || 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-2">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleSendWhatsApp(dealer)}
+                              title={isDealerSent ? "Message Sent" : "Send WhatsApp Reminder"}
+                              disabled={isSendingWhatsApp || !dealer.phone || isDealerSent}
+                            >
+                              {isSendingWhatsApp && isDealerSent ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <MessageCircle className="h-4 w-4 text-blue-500" />
+                              )}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
           )}
         </div>
+
+        {sentDealerIds.size > 0 && (
+          <div className="flex justify-end mt-4">
+            <Button 
+              variant="outline" 
+              onClick={handleResetSentStatus} 
+              disabled={isSendingWhatsApp}
+              className="flex items-center gap-2"
+            >
+              <RotateCcw className="h-4 w-4" /> Enable All to Resend
+            </Button>
+          </div>
+        )}
 
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
           <Button variant="outline" onClick={handlePrint} disabled={dealers.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground">
