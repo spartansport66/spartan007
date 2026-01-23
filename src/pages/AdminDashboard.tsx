@@ -30,7 +30,6 @@ import DealerLedgerReportDialog from '@/components/reports/DealerLedgerReportDia
 import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog';
 import SalesChart from '@/components/SalesChart';
 import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog';
-import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog'; // Re-added import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -49,7 +48,7 @@ const AdminDashboard = () => {
   const [isDealerLedgerReportOpen, setIsDealerLedgerReportOpen] = useState(false);
   const [isOpeningBalanceReportOpen, setIsOpeningBalanceReportOpen] = useState(false);
   const [isDealerOverdueBalanceReportOpen, setIsDealerOverdueBalanceReportOpen] = useState(false);
-  const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false); // Re-added state
+  // Removed isDealerClosingBalanceReportOpen state
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -284,7 +283,7 @@ const AdminDashboard = () => {
               setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen}
               setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen}
               setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen}
-              setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen} // Re-added prop
+              // Removed setIsDealerClosingBalanceReportOpen prop
             />
           </SheetContent>
         </Sheet>
@@ -377,10 +376,7 @@ const AdminDashboard = () => {
         isOpen={isDealerOverdueBalanceReportOpen}
         onOpenChange={setIsDealerOverdueBalanceReportOpen}
       />
-      <DealerClosingBalanceReportDialog // Re-added component
-        isOpen={isDealerClosingBalanceReportOpen}
-        onOpenChange={setIsDealerClosingBalanceReportOpen}
-      />
+      {/* Removed DealerClosingBalanceReportDialog component */}
     </div>
   );
 };

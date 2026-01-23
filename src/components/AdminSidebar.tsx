@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from 'react-router-dom';
-import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale } from 'lucide-react'; // Added Scale icon for balance
+import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AdminSidebarProps {
@@ -20,7 +20,6 @@ interface AdminSidebarProps {
   setIsDealerLedgerReportOpen: (isOpen: boolean) => void;
   setIsOpeningBalanceReportOpen: (isOpen: boolean) => void;
   setIsDealerOverdueBalanceReportOpen: (isOpen: boolean) => void;
-  setIsDealerClosingBalanceReportOpen: (isOpen: boolean) => void; // Re-added prop
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -35,7 +34,6 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsDealerLedgerReportOpen,
   setIsOpeningBalanceReportOpen,
   setIsDealerOverdueBalanceReportOpen,
-  setIsDealerClosingBalanceReportOpen, // Re-added prop
 }) => {
   const navigate = useNavigate();
 
@@ -143,11 +141,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
               Opening Balance Report
             </DropdownMenuItem>
           </SheetClose>
-          <SheetClose asChild>
-            <DropdownMenuItem onClick={() => setIsDealerClosingBalanceReportOpen(true)}> {/* Re-added menu item */}
-              <Scale className="h-4 w-4 mr-2" /> Dealer Closing Balance
-            </DropdownMenuItem>
-          </SheetClose>
+          {/* Removed Dealer Closing Balance Report */}
           <DropdownMenuSeparator />
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDealerOverdueBalanceReportOpen(true)} className="text-red-600 font-semibold">
