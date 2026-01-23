@@ -25,6 +25,7 @@ interface DealerClosingBalance {
   closing_balance: number; // Calculated field
   last_billing_date: string | null; // Now directly from dealers table
   phone: string; // Added phone number
+  daysSinceLastBill: number | null; // New: Calculated days since last bill
 }
 
 interface FilterOption {
@@ -66,6 +67,21 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       setCompanyName(null);
     }
   }, []);
+
+  const calculateDaysSinceLastBill = (lastBillingDate: string | null): number | null => {
+    if (!lastBillingDate) return null;
+    const lastBill = new Date(lastBillingDate);
+    const today = new Date();
+    
+    // Normalize dates to midnight UTC for accurate day difference calculation
+    lastBill.setUTCHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
+
+    const diffTime = today.getTime() - lastBill.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    return diffDays > 0 ? diffDays : 0;
+  };
 
   const fetchClosingBalances = useCallback(async () => {
     setLoading(true);
@@ -148,6 +164,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
           // Calculation: Closing Balance = Opening Balance + Total Sales - Total Payments
           const closingBalance = openingBalance + totalSales - totalPayments;
+          const daysSinceLastBill = calculateDaysSinceLastBill(d.last_billing_date);
           
           return {
             id: d.id,
@@ -155,6 +172,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             phone: d.phone || '',
             closing_balance: closingBalance,
             last_billing_date: d.last_billing_date,
+            daysSinceLastBill: daysSinceLastBill,
           };
         }).filter(d => d.closing_balance > 0); // Only show dealers with positive closing balance
         
@@ -365,11 +383,12 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
       }
 
-      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Last Billing Date", "Phone"];
+      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Last Billing Date", "Days Since Last Bill", "Phone"];
       const tableRows = dealers.map(dealer => [
         dealer.name,
         dealer.closing_balance.toFixed(2),
-        dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : '',
+        dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A',
+        dealer.daysSinceLastBill !== null ? dealer.daysSinceLastBill.toString() : 'N/A',
         dealer.phone || 'N/A',
       ]);
 
@@ -382,6 +401,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           [
             { content: 'Total Closing Balance', styles: { halign: 'right', fontStyle: 'bold' }, colSpan: 2 },
             `₹${totalClosingBalance.toFixed(2)}`,
+            '',
             '',
             '',
           ]
@@ -409,10 +429,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         },
         margin: { top: 10, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 60 }, // Dealer Name
-          1: { cellWidth: 40, halign: 'right' }, // Closing Balance
+          0: { cellWidth: 50 }, // Dealer Name
+          1: { cellWidth: 30, halign: 'right' }, // Closing Balance
           2: { cellWidth: 30, halign: 'center' }, // Last Billing Date
-          3: { cellWidth: 30, halign: 'center' }, // Phone
+          3: { cellWidth: 30, halign: 'center' }, // Days Since Last Bill
+          4: { cellWidth: 30, halign: 'center' }, // Phone
         }
       });
 
@@ -495,6 +516,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                     <TableHead className="text-muted-foreground font-bold">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Closing Balance (₹)</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Last Billing Date</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-center">Days Since Last Bill</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Phone</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Actions</TableHead>
                   </TableRow>
@@ -519,7 +541,10 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                           {`₹${dealer.closing_balance.toFixed(2)}`}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
-                          {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : ''}
+                          {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center text-muted-foreground">
+                          {dealer.daysSinceLastBill !== null ? dealer.daysSinceLastBill : 'N/A'}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
                           {dealer.phone || 'N/A'}
