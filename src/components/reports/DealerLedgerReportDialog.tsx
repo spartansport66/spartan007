@@ -106,6 +106,8 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     if (!filterDealerId) {
       console.log("[DealerLedgerReportDialog] No dealer selected, clearing transactions.");
       setTransactions([]);
+      setSelectedDealerPhone(null);
+      setSelectedDealerName(null);
       setLoading(false);
       return;
     }
@@ -304,7 +306,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     setFilterToDate('');
   };
 
-  const handleSendWhatsApp = (orderNumber: number, amountDue: number, dueDate: string | null) => {
+  const handleSendOrderWhatsApp = (orderNumber: number, amountDue: number, dueDate: string | null) => {
     if (!selectedDealerPhone) {
       showError('Dealer phone number is not available.');
       return;
@@ -320,6 +322,31 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     // Open WhatsApp Web in a new tab
     window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
     showSuccess('WhatsApp message drafted. Please check the new tab.');
+  };
+
+  const handleSendBalanceWhatsApp = (balance: number) => {
+    if (!selectedDealerPhone) {
+      showError('Dealer phone number is not available.');
+      return;
+    }
+    if (!companyName) {
+      showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
+      return;
+    }
+    if (balance <= 0) {
+      showError('Current balance is zero or negative. No reminder needed.');
+      return;
+    }
+
+    const dealerName = selectedDealerName || 'Dealer';
+    const formattedBalance = balance.toFixed(2);
+    
+    const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that your current outstanding balance is *₹${formattedBalance}*. Please clear your balance as soon as possible.\n\nThank you!`;
+    const encodedMessage = encodeURIComponent(message);
+    
+    // Open WhatsApp Web in a new tab
+    window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
+    showSuccess('WhatsApp balance reminder drafted. Please check the new tab.');
   };
 
   const handlePrint = () => {
@@ -462,11 +489,12 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                 </TableHeader>
                 <TableBody>
                   {transactions.map((entry, index) => {
-                    // Condition to enable the WhatsApp button:
-                    // 1. It must be an 'order' entry (debit).
-                    // 2. The order's payment status must be 'pending' or 'pending_approval'.
+                    // Condition to enable the WhatsApp button for pending orders
                     const isPendingOrder = entry.type === 'order' && 
                                            (entry.payment_status === 'pending' || entry.payment_status === 'pending_approval');
+
+                    // Condition to enable the general balance reminder button
+                    const isBalancePositive = entry.balance > 0;
 
                     return (
                       <TableRow key={index} className="hover:bg-accent/50">
@@ -476,17 +504,32 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                         <TableCell className="text-foreground text-right">{entry.credit.toFixed(2)}</TableCell>
                         <TableCell className="text-foreground text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
                         <TableCell className="text-center">
-                          {isPendingOrder && entry.order_number && entry.debit > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleSendWhatsApp(entry.order_number!, entry.debit, entry.payment_due_date || null)}
-                              title="Send WhatsApp Reminder for this Pending Order"
-                              disabled={!selectedDealerPhone}
-                            >
-                              <MessageCircle className="h-4 w-4 text-blue-500" />
-                            </Button>
-                          )}
+                          <div className="flex justify-center gap-2">
+                            {/* 1. Specific Pending Order Reminder */}
+                            {isPendingOrder && entry.order_number && entry.debit > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleSendOrderWhatsApp(entry.order_number!, entry.debit, entry.payment_due_date || null)}
+                                title="Send WhatsApp Reminder for this Pending Order"
+                                disabled={!selectedDealerPhone}
+                              >
+                                <MessageCircle className="h-4 w-4 text-blue-500" />
+                              </Button>
+                            )}
+                            {/* 2. General Balance Reminder (if balance is positive) */}
+                            {isBalancePositive && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleSendBalanceWhatsApp(entry.balance)}
+                                title="Send WhatsApp Reminder for Current Balance"
+                                disabled={!selectedDealerPhone}
+                              >
+                                <MessageCircle className="h-4 w-4 text-green-500" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
