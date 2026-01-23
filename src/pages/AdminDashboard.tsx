@@ -30,6 +30,7 @@ import DealerLedgerReportDialog from '@/components/reports/DealerLedgerReportDia
 import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog';
 import SalesChart from '@/components/SalesChart';
 import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog';
+import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -48,7 +49,7 @@ const AdminDashboard = () => {
   const [isDealerLedgerReportOpen, setIsDealerLedgerReportOpen] = useState(false);
   const [isOpeningBalanceReportOpen, setIsOpeningBalanceReportOpen] = useState(false);
   const [isDealerOverdueBalanceReportOpen, setIsDealerOverdueBalanceReportOpen] = useState(false);
-  // Removed isDealerClosingBalanceReportOpen state
+  const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false); // New state
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -283,7 +284,7 @@ const AdminDashboard = () => {
               setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen}
               setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen}
               setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen}
-              // Removed setIsDealerClosingBalanceReportOpen prop
+              setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen}
             />
           </SheetContent>
         </Sheet>
@@ -376,7 +377,10 @@ const AdminDashboard = () => {
         isOpen={isDealerOverdueBalanceReportOpen}
         onOpenChange={setIsDealerOverdueBalanceReportOpen}
       />
-      {/* Removed DealerClosingBalanceReportDialog component */}
+      <DealerClosingBalanceReportDialog
+        isOpen={isDealerClosingBalanceReportOpen}
+        onOpenChange={setIsDealerClosingBalanceReportOpen}
+      />
     </div>
   );
 };

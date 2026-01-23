@@ -20,6 +20,7 @@ interface AdminSidebarProps {
   setIsDealerLedgerReportOpen: (isOpen: boolean) => void;
   setIsOpeningBalanceReportOpen: (isOpen: boolean) => void;
   setIsDealerOverdueBalanceReportOpen: (isOpen: boolean) => void;
+  setIsDealerClosingBalanceReportOpen: (isOpen: boolean) => void;
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -34,6 +35,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsDealerLedgerReportOpen,
   setIsOpeningBalanceReportOpen,
   setIsDealerOverdueBalanceReportOpen,
+  setIsDealerClosingBalanceReportOpen,
 }) => {
   const navigate = useNavigate();
 
@@ -141,7 +143,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
               Opening Balance Report
             </DropdownMenuItem>
           </SheetClose>
-          {/* Removed Dealer Closing Balance Report */}
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsDealerClosingBalanceReportOpen(true)}>
+              Closing Balance Report
+            </DropdownMenuItem>
+          </SheetClose>
           <DropdownMenuSeparator />
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDealerOverdueBalanceReportOpen(true)} className="text-red-600 font-semibold">
