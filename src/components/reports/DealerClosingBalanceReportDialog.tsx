@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer } from 'lucide-react';
+import { Loader2, Search, Printer, Scale } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -123,6 +123,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           .map((dsp: any) => `${dsp.profiles.first_name} ${dsp.profiles.last_name || ''}`.trim())
           .join(', ') || 'N/A';
 
+        // dealer.dealer_balances is an array of one element or null/undefined
         const openingBalance = dealer.dealer_balances?.[0]?.opening_balance || 0;
 
         let totalDebits = 0;
@@ -282,7 +283,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">Dealer Closing Balance Report</DialogTitle>
           <DialogDescription>
-            Generate a report showing the closing balance for all dealers.
+            Generate a report showing the closing balance for all dealers. (Opening Balance + Total Sales - Total Payments Received)
           </DialogDescription>
         </DialogHeader>
 

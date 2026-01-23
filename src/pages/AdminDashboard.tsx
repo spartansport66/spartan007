@@ -30,7 +30,7 @@ import DealerLedgerReportDialog from '@/components/reports/DealerLedgerReportDia
 import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog';
 import SalesChart from '@/components/SalesChart';
 import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog';
-import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog'; // New import
+import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog'; // Re-added import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -49,7 +49,7 @@ const AdminDashboard = () => {
   const [isDealerLedgerReportOpen, setIsDealerLedgerReportOpen] = useState(false);
   const [isOpeningBalanceReportOpen, setIsOpeningBalanceReportOpen] = useState(false);
   const [isDealerOverdueBalanceReportOpen, setIsDealerOverdueBalanceReportOpen] = useState(false);
-  const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false); // New state for Closing Balance Report
+  const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false); // Re-added state
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -156,7 +156,7 @@ const AdminDashboard = () => {
       if (!user) {
         navigate('/login');
       } else if (userType !== 'admin') {
-        showError('Access Denied: You must be an administrator to view this page.');
+        showError('Access Denied: Only administrators can view this page.');
         navigate('/dashboard');
       } else {
         fetchDashboardData();
@@ -284,7 +284,7 @@ const AdminDashboard = () => {
               setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen}
               setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen}
               setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen}
-              setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen} // Pass new prop
+              setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen} // Re-added prop
             />
           </SheetContent>
         </Sheet>
@@ -377,7 +377,7 @@ const AdminDashboard = () => {
         isOpen={isDealerOverdueBalanceReportOpen}
         onOpenChange={setIsDealerOverdueBalanceReportOpen}
       />
-      <DealerClosingBalanceReportDialog // New dialog component
+      <DealerClosingBalanceReportDialog // Re-added component
         isOpen={isDealerClosingBalanceReportOpen}
         onOpenChange={setIsDealerClosingBalanceReportOpen}
       />
