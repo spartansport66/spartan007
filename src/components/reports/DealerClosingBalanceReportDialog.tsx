@@ -17,7 +17,7 @@ import { useSession } from '@/contexts/SessionContext';
 interface DealerClosingBalance {
   id: string; // Dealer ID
   name: string; // Dealer Name
-  closing_balance: number;
+  closing_balance: number; // Calculated field
   last_billing_date: string | null; // Now directly from dealers table
 }
 
@@ -60,7 +60,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const fetchClosingBalances = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch all sales persons first to populate the filter dropdown
+      // 1. Fetch all sales persons first to populate the filter dropdown
       const { data: salesPersonsData, error: salesPersonsError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name')
@@ -78,6 +78,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         })));
       }
 
+      // 2. Fetch all dealer data needed for calculation
       let query;
       if (filterSalesPersonId) {
         query = supabase
@@ -86,7 +87,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             id,
             name,
             last_billing_date,
-            dealer_balances(closing_balance),
+            dealer_balances(opening_balance),
+            orders(total_amount, payment_status, payments(amount, status)),
             dealer_sales_persons!inner(sales_person_id)
           `)
           .eq('dealer_sales_persons.sales_person_id', filterSalesPersonId);
@@ -97,7 +99,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             id,
             name,
             last_billing_date,
-            dealer_balances(closing_balance)
+            dealer_balances(opening_balance),
+            orders(total_amount, payment_status, payments(amount, status))
           `);
       }
 
@@ -109,12 +112,30 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
       const { data, error } = await query;
       if (error) {
-        console.error('[DealerClosingBalanceReportDialog] Error fetching dealer closing balances:', error.message);
-        showError('Failed to load dealer closing balances.');
+        console.error('[DealerClosingBalanceReportDialog] Error fetching dealer data:', error.message);
+        showError('Failed to load dealer data.');
         setDealers([]);
       } else {
         const formattedDealers: DealerClosingBalance[] = (data || []).map((d: any) => {
-          const closingBalance = d.dealer_balances?.closing_balance || 0;
+          const openingBalance = d.dealer_balances?.opening_balance || 0;
+          
+          let totalSales = 0;
+          let totalPayments = 0;
+
+          (d.orders || []).forEach((order: any) => {
+            // All orders are debits (increase amount owed)
+            totalSales += order.total_amount;
+
+            // Iterate through payments associated with this order
+            (order.payments || []).forEach((payment: any) => {
+              if (payment.status === 'completed') {
+                totalPayments += payment.amount;
+              }
+            });
+          });
+
+          // Calculation: Closing Balance = Opening Balance + Total Sales - Total Payments
+          const closingBalance = openingBalance + totalSales - totalPayments;
           
           return {
             id: d.id,
@@ -234,7 +255,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">Dealer Closing Balance Report</DialogTitle>
           <DialogDescription>
-            View the closing balances for all dealers.
+            View the calculated closing balances for all dealers (Opening Balance + Total Sales - Total Payments).
           </DialogDescription>
         </DialogHeader>
 
