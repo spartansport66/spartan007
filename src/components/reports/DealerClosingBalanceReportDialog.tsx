@@ -14,6 +14,7 @@ import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
 import { Checkbox } from '@/components/ui/checkbox';
+import RCSBulkMessageSender from '@/components/RCSBulkMessageSender'; // Import the new component
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -46,7 +47,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
   const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(new Set());
-  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]); // New state for bulk selection
+  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]); // State for bulk selection
+  const [isRCSBulkSenderOpen, setIsRCSBulkSenderOpen] = useState(false); // New state for RCS dialog
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -195,7 +197,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedDealerIds(dealers.map(d => d.id));
+      // Only select dealers who have a phone number and haven't been sent a message yet
+      const selectableIds = dealers
+        .filter(d => d.phone && !sentDealerIds.has(d.id))
+        .map(d => d.id);
+      setSelectedDealerIds(selectableIds);
     } else {
       setSelectedDealerIds([]);
     }
@@ -419,6 +425,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   };
 
   const allDealersSelected = selectedDealerIds.length === dealers.length && dealers.length > 0;
+  
+  const selectedDealersForRCS = dealers.filter(d => selectedDealerIds.includes(d.id));
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -552,6 +560,15 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             {isSendingWhatsApp ? <Loader2 className="h-4 w-4 animate-spin" /> : `Send Bulk WhatsApp (${selectedDealerIds.length})`}
           </Button>
           
+          <Button
+            onClick={() => setIsRCSBulkSenderOpen(true)}
+            disabled={selectedDealerIds.length === 0}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700"
+          >
+            <MessageCircle className="h-4 w-4" /> 
+            Send Bulk RCS (Mock)
+          </Button>
+
           {sentDealerIds.size > 0 && (
             <Button 
               variant="outline" 
@@ -571,6 +588,13 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
         </DialogFooter>
       </DialogContent>
+      
+      <RCSBulkMessageSender
+        isOpen={isRCSBulkSenderOpen}
+        onOpenChange={setIsRCSBulkSenderOpen}
+        selectedDealers={selectedDealersForRCS}
+        companyName={companyName}
+      />
     </Dialog>
   );
 };
