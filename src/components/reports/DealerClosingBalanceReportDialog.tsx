@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send } from 'lucide-react';
+import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -15,6 +15,7 @@ import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
 import { Checkbox } from '@/components/ui/checkbox';
 import RCSBulkMessageSender from '@/components/RCSBulkMessageSender'; // Import the new component
+import { cn } from '@/lib/utils';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -50,6 +51,10 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(new Set());
   const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]); // State for bulk selection
   const [isRCSBulkSenderOpen, setIsRCSBulkSenderOpen] = useState(false); // New state for RCS dialog
+  
+  // Sorting states
+  const [sortKey, setSortKey] = useState<'name' | 'closing_balance' | 'daysSinceLastBill'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -356,6 +361,39 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     }
   };
 
+  const handleSort = (key: 'name' | 'closing_balance' | 'daysSinceLastBill') => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedDealers = React.useMemo(() => {
+    if (dealers.length === 0) return [];
+
+    const sorted = [...dealers].sort((a, b) => {
+      let comparison = 0;
+
+      if (sortKey === 'name') {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortKey === 'closing_balance') {
+        comparison = a.closing_balance - b.closing_balance;
+      } else if (sortKey === 'daysSinceLastBill') {
+        // Handle nulls: nulls should go to the end regardless of direction
+        const valA = a.daysSinceLastBill === null ? (sortDirection === 'asc' ? Infinity : -Infinity) : a.daysSinceLastBill;
+        const valB = b.daysSinceLastBill === null ? (sortDirection === 'asc' ? Infinity : -Infinity) : b.daysSinceLastBill;
+        
+        comparison = valA - valB;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return sorted;
+  }, [dealers, sortKey, sortDirection]);
+
   const handlePrint = () => {
     try {
       const doc = new jsPDF({
@@ -384,7 +422,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       }
 
       const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Last Billing Date", "Days Since Last Bill", "Phone"];
-      const tableRows = dealers.map(dealer => [
+      const tableRows = sortedDealers.map(dealer => [
         dealer.name,
         dealer.closing_balance.toFixed(2),
         dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A',
@@ -392,7 +430,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         dealer.phone || 'N/A',
       ]);
 
-      const totalClosingBalance = dealers.reduce((sum, dealer) => sum + dealer.closing_balance, 0);
+      const totalClosingBalance = sortedDealers.reduce((sum, dealer) => sum + dealer.closing_balance, 0);
 
       autoTable(doc, {
         head: [tableColumn],
@@ -513,16 +551,52 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                         disabled={isSendingWhatsApp}
                       />
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-bold">Dealer Name</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-right">Closing Balance (₹)</TableHead>
+                    <TableHead 
+                      className="text-muted-foreground font-bold cursor-pointer hover:bg-muted/70"
+                      onClick={() => handleSort('name')}
+                    >
+                      <div className="flex items-center justify-between">
+                        Dealer Name
+                        {sortKey === 'name' ? (
+                          sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
+                        ) : (
+                          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
+                        )}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="text-muted-foreground font-bold text-right cursor-pointer hover:bg-muted/70"
+                      onClick={() => handleSort('closing_balance')}
+                    >
+                      <div className="flex items-center justify-end">
+                        Closing Balance (₹)
+                        {sortKey === 'closing_balance' ? (
+                          sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
+                        ) : (
+                          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
+                        )}
+                      </div>
+                    </TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Last Billing Date</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Days Since Last Bill</TableHead>
+                    <TableHead 
+                      className="text-muted-foreground font-bold text-center cursor-pointer hover:bg-muted/70"
+                      onClick={() => handleSort('daysSinceLastBill')}
+                    >
+                      <div className="flex items-center justify-center">
+                        Days Since Last Bill
+                        {sortKey === 'daysSinceLastBill' ? (
+                          sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
+                        ) : (
+                          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
+                        )}
+                      </div>
+                    </TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Phone</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dealers.map((dealer) => {
+                  {sortedDealers.map((dealer) => {
                     const isDealerSent = sentDealerIds.has(dealer.id);
                     const isDealerSelected = selectedDealerIds.includes(dealer.id);
                     const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
