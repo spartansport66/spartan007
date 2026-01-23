@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send } from 'lucide-react';
+import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -15,6 +15,7 @@ import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
 import { Checkbox } from '@/components/ui/checkbox';
 import RCSBulkMessageSender from '@/components/RCSBulkMessageSender'; // Import the new component
+import { cn } from '@/lib/utils';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -50,6 +51,10 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(new Set());
   const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]); // State for bulk selection
   const [isRCSBulkSenderOpen, setIsRCSBulkSenderOpen] = useState(false); // New state for RCS dialog
+  
+  // Sorting states
+  const [sortColumn, setSortColumn] = useState<'name' | 'closing_balance' | 'daysSinceLastBill'>('closing_balance');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -176,7 +181,25 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           };
         }).filter(d => d.closing_balance > 0); // Only show dealers with positive closing balance
         
-        setDealers(formattedDealers);
+        // Apply sorting
+        filteredDealers.sort((a, b) => {
+            let comparison = 0;
+            
+            if (sortColumn === 'name') {
+                comparison = a.name.localeCompare(b.name);
+            } else if (sortColumn === 'closing_balance') {
+                comparison = a.closing_balance - b.closing_balance;
+            } else if (sortColumn === 'daysSinceLastBill') {
+                // Treat null/N/A (no last billing date) as -1 for sorting purposes (lowest priority)
+                const daysA = a.daysSinceLastBill === null ? -1 : a.daysSinceLastBill; 
+                const daysB = b.daysSinceLastBill === null ? -1 : b.daysSinceLastBill;
+                comparison = daysA - daysB;
+            }
+
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+
+        setDealers(filteredDealers);
       }
     } catch (error: any) {
       console.error('Error in fetchClosingBalances:', error.message);
@@ -184,7 +207,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     } finally {
       setLoading(false);
     }
-  }, [filterDealerName, filterSalesPersonId]);
+  }, [filterDealerName, filterSalesPersonId, sortColumn, sortDirection]);
 
   useEffect(() => {
     if (isOpen) {
@@ -449,6 +472,32 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   
   const selectedDealersForRCS = dealers.filter(d => selectedDealerIds.includes(d.id));
 
+  const handleSort = (column: typeof sortColumn) => {
+    if (sortColumn === column) {
+        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+        setSortColumn(column);
+        setSortDirection('desc'); // Default to descending for new column
+    }
+  };
+
+  const SortableTableHead: React.FC<{ column: typeof sortColumn; label: string; className?: string }> = ({ column, label, className }) => (
+    <TableHead 
+        className={cn(
+            "text-muted-foreground font-bold cursor-pointer hover:bg-muted/70 transition-colors",
+            className
+        )}
+        onClick={() => handleSort(column)}
+    >
+        <div className={cn("flex items-center gap-1", (column === 'closing_balance' || column === 'daysSinceLastBill') ? 'justify-end' : 'justify-start')}>
+            {label}
+            {sortColumn === column && (
+                sortDirection === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />
+            )}
+        </div>
+    </TableHead>
+  );
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
@@ -513,10 +562,10 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                         disabled={isSendingWhatsApp}
                       />
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-bold">Dealer Name</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-right">Closing Balance (₹)</TableHead>
+                    <SortableTableHead column="name" label="Dealer Name" className="text-left" />
+                    <SortableTableHead column="closing_balance" label="Closing Balance (₹)" className="text-right" />
                     <TableHead className="text-muted-foreground font-bold text-center">Last Billing Date</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Days Since Last Bill</TableHead>
+                    <SortableTableHead column="daysSinceLastBill" label="Days Since Last Bill" className="text-center" />
                     <TableHead className="text-muted-foreground font-bold text-center">Phone</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Actions</TableHead>
                   </TableRow>
