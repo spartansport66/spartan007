@@ -7,12 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw } from 'lucide-react';
+import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
+import { Checkbox } from '@/components/ui/checkbox';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -45,6 +46,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
   const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(new Set());
+  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]); // New state for bulk selection
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -169,8 +171,9 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       fetchCompanyInfo();
       fetchClosingBalances();
     } else {
-      // Reset sent status when dialog closes
+      // Reset sent status and selection when dialog closes
       setSentDealerIds(new Set());
+      setSelectedDealerIds([]);
     }
   }, [isOpen, fetchCompanyInfo, fetchClosingBalances]);
 
@@ -182,6 +185,20 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const handleResetSentStatus = () => {
     setSentDealerIds(new Set());
     showSuccess('Sent status reset for all dealers.');
+  };
+
+  const handleSelectDealer = (dealerId: string, checked: boolean) => {
+    setSelectedDealerIds(prev => 
+      checked ? [...prev, dealerId] : prev.filter(id => id !== dealerId)
+    );
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedDealerIds(dealers.map(d => d.id));
+    } else {
+      setSelectedDealerIds([]);
+    }
   };
 
   const handleSendWhatsApp = async (dealer: DealerClosingBalance) => {
@@ -227,7 +244,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       }
 
       // 2. Open WhatsApp Web/Desktop
-      showSuccess('WhatsApp message drafted. A new tab may open, please ensure pop-ups are allowed.');
+      showSuccess(`WhatsApp message drafted for ${dealer.name}. Please check the new tab.`);
       
       const encodedMessage = encodeURIComponent(message);
       const whatsappUrl = `https://web.whatsapp.com/send?phone=${dealer.phone}&text=${encodedMessage}`;
@@ -238,6 +255,78 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     } catch (error: any) {
       console.error('[DealerClosingBalanceReportDialog] Error sending WhatsApp message:', error);
       showError(`Failed to send WhatsApp message: ${error.message}`);
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
+  };
+
+  const handleBulkSendWhatsApp = async () => {
+    if (selectedDealerIds.length === 0) {
+      showError('Please select at least one dealer to send messages.');
+      return;
+    }
+    if (!user) {
+      showError('You must be logged in to send WhatsApp messages.');
+      return;
+    }
+    if (!companyName) {
+      showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
+      return;
+    }
+
+    setIsSendingWhatsApp(true);
+    const dealersToSend = dealers.filter(d => selectedDealerIds.includes(d.id) && d.phone && !sentDealerIds.has(d.id));
+    
+    if (dealersToSend.length === 0) {
+      showError('No un-sent dealers with valid phone numbers selected.');
+      setIsSendingWhatsApp(false);
+      return;
+    }
+
+    try {
+      const dealerIdsToLog = dealersToSend.map(d => d.id);
+      
+      // 1. Log the bulk message send attempt via Edge Function
+      const genericMessage = `Bulk reminder from ${companyName}. Please check your outstanding balance.`;
+      const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dealerIds: dealerIdsToLog,
+          message: genericMessage, // Log a generic message for the bulk action
+          comboOfferId: null,
+          sentByUserId: user.id,
+          messageType: 'closing_balance_reminder_bulk',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to log bulk WhatsApp message send attempt');
+      }
+
+      // 2. Open individual WhatsApp tabs for each selected dealer
+      let successfulSends = 0;
+      for (const dealer of dealersToSend) {
+        const formattedBalance = dealer.closing_balance.toFixed(2);
+        const message = `Hello ${dealer.name},\n\nThis is a friendly reminder from *${companyName}* regarding your account. Your current outstanding balance is *₹${formattedBalance}*.\n\nTo ensure your account remains active and to continue placing new orders without interruption, please clear this outstanding balance promptly.\n\nThank you for your cooperation.\n\nBest regards,\n${companyName} Team`;
+        
+        const encodedMessage = encodeURIComponent(message);
+        const whatsappUrl = `https://web.whatsapp.com/send?phone=${dealer.phone}&text=${encodedMessage}`;
+        window.open(whatsappUrl, '_blank');
+        
+        setSentDealerIds(prev => new Set([...prev, dealer.id]));
+        successfulSends++;
+      }
+
+      showSuccess(`Drafted ${successfulSends} WhatsApp messages. Please check the new tabs.`);
+      setSelectedDealerIds([]); // Clear selection after bulk send attempt
+    } catch (error: any) {
+      console.error('[DealerClosingBalanceReportDialog] Error during bulk WhatsApp send:', error);
+      showError(`Failed to send bulk WhatsApp messages: ${error.message}`);
     } finally {
       setIsSendingWhatsApp(false);
     }
@@ -329,6 +418,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     }
   };
 
+  const allDealersSelected = selectedDealerIds.length === dealers.length && dealers.length > 0;
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
@@ -385,6 +476,14 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
               <Table>
                 <TableHeader className="sticky top-0 bg-muted">
                   <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="w-10 text-muted-foreground font-bold">
+                      <Checkbox
+                        checked={allDealersSelected}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all dealers"
+                        disabled={isSendingWhatsApp}
+                      />
+                    </TableHead>
                     <TableHead className="text-muted-foreground font-bold">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Closing Balance (₹)</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Last Billing Date</TableHead>
@@ -395,8 +494,18 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                 <TableBody>
                   {dealers.map((dealer) => {
                     const isDealerSent = sentDealerIds.has(dealer.id);
+                    const isDealerSelected = selectedDealerIds.includes(dealer.id);
+                    const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
+
                     return (
                       <TableRow key={dealer.id} className="hover:bg-accent/50">
+                        <TableCell>
+                          <Checkbox
+                            checked={isDealerSelected}
+                            onCheckedChange={(checked) => handleSelectDealer(dealer.id, !!checked)}
+                            disabled={isSendingWhatsApp}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
                         <TableCell className="text-right">
                           {`₹${dealer.closing_balance.toFixed(2)}`}
@@ -414,7 +523,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                               size="icon" 
                               onClick={() => handleSendWhatsApp(dealer)}
                               title={isDealerSent ? "Message Sent" : "Send WhatsApp Reminder"}
-                              disabled={isSendingWhatsApp || !dealer.phone || isDealerSent}
+                              disabled={!canSend}
                             >
                               {isSendingWhatsApp && isDealerSent ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -433,8 +542,17 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           )}
         </div>
 
-        {sentDealerIds.size > 0 && (
-          <div className="flex justify-end mt-4">
+        <div className="flex justify-between items-center mt-4">
+          <Button
+            onClick={handleBulkSendWhatsApp}
+            disabled={isSendingWhatsApp || selectedDealerIds.length === 0}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+          >
+            <Send className="h-4 w-4" /> 
+            {isSendingWhatsApp ? <Loader2 className="h-4 w-4 animate-spin" /> : `Send Bulk WhatsApp (${selectedDealerIds.length})`}
+          </Button>
+          
+          {sentDealerIds.size > 0 && (
             <Button 
               variant="outline" 
               onClick={handleResetSentStatus} 
@@ -443,8 +561,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             >
               <RotateCcw className="h-4 w-4" /> Enable All to Resend
             </Button>
-          </div>
-        )}
+          )}
+        </div>
 
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
           <Button variant="outline" onClick={handlePrint} disabled={dealers.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground">
