@@ -28,6 +28,7 @@ interface LedgerEntry {
   refId?: string; // Order ID or Payment ID
   order_number?: number; // New: For WhatsApp action
   payment_due_date?: string | null; // New: For WhatsApp action
+  payment_status?: string; // New: To check if payment is still pending
 }
 
 interface FilterOption {
@@ -194,7 +195,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       // 2. Fetch orders within the date range
       let ordersQuery = supabase
         .from('orders')
-        .select('id, order_number, order_date, total_amount, payment_status, payment_due_date') // Fetch payment_due_date
+        .select('id, order_number, order_date, total_amount, payment_status, payment_due_date') // Fetch payment_status
         .eq('dealer_id', dealerId)
         .in('payment_status', ['pending', 'pending_approval', 'paid']);
 
@@ -215,6 +216,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           refId: order.id,
           order_number: order.order_number, // Store order number
           payment_due_date: order.payment_due_date, // Store due date
+          payment_status: order.payment_status, // Store payment status
         });
       });
 
@@ -459,28 +461,36 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((entry, index) => (
-                    <TableRow key={index} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{entry.date}</TableCell>
-                      <TableCell className="text-foreground">{entry.description}</TableCell>
-                      <TableCell className="text-foreground text-right">{entry.debit.toFixed(2)}</TableCell>
-                      <TableCell className="text-foreground text-right">{entry.credit.toFixed(2)}</TableCell>
-                      <TableCell className="text-foreground text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
-                      <TableCell className="text-center">
-                        {entry.type === 'order' && entry.order_number && entry.debit > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleSendWhatsApp(entry.order_number!, entry.debit, entry.payment_due_date || null)}
-                            title="Send WhatsApp Reminder for this Order"
-                            disabled={!selectedDealerPhone}
-                          >
-                            <MessageCircle className="h-4 w-4 text-blue-500" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {transactions.map((entry, index) => {
+                    // Condition to enable the WhatsApp button:
+                    // 1. It must be an 'order' entry (debit).
+                    // 2. The order's payment status must be 'pending' or 'pending_approval'.
+                    const isPendingOrder = entry.type === 'order' && 
+                                           (entry.payment_status === 'pending' || entry.payment_status === 'pending_approval');
+
+                    return (
+                      <TableRow key={index} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{entry.date}</TableCell>
+                        <TableCell className="text-foreground">{entry.description}</TableCell>
+                        <TableCell className="text-foreground text-right">{entry.debit.toFixed(2)}</TableCell>
+                        <TableCell className="text-foreground text-right">{entry.credit.toFixed(2)}</TableCell>
+                        <TableCell className="text-foreground text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
+                        <TableCell className="text-center">
+                          {isPendingOrder && entry.order_number && entry.debit > 0 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleSendWhatsApp(entry.order_number!, entry.debit, entry.payment_due_date || null)}
+                              title="Send WhatsApp Reminder for this Pending Order"
+                              disabled={!selectedDealerPhone}
+                            >
+                              <MessageCircle className="h-4 w-4 text-blue-500" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
