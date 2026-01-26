@@ -15,6 +15,7 @@ import autoTable from 'jspdf-autotable';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import PaymentDetailsDialog from '@/components/PaymentDetailsDialog'; // Import PaymentDetailsDialog
+import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 
 interface PaymentReportData {
   id: string; // Order ID
@@ -81,25 +82,6 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
     setFilterFromDate(initialFilterFromDate);
     setFilterToDate(initialFilterToDate);
   }, [initialFilterStatus, initialFilterDealerId, initialFilterFromDate, initialFilterToDate]);
-
-
-  // Helper to get start of current UTC day
-  const getStartOfUTCDayISO = () => {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const day = now.getUTCDate();
-    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
-  };
-
-  // Helper to get end of current UTC day
-  const getEndOfUTCDayISO = () => {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const day = now.getUTCDate();
-    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
-  };
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -380,104 +362,6 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
       showError(`Failed to ${action} payment: ${error.message}`);
     } finally {
       setIsSubmittingAction(false);
-    }
-  };
-
-  const handlePrint = () => {
-    try {
-      const doc = new jsPDF({
-        orientation: 'landscape'
-      });
-
-      const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
-      doc.setFontSize(22);
-      doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
-      doc.setFontSize(18);
-      doc.text("Payments Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
-      doc.setFontSize(10);
-      doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
-
-      let filterDetails = [];
-      if (filterStatus !== 'all') filterDetails.push(`Status: ${filterStatus.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}`);
-      if (filterDealerId) {
-        const dealerLabel = allDealers.find(d => d.value === filterDealerId)?.label;
-        if (dealerLabel) filterDetails.push(`Dealer: ${dealerLabel}`);
-      }
-      if (filterFromDate) filterDetails.push(`From Order Date: ${new Date(filterFromDate).toLocaleDateString()}`);
-      if (filterToDate) filterDetails.push(`To Order Date: ${new Date(filterToDate).toLocaleDateString()}`);
-
-      if (filterDetails.length > 0) {
-        doc.setFontSize(9);
-        doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
-      }
-
-      const tableColumn = [
-        "Order No.",
-        "Dealer Name",
-        "Phone",
-        "Order Date",
-        "Payment Method",
-        "Status",
-        "Due Date",
-        "Amount"
-      ];
-
-      const tableRows = payments.map(payment => [
-        `#${payment.order_number}`,
-        payment.dealer_name,
-        payment.dealer_phone || 'N/A',
-        new Date(payment.order_date).toLocaleDateString(),
-        payment.payment_method ? payment.payment_method.replace(/_/g, ' ') : 'N/A',
-        payment.payment_status.replace(/_/g, ' ').toUpperCase(),
-        payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A',
-        `₹${payment.total_amount.toFixed(2)}`,
-      ]);
-
-      const totalSum = payments.reduce((sum, payment) => sum + payment.total_amount, 0);
-
-      autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        foot: [[{ content: 'Total', colSpan: 7, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalSum.toFixed(2)}`]],
-        startY: 45, // Adjust startY to accommodate the new header
-        styles: {
-          fontSize: 7,
-          cellPadding: 2,
-          valign: 'middle',
-        },
-        headStyles: {
-          fillColor: [30, 58, 138], // Dark blue (similar to indigo-800)
-          textColor: [255, 255, 255], // White
-          fontStyle: 'bold',
-          halign: 'center',
-        },
-        bodyStyles: {
-          textColor: [0, 0, 0],
-        },
-        footStyles: {
-          fillColor: [220, 220, 220], // Light gray
-          textColor: [0, 0, 0],
-          fontStyle: 'bold',
-          fontSize: 8,
-        },
-        margin: { top: 10, left: 10, right: 10 },
-        columnStyles: {
-          0: { cellWidth: 20, halign: 'center' }, // Order No.
-          1: { cellWidth: 35 }, // Dealer Name
-          2: { cellWidth: 25 }, // Phone
-          3: { cellWidth: 25, halign: 'center' }, // Order Date
-          4: { cellWidth: 30, halign: 'center' }, // Payment Method
-          5: { cellWidth: 25, halign: 'center' }, // Status
-          6: { cellWidth: 25, halign: 'center' }, // Due Date
-          7: { cellWidth: 25, halign: 'right' }, // Amount
-        }
-      });
-
-      doc.save('payments_report.pdf');
-      showSuccess('Payments report generated successfully!');
-    } catch (error: any) {
-      console.error('Error generating PDF:', error);
-      showError(`Failed to generate payments report: ${error.message || 'An unknown error occurred.'}`);
     }
   };
 

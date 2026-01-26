@@ -9,14 +9,9 @@ import { showError } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
 import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
+import { getStartOfUTCDayISO } from '@/utils/date';
 
 const DAILY_VISIT_GOAL = 5;
-
-const getStartOfUTCDayISO = () => {
-  const now = new Date();
-  now.setUTCHours(0, 0, 0, 0);
-  return now.toISOString();
-};
 
 const DailyVisitProgressCard: React.FC = () => {
   const { user, loading: sessionLoading } = useSession();

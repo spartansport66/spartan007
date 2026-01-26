@@ -6,6 +6,7 @@ import { Loader2, DollarSign, CalendarDays, TrendingUp, Clock, CheckCircle, Aler
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import { Separator } from '@/components/ui/separator';
+import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 
 interface PaymentOverviewCardProps {
   onViewReport: () => void; // Simplified to a simple callback
@@ -18,24 +19,6 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
   const [totalPendingApprovalAmount, setTotalPendingApprovalAmount] = useState<number>(0);
   const [todayReceivedAmount, setTodayReceivedAmount] = useState<number>(0);
   const [todayPendingApprovalAmount, setTodayPendingApprovalAmount] = useState<number>(0);
-
-  // Helper to get start of current UTC day
-  const getStartOfUTCDayISO = () => {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const day = now.getUTCDate();
-    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
-  };
-
-  // Helper to get end of current UTC day
-  const getEndOfUTCDayISO = () => {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const day = now.getUTCDate();
-    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
-  };
 
   const fetchOverviewData = useCallback(async () => {
     setLoading(true);

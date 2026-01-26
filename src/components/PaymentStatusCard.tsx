@@ -12,6 +12,7 @@ import { useSession } from '@/contexts/SessionContext';
 import { Label } from '@/components/ui/label';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 
 interface Order {
   id: string;
@@ -76,18 +77,6 @@ const PaymentStatusCard: React.FC = () => {
   const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
   const [selectedOrderForPaymentDetails, setSelectedOrderForPaymentDetails] = useState<Order | null>(null);
 
-  const getTodayDateISO = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today.toISOString();
-  };
-
-  const getEndOfTodayDateISO = () => {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-    return today.toISOString();
-  };
-
   const fetchOrdersAndDealers = useCallback(async () => {
     if (!user) {
       setLoading(false);
@@ -141,8 +130,8 @@ const PaymentStatusCard: React.FC = () => {
         .eq('user_id', user.id) // Filter by current sales person
         .order('payment_due_date', { ascending: true });
 
-      const todayISO = getTodayDateISO();
-      const endOfTodayISO = getEndOfTodayDateISO();
+      const startOfUTCTodayISO = getStartOfUTCDayISO();
+      const endOfUTCTodayISO = getEndOfUTCDayISO();
 
       if (filterStatus === 'pending') {
         query = query.eq('payment_status', 'pending');
@@ -151,13 +140,13 @@ const PaymentStatusCard: React.FC = () => {
       } else if (filterStatus === 'pending_approval') {
         query = query.eq('payment_status', 'pending_approval');
       } else if (filterStatus === 'overdue') {
-        query = query.eq('payment_status', 'pending').lte('payment_due_date', todayISO);
+        query = query.eq('payment_status', 'pending').lte('payment_due_date', startOfUTCTodayISO);
       } else if (filterStatus === 'upcoming') {
-        query = query.eq('payment_status', 'pending').gte('payment_due_date', endOfTodayISO);
+        query = query.eq('payment_status', 'pending').gte('payment_due_date', endOfUTCTodayISO);
       } else if (filterStatus === 'todays_due') {
         query = query.eq('payment_status', 'pending')
-          .gte('payment_due_date', todayISO)
-          .lte('payment_due_date', endOfTodayISO);
+          .gte('payment_due_date', startOfUTCTodayISO)
+          .lte('payment_due_date', endOfUTCTodayISO);
       } else if (filterStatus === 'opening_balance') {
         // For opening balance, we'll fetch all orders but filter will be handled in UI
         // No specific query filtering needed here

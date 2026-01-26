@@ -10,6 +10,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import PaymentDetailsDialog from '@/components/PaymentDetailsDialog';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog'; // Import UpdatePaymentDialog
+import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 
 interface PendingPaymentItem {
   type: 'order_due_today' | 'payment_pending_approval_today'; // Removed 'payment_paid_today'
@@ -47,20 +48,6 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PendingPaymentItem | null>(null); // This is the order_id for 'order_pending'
 
-  // Helper to get start of current UTC day
-  const getStartOfUTCDayISO = () => {
-    const now = new Date();
-    now.setUTCHours(0, 0, 0, 0); // Use setUTCHours for consistency with Supabase timestamps
-    return now.toISOString();
-  };
-
-  // Helper to get end of current UTC day
-  const getEndOfUTCDayISO = () => {
-    const now = new Date();
-    now.setUTCHours(23, 59, 59, 999); // Use setUTCHours for consistency with Supabase timestamps
-    return now.toISOString();
-  };
-
   const fetchCompanyInfo = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -82,8 +69,8 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   const fetchTodayPaymentActivities = useCallback(async () => {
     setLoading(true);
     try {
-      const startOfUTCToday = new Date(getStartOfUTCDayISO());
-      const endOfUTCToday = new Date(getEndOfUTCDayISO());
+      const startOfUTCToday = getStartOfUTCDayISO();
+      const endOfUTCToday = getEndOfUTCDayISO();
 
       // 1. Fetch orders with payment_status = 'pending' and payment_due_date is today or earlier
       const { data: ordersDueToday, error: ordersDueTodayError } = await supabase
@@ -97,7 +84,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
           dealers (name, phone)
         `)
         .eq('payment_status', 'pending')
-        .lte('payment_due_date', endOfUTCToday.toISOString()) // Due today or earlier
+        .lte('payment_due_date', endOfUTCToday) // Due today or earlier
         .order('payment_due_date', { ascending: true });
 
       if (ordersDueTodayError) throw ordersDueTodayError;
@@ -157,7 +144,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
           effectiveDueDate.setUTCHours(0, 0, 0, 0); // Normalize to start of day UTC
 
           // Show if effective due date is today or earlier
-          return effectiveDueDate <= endOfUTCToday;
+          return effectiveDueDate <= new Date(endOfUTCToday);
         })
         .map((payment: any) => ({
           type: 'payment_pending_approval_today',

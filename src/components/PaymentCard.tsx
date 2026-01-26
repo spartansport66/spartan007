@@ -7,6 +7,7 @@ import { Loader2, DollarSign, CalendarDays, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import { Separator } from '@/components/ui/separator';
+import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 
 interface PaymentCardProps {
   onViewDetails: () => void; // New prop to open the detailed report dialog
@@ -20,26 +21,6 @@ const PaymentCard: React.FC<PaymentCardProps> = ({ onViewDetails }) => {
   // const [todaysDueAmountOverview, setTodaysDueAmountOverview] = useState<number>(0); // Removed
   const [todayReceivedAmountOverview, setTodayReceivedAmountOverview] = useState<number>(0);
   const [pendingApprovalAmountOverview, setPendingApprovalAmountOverview] = useState<number>(0); // New state
-
-  // Helper to get start of current UTC day
-  const getStartOfUTCDayISO = () => {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const day = now.getUTCDate();
-    // Ensure the string ends with 'Z' for UTC
-    return new Date(Date.UTC(year, month, day, 0, 0, 0, 0)).toISOString();
-  };
-
-  // Helper to get end of current UTC day
-  const getEndOfUTCDayISO = () => {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = now.getUTCMonth();
-    const day = now.getUTCDate();
-    // Ensure the string ends with 'Z' for UTC
-    return new Date(Date.UTC(year, month, day, 23, 59, 59, 999)).toISOString();
-  };
 
   const fetchPaymentOverviewData = useCallback(async () => {
     console.log("DEBUG: fetchPaymentOverviewData called");
