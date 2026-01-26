@@ -168,6 +168,7 @@ const SalesPersonFollowupsCard: React.FC = () => {
                       <TableCell className="font-medium text-foreground">{followup.dealer_name}</TableCell>
                       <TableCell className="text-muted-foreground">{new Date(followup.last_visit_time).toLocaleDateString()}</TableCell>
                       <TableCell className={followup.isOverdue ? "text-destructive font-semibold" : "text-blue-600 font-medium"}>
+                        {followup.isOverdue ? <AlertTriangle className="h-4 w-4 inline mr-1 text-destructive" /> : <Clock className="h-4 w-4 inline mr-1 text-blue-600" />}
                         {formatDate(followup.next_visit_date)}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-[250px] truncate" title={followup.last_visit_remarks || ''}>

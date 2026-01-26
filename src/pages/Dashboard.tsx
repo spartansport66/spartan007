@@ -269,9 +269,27 @@ const Dashboard = () => {
             Welcome, {salesPersonName || 'Sales Person'}!
           </h2>
         </div>
-        {/* Removed Sales Dashboard Title */}
         <div className="flex-shrink-0 flex items-center gap-2">
-          {/* Removed My Reports Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" /> My Reports
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Sales Person Reports</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setIsSalesPersonSalesReportOpen(true)}>
+                Sales Report
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonDealerReportOpen(true)}>
+                Dealer Report
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonPaymentsReportOpen(true)}>
+                Payments Report
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button onClick={handleLogout} variant="ghost" size="icon" className="text-black hover:text-black p-2">
             <LogOut className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
