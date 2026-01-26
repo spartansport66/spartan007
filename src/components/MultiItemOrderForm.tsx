@@ -688,7 +688,7 @@ const MultiItemOrderForm: React.FC = () => {
                           value={searchValue}
                           onValueChange={setSearchValue}
                         />
-                        <CommandList>
+                        <CommandList className="max-h-[300px] overflow-y-auto"> {/* Added max-h and overflow-y-auto */}
                           {filteredProducts.length === 0 ? (
                             <CommandEmpty>No product found.</CommandEmpty>
                           ) : (
