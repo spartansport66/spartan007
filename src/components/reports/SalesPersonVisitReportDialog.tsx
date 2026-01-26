@@ -21,6 +21,7 @@ interface VisitReportData {
   photo_url: string | null;
   visit_status: string; // New field
   remarks: string | null; // New field
+  next_visit_date: string | null; // New field
 }
 
 interface FilterOption {
@@ -66,6 +67,7 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
           sales_person_id,
           visit_status,
           remarks,
+          next_visit_date,
           dealers (name)
         `)
         .order('visit_time', { ascending: false });
@@ -94,6 +96,7 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
         photo_url: visit.photo_url,
         visit_status: visit.visit_status || 'Routine Visit',
         remarks: visit.remarks || null,
+        next_visit_date: visit.next_visit_date || null,
       }));
       setVisits(formattedVisits);
 
@@ -127,13 +130,14 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
     doc.setFontSize(11);
     doc.setTextColor(100);
 
-    const tableColumn = ["Sales Person", "Dealer Name", "Visit Time", "Status", "Remarks", "Photo Link"];
+    const tableColumn = ["Sales Person", "Dealer Name", "Visit Time", "Status", "Remarks", "Next Visit Date", "Photo Link"];
     const tableRows = visits.map(visit => [
       visit.sales_person_name,
       visit.dealer_name,
       new Date(visit.visit_time).toLocaleString(),
       visit.visit_status,
       visit.remarks || 'N/A',
+      visit.next_visit_date ? new Date(visit.next_visit_date).toLocaleDateString() : 'N/A',
       visit.photo_url ? 'View Photo' : 'N/A',
     ]);
 
@@ -154,8 +158,9 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
         1: { cellWidth: 30 },
         2: { cellWidth: 30 },
         3: { cellWidth: 25 },
-        4: { cellWidth: 60 },
-        5: { cellWidth: 20, halign: 'center' },
+        4: { cellWidth: 40 },
+        5: { cellWidth: 25 },
+        6: { cellWidth: 20, halign: 'center' },
       }
     });
 
@@ -234,6 +239,7 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
                     <TableHead className="text-muted-foreground font-bold">Visit Time</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Status</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Remarks</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Next Visit Date</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Photo</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -245,6 +251,7 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
                       <TableCell className="text-foreground">{new Date(visit.visit_time).toLocaleString()}</TableCell>
                       <TableCell className="text-foreground">{visit.visit_status}</TableCell>
                       <TableCell className="text-foreground max-w-[200px] truncate" title={visit.remarks || ''}>{visit.remarks || 'N/A'}</TableCell>
+                      <TableCell className="text-foreground">{visit.next_visit_date ? new Date(visit.next_visit_date).toLocaleDateString() : 'N/A'}</TableCell>
                       <TableCell className="text-center">
                         {visit.photo_url ? (
                           <Button 
