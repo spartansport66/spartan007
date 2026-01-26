@@ -717,7 +717,10 @@ const MultiItemOrderForm: React.FC = () => {
                     open={popoverOpenStates[item.id]} 
                     onOpenChange={(openState) => {
                       setPopoverOpenStates(prev => ({ ...prev, [item.id]: openState }));
-                      if (!openState) setSearchValue(""); // Clear search when popover closes
+                      // When opening a new popover, clear the search value if it's not the currently selected item's popover
+                      if (openState) {
+                        setSearchValue("");
+                      }
                     }}
                   >
                     <PopoverTrigger asChild>
@@ -730,6 +733,7 @@ const MultiItemOrderForm: React.FC = () => {
                         {item.product_id
                           ? products.find((product) => product.id === item.product_id)?.name
                           : "Select product..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
@@ -739,7 +743,7 @@ const MultiItemOrderForm: React.FC = () => {
                           value={searchValue}
                           onValueChange={setSearchValue}
                         />
-                        <CommandList className="max-h-[300px] overflow-y-auto"> {/* Added max-h and overflow-y-auto */}
+                        <CommandList className="max-h-[300px] overflow-y-auto">
                           {filteredProducts.length === 0 ? (
                             <CommandEmpty>No product found.</CommandEmpty>
                           ) : (
@@ -747,13 +751,25 @@ const MultiItemOrderForm: React.FC = () => {
                               {filteredProducts.map((product) => (
                                 <CommandItem
                                   key={product.id}
-                                  value={product.id}
+                                  value={product.id} // Use product ID as value for CommandItem
                                   onSelect={(currentValue) => {
-                                    updateOrderItem(item.id, 'product_id', currentValue === item.product_id ? '' : currentValue);
-                                    setPopoverOpenStates(prev => ({ ...prev, [item.id]: false })); // Close this specific popover
-                                    setSearchValue(""); // Clear global search value
+                                    // Find the product by ID using the currentValue (which is the product ID)
+                                    const selectedProduct = products.find(p => p.id === currentValue);
+                                    
+                                    // Update the order item with the selected product ID
+                                    updateOrderItem(item.id, 'product_id', selectedProduct?.id || '');
+                                    
+                                    // Close the popover and clear search
+                                    setPopoverOpenStates(prev => ({ ...prev, [item.id]: false }));
+                                    setSearchValue("");
                                   }}
                                 >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      item.product_id === product.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
                                   <div>
                                     <div>{product.name} ({product.code})</div>
                                     <div className="text-xs text-muted-foreground">
