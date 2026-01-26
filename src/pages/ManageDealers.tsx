@@ -36,7 +36,6 @@ interface DealerWithRelations {
   contact_person: string;
   email: string;
   phone: string;
-  gstin: string | null; // New: GSTIN field
   address: string;
   city: string;
   state: string;
@@ -61,7 +60,6 @@ interface Dealer {
   contact_person: string;
   email: string;
   phone: string;
-  gstin: string | null; // New: GSTIN field
   address: string;
   city: string;
   state: string;
@@ -87,7 +85,6 @@ const formSchema = z.object({
   contactPerson: z.string().nullable().optional(), // Made optional
   email: z.string().email({ message: 'Please enter a valid email address.' }).nullable().optional(), // Made optional
   phone: z.string().min(10, { message: 'Phone number must be at least 10 digits.' }).max(15, { message: 'Phone number cannot exceed 15 digits.' }),
-  gstin: z.string().nullable().optional(), // New: GSTIN field
   address: z.string().min(5, { message: 'Address must be at least 5 characters.' }),
   city: z.string().min(2, { message: 'City must be at least 2 characters.' }),
   state: z.string().min(2, { message: 'State must be at least 2 characters.' }),
@@ -142,7 +139,6 @@ const ManageDealers = () => {
       contactPerson: '', // Default to empty string
       email: '', // Default to empty string
       phone: '',
-      gstin: '', // Default to empty string
       address: '',
       city: '',
       state: '',
@@ -163,7 +159,6 @@ const ManageDealers = () => {
         contactPerson: selectedDealer.contact_person || '', // Handle null/undefined
         email: selectedDealer.email || '', // Handle null/undefined
         phone: selectedDealer.phone,
-        gstin: selectedDealer.gstin || '', // New: Set GSTIN
         address: selectedDealer.address,
         city: selectedDealer.city,
         state: selectedDealer.state,
@@ -209,7 +204,7 @@ const ManageDealers = () => {
         query = supabase
           .from('dealers')
           .select(`
-            id, name, contact_person, email, phone, gstin, address, city, state, country, credit_limit, allotted_credit_days, user_id, last_billing_date,
+            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id, last_billing_date,
             dealer_sales_persons!inner(sales_person_id, profiles(id, first_name, last_name)),
             dealer_balances(opening_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
@@ -221,7 +216,7 @@ const ManageDealers = () => {
         query = supabase
           .from('dealers')
           .select(`
-            id, name, contact_person, email, phone, gstin, address, city, state, country, credit_limit, allotted_credit_days, user_id, last_billing_date,
+            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id, last_billing_date,
             dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name)),
             dealer_balances(opening_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
@@ -369,7 +364,6 @@ const ManageDealers = () => {
         contact_person: values.contactPerson || null, // Pass null if optional and empty
         email: values.email || null, // Pass null if optional and empty
         phone: values.phone,
-        gstin: values.gstin || null, // New: Update GSTIN
         address: values.address,
         city: values.city,
         state: values.state,
@@ -504,7 +498,7 @@ const ManageDealers = () => {
       doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
 
       const tableColumn = [
-        "Name", "Contact Person", "Email", "Phone", "GSTIN", "Address", "City", "State", "Country",
+        "Name", "Contact Person", "Email", "Phone", "Address", "City", "State", "Country",
         "Opening Balance", "Current Balance", "Monthly Credit Limit", "Credit Days", "Last Billing Date", "Assigned To"
       ];
       const tableRows = dealers.map(dealer => [
@@ -512,7 +506,6 @@ const ManageDealers = () => {
         dealer.contact_person || 'N/A',
         dealer.email || 'N/A',
         dealer.phone || 'N/A',
-        dealer.gstin || 'N/A', // New: GSTIN
         dealer.address,
         dealer.city || 'N/A',
         dealer.state || 'N/A',
@@ -536,7 +529,7 @@ const ManageDealers = () => {
         body: tableRows,
         foot: [
           [
-            { content: 'Totals', colSpan: 9, styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: 'Totals', colSpan: 8, styles: { halign: 'right', fontStyle: 'bold' } },
             `₹${totalOpeningBalance.toFixed(2)}`,
             `₹${totalCurrentBalance.toFixed(2)}`, // Display total current balance
             `₹${totalMonthlyCreditLimit.toFixed(2)}`,
@@ -573,17 +566,16 @@ const ManageDealers = () => {
           1: { cellWidth: 20 }, // Contact Person
           2: { cellWidth: 30 }, // Email
           3: { cellWidth: 20 }, // Phone
-          4: { cellWidth: 20 }, // GSTIN
-          5: { cellWidth: 30 }, // Address
-          6: { cellWidth: 15 }, // City
-          7: { cellWidth: 15 }, // State
-          8: { cellWidth: 15 }, // Country
-          9: { cellWidth: 20, halign: 'right' }, // Opening Balance
-          10: { cellWidth: 20, halign: 'right' }, // Current Balance
-          11: { cellWidth: 20, halign: 'right' }, // Monthly Credit Limit
-          12: { cellWidth: 15, halign: 'right' }, // Credit Days
-          13: { cellWidth: 20, halign: 'center' }, // Last Billing Date
-          14: { cellWidth: 35 }, // Assigned To
+          4: { cellWidth: 30 }, // Address
+          5: { cellWidth: 15 }, // City
+          6: { cellWidth: 15 }, // State
+          7: { cellWidth: 15 }, // Country
+          8: { cellWidth: 20, halign: 'right' }, // Opening Balance
+          9: { cellWidth: 20, halign: 'right' }, // Current Balance
+          10: { cellWidth: 20, halign: 'right' }, // Monthly Credit Limit
+          11: { cellWidth: 15, halign: 'right' }, // Credit Days
+          12: { cellWidth: 20, halign: 'center' }, // Last Billing Date
+          13: { cellWidth: 35 }, // Assigned To
         }
       });
 
@@ -715,7 +707,6 @@ const ManageDealers = () => {
                         <TableHead className="text-muted-foreground">Contact Person</TableHead>
                         <TableHead className="text-muted-foreground">Email</TableHead>
                         <TableHead className="text-muted-foreground">Phone</TableHead>
-                        <TableHead className="text-muted-foreground">GSTIN</TableHead>
                         <TableHead className="text-muted-foreground">City</TableHead>
                         <TableHead className="text-muted-foreground">State</TableHead>
                         <TableHead className="text-muted-foreground">Country</TableHead>
@@ -723,7 +714,7 @@ const ManageDealers = () => {
                         <TableHead className="text-muted-foreground">Current Balance</TableHead>
                         <TableHead className="text-muted-foreground">Monthly Credit Limit</TableHead>
                         <TableHead className="text-muted-foreground">Credit Days</TableHead>
-                        <TableHead className="text-muted-foreground">Last Billing Date</TableHead>
+                        <TableHead className="text-muted-foreground">Last Billing Date</TableHead> {/* New Table Head */}
                         <TableHead className="text-muted-foreground">Assigned To</TableHead>
                         <TableHead className="text-muted-foreground">Actions</TableHead>
                       </TableRow>
@@ -735,7 +726,6 @@ const ManageDealers = () => {
                           <TableCell className="text-muted-foreground">{dealer.contact_person || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.email || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
-                          <TableCell className="text-muted-foreground">{dealer.gstin || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.city || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.state || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.country || 'N/A'}</TableCell>
@@ -894,17 +884,6 @@ const ManageDealers = () => {
                     className="col-span-3"
                   />
                   {form.formState.errors.phone && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.phone.message}</p>}
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="gstin" className="text-right">
-                    GSTIN (Optional)
-                  </Label>
-                  <Input
-                    id="gstin"
-                    {...form.register('gstin')}
-                    className="col-span-3"
-                  />
-                  {form.formState.errors.gstin && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.gstin.message}</p>}
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="address" className="text-right">

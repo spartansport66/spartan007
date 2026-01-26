@@ -34,72 +34,42 @@ serve(async (req) => {
 
     const results = {
       successCount: 0,
-      notFound: [] as { dealerName: string; phoneNumber: string | null; gstin: string | null; openingBalance: number; lastBillingDate: string | null }[],
+      notFound: [] as { dealerName: string; phoneNumber: string | null; openingBalance: number; lastBillingDate: string | null }[],
       errorCount: 0,
     };
 
     for (const update of updates) {
-      const { dealerName, phoneNumber, gstin, openingBalance, lastBillingDate } = update;
+      const { dealerName, phoneNumber, openingBalance, lastBillingDate } = update;
 
       try {
-        // 1. Find the dealer ID using name, optional phone number, and optional gstin
+        // 1. Find the dealer ID using name and optional phone number
         let dealerQuery = supabaseAdmin
           .from('dealers')
-          .select('id, gstin') // Select existing gstin to check if we need to update it
+          .select('id')
           .eq('name', dealerName);
         
-        // Use OR condition for matching by phone or gstin if provided, otherwise rely only on name
-        const matchConditions = [];
+        // If phone number is provided, use it for a more precise match
         if (phoneNumber) {
-          matchConditions.push(`phone.eq.${phoneNumber}`);
-        }
-        if (gstin) {
-          matchConditions.push(`gstin.eq.${gstin}`);
-        }
-        
-        if (matchConditions.length > 0) {
-            dealerQuery = dealerQuery.or(matchConditions.join(','));
+          dealerQuery = dealerQuery.eq('phone', phoneNumber);
         }
 
         const { data: dealerData, error: dealerFetchError } = await dealerQuery.limit(1).single();
 
         if (dealerFetchError || !dealerData) {
-          results.notFound.push({ dealerName, phoneNumber, gstin, openingBalance, lastBillingDate });
+          results.notFound.push({ dealerName, phoneNumber, openingBalance, lastBillingDate });
           continue;
         }
 
         const dealerId = dealerData.id;
-        let dealerUpdateData: { last_billing_date?: string | null; gstin?: string | null } = {};
 
-        // 2. Update last_billing_date in dealers table
-        if (lastBillingDate) {
-            dealerUpdateData.last_billing_date = lastBillingDate;
-        }
-        
-        // 3. Update GSTIN in dealers table if provided and different
-        if (gstin && dealerData.gstin !== gstin) {
-            dealerUpdateData.gstin = gstin;
-        }
-        
-        if (Object.keys(dealerUpdateData).length > 0) {
-            const { error: dealerUpdateError } = await supabaseAdmin
-                .from('dealers')
-                .update(dealerUpdateData)
-                .eq('id', dealerId);
-
-            if (dealerUpdateError) {
-                console.error(`[bulk-update-opening-balance] Error updating dealer details for ${dealerName}:`, dealerUpdateError.message);
-                // Log error but continue
-            }
-        }
-
-        // 4. Upsert opening balance into dealer_balances
+        // 2. Upsert opening balance into dealer_balances
         const { error: balanceUpsertError } = await supabaseAdmin
           .from('dealer_balances')
           .upsert(
             {
               dealer_id: dealerId,
               opening_balance: openingBalance,
+              // Note: We don't update closing_balance here; it's calculated dynamically.
             },
             { onConflict: 'dealer_id' }
           );
@@ -110,6 +80,19 @@ serve(async (req) => {
           continue;
         }
         
+        // 3. Update last_billing_date in dealers table
+        if (lastBillingDate) {
+            const { error: dateUpdateError } = await supabaseAdmin
+                .from('dealers')
+                .update({ last_billing_date: lastBillingDate })
+                .eq('id', dealerId);
+
+            if (dateUpdateError) {
+                console.error(`[bulk-update-opening-balance] Error updating last_billing_date for ${dealerName}:`, dateUpdateError.message);
+                // Log error but continue
+            }
+        }
+
         results.successCount++;
 
       } catch (e) {

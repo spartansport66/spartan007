@@ -14,7 +14,6 @@ const BULK_UPDATE_OPENING_BALANCE_URL = "https://hxftiocfihhdutciaisl.supabase.c
 const openingBalanceSchema = z.object({
   dealerName: z.string().min(1, { message: 'Dealer Name is required.' }).trim(),
   phoneNumber: z.coerce.string().nullable().optional().transform(val => val ? val.replace(/\D/g, '') : null), // Normalize phone, now optional
-  gstin: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // New: GSTIN field
   openingBalance: z.preprocess(
     (val) => {
       if (typeof val === 'string') {
@@ -50,7 +49,6 @@ const openingBalanceSchema = z.object({
 // Define display headers for the ExcelUpload component
 const openingBalanceDisplayHeaders = [
   { key: 'dealerName', label: 'Dealer Name' },
-  { key: 'gstin', label: 'GSTIN' }, // New: GSTIN header
   { key: 'openingBalance', label: 'Opening Balance' },
   { key: 'lastBillingDate', label: 'Last Billing Date' },
 ];
@@ -59,13 +57,11 @@ const openingBalanceDisplayHeaders = [
 const openingBalanceSampleData = [
   {
     "Dealer Name": 'Global Distributors',
-    "GSTIN": '03ABNPS2508R1Z4', // Added GSTIN to sample
     "Opening Balance": 15000.00,
     "Last Billing Date": '2023-12-31',
   },
   {
     "Dealer Name": 'Regional Traders',
-    "GSTIN": '', // Empty GSTIN
     "Opening Balance": 5000.00,
     "Last Billing Date": '2024-01-15',
   }
@@ -82,7 +78,6 @@ const OpeningBalanceBulkUpdate: React.FC<OpeningBalanceBulkUpdateProps> = ({ onU
         updates: updatesToUpload.map(u => ({
           dealerName: u.dealerName,
           phoneNumber: u.phoneNumber,
-          gstin: u.gstin, // Pass GSTIN
           openingBalance: u.openingBalance,
           lastBillingDate: u.lastBillingDate,
         })),
@@ -106,7 +101,7 @@ const OpeningBalanceBulkUpdate: React.FC<OpeningBalanceBulkUpdateProps> = ({ onU
 
       if (notFound.length > 0) {
         const notFoundList = notFound.map((d: any) => 
-          `Name: ${d.dealerName}, Phone: ${d.phoneNumber || 'N/A'}, GSTIN: ${d.gstin || 'N/A'}`
+          `Name: ${d.dealerName}, Phone: ${d.phoneNumber || 'N/A'}`
         ).join('; ');
         
         showError(`Update completed with warnings: ${successCount} successful, ${errorCount} errors. ${notFound.length} dealers not found.`);
@@ -149,7 +144,7 @@ const OpeningBalanceBulkUpdate: React.FC<OpeningBalanceBulkUpdateProps> = ({ onU
                   <AlertCircle className="h-5 w-5" /> Dealers Not Found
                 </CardTitle>
                 <CardDescription className="text-yellow-700 dark:text-yellow-300">
-                  The following {notFoundDealers.length} dealers could not be matched by Name (and optional Phone Number/GSTIN) in the database. Please ensure they are registered before attempting to update their balances.
+                  The following {notFoundDealers.length} dealers could not be matched by Name (and optional Phone Number) in the database. Please ensure they are registered before attempting to update their balances.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -158,7 +153,7 @@ const OpeningBalanceBulkUpdate: React.FC<OpeningBalanceBulkUpdateProps> = ({ onU
                     <TableHeader>
                       <TableRow>
                         <TableHead>Dealer Name</TableHead>
-                        <TableHead>GSTIN</TableHead>
+                        <TableHead>Phone</TableHead>
                         <TableHead className="text-right">Opening Balance</TableHead>
                         <TableHead className="text-center">Last Billing Date</TableHead>
                       </TableRow>
@@ -167,7 +162,7 @@ const OpeningBalanceBulkUpdate: React.FC<OpeningBalanceBulkUpdateProps> = ({ onU
                       {notFoundDealers.map((dealer: any, index: number) => (
                         <TableRow key={index}>
                           <TableCell>{dealer.dealerName}</TableCell>
-                          <TableCell>{dealer.gstin || 'N/A'}</TableCell>
+                          <TableCell>{dealer.phoneNumber || 'N/A'}</TableCell>
                           <TableCell className="text-right">₹{dealer.openingBalance.toFixed(2)}</TableCell>
                           <TableCell className="text-center">{dealer.lastBillingDate || 'N/A'}</TableCell>
                         </TableRow>
