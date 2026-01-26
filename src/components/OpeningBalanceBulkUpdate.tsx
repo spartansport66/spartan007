@@ -13,7 +13,7 @@ const BULK_UPDATE_OPENING_BALANCE_URL = "https://hxftiocfihhdutciaisl.supabase.c
 // Zod schema for dealer opening balance validation
 const openingBalanceSchema = z.object({
   dealerName: z.string().min(1, { message: 'Dealer Name is required.' }).trim(),
-  phoneNumber: z.coerce.string().nullable().optional().transform(val => val ? val.replace(/\D/g, '') : null), // Normalize phone, now optional
+  phoneNumber: z.coerce.string().nullable().optional().transform(val => val ? val.replace(/\D/g, '') : null), // Normalize phone
   openingBalance: z.preprocess(
     (val) => {
       if (typeof val === 'string') {
@@ -49,6 +49,7 @@ const openingBalanceSchema = z.object({
 // Define display headers for the ExcelUpload component
 const openingBalanceDisplayHeaders = [
   { key: 'dealerName', label: 'Dealer Name' },
+  { key: 'phoneNumber', label: 'Phone Number' },
   { key: 'openingBalance', label: 'Opening Balance' },
   { key: 'lastBillingDate', label: 'Last Billing Date' },
 ];
@@ -57,11 +58,13 @@ const openingBalanceDisplayHeaders = [
 const openingBalanceSampleData = [
   {
     "Dealer Name": 'Global Distributors',
+    "Phone Number": '1234567890',
     "Opening Balance": 15000.00,
     "Last Billing Date": '2023-12-31',
   },
   {
     "Dealer Name": 'Regional Traders',
+    "Phone Number": '0987654321',
     "Opening Balance": 5000.00,
     "Last Billing Date": '2024-01-15',
   }
@@ -131,8 +134,7 @@ const OpeningBalanceBulkUpdate: React.FC<OpeningBalanceBulkUpdateProps> = ({ onU
       uploadButtonText="Update Opening Balances"
       displayHeaders={openingBalanceDisplayHeaders}
       validationSchema={openingBalanceSchema}
-      // Exclude 'Phone Number' from source headers if it exists in the user's file but isn't mapped
-      excludedSourceHeaders={['Phone Number']}
+      // No excluded headers needed here
     >
       {({ uploadResults }) => {
         const notFoundDealers = uploadResults?.results?.notFound || [];
@@ -144,7 +146,7 @@ const OpeningBalanceBulkUpdate: React.FC<OpeningBalanceBulkUpdateProps> = ({ onU
                   <AlertCircle className="h-5 w-5" /> Dealers Not Found
                 </CardTitle>
                 <CardDescription className="text-yellow-700 dark:text-yellow-300">
-                  The following {notFoundDealers.length} dealers could not be matched by Name (and optional Phone Number) in the database. Please ensure they are registered before attempting to update their balances.
+                  The following {notFoundDealers.length} dealers could not be matched by Name and Phone Number in the database. Please ensure they are registered before attempting to update their balances.
                 </CardDescription>
               </CardHeader>
               <CardContent>
