@@ -744,6 +744,7 @@ const MultiItemOrderForm: React.FC = () => {
                           onValueChange={setSearchValue}
                         />
                         <CommandList className="max-h-[300px] overflow-y-auto">
+                          {/* Use filteredProducts here */}
                           {filteredProducts.length === 0 ? (
                             <CommandEmpty>No product found.</CommandEmpty>
                           ) : (
@@ -751,10 +752,13 @@ const MultiItemOrderForm: React.FC = () => {
                               {filteredProducts.map((product) => (
                                 <CommandItem
                                   key={product.id}
-                                  value={product.id} // Use product ID as value for CommandItem
+                                  // Set value to the searchable string (name + code)
+                                  value={`${product.name} ${product.code}`}
                                   onSelect={(currentValue) => {
-                                    // Find the product by ID using the currentValue (which is the product ID)
-                                    const selectedProduct = products.find(p => p.id === currentValue);
+                                    // Find the product by matching the name/code string
+                                    const selectedProduct = products.find(p => 
+                                      `${p.name} ${p.code}`.toLowerCase() === currentValue.toLowerCase()
+                                    );
                                     
                                     // Update the order item with the selected product ID
                                     updateOrderItem(item.id, 'product_id', selectedProduct?.id || '');
