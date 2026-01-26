@@ -28,6 +28,7 @@ export const dealerSchema = z.object({
   city: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
   state: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
   country: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  // gstin: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Temporarily removed
   creditlimit: z.preprocess(
     (val) => {
       if (typeof val === 'string') {
@@ -78,6 +79,7 @@ const dealerDisplayHeaders = [
   { key: 'city', label: 'City' },
   { key: 'state', label: 'State' },
   { key: 'country', label: 'Country' },
+  // { key: 'gstin', label: 'GSTIN' }, // Temporarily removed
   { key: 'creditlimit', label: 'Credit Limit' },
   { key: 'allottedcreditdays', label: 'Allotted Credit Days' },
   { key: 'openingbalance', label: 'Opening Balance' },
@@ -96,6 +98,7 @@ const dealerSampleData = [
     "City": 'New York',
     "State": 'NY',
     "Country": 'USA',
+    // "GSTIN": '03ABNPS2508R1Z4', // Temporarily removed
     "Credit Limit": 50000,
     "Allotted Credit Days": 30,
     "Opening Balance": 10000,
@@ -111,6 +114,7 @@ const dealerSampleData = [
     "City": '', // Empty city
     "State": '', // Empty state
     "Country": '', // Empty country
+    // "GSTIN": '', // Temporarily removed
     "Credit Limit": 30000,
     "Allotted Credit Days": 45,
     "Opening Balance": 5000,
@@ -151,6 +155,7 @@ const DealerExcelUpload: React.FC<DealerExcelUploadProps> = ({ onUploadComplete 
         city: row.city || null, // Convert empty string to null
         state: row.state || null, // Convert empty string to null
         country: row.country || null, // Convert empty string to null
+        // gstin: row.gstin || null, // Temporarily removed
         credit_limit: row.creditlimit,
         allotted_credit_days: row.allottedcreditdays,
         last_billing_date: row.lastbillingdate || null, // New: Insert last_billing_date
