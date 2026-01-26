@@ -326,7 +326,6 @@ const AdminDashboard = () => {
       </div>
       
       {/* 2. Sales Person Lead Management Section (MOVED HERE) */}
-      <h2 className="text-2xl font-bold text-primary mb-4">Sales Person Lead Management</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <AdminTodayFollowupsCard onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} />
         <AdminTodayVisitsCard onViewReport={() => setIsSalesPersonVisitReportOpen(true)} />
