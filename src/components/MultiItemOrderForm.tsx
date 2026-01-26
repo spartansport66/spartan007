@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -90,6 +90,14 @@ const MultiItemOrderForm: React.FC = () => {
   const [transactionId, setTransactionId] = useState<string>('');
 
   const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
+
+  // State for searchable product dropdown
+  const [popoverOpenStates, setPopoverOpenStates] = useState<Record<string, boolean>>({}); // Individual open states
+  const [searchValue, setSearchValue] = useState(""); // Global search for the currently active product popover
+  
+  // New states for searchable dealer dropdown
+  const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
+  const [dealerSearchValue, setDealerSearchValue] = useState("");
 
   // Format date as dd/mm/yyyy
   const formatDate = (dateString: string) => {
@@ -488,8 +496,9 @@ const MultiItemOrderForm: React.FC = () => {
       setPaymentDueDate(null);
       setPendingPayments([]);
       setTotalPendingAmount(0);
-      setPopoverOpenStates({}); // Clear all popover states
-      setSearchValue(""); // Clear global search value
+      setPopoverOpenStates({}); // Clear all product popover states
+      setSearchValue(""); // Clear global product search value
+      setDealerSearchValue(""); // Clear dealer search value
     } catch (error: any) {
       console.error('Error placing order:', error);
       showError(`Failed to place order: ${error.message}`);
@@ -498,13 +507,8 @@ const MultiItemOrderForm: React.FC = () => {
     }
   };
 
-  // State for searchable product dropdown
-  const [popoverOpenStates, setPopoverOpenStates] = useState<Record<string, boolean>>({}); // Individual open states
-  const [searchValue, setSearchValue] = useState(""); // Global search for the currently active popover
-
   // Filter products based on search value - improved matching
   const filteredProducts = useMemo(() => {
-    // Always return all products if no search value, or if search value is less than 3 characters
     if (!searchValue) {
       return products;
     }
@@ -522,11 +526,22 @@ const MultiItemOrderForm: React.FC = () => {
       );
     });
   }, [products, searchValue]);
+  
+  // Filter dealers based on search value
+  const filteredDealers = useMemo(() => {
+    if (!dealerSearchValue) {
+      return dealers;
+    }
+    const lowerCaseSearchValue = dealerSearchValue.toLowerCase();
+    return dealers.filter(dealer => 
+      dealer.name.toLowerCase().includes(lowerCaseSearchValue)
+    );
+  }, [dealers, dealerSearchValue]);
 
   // Condition to disable "Add Item" button
   const disableAddItem = selectedDealer && availableCredit !== null && availableCredit <= 0;
 
-  console.log("[MultiItemOrderForm Render] dealers:", dealers, "loading:", loading);
+  const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -540,22 +555,58 @@ const MultiItemOrderForm: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <Label htmlFor="dealer">Dealer</Label>
-            <Select
-              value={selectedDealer}
-              onValueChange={setSelectedDealer}
-              disabled={dealers.length === 0 || loading} // Disable if loading or no dealers
-            >
-              <SelectTrigger id="dealer" className="w-full">
-                <SelectValue placeholder={dealers.length === 0 ? "No dealers available" : "Select a dealer"} />
-              </SelectTrigger>
-              <SelectContent>
-                {dealers.map((dealer) => (
-                  <SelectItem key={dealer.id} value={dealer.id}>
-                    {dealer.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={isDealerPopoverOpen}
+                  className="w-full justify-between"
+                  disabled={dealers.length === 0 || loading}
+                >
+                  {currentDealerName}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                <Command>
+                  <CommandInput
+                    placeholder="Search dealer..."
+                    value={dealerSearchValue}
+                    onValueChange={setDealerSearchValue}
+                  />
+                  <CommandList className="max-h-[300px] overflow-y-auto">
+                    {filteredDealers.length === 0 ? (
+                      <CommandEmpty>No dealer found.</CommandEmpty>
+                    ) : (
+                      <CommandGroup>
+                        {filteredDealers.map((dealer) => (
+                          <CommandItem
+                            key={dealer.id}
+                            value={dealer.name}
+                            onSelect={(currentValue) => {
+                              const selected = dealers.find(d => d.name.toLowerCase() === currentValue.toLowerCase());
+                              setSelectedDealer(selected?.id === selectedDealer ? '' : selected?.id || '');
+                              setIsDealerPopoverOpen(false);
+                              setDealerSearchValue("");
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedDealer === dealer.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {dealer.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            
             {/* Conditional message if no dealers are available after loading */}
             {!loading && dealers.length === 0 && (
               <p className="text-sm text-muted-foreground mt-2">
