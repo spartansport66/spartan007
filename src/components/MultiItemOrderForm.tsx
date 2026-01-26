@@ -712,8 +712,8 @@ const MultiItemOrderForm: React.FC = () => {
             {orderItems.map((item, index) => (
               <div key={item.id} className="space-y-3 p-4 border rounded-md bg-muted/50">
                 {/* Row 1: Product Selection (Label + Button) + Remove Button */}
-                <div className="grid grid-cols-12 gap-2 items-end">
-                  <div className="col-span-10">
+                <div className="flex items-end gap-2">
+                  <div className="flex-grow">
                     <Label htmlFor={`product-${item.id}`}>Product Selection</Label>
                     <Popover 
                       open={popoverOpenStates[item.id]} 
@@ -790,8 +790,8 @@ const MultiItemOrderForm: React.FC = () => {
                       </PopoverContent>
                     </Popover>
                   </div>
-                  <div className="col-span-2 flex justify-end">
-                    {orderItems.length > 1 && (
+                  {orderItems.length > 1 && (
+                    <div className="flex-shrink-0">
                       <Button
                         type="button"
                         variant="ghost"
@@ -801,8 +801,8 @@ const MultiItemOrderForm: React.FC = () => {
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Row 2: Quantity and Item Total - Side by Side */}

@@ -66,11 +66,11 @@ const AdminTodayFollowupsCard: React.FC<AdminTodayFollowupsCardProps> = ({ onVie
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
-      <CardHeader className="bg-orange-500 dark:bg-orange-700 text-white rounded-t-lg p-4">
+      <CardHeader className="bg-purple-600 dark:bg-purple-800 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold flex items-center gap-2">
           <Clock className="h-5 w-5" /> Today's Follow-ups Due
         </CardTitle>
-        <CardDescription className="text-orange-100 dark:text-orange-200">
+        <CardDescription className="text-purple-100 dark:text-purple-200">
           Total dealer follow-ups due today or overdue across all sales persons.
         </CardDescription>
       </CardHeader>
@@ -81,13 +81,13 @@ const AdminTodayFollowupsCard: React.FC<AdminTodayFollowupsCardProps> = ({ onVie
           </div>
         ) : (
           <div className="flex items-center justify-between">
-            <span className="text-4xl font-bold text-orange-600">{count}</span>
+            <span className="text-4xl font-bold text-purple-600">{count}</span>
             <span className="text-lg font-medium text-muted-foreground">Dealers</span>
           </div>
         )}
         <Button 
           onClick={onViewReport} 
-          className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+          className="w-full bg-purple-600 hover:bg-purple-700 text-white"
         >
           View Detailed Report <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
