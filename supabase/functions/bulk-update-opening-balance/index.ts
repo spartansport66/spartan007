@@ -34,7 +34,7 @@ serve(async (req) => {
 
     const results = {
       successCount: 0,
-      notFound: [] as { name: string; phone: string | null; openingBalance: number; lastBillingDate: string | null }[],
+      notFound: [] as { dealerName: string; phoneNumber: string | null; openingBalance: number; lastBillingDate: string | null }[],
       errorCount: 0,
     };
 
@@ -42,18 +42,18 @@ serve(async (req) => {
       const { dealerName, phoneNumber, openingBalance, lastBillingDate } = update;
 
       try {
-        // 1. Find the dealer ID using name and phone (or just name if phone is missing)
+        // 1. Find the dealer ID using name and optional phone number
         let dealerQuery = supabaseAdmin
           .from('dealers')
           .select('id')
-          .eq('name', dealerName)
-          .limit(1);
+          .eq('name', dealerName);
         
+        // If phone number is provided, use it for a more precise match
         if (phoneNumber) {
           dealerQuery = dealerQuery.eq('phone', phoneNumber);
         }
 
-        const { data: dealerData, error: dealerFetchError } = await dealerQuery.single();
+        const { data: dealerData, error: dealerFetchError } = await dealerQuery.limit(1).single();
 
         if (dealerFetchError || !dealerData) {
           results.notFound.push({ dealerName, phoneNumber, openingBalance, lastBillingDate });
