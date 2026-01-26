@@ -32,8 +32,11 @@ import SalesChart from '@/components/SalesChart';
 import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog';
 import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog';
 import SalesPersonVisitReportDialog from '@/components/reports/SalesPersonVisitReportDialog';
-import SalesPersonTodayFollowupsReportDialog from '@/components/reports/SalesPersonTodayFollowupsReportDialog'; // New Import
-import { updateAllDealerCreditDays } from '@/utils/supabase-actions'; // New import
+import SalesPersonTodayFollowupsReportDialog from '@/components/reports/SalesPersonTodayFollowupsReportDialog';
+import { updateAllDealerCreditDays } from '@/utils/supabase-actions';
+import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
+import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
+import AdminTotalPendingOrdersCard from '@/components/AdminTotalPendingOrdersCard';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -54,10 +57,10 @@ const AdminDashboard = () => {
   const [isDealerOverdueBalanceReportOpen, setIsDealerOverdueBalanceReportOpen] = useState(false);
   const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false);
   const [isSalesPersonVisitReportOpen, setIsSalesPersonVisitReportOpen] = useState(false);
-  const [isSalesPersonTodayFollowupsReportOpen, setIsSalesPersonTodayFollowupsReportOpen] = useState(false); // New state
+  const [isSalesPersonTodayFollowupsReportOpen, setIsSalesPersonTodayFollowupsReportOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [creditDaysUpdated, setCreditDaysUpdated] = useState(false); // New state to track update
+  const [creditDaysUpdated, setCreditDaysUpdated] = useState(false);
 
   const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
   const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
@@ -300,7 +303,7 @@ const AdminDashboard = () => {
               setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen}
               setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen}
               setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen}
-              setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen} // New prop
+              setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen}
             />
           </SheetContent>
         </Sheet>
@@ -329,6 +332,14 @@ const AdminDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <ProductionAlertsCard />
         <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
+      </div>
+      
+      {/* Sales Person Lead Management Section */}
+      <h2 className="text-2xl font-bold text-primary mb-4">Sales Person Lead Management</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <AdminTodayFollowupsCard onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} />
+        <AdminTodayVisitsCard onViewReport={() => setIsSalesPersonVisitReportOpen(true)} />
+        <AdminTotalPendingOrdersCard onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} />
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
@@ -401,7 +412,7 @@ const AdminDashboard = () => {
         isOpen={isSalesPersonVisitReportOpen}
         onOpenChange={setIsSalesPersonVisitReportOpen}
       />
-      <SalesPersonTodayFollowupsReportDialog // New Dialog Render
+      <SalesPersonTodayFollowupsReportDialog
         isOpen={isSalesPersonTodayFollowupsReportOpen}
         onOpenChange={setIsSalesPersonTodayFollowupsReportOpen}
       />
