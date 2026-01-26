@@ -309,6 +309,7 @@ const AdminDashboard = () => {
         </Sheet>
       </div>
       
+      {/* 1. Sales Overview (4 cards) */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md h-full">
@@ -324,17 +325,7 @@ const AdminDashboard = () => {
         ))}
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
-        <DispatchedOrdersCard />
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <ProductionAlertsCard />
-        <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
-      </div>
-      
-      {/* Sales Person Lead Management Section */}
+      {/* 2. Sales Person Lead Management Section (MOVED HERE) */}
       <h2 className="text-2xl font-bold text-primary mb-4">Sales Person Lead Management</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <AdminTodayFollowupsCard onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} />
@@ -342,14 +333,24 @@ const AdminDashboard = () => {
         <AdminTotalPendingOrdersCard onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} />
       </div>
       
+      {/* 3. Orders to Dispatch / Dispatched Orders */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
+        <DispatchedOrdersCard />
+      </div>
+      
+      {/* 4. Production Alerts / Performance Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <ProductionAlertsCard />
+        <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
+      </div>
+      
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <PaymentOverviewCard onViewReport={handleViewPaymentsReport} />
         <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
       </div>
 
-      <div className="grid grid-cols-1 mb-6">
-        <SalesChart data={monthlySalesData} />
-      </div>
+      {/* Monthly Sales Trend Chart (REMOVED) */}
       
       <MadeWithDyad />
       
