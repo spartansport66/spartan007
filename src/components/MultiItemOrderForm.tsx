@@ -712,9 +712,9 @@ const MultiItemOrderForm: React.FC = () => {
             {orderItems.map((item, index) => (
               <div key={item.id} className="space-y-3 p-4 border rounded-md bg-muted/50">
                 {/* Row 1: Product Selection (Full Width) */}
-                <div className="grid grid-cols-12 gap-2 items-end">
-                  <div className="col-span-11">
-                    <Label htmlFor={`product-${item.id}`}>Product</Label>
+                <div className="flex justify-between items-end gap-2">
+                  <div className="flex-grow">
+                    <Label htmlFor={`product-${item.id}`}>Product Selection</Label>
                     <Popover 
                       open={popoverOpenStates[item.id]} 
                       onOpenChange={(openState) => {
@@ -790,24 +790,22 @@ const MultiItemOrderForm: React.FC = () => {
                       </PopoverContent>
                     </Popover>
                   </div>
-                  <div className="col-span-1 flex justify-end">
-                    {orderItems.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeOrderItem(item.id)}
-                        className="h-9 w-9"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
-                  </div>
+                  {orderItems.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeOrderItem(item.id)}
+                      className="h-9 w-9 flex-shrink-0"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  )}
                 </div>
 
                 {/* Row 2: Quantity and Item Total */}
-                <div className="grid grid-cols-12 gap-4 items-end">
-                  <div className="col-span-6">
+                <div className="grid grid-cols-2 gap-4 items-end">
+                  <div>
                     <Label htmlFor={`quantity-${item.id}`}>Quantity</Label>
                     <Input
                       id={`quantity-${item.id}`}
@@ -818,7 +816,7 @@ const MultiItemOrderForm: React.FC = () => {
                       className="w-full"
                     />
                   </div>
-                  <div className="col-span-6">
+                  <div>
                     <Label>Item Total</Label>
                     <div className="font-medium text-lg">₹{calculateItemTotal(item).toFixed(2)}</div>
                   </div>
