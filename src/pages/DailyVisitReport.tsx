@@ -15,6 +15,7 @@ import { ArrowLeft, Loader2, Camera, Upload, CheckCircle, Target } from 'lucide-
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { Progress } from '@/components/ui/progress';
+import { Textarea } from '@/components/ui/textarea';
 
 const DAILY_VISIT_GOAL = 5;
 
@@ -23,8 +24,12 @@ interface Dealer {
   name: string;
 }
 
+const VISIT_STATUS_OPTIONS = ['Routine Visit', 'Payment Reminder Visit', 'New Order'];
+
 const formSchema = z.object({
   dealerId: z.string().uuid({ message: 'Please select a dealer.' }),
+  visitStatus: z.enum(VISIT_STATUS_OPTIONS as [string, ...string[]], { message: 'Please select a visit status.' }),
+  remarks: z.string().max(500, { message: 'Remarks cannot exceed 500 characters.' }).optional(),
   photoFile: z.any().refine(file => file instanceof File, { message: 'A photo is required.' }),
 });
 
@@ -46,6 +51,8 @@ const DailyVisitReport: React.FC = () => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       dealerId: '',
+      visitStatus: 'Routine Visit',
+      remarks: '',
       photoFile: undefined,
     },
   });
@@ -108,6 +115,7 @@ const DailyVisitReport: React.FC = () => {
       const file = values.photoFile as File;
       const dealerName = dealers.find(d => d.id === values.dealerId)?.name || 'unknown';
       const fileExt = file.name.split('.').pop();
+      // Use user ID as the first folder name for RLS
       const filePath = `${user.id}/${Date.now()}_${dealerName.replace(/\s/g, '_')}.${fileExt}`;
 
       // 1. Upload photo to Supabase Storage
@@ -135,6 +143,8 @@ const DailyVisitReport: React.FC = () => {
           dealer_id: values.dealerId,
           visit_time: new Date().toISOString(),
           photo_url: publicUrl,
+          visit_status: values.visitStatus, // New field
+          remarks: values.remarks || null, // New field
         });
 
       if (insertError) {
@@ -144,7 +154,7 @@ const DailyVisitReport: React.FC = () => {
       }
 
       showSuccess(`Visit logged successfully for ${dealerName}!`);
-      form.reset({ dealerId: '', photoFile: undefined });
+      form.reset({ dealerId: '', visitStatus: 'Routine Visit', remarks: '', photoFile: undefined });
       fetchInitialData(); // Refresh progress
     } catch (error: any) {
       console.error('Error logging visit:', error);
@@ -219,6 +229,45 @@ const DailyVisitReport: React.FC = () => {
                           ))}
                         </SelectContent>
                       </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="visitStatus"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Visit Status</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select visit status" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {VISIT_STATUS_OPTIONS.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="remarks"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Remarks (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Any notes about the visit..." {...field} disabled={isSubmitting} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

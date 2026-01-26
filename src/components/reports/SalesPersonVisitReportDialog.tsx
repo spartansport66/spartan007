@@ -19,6 +19,8 @@ interface VisitReportData {
   dealer_name: string;
   visit_time: string;
   photo_url: string | null;
+  visit_status: string; // New field
+  remarks: string | null; // New field
 }
 
 interface FilterOption {
@@ -62,6 +64,8 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
           visit_time,
           photo_url,
           sales_person_id,
+          visit_status,
+          remarks,
           dealers (name)
         `)
         .order('visit_time', { ascending: false });
@@ -88,6 +92,8 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
         dealer_name: visit.dealers?.name || 'N/A',
         visit_time: visit.visit_time,
         photo_url: visit.photo_url,
+        visit_status: visit.visit_status || 'Routine Visit',
+        remarks: visit.remarks || null,
       }));
       setVisits(formattedVisits);
 
@@ -121,11 +127,13 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
     doc.setFontSize(11);
     doc.setTextColor(100);
 
-    const tableColumn = ["Sales Person", "Dealer Name", "Visit Time", "Photo Link"];
+    const tableColumn = ["Sales Person", "Dealer Name", "Visit Time", "Status", "Remarks", "Photo Link"];
     const tableRows = visits.map(visit => [
       visit.sales_person_name,
       visit.dealer_name,
       new Date(visit.visit_time).toLocaleString(),
+      visit.visit_status,
+      visit.remarks || 'N/A',
       visit.photo_url ? 'View Photo' : 'N/A',
     ]);
 
@@ -141,6 +149,14 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
         textColor: [0, 0, 0]
       },
       margin: { top: 25 },
+      columnStyles: {
+        0: { cellWidth: 30 },
+        1: { cellWidth: 30 },
+        2: { cellWidth: 30 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 60 },
+        5: { cellWidth: 20, halign: 'center' },
+      }
     });
 
     doc.save('sales_person_visit_report.pdf');
@@ -149,7 +165,7 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">Sales Person Daily Visit Report</DialogTitle>
           <DialogDescription>
@@ -216,6 +232,8 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
                     <TableHead className="text-muted-foreground font-bold">Sales Person</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Visit Time</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Status</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Remarks</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Photo</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -225,6 +243,8 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
                       <TableCell className="font-medium text-foreground">{visit.sales_person_name}</TableCell>
                       <TableCell className="text-foreground">{visit.dealer_name}</TableCell>
                       <TableCell className="text-foreground">{new Date(visit.visit_time).toLocaleString()}</TableCell>
+                      <TableCell className="text-foreground">{visit.visit_status}</TableCell>
+                      <TableCell className="text-foreground max-w-[200px] truncate" title={visit.remarks || ''}>{visit.remarks || 'N/A'}</TableCell>
                       <TableCell className="text-center">
                         {visit.photo_url ? (
                           <Button 
