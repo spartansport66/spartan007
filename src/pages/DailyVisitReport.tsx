@@ -29,9 +29,9 @@ const VISIT_STATUS_OPTIONS = ['Routine Visit', 'Payment Reminder Visit', 'New Or
 const formSchema = z.object({
   dealerId: z.string().uuid({ message: 'Please select a dealer.' }),
   visitStatus: z.enum(VISIT_STATUS_OPTIONS as [string, ...string[]], { message: 'Please select a visit status.' }),
-  remarks: z.string().max(500, { message: 'Remarks cannot exceed 500 characters.' }).optional(),
+  remarks: z.string().min(1, { message: 'Remarks are required.' }).max(500, { message: 'Remarks cannot exceed 500 characters.' }),
   photoFile: z.any().refine(file => file instanceof File, { message: 'A photo is required.' }),
-  nextVisitDate: z.string().min(1, { message: 'Next Follow-up Date is required.' }), // Made required
+  nextVisitDate: z.string().min(1, { message: 'Next Follow-up Date is required.' }),
 });
 
 const getStartOfUTCDayISO = () => {
@@ -146,8 +146,8 @@ const DailyVisitReport: React.FC = () => {
           visit_time: new Date().toISOString(),
           photo_url: publicUrl,
           visit_status: values.visitStatus,
-          remarks: values.remarks || null,
-          next_visit_date: values.nextVisitDate, // Now required
+          remarks: values.remarks, // Remarks is now guaranteed to be a non-empty string
+          next_visit_date: values.nextVisitDate,
         });
 
       if (insertError) {
@@ -267,7 +267,7 @@ const DailyVisitReport: React.FC = () => {
                   name="remarks"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Remarks (Optional)</FormLabel>
+                      <FormLabel>Remarks (Required)</FormLabel>
                       <FormControl>
                         <Textarea placeholder="Any notes about the visit..." {...field} disabled={isSubmitting} />
                       </FormControl>
