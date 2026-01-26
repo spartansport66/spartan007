@@ -194,7 +194,7 @@ const ProductionAlertsCard: React.FC = () => {
           fontSize: 8
         },
         headStyles: {
-          fillColor: [220, 38, 38], // Red color
+          fillColor: [249, 115, 22], // Orange color
           textColor: [255, 255, 255]
         },
         margin: {
@@ -222,9 +222,9 @@ const ProductionAlertsCard: React.FC = () => {
   if (loading) {
     return (
       <Card className="bg-card text-card-foreground shadow-lg h-full">
-        <CardHeader className="bg-red-600 dark:bg-red-800 text-white rounded-t-lg p-4">
+        <CardHeader className="bg-orange-600 dark:bg-orange-800 text-white rounded-t-lg p-4">
           <CardTitle className="text-xl font-semibold">Production Alerts</CardTitle>
-          <CardDescription className="text-red-100 dark:text-red-200">Urgent material requirements from sales orders.</CardDescription>
+          <CardDescription className="text-orange-100 dark:text-orange-200">Urgent material requirements from sales orders.</CardDescription>
         </CardHeader>
         <CardContent className="p-4 flex items-center justify-center py-8">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -236,11 +236,11 @@ const ProductionAlertsCard: React.FC = () => {
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
-      <CardHeader className="bg-red-600 dark:bg-red-800 text-white rounded-t-lg p-4">
+      <CardHeader className="bg-orange-600 dark:bg-orange-800 text-white rounded-t-lg p-4">
         <div className="flex justify-between items-center">
           <div>
             <CardTitle className="text-xl font-semibold">Production Alerts</CardTitle>
-            <CardDescription className="text-red-100 dark:text-red-200">
+            <CardDescription className="text-orange-100 dark:text-orange-200">
               Urgent material requirements from sales orders. ({alerts.length} pending)
             </CardDescription>
           </div>
