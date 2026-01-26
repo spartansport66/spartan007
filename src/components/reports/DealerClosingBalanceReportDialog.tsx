@@ -150,7 +150,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         setDealers([]);
       } else {
         const formattedDealers: DealerClosingBalance[] = (data || []).map((d: any) => {
-          const openingBalance = d.dealer_balances?.opening_balance || 0;
+          const openingBalance = d.dealer_balances?.[0]?.opening_balance || 0;
           
           let totalSales = 0;
           let totalPayments = 0;
@@ -489,7 +489,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">Dealer Closing Balance Report</DialogTitle>
           <DialogDescription>
@@ -600,9 +600,22 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                     const isDealerSent = sentDealerIds.has(dealer.id);
                     const isDealerSelected = selectedDealerIds.includes(dealer.id);
                     const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
+                    
+                    // Conditional styling based on daysSinceLastBill
+                    let rowClass = "hover:bg-accent/50";
+                    let textClass = "text-foreground";
+                    if (dealer.daysSinceLastBill !== null) {
+                      if (dealer.daysSinceLastBill > 60) {
+                        rowClass = "bg-red-50/50 hover:bg-red-100/50";
+                        textClass = "text-red-800 dark:text-red-200";
+                      } else if (dealer.daysSinceLastBill > 0) {
+                        rowClass = "bg-green-50/50 hover:bg-green-100/50";
+                        textClass = "text-green-800 dark:text-green-200";
+                      }
+                    }
 
                     return (
-                      <TableRow key={dealer.id} className="hover:bg-accent/50">
+                      <TableRow key={dealer.id} className={cn(rowClass)}>
                         <TableCell>
                           <Checkbox
                             checked={isDealerSelected}
@@ -610,17 +623,17 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                             disabled={isSendingWhatsApp}
                           />
                         </TableCell>
-                        <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className={cn("font-medium", textClass)}>{dealer.name}</TableCell>
+                        <TableCell className={cn("text-right font-medium", textClass)}>
                           {`₹${dealer.closing_balance.toFixed(2)}`}
                         </TableCell>
-                        <TableCell className="text-center text-muted-foreground">
+                        <TableCell className={cn("text-center", textClass)}>
                           {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
                         </TableCell>
-                        <TableCell className="text-center text-muted-foreground">
+                        <TableCell className={cn("text-center font-medium", textClass)}>
                           {dealer.daysSinceLastBill !== null ? dealer.daysSinceLastBill : 'N/A'}
                         </TableCell>
-                        <TableCell className="text-center text-muted-foreground">
+                        <TableCell className={cn("text-center", textClass)}>
                           {dealer.phone || 'N/A'}
                         </TableCell>
                         <TableCell className="text-center">
