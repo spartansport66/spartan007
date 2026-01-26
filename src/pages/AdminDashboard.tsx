@@ -31,7 +31,8 @@ import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceRepor
 import SalesChart from '@/components/SalesChart';
 import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog';
 import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog';
-import SalesPersonVisitReportDialog from '@/components/reports/SalesPersonVisitReportDialog'; // New import
+import SalesPersonVisitReportDialog from '@/components/reports/SalesPersonVisitReportDialog';
+import { updateAllDealerCreditDays } from '@/utils/supabase-actions'; // New import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -51,9 +52,10 @@ const AdminDashboard = () => {
   const [isOpeningBalanceReportOpen, setIsOpeningBalanceReportOpen] = useState(false);
   const [isDealerOverdueBalanceReportOpen, setIsDealerOverdueBalanceReportOpen] = useState(false);
   const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false);
-  const [isSalesPersonVisitReportOpen, setIsSalesPersonVisitReportOpen] = useState(false); // New state
+  const [isSalesPersonVisitReportOpen, setIsSalesPersonVisitReportOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [creditDaysUpdated, setCreditDaysUpdated] = useState(false); // New state to track update
 
   const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
   const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
@@ -161,11 +163,19 @@ const AdminDashboard = () => {
         showError('Access Denied: Only administrators can view this page.');
         navigate('/dashboard');
       } else {
+        // Admin specific action: Update all dealer credit days to 60 once per session
+        if (!creditDaysUpdated) {
+          updateAllDealerCreditDays(60).then(success => {
+            if (success) {
+              setCreditDaysUpdated(true);
+            }
+          });
+        }
         fetchDashboardData();
         fetchCompanyInfo();
       }
     }
-  }, [sessionLoading, user, userType, isAdmin, fetchDashboardData, fetchCompanyInfo, navigate]);
+  }, [sessionLoading, user, userType, isAdmin, fetchDashboardData, fetchCompanyInfo, navigate, creditDaysUpdated]);
 
   const handleLogout = async () => {
     try {
@@ -287,7 +297,7 @@ const AdminDashboard = () => {
               setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen}
               setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen}
               setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen}
-              setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen} // Pass new setter
+              setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen}
             />
           </SheetContent>
         </Sheet>
@@ -384,7 +394,7 @@ const AdminDashboard = () => {
         isOpen={isDealerClosingBalanceReportOpen}
         onOpenChange={setIsDealerClosingBalanceReportOpen}
       />
-      <SalesPersonVisitReportDialog // New Report Dialog
+      <SalesPersonVisitReportDialog
         isOpen={isSalesPersonVisitReportOpen}
         onOpenChange={setIsSalesPersonVisitReportOpen}
       />
