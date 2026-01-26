@@ -710,112 +710,118 @@ const MultiItemOrderForm: React.FC = () => {
             )}
 
             {orderItems.map((item, index) => (
-              <div key={item.id} className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-5">
-                  <Label htmlFor={`product-${item.id}`}>Product</Label>
-                  <Popover 
-                    open={popoverOpenStates[item.id]} 
-                    onOpenChange={(openState) => {
-                      setPopoverOpenStates(prev => ({ ...prev, [item.id]: openState }));
-                      // When opening a new popover, clear the search value if it's not the currently selected item's popover
-                      if (openState) {
-                        setSearchValue("");
-                      }
-                    }}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={popoverOpenStates[item.id]}
-                        className="w-full justify-between"
-                      >
-                        {item.product_id
-                          ? products.find((product) => product.id === item.product_id)?.name
-                          : "Select product..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                      <Command>
-                        <CommandInput
-                          placeholder="Search product..."
-                          value={searchValue}
-                          onValueChange={setSearchValue}
-                        />
-                        <CommandList className="max-h-[300px] overflow-y-auto">
-                          {/* Use filteredProducts here */}
-                          {filteredProducts.length === 0 ? (
-                            <CommandEmpty>No product found.</CommandEmpty>
-                          ) : (
-                            <CommandGroup>
-                              {filteredProducts.map((product) => (
-                                <CommandItem
-                                  key={product.id}
-                                  // Set value to the searchable string (name + code)
-                                  value={`${product.name} ${product.code}`}
-                                  onSelect={(currentValue) => {
-                                    // Find the product by matching the name/code string
-                                    const selectedProduct = products.find(p => 
-                                      `${p.name} ${p.code}`.toLowerCase() === currentValue.toLowerCase()
-                                    );
-                                    
-                                    // Update the order item with the selected product ID
-                                    updateOrderItem(item.id, 'product_id', selectedProduct?.id || '');
-                                    
-                                    // Close the popover and clear search
-                                    setPopoverOpenStates(prev => ({ ...prev, [item.id]: false }));
-                                    setSearchValue("");
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      item.product_id === product.id ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  <div>
-                                    <div>{product.name} ({product.code})</div>
-                                    <div className="text-xs text-muted-foreground">
-                                      DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}
-                                    </div>
-                                  </div>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          )}
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="col-span-3">
-                  <Label htmlFor={`quantity-${item.id}`}>Quantity</Label>
-                  <Input
-                    id={`quantity-${item.id}`}
-                    type="number"
-                    value={item.quantity}
-                    onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
-                    min="1"
-                    className="w-full"
-                  />
-                </div>
-                <div className="col-span-3">
-                  <Label>Item Total</Label>
-                  <div className="font-medium">₹{calculateItemTotal(item).toFixed(2)}</div>
-                </div>
-                <div className="col-span-1">
-                  {orderItems.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeOrderItem(item.id)}
-                      className="h-9 w-9"
+              <div key={item.id} className="space-y-3 p-4 border rounded-md bg-muted/50">
+                {/* Row 1: Product Selection (Full Width) */}
+                <div className="grid grid-cols-12 gap-2 items-end">
+                  <div className="col-span-11">
+                    <Label htmlFor={`product-${item.id}`}>Product</Label>
+                    <Popover 
+                      open={popoverOpenStates[item.id]} 
+                      onOpenChange={(openState) => {
+                        setPopoverOpenStates(prev => ({ ...prev, [item.id]: openState }));
+                        if (openState) {
+                          setSearchValue("");
+                        }
+                      }}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={popoverOpenStates[item.id]}
+                          className="w-full justify-between"
+                        >
+                          {item.product_id
+                            ? products.find((product) => product.id === item.product_id)?.name
+                            : "Select product..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                        <Command>
+                          <CommandInput
+                            placeholder="Search product..."
+                            value={searchValue}
+                            onValueChange={setSearchValue}
+                          />
+                          <CommandList className="max-h-[300px] overflow-y-auto">
+                            {/* Use filteredProducts here */}
+                            {filteredProducts.length === 0 ? (
+                              <CommandEmpty>No product found.</CommandEmpty>
+                            ) : (
+                              <CommandGroup>
+                                {filteredProducts.map((product) => (
+                                  <CommandItem
+                                    key={product.id}
+                                    // Set value to the searchable string (name + code)
+                                    value={`${product.name} ${product.code}`}
+                                    onSelect={(currentValue) => {
+                                      // Find the product by matching the name/code string
+                                      const selectedProduct = products.find(p => 
+                                        `${p.name} ${p.code}`.toLowerCase() === currentValue.toLowerCase()
+                                      );
+                                      
+                                      // Update the order item with the selected product ID
+                                      updateOrderItem(item.id, 'product_id', selectedProduct?.id || '');
+                                      
+                                      // Close the popover and clear search
+                                      setPopoverOpenStates(prev => ({ ...prev, [item.id]: false }));
+                                      setSearchValue("");
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        item.product_id === product.id ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    <div>
+                                      <div>{product.name} ({product.code})</div>
+                                      <div className="text-xs text-muted-foreground">
+                                        DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}
+                                      </div>
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            )}
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="col-span-1 flex justify-end">
+                    {orderItems.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeOrderItem(item.id)}
+                        className="h-9 w-9"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Row 2: Quantity and Item Total */}
+                <div className="grid grid-cols-12 gap-4 items-end">
+                  <div className="col-span-6">
+                    <Label htmlFor={`quantity-${item.id}`}>Quantity</Label>
+                    <Input
+                      id={`quantity-${item.id}`}
+                      type="number"
+                      value={item.quantity}
+                      onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
+                      min="1"
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="col-span-6">
+                    <Label>Item Total</Label>
+                    <div className="font-medium text-lg">₹{calculateItemTotal(item).toFixed(2)}</div>
+                  </div>
                 </div>
               </div>
             ))}
