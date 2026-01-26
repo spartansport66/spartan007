@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2, Search, Eye, FileText } from 'lucide-react'; // Added FileText icon
+import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2, Search, Eye, FileText } from 'lucide-react';
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
@@ -17,12 +17,12 @@ import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import SalesPersonPerformanceCard from '@/components/SalesPersonPerformanceCard';
 import PaymentStatusCard from '@/components/PaymentStatusCard';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"; // Added DropdownMenu imports
-import SalesPersonSalesReport from '@/components/reports/SalesPersonSalesReport'; // New import
-import SalesPersonDealerReport from '@/components/reports/SalesPersonDealerReport'; // New import
-import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsReport'; // New import
-import DailyVisitProgressCard from '@/components/DailyVisitProgressCard'; // New import
-import SalesPersonOverdueBalanceCard from '@/components/SalesPersonOverdueBalanceCard'; // NEW IMPORT
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import SalesPersonSalesReport from '@/components/reports/SalesPersonSalesReport';
+import SalesPersonDealerReport from '@/components/reports/SalesPersonDealerReport';
+import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsReport';
+import DailyVisitProgressCard from '@/components/DailyVisitProgressCard';
+// import SalesPersonOverdueBalanceCard from '@/components/SalesPersonOverdueBalanceCard'; // REMOVED IMPORT
 
 interface Product {
   id: string;
@@ -306,11 +306,6 @@ const Dashboard = () => {
         <DailyVisitProgressCard />
       </div>
       
-      {/* NEW: Overdue Accounts Card (Spans 2 columns) */}
-      <div className="grid grid-cols-1 mb-6">
-        <SalesPersonOverdueBalanceCard />
-      </div>
-
       {/* Multi-Item Order Form - Full Width */}
       <div className="mb-6">
         <MultiItemOrderForm />
