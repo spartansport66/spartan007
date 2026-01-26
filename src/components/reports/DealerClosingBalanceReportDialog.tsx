@@ -39,12 +39,15 @@ interface DealerClosingBalanceReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const OVERDUE_THRESHOLD_DAYS = 60;
+
 const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const { user } = useSession();
   const [dealers, setDealers] = useState<DealerClosingBalance[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDealerName, setFilterDealerName] = useState<string>('');
   const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
+  const [filterOverduePeriod, setFilterOverduePeriod] = useState<'all' | 'less_than_60' | 'more_than_60'>('all'); // New filter state
   const [allSalesPersons, setAllSalesPersons] = useState<FilterOption[]>([]);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
@@ -181,7 +184,23 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           };
         }).filter(d => d.closing_balance > 0); // Only show dealers with positive closing balance
         
-        setDealers(formattedDealers);
+        // Apply overdue period filter
+        const filteredByOverdue = formattedDealers.filter(dealer => {
+          if (filterOverduePeriod === 'all') return true;
+          
+          const days = dealer.daysSinceLastBill;
+          if (days === null) return false; // Must have a last billing date to be filtered by days
+
+          if (filterOverduePeriod === 'less_than_60') {
+            return days <= OVERDUE_THRESHOLD_DAYS;
+          }
+          if (filterOverduePeriod === 'more_than_60') {
+            return days > OVERDUE_THRESHOLD_DAYS;
+          }
+          return true;
+        });
+
+        setDealers(filteredByOverdue);
       }
     } catch (error: any) {
       console.error('Error in fetchClosingBalances:', error.message);
@@ -189,7 +208,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     } finally {
       setLoading(false);
     }
-  }, [filterDealerName, filterSalesPersonId]);
+  }, [filterDealerName, filterSalesPersonId, filterOverduePeriod]);
 
   useEffect(() => {
     if (isOpen) {
@@ -205,6 +224,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const handleClearFilters = () => {
     setFilterDealerName('');
     setFilterSalesPersonId('');
+    setFilterOverduePeriod('all');
   };
 
   const handleResetSentStatus = () => {
@@ -282,7 +302,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       // 3. Update local state to mark as sent
       setSentDealerIds(prev => new Set([...prev, dealer.id]));
     } catch (error: any) {
-      console.error('[DealerClosingBalanceReportDialog] Error sending WhatsApp message:', error);
+      console.error('Error sending WhatsApp message:', error);
       showError(`Failed to send WhatsApp message: ${error.message}`);
     } finally {
       setIsSendingWhatsApp(false);
@@ -415,6 +435,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         const salesPersonLabel = allSalesPersons.find(sp => sp.value === filterSalesPersonId)?.label;
         if (salesPersonLabel) filterDetails.push(`Sales Person: ${salesPersonLabel}`);
       }
+      if (filterOverduePeriod === 'less_than_60') filterDetails.push(`Overdue Period: <= ${OVERDUE_THRESHOLD_DAYS} Days`);
+      if (filterOverduePeriod === 'more_than_60') filterDetails.push(`Overdue Period: > ${OVERDUE_THRESHOLD_DAYS} Days`);
       
       if (filterDetails.length > 0) {
         doc.setFontSize(9);
@@ -522,6 +544,19 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
               </SelectContent>
             </Select>
           </div>
+          <div className="flex-1 min-w-[180px]">
+            <Label htmlFor="filterOverduePeriod">Overdue Period</Label>
+            <Select value={filterOverduePeriod} onValueChange={(value) => setFilterOverduePeriod(value as typeof filterOverduePeriod)}>
+              <SelectTrigger id="filterOverduePeriod" className="w-full">
+                <SelectValue placeholder="All Balances" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Positive Balances</SelectItem>
+                <SelectItem value="less_than_60">Less than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem>
+                <SelectItem value="more_than_60">More than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button onClick={fetchClosingBalances} className="flex items-center gap-2 bg-primary hover:bg-primary/90">
             <Search className="h-4 w-4" /> Apply Filter
           </Button>
@@ -537,7 +572,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
               <p className="ml-2 text-lg text-foreground">Loading data...</p>
             </div>
           ) : dealers.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No dealer closing balance data found.</p>
+            <p className="text-center text-muted-foreground py-8">No dealer closing balance data found matching your criteria.</p>
           ) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
