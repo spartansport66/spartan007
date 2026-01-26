@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, PlusCircle, Boxes, AlertTriangle, FileUp } from 'lucide-react'; // Added FileUp icon
+import { ArrowLeft, PlusCircle, Boxes, AlertTriangle, FileUp, Package } from 'lucide-react'; // Added Package icon
 import ProductTableManager from '@/components/ProductTableManager';
 import LowStockProductsCard from '@/components/LowStockProductsCard';
 import { useSession } from '@/contexts/SessionContext';
@@ -46,7 +46,7 @@ const ProductManagementConsole = () => {
         <div className="w-fit"></div> {/* Spacer for alignment */}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
         {/* Add New Product Card */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
@@ -69,6 +69,19 @@ const ProductManagementConsole = () => {
           <CardContent className="p-4 flex-grow flex items-center justify-center">
             <Button onClick={() => navigate('/bulk-add-products')} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white">
               <FileUp className="h-5 w-5 mr-2" /> Bulk Upload
+            </Button>
+          </CardContent>
+        </Card>
+        
+        {/* Record Stock Receipt Card (New) */}
+        <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
+          <CardHeader className="bg-purple-500 dark:bg-purple-700 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold">Record Stock Receipt</CardTitle>
+            <CardDescription className="text-purple-100 dark:text-purple-200">Log new inventory received.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 flex-grow flex items-center justify-center">
+            <Button onClick={() => navigate('/stock-receipts')} className="w-full bg-purple-600 hover:bg-purple-700 text-white">
+              <Package className="h-5 w-5 mr-2" /> Record Receipt
             </Button>
           </CardContent>
         </Card>
