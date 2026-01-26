@@ -95,7 +95,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
       }
       setCompanyName(data?.company_name || null);
     } catch (error: any) {
-      console.error('Error fetching company info for WhatsApp message:', error.message);
+      console.error('Error fetching company name for WhatsApp message:', error.message);
       showError('Failed to load company information for WhatsApp message.');
       setCompanyName(null);
     }
@@ -397,6 +397,105 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
     }
   };
 
+  const handlePrint = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'landscape'
+      });
+      
+      const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+      doc.setFontSize(22);
+      doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
+      doc.setFontSize(18);
+      doc.text("Payments Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
+
+      let filterDetails = [];
+      if (filterStatus !== 'all') filterDetails.push(`Status: ${filterStatus.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())}`);
+      if (filterDealerId) {
+        const dealerLabel = allDealers.find(d => d.value === filterDealerId)?.label;
+        if (dealerLabel) filterDetails.push(`Dealer: ${dealerLabel}`);
+      }
+      if (filterFromDate) filterDetails.push(`From Order Date: ${new Date(filterFromDate).toLocaleDateString()}`);
+      if (filterToDate) filterDetails.push(`To Order Date: ${new Date(filterToDate).toLocaleDateString()}`);
+
+      if (filterDetails.length > 0) {
+        doc.setFontSize(9);
+        doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
+      }
+
+      const tableColumn = [
+        "Order No.",
+        "Dealer Name",
+        "Phone",
+        "Order Date",
+        "Payment Method",
+        "Status",
+        "Due Date",
+        "Amount"
+      ];
+
+      const tableRows = payments.map(payment => [
+        `#${payment.order_number}`,
+        payment.dealer_name,
+        payment.dealer_phone || 'N/A',
+        new Date(payment.order_date).toLocaleDateString(),
+        payment.payment_method ? payment.payment_method.replace(/_/g, ' ') : 'N/A',
+        payment.payment_status.replace(/_/g, ' ').toUpperCase(),
+        payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A',
+        `₹${payment.total_amount.toFixed(2)}`,
+      ]);
+
+      const totalSum = payments.reduce((sum, payment) => sum + payment.total_amount, 0);
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        foot: [[{ content: 'Total', colSpan: 7, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalSum.toFixed(2)}`]],
+        startY: 45,
+        styles: {
+          fontSize: 7,
+          cellPadding: 2,
+          valign: 'middle',
+        },
+        headStyles: {
+          fillColor: [30, 58, 138],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'center',
+        },
+        bodyStyles: {
+          textColor: [0, 0, 0],
+        },
+        footStyles: {
+          fillColor: [220, 220, 220],
+          textColor: [0, 0, 0],
+          fontStyle: 'bold',
+          fontSize: 8,
+        },
+        margin: { top: 10, left: 10, right: 10 },
+        columnStyles: {
+          0: { cellWidth: 20, halign: 'center' },
+          1: { cellWidth: 35 },
+          2: { cellWidth: 25 },
+          3: { cellWidth: 25, halign: 'center' },
+          4: { cellWidth: 30, halign: 'center' },
+          5: { cellWidth: 25, halign: 'center' },
+          6: { cellWidth: 25, halign: 'center' },
+          7: { cellWidth: 25, halign: 'right' },
+        }
+      });
+
+      doc.save('payments_report.pdf');
+      showSuccess('Payments report generated successfully!');
+    } catch (error: any) {
+      console.error('[PaymentsReportDialog] Error generating PDF:', error);
+      showError(`Failed to generate payments report: ${error.message || 'An unknown error occurred.'}`);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto">
@@ -491,9 +590,8 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                 </TableHeader>
                 <TableBody>
                   {payments.map((payment) => {
-                    console.log("DEBUG: Rendering payment row:", payment); // Log the payment object before rendering
-                    const displayStatus = payment.payment_status ?? 'unknown'; // Ensure it's a string
-                    const paymentIsDue = isPaymentDue(payment); // Determine if payment is due
+                    const displayStatus = payment.payment_status ?? 'unknown';
+                    const paymentIsDue = isPaymentDue(payment);
 
                     return (
                       <TableRow key={payment.id} className="hover:bg-accent/50">
