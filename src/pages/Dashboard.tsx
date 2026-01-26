@@ -22,6 +22,7 @@ import SalesPersonSalesReport from '@/components/reports/SalesPersonSalesReport'
 import SalesPersonDealerReport from '@/components/reports/SalesPersonDealerReport'; // New import
 import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsReport'; // New import
 import DailyVisitProgressCard from '@/components/DailyVisitProgressCard'; // New import
+import SalesPersonOverdueBalanceCard from '@/components/SalesPersonOverdueBalanceCard'; // NEW IMPORT
 
 interface Product {
   id: string;
@@ -302,7 +303,12 @@ const Dashboard = () => {
       {/* Sales Person Performance Card and Daily Visit Progress Card */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <SalesPersonPerformanceCard />
-        <DailyVisitProgressCard /> {/* New Daily Visit Progress Card */}
+        <DailyVisitProgressCard />
+      </div>
+      
+      {/* NEW: Overdue Accounts Card (Spans 2 columns) */}
+      <div className="grid grid-cols-1 mb-6">
+        <SalesPersonOverdueBalanceCard />
       </div>
 
       {/* Multi-Item Order Form - Full Width */}
