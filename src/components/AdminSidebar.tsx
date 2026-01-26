@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from 'react-router-dom';
-import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale, MapPin } from 'lucide-react';
+import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale, MapPin, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AdminSidebarProps {
@@ -21,7 +21,8 @@ interface AdminSidebarProps {
   setIsOpeningBalanceReportOpen: (isOpen: boolean) => void;
   setIsDealerOverdueBalanceReportOpen: (isOpen: boolean) => void;
   setIsDealerClosingBalanceReportOpen: (isOpen: boolean) => void;
-  setIsSalesPersonVisitReportOpen: (isOpen: boolean) => void; // New prop
+  setIsSalesPersonVisitReportOpen: (isOpen: boolean) => void;
+  setIsSalesPersonTodayFollowupsReportOpen: (isOpen: boolean) => void; // New prop
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -37,7 +38,8 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsOpeningBalanceReportOpen,
   setIsDealerOverdueBalanceReportOpen,
   setIsDealerClosingBalanceReportOpen,
-  setIsSalesPersonVisitReportOpen, // Destructure new prop
+  setIsSalesPersonVisitReportOpen,
+  setIsSalesPersonTodayFollowupsReportOpen, // Destructure new prop
 }) => {
   const navigate = useNavigate();
 
@@ -154,6 +156,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsSalesPersonVisitReportOpen(true)}>
               <MapPin className="h-4 w-4 mr-2" /> Daily Visit Report
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsSalesPersonTodayFollowupsReportOpen(true)} className="text-orange-600 font-semibold">
+              <Clock className="h-4 w-4 mr-2 text-orange-600" /> Today's Follow-ups
             </DropdownMenuItem>
           </SheetClose>
           <DropdownMenuSeparator />

@@ -32,6 +32,7 @@ import SalesChart from '@/components/SalesChart';
 import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog';
 import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog';
 import SalesPersonVisitReportDialog from '@/components/reports/SalesPersonVisitReportDialog';
+import SalesPersonTodayFollowupsReportDialog from '@/components/reports/SalesPersonTodayFollowupsReportDialog'; // New Import
 import { updateAllDealerCreditDays } from '@/utils/supabase-actions'; // New import
 
 const AdminDashboard = () => {
@@ -53,6 +54,7 @@ const AdminDashboard = () => {
   const [isDealerOverdueBalanceReportOpen, setIsDealerOverdueBalanceReportOpen] = useState(false);
   const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false);
   const [isSalesPersonVisitReportOpen, setIsSalesPersonVisitReportOpen] = useState(false);
+  const [isSalesPersonTodayFollowupsReportOpen, setIsSalesPersonTodayFollowupsReportOpen] = useState(false); // New state
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [creditDaysUpdated, setCreditDaysUpdated] = useState(false); // New state to track update
@@ -298,6 +300,7 @@ const AdminDashboard = () => {
               setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen}
               setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen}
               setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen}
+              setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen} // New prop
             />
           </SheetContent>
         </Sheet>
@@ -397,6 +400,10 @@ const AdminDashboard = () => {
       <SalesPersonVisitReportDialog
         isOpen={isSalesPersonVisitReportOpen}
         onOpenChange={setIsSalesPersonVisitReportOpen}
+      />
+      <SalesPersonTodayFollowupsReportDialog // New Dialog Render
+        isOpen={isSalesPersonTodayFollowupsReportOpen}
+        onOpenChange={setIsSalesPersonTodayFollowupsReportOpen}
       />
     </div>
   );
