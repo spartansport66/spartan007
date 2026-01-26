@@ -39,22 +39,23 @@ serve(async (req) => {
     };
 
     for (const update of updates) {
-      // Temporarily include gstin in update object for logging purposes, but don't use it for matching/updating
       const { dealerName, phoneNumber, gstin, openingBalance, lastBillingDate } = update;
 
       try {
-        // 1. Find the dealer ID using name and optional phone number
+        // 1. Find the dealer ID using name, optional phone number, and optional gstin
         let dealerQuery = supabaseAdmin
           .from('dealers')
-          .select('id')
+          .select('id, gstin') // Select existing gstin to check if we need to update it
           .eq('name', dealerName);
         
-        // Use OR condition for matching by phone if provided, otherwise rely only on name
+        // Use OR condition for matching by phone or gstin if provided, otherwise rely only on name
         const matchConditions = [];
         if (phoneNumber) {
           matchConditions.push(`phone.eq.${phoneNumber}`);
         }
-        // GSTIN matching is temporarily removed here
+        if (gstin) {
+          matchConditions.push(`gstin.eq.${gstin}`);
+        }
         
         if (matchConditions.length > 0) {
             dealerQuery = dealerQuery.or(matchConditions.join(','));
@@ -63,20 +64,22 @@ serve(async (req) => {
         const { data: dealerData, error: dealerFetchError } = await dealerQuery.limit(1).single();
 
         if (dealerFetchError || !dealerData) {
-          // Include gstin in notFound log for user reference
           results.notFound.push({ dealerName, phoneNumber, gstin, openingBalance, lastBillingDate });
           continue;
         }
 
         const dealerId = dealerData.id;
-        let dealerUpdateData: { last_billing_date?: string | null } = {}; // Removed gstin update
+        let dealerUpdateData: { last_billing_date?: string | null; gstin?: string | null } = {};
 
         // 2. Update last_billing_date in dealers table
         if (lastBillingDate) {
             dealerUpdateData.last_billing_date = lastBillingDate;
         }
         
-        // 3. GSTIN update logic is temporarily removed
+        // 3. Update GSTIN in dealers table if provided and different
+        if (gstin && dealerData.gstin !== gstin) {
+            dealerUpdateData.gstin = gstin;
+        }
         
         if (Object.keys(dealerUpdateData).length > 0) {
             const { error: dealerUpdateError } = await supabaseAdmin

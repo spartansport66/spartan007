@@ -21,7 +21,7 @@ const formSchema = z.object({
   contactPerson: z.string().nullable().optional(), // Made optional
   email: z.string().email({ message: 'Please enter a valid email address.' }).nullable().optional(), // Made optional
   phone: z.string().min(10, { message: 'Phone number must be at least 10 digits.' }).max(15, { message: 'Phone number cannot exceed 15 digits.' }),
-  // gstin: z.string().nullable().optional(), // Temporarily removed
+  gstin: z.string().nullable().optional(), // New: GSTIN field
   address: z.string().min(5, { message: 'Address must be at least 5 characters.' }),
   city: z.string().min(2, { message: 'City must be at least 2 characters.' }),
   state: z.string().min(2, { message: 'State must be at least 2 characters.' }),
@@ -61,7 +61,7 @@ const AddDealer = () => {
       contactPerson: '', // Default to empty string
       email: '', // Default to empty string
       phone: '',
-      // gstin: '', // Temporarily removed
+      gstin: '', // Default to empty string
       address: '',
       city: '',
       state: '',
@@ -128,7 +128,7 @@ const AddDealer = () => {
         contact_person: values.contactPerson || null, // Pass null if optional and empty
         email: values.email || null, // Pass null if optional and empty
         phone: values.phone,
-        // gstin: values.gstin || null, // Temporarily removed
+        gstin: values.gstin || null, // New: Insert GSTIN
         address: values.address,
         city: values.city,
         state: values.state,
@@ -277,7 +277,7 @@ const AddDealer = () => {
                   )}
                 />
 
-                {/* <FormField
+                <FormField
                   control={form.control}
                   name="gstin"
                   render={({ field }) => (
@@ -289,7 +289,7 @@ const AddDealer = () => {
                       <FormMessage />
                     </FormItem>
                   )}
-                /> */}
+                />
                 
                 <FormField
                   control={form.control}
@@ -412,10 +412,10 @@ const AddDealer = () => {
                       <FormControl>
                         <MultiSelect 
                           options={salesPersonOptions}
-                          value={field.value}
-                          onChange={field.onChange}
+                          value={field.value} // Changed from 'selected' to 'value'
+                          onChange={field.onChange} // Changed from 'onSelect' to 'onChange'
                           placeholder="Select sales person(s)"
-                          disabled={!isAdmin}
+                          disabled={!isAdmin} // Disable if not admin, sales person automatically assigns themselves
                         />
                       </FormControl>
                       <FormMessage />

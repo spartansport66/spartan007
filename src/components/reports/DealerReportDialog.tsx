@@ -19,7 +19,6 @@ interface DealerReportData {
   contact_person: string;
   email: string;
   phone: string;
-  // gstin: string; // Temporarily removed
   address: string;
   city: string;
   state: string;
@@ -79,7 +78,6 @@ const DealerReportDialog: React.FC<DealerReportDialogProps> = ({ isOpen, onOpenC
           contact_person: d.contact_person,
           email: d.email,
           phone: d.phone,
-          // gstin: d.gstin, // Temporarily removed
           address: d.address,
           city: d.city,
           state: d.state,
@@ -242,7 +240,6 @@ const DealerReportDialog: React.FC<DealerReportDialogProps> = ({ isOpen, onOpenC
                     <TableHead className="text-muted-foreground">Contact Person</TableHead>
                     <TableHead className="text-muted-foreground">Email</TableHead>
                     <TableHead className="text-muted-foreground">Phone</TableHead>
-                    {/* <TableHead className="text-muted-foreground">GSTIN</TableHead> */}
                     <TableHead className="text-muted-foreground">Address</TableHead>
                     <TableHead className="text-muted-foreground">City</TableHead>
                     <TableHead className="text-muted-foreground">State</TableHead>
@@ -258,7 +255,6 @@ const DealerReportDialog: React.FC<DealerReportDialogProps> = ({ isOpen, onOpenC
                       <TableCell className="text-muted-foreground">{dealer.contact_person}</TableCell>
                       <TableCell className="text-muted-foreground">{dealer.email}</TableCell>
                       <TableCell className="text-muted-foreground">{dealer.phone}</TableCell>
-                      {/* <TableCell className="text-muted-foreground">{dealer.gstin}</TableCell> */}
                       <TableCell className="text-muted-foreground">{dealer.address}</TableCell>
                       <TableCell className="text-muted-foreground">{dealer.city}</TableCell>
                       <TableCell className="text-muted-foreground">{dealer.state}</TableCell>
