@@ -17,7 +17,8 @@ import ProductManagementConsole from "./pages/ProductManagementConsole";
 import BulkAddProducts from "./pages/BulkAddProducts";
 import ComboOffersDashboard from "./pages/ComboOffersDashboard";
 import SheetConverterPage from "./pages/SheetConverterPage";
-import ForcePasswordReset from "./pages/ForcePasswordReset"; // Import the new page
+import ForcePasswordReset from "./pages/ForcePasswordReset";
+import DailyVisitReport from "./pages/DailyVisitReport"; // Import the new page
 import { SessionContextProvider } from "./contexts/SessionContext";
 
 const queryClient = new QueryClient();
@@ -43,7 +44,8 @@ const App = () => (
             <Route path="/bulk-add-products" element={<BulkAddProducts />} />
             <Route path="/combo-offers-dashboard" element={<ComboOffersDashboard />} />
             <Route path="/sheet-converter" element={<SheetConverterPage />} />
-            <Route path="/force-password-reset" element={<ForcePasswordReset />} /> {/* New route */}
+            <Route path="/force-password-reset" element={<ForcePasswordReset />} />
+            <Route path="/daily-visit-report" element={<DailyVisitReport />} /> {/* New route */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -21,6 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import SalesPersonSalesReport from '@/components/reports/SalesPersonSalesReport'; // New import
 import SalesPersonDealerReport from '@/components/reports/SalesPersonDealerReport'; // New import
 import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsReport'; // New import
+import DailyVisitProgressCard from '@/components/DailyVisitProgressCard'; // New import
 
 interface Product {
   id: string;
@@ -298,9 +299,10 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Sales Person Performance Card */}
-      <div className="mb-6">
+      {/* Sales Person Performance Card and Daily Visit Progress Card */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <SalesPersonPerformanceCard />
+        <DailyVisitProgressCard /> {/* New Daily Visit Progress Card */}
       </div>
 
       {/* Multi-Item Order Form - Full Width */}

@@ -31,6 +31,7 @@ import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceRepor
 import SalesChart from '@/components/SalesChart';
 import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog';
 import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog';
+import SalesPersonVisitReportDialog from '@/components/reports/SalesPersonVisitReportDialog'; // New import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -49,7 +50,8 @@ const AdminDashboard = () => {
   const [isDealerLedgerReportOpen, setIsDealerLedgerReportOpen] = useState(false);
   const [isOpeningBalanceReportOpen, setIsOpeningBalanceReportOpen] = useState(false);
   const [isDealerOverdueBalanceReportOpen, setIsDealerOverdueBalanceReportOpen] = useState(false);
-  const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false); // New state
+  const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false);
+  const [isSalesPersonVisitReportOpen, setIsSalesPersonVisitReportOpen] = useState(false); // New state
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -285,6 +287,7 @@ const AdminDashboard = () => {
               setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen}
               setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen}
               setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen}
+              setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen} // Pass new setter
             />
           </SheetContent>
         </Sheet>
@@ -380,6 +383,10 @@ const AdminDashboard = () => {
       <DealerClosingBalanceReportDialog
         isOpen={isDealerClosingBalanceReportOpen}
         onOpenChange={setIsDealerClosingBalanceReportOpen}
+      />
+      <SalesPersonVisitReportDialog // New Report Dialog
+        isOpen={isSalesPersonVisitReportOpen}
+        onOpenChange={setIsSalesPersonVisitReportOpen}
       />
     </div>
   );
