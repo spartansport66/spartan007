@@ -1,4 +1,3 @@
-60 days for the logged-in sales person.">
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
