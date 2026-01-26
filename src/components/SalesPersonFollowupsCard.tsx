@@ -17,6 +17,8 @@ interface Followup {
   next_visit_date: string; // YYYY-MM-DD
   last_visit_time: string; // ISO string
   isOverdue: boolean;
+  last_visit_status: string; // New: Status of the last visit
+  last_visit_remarks: string | null; // New: Remarks from the last visit
 }
 
 const SalesPersonFollowupsCard: React.FC = () => {
@@ -38,7 +40,9 @@ const SalesPersonFollowupsCard: React.FC = () => {
           dealer_id,
           dealers (name),
           visit_time,
-          next_visit_date
+          next_visit_date,
+          visit_status,
+          remarks
         `)
         .eq('sales_person_id', user.id)
         .order('visit_time', { ascending: false }); // Get newest first
@@ -53,6 +57,8 @@ const SalesPersonFollowupsCard: React.FC = () => {
         const dealerName = visit.dealers?.name || 'N/A';
         const nextVisitDate = visit.next_visit_date;
         const lastVisitTime = visit.visit_time;
+        const lastVisitStatus = visit.visit_status || 'N/A';
+        const lastVisitRemarks = visit.remarks;
 
         if (!dealerId || !nextVisitDate) continue;
 
@@ -61,9 +67,7 @@ const SalesPersonFollowupsCard: React.FC = () => {
 
         const isOverdue = followupDate < today;
 
-        // Only track the latest *uncompleted* follow-up date for each dealer.
-        // If a dealer already has an entry in the map, we only update it if the new entry is older (more overdue)
-        // or if the map is empty.
+        // Only track the most recent visit's follow-up details for each dealer.
         if (!dealerFollowupsMap.has(dealerId)) {
           dealerFollowupsMap.set(dealerId, {
             dealer_id: dealerId,
@@ -71,11 +75,10 @@ const SalesPersonFollowupsCard: React.FC = () => {
             next_visit_date: nextVisitDate,
             last_visit_time: lastVisitTime,
             isOverdue: isOverdue,
+            last_visit_status: lastVisitStatus,
+            last_visit_remarks: lastVisitRemarks,
           });
         }
-        // Note: Since we order by visit_time descending, the first entry found for a dealer
-        // is the one associated with their *most recent* visit. We assume the `next_visit_date`
-        // recorded on that most recent visit is the one we should track.
       }
 
       // Convert map values to array and sort: Overdue first, then by date ascending
@@ -152,7 +155,7 @@ const SalesPersonFollowupsCard: React.FC = () => {
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground">Last Visit</TableHead>
                     <TableHead className="text-muted-foreground">Follow-up Date</TableHead>
-                    <TableHead className="text-muted-foreground text-center">Status</TableHead>
+                    <TableHead className="text-muted-foreground">Last Visit Status & Remarks</TableHead>
                     <TableHead className="text-muted-foreground text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -167,11 +170,9 @@ const SalesPersonFollowupsCard: React.FC = () => {
                       <TableCell className={followup.isOverdue ? "text-destructive font-semibold" : "text-blue-600 font-medium"}>
                         {formatDate(followup.next_visit_date)}
                       </TableCell>
-                      <TableCell className="text-center">
-                        <div className={`flex items-center justify-center gap-1 px-2 py-1 rounded-full text-xs font-semibold w-fit mx-auto ${followup.isOverdue ? 'text-red-800 bg-red-100' : 'text-blue-800 bg-blue-100'}`}>
-                          {followup.isOverdue ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                          {followup.isOverdue ? 'OVERDUE' : 'UPCOMING'}
-                        </div>
+                      <TableCell className="text-sm text-muted-foreground max-w-[250px] truncate" title={followup.last_visit_remarks || ''}>
+                        <span className="font-medium text-foreground block">{followup.last_visit_status}</span>
+                        <span className="text-xs italic">{followup.last_visit_remarks || 'No remarks recorded'}</span>
                       </TableCell>
                       <TableCell className="text-center">
                         <Button
