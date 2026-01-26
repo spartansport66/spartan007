@@ -31,7 +31,7 @@ const formSchema = z.object({
   visitStatus: z.enum(VISIT_STATUS_OPTIONS as [string, ...string[]], { message: 'Please select a visit status.' }),
   remarks: z.string().max(500, { message: 'Remarks cannot exceed 500 characters.' }).optional(),
   photoFile: z.any().refine(file => file instanceof File, { message: 'A photo is required.' }),
-  nextVisitDate: z.string().nullable().optional(), // Re-added nextVisitDate
+  nextVisitDate: z.string().min(1, { message: 'Next Follow-up Date is required.' }), // Made required
 });
 
 const getStartOfUTCDayISO = () => {
@@ -55,7 +55,7 @@ const DailyVisitReport: React.FC = () => {
       visitStatus: 'Routine Visit',
       remarks: '',
       photoFile: undefined,
-      nextVisitDate: '', // Re-added default value
+      nextVisitDate: '', // Default to empty string
     },
   });
 
@@ -147,7 +147,7 @@ const DailyVisitReport: React.FC = () => {
           photo_url: publicUrl,
           visit_status: values.visitStatus,
           remarks: values.remarks || null,
-          next_visit_date: values.nextVisitDate || null, // Re-added submission logic
+          next_visit_date: values.nextVisitDate, // Now required
         });
 
       if (insertError) {
@@ -157,7 +157,7 @@ const DailyVisitReport: React.FC = () => {
       }
 
       showSuccess(`Visit logged successfully for ${dealerName}!`);
-      form.reset({ dealerId: '', visitStatus: 'Routine Visit', remarks: '', photoFile: undefined, nextVisitDate: '' }); // Re-added nextVisitDate to reset
+      form.reset({ dealerId: '', visitStatus: 'Routine Visit', remarks: '', photoFile: undefined, nextVisitDate: '' });
       fetchInitialData(); // Refresh progress
     } catch (error: any) {
       console.error('Error logging visit:', error);
@@ -281,7 +281,7 @@ const DailyVisitReport: React.FC = () => {
                   name="nextVisitDate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Next Follow-up Date (Optional)</FormLabel>
+                      <FormLabel>Next Follow-up Date (Required)</FormLabel>
                       <FormControl>
                         <Input type="date" {...field} disabled={isSubmitting} />
                       </FormControl>
