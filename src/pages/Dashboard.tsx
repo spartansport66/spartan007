@@ -269,31 +269,9 @@ const Dashboard = () => {
             Welcome, {salesPersonName || 'Sales Person'}!
           </h2>
         </div>
-        <h1 className="text-[5vw] sm:text-[2.5vw] md:text-2xl lg:text-3xl font-bold text-black dark:text-black text-center flex-grow mx-2">
-          Sales Dashboard
-        </h1>
+        {/* Removed Sales Dashboard Title */}
         <div className="flex-shrink-0 flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                My Reports
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56">
-              <DropdownMenuLabel>Select a Report</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsSalesPersonSalesReportOpen(true)}>
-                My Sales Report
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsSalesPersonDealerReportOpen(true)}>
-                My Dealer Report
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsSalesPersonPaymentsReportOpen(true)}>
-                My Payments Report
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Removed My Reports Dropdown */}
           <Button onClick={handleLogout} variant="ghost" size="icon" className="text-black hover:text-black p-2">
             <LogOut className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
