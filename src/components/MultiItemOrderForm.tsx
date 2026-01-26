@@ -805,8 +805,8 @@ const MultiItemOrderForm: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Row 2 & 3: Quantity and Item Total - Stacked Vertically */}
-                <div className="space-y-3">
+                {/* Row 2: Quantity and Item Total - Side by Side */}
+                <div className="grid grid-cols-2 gap-4 items-end">
                   <div>
                     <Label htmlFor={`quantity-${item.id}`}>Quantity</Label>
                     <Input
