@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Edit, Trash2, Loader2, CalendarDays, Upload, FileSpreadsheet, Search, Printer } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Loader2, CalendarDays, Upload, FileSpreadsheet, Search, Printer, Scale } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -20,6 +20,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import MultiSelect from '@/components/MultiSelect';
 import DealerMonthlyCreditManager from '@/components/DealerMonthlyCreditManager';
 import DealerExcelUpload from '@/components/DealerExcelUpload';
+import OpeningBalanceBulkUpdate from '@/components/OpeningBalanceBulkUpdate'; // New Import
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
@@ -116,6 +117,7 @@ const ManageDealers = () => {
   const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false);
   const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [isOpeningBalanceBulkUpdateOpen, setIsOpeningBalanceBulkUpdateOpen] = useState(false); // New state for bulk balance update
   const [companyName, setCompanyName] = useState<string | null>(null); // New state for company name
 
   // Applied filter states (used for fetching data)
@@ -271,7 +273,7 @@ const ManageDealers = () => {
           last_name: dsp.profiles.last_name,
         }));
         
-        const balance = balancesMap.get(d.id) || { opening_balance: 0 }; // Corrected access
+        const balance = d.dealer_balances || { opening_balance: 0 }; // Corrected access
         const openingBalance = balance.opening_balance || 0; // This will now be correct because `balance` itself will be the object, not an array.
         
         const currentMonthCreditLimit = monthlyLimitsMap.has(d.id) 
@@ -457,6 +459,7 @@ const ManageDealers = () => {
   const handleUploadComplete = () => {
     fetchDealers();
     setIsUploadDialogOpen(false);
+    setIsOpeningBalanceBulkUpdateOpen(false); // Close the bulk balance dialog too
   };
 
   const handleApplyFilters = () => {
@@ -803,6 +806,13 @@ const ManageDealers = () => {
                   Bulk Upload Dealers
                 </Button>
                 <Button 
+                  onClick={() => setIsOpeningBalanceBulkUpdateOpen(true)} // New Button
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2"
+                >
+                  <Scale className="h-4 w-4" />
+                  Bulk Update Balances
+                </Button>
+                <Button 
                   onClick={() => navigate('/sheet-converter')} 
                   variant="outline" 
                   className="flex items-center gap-2"
@@ -1028,6 +1038,19 @@ const ManageDealers = () => {
             </DialogDescription>
           </DialogHeader>
           <DealerExcelUpload onUploadComplete={handleUploadComplete} />
+        </DialogContent>
+      </Dialog>
+
+      {/* New Dialog for Bulk Opening Balance Update */}
+      <Dialog open={isOpeningBalanceBulkUpdateOpen} onOpenChange={setIsOpeningBalanceBulkUpdateOpen}>
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bulk Update Opening Balances</DialogTitle>
+            <DialogDescription>
+              Upload an Excel sheet to update opening balances and last billing dates for existing dealers.
+            </DialogDescription>
+          </DialogHeader>
+          <OpeningBalanceBulkUpdate onUploadComplete={handleUploadComplete} />
         </DialogContent>
       </Dialog>
     </div>
