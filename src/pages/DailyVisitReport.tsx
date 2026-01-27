@@ -348,7 +348,7 @@ const DailyVisitReport: React.FC = () => {
                 <FormField
                   control={form.control}
                   name="photoFile"
-                  render={({ field: { value, onChange, ...fieldProps } }) => (
+                  render={({ field: { value, onChange, ref, ...fieldProps } }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-2">
                         <Camera className="h-4 w-4" /> Dealer Photo (Required)
@@ -361,9 +361,10 @@ const DailyVisitReport: React.FC = () => {
                           capture="environment" // Suggest using the rear camera on mobile
                           onChange={(event) => {
                             const file = event.target.files?.[0];
-                            // Manually set the file object in the form state
+                            // Pass the File object directly to onChange
                             onChange(file);
                           }}
+                          ref={ref} // Use the ref provided by useForm
                           disabled={isSubmitting}
                         />
                       </FormControl>
