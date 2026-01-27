@@ -26,11 +26,15 @@ interface Dealer {
 
 const VISIT_STATUS_OPTIONS = ['Routine Visit', 'Payment Reminder Visit', 'New Order'];
 
+// Define a custom schema for the file input
+const fileSchema = z.instanceof(File, { message: 'A photo is required.' })
+  .refine(file => file.size > 0, { message: 'File cannot be empty.' });
+
 const formSchema = z.object({
   dealerId: z.string().uuid({ message: 'Please select a dealer.' }),
   visitStatus: z.enum(VISIT_STATUS_OPTIONS as [string, ...string[]], { message: 'Please select a visit status.' }),
   remarks: z.string().min(1, { message: 'Remarks are required.' }).max(500, { message: 'Remarks cannot exceed 500 characters.' }),
-  photoFile: z.any().refine(file => file instanceof File, { message: 'A photo is required.' }),
+  photoFile: fileSchema, // Use the custom file schema
   nextVisitDate: z.string().min(1, { message: 'Next Follow-up Date is required.' }),
 });
 
@@ -357,6 +361,7 @@ const DailyVisitReport: React.FC = () => {
                           capture="environment" // Suggest using the rear camera on mobile
                           onChange={(event) => {
                             const file = event.target.files?.[0];
+                            // Manually set the file object in the form state
                             onChange(file);
                           }}
                           disabled={isSubmitting}
