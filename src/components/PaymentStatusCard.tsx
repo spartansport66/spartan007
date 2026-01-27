@@ -208,28 +208,34 @@ const PaymentStatusCard: React.FC = () => {
 
       // --- 2. Fetch Dealer Balances (if filtering for opening balance or overdue payments) ---
       if (filterStatus === 'overdue' || filterStatus === 'opening_balance') {
-        const { data: dealerBalancesData, error: dealerBalancesError } = await supabase
+        // Fetch dealers assigned to the current user, including their balances
+        const { data: dealerAssignments, error: assignmentsError } = await supabase
           .from('dealer_sales_persons')
-          .select(`
-            dealers (
-              id,
-              name,
-              dealer_balances (
-                opening_balance
-              )
-            )
-          `)
+          .select('dealer_id')
           .eq('sales_person_id', user.id);
 
-        if (dealerBalancesError) {
-          console.error('Error fetching dealer balances:', dealerBalancesError.message);
-          showError('Failed to load dealer balances.');
-          setDealerBalances([]);
-        } else {
-          const formattedBalances: DealerBalance[] = (dealerBalancesData || [])
-            .map((item: any) => {
-              const dealer = item.dealers;
-              const openingBalance = dealer.dealer_balances?.[0]?.opening_balance || 0;
+        if (assignmentsError) throw assignmentsError;
+
+        const assignedDealerIds = (dealerAssignments || []).map(a => a.dealer_id);
+
+        if (assignedDealerIds.length > 0) {
+          const { data: dealersWithBalances, error: balancesError } = await supabase
+            .from('dealers')
+            .select(`
+              id,
+              name,
+              dealer_balances(opening_balance)
+            `)
+            .in('id', assignedDealerIds);
+
+          if (balancesError) throw balancesError;
+          
+          console.log("DEBUG: Raw Dealers with Balances Data:", dealersWithBalances);
+
+          const formattedBalances: DealerBalance[] = (dealersWithBalances || [])
+            .map((dealer: any) => {
+              // Access dealer_balances as an object, not an array
+              const openingBalance = dealer.dealer_balances?.opening_balance || 0;
               return {
                 id: dealer.id,
                 name: dealer.name,
@@ -239,6 +245,8 @@ const PaymentStatusCard: React.FC = () => {
             .filter((dealer: DealerBalance) => dealer.opening_balance > 0); // Only dealers with positive opening balance
           
           setDealerBalances(formattedBalances);
+        } else {
+          setDealerBalances([]);
         }
       } else {
         setDealerBalances([]);
