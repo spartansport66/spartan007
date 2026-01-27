@@ -60,7 +60,7 @@ const AdminDashboard = () => {
   const [isSalesPersonTodayFollowupsReportOpen, setIsSalesPersonTodayFollowupsReportOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [creditDaysUpdated, setCreditDaysUpdated] = useState(false);
+  // Removed creditDaysUpdated state
 
   const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
   const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
@@ -168,19 +168,12 @@ const AdminDashboard = () => {
         showError('Access Denied: Only administrators can view this page.');
         navigate('/dashboard');
       } else {
-        // Admin specific action: Update all dealer credit days to 60 once per session
-        if (!creditDaysUpdated) {
-          updateAllDealerCreditDays(60).then(success => {
-            if (success) {
-              setCreditDaysUpdated(true);
-            }
-          });
-        }
+        // Removed automatic update logic here
         fetchDashboardData();
         fetchCompanyInfo();
       }
     }
-  }, [sessionLoading, user, userType, isAdmin, fetchDashboardData, fetchCompanyInfo, navigate, creditDaysUpdated]);
+  }, [sessionLoading, user, userType, isAdmin, fetchDashboardData, fetchCompanyInfo, navigate]);
 
   const handleLogout = async () => {
     try {
