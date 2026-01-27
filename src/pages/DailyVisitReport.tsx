@@ -360,7 +360,7 @@ const DailyVisitReport: React.FC = () => {
                           {...fieldProps}
                           type="file"
                           accept="image/*"
-                          capture="environment"
+                          // Removed capture="environment"
                           onChange={(event) => {
                             const file = event.target.files?.[0];
                             if (file) {
