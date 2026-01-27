@@ -97,6 +97,7 @@ const DailyVisitReport: React.FC = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [visitsToday, setVisitsToday] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null); // New state for file name
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -213,6 +214,7 @@ const DailyVisitReport: React.FC = () => {
 
       showSuccess(`Visit logged successfully for ${dealerName}!`);
       form.reset({ dealerId: '', visitStatus: 'Routine Visit', remarks: '', photoFile: undefined, nextVisitDate: '' });
+      setSelectedFileName(null); // Clear file name state
       fetchInitialData(); // Refresh progress
     } catch (error: any) {
       console.error('Error logging visit:', error);
@@ -348,7 +350,7 @@ const DailyVisitReport: React.FC = () => {
                 <FormField
                   control={form.control}
                   name="photoFile"
-                  render={({ field: { value, onChange, ref, ...fieldProps } }) => (
+                  render={({ field: { value, onChange, ...fieldProps } }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-2">
                         <Camera className="h-4 w-4" /> Dealer Photo (Required)
@@ -358,16 +360,24 @@ const DailyVisitReport: React.FC = () => {
                           {...fieldProps}
                           type="file"
                           accept="image/*"
-                          capture="environment" // Suggest using the rear camera on mobile
+                          capture="environment"
                           onChange={(event) => {
                             const file = event.target.files?.[0];
-                            // Pass the File object directly to onChange
-                            onChange(file);
+                            if (file) {
+                              // Manually set the file object in the form state
+                              form.setValue('photoFile', file, { shouldValidate: true });
+                              setSelectedFileName(file.name);
+                            } else {
+                              form.setValue('photoFile', undefined, { shouldValidate: true });
+                              setSelectedFileName(null);
+                            }
                           }}
-                          ref={ref} // Use the ref provided by useForm
                           disabled={isSubmitting}
                         />
                       </FormControl>
+                      {selectedFileName && (
+                        <p className="text-sm text-muted-foreground mt-1">Selected: {selectedFileName}</p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
