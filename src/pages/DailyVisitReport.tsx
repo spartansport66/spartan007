@@ -40,6 +40,52 @@ const getStartOfUTCDayISO = () => {
   return now.toISOString();
 };
 
+// --- Image Compression Utility ---
+const compressImage = (file: File, maxWidth: number = 800, quality: number = 0.7): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = height * (maxWidth / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          return reject(new Error("Could not get canvas context."));
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            return reject(new Error("Canvas to Blob conversion failed."));
+          }
+          // Create a new File object from the compressed blob
+          const compressedFile = new File([blob], file.name, {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+          resolve(compressedFile);
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = (error) => reject(new Error("Error loading image for compression."));
+    };
+    reader.onerror = (error) => reject(new Error("Error reading file for compression."));
+  });
+};
+// ---------------------------------
+
 const DailyVisitReport: React.FC = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
@@ -114,30 +160,35 @@ const DailyVisitReport: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const file = values.photoFile as File;
+      const originalFile = values.photoFile as File;
+      
+      // --- STEP 1: Compress and Resize Image ---
+      const compressedFile = await compressImage(originalFile, 800, 0.7);
+      
       const dealerName = dealers.find(d => d.id === values.dealerId)?.name || 'unknown';
-      const fileExt = file.name.split('.').pop();
+      const fileExt = compressedFile.name.split('.').pop() || 'jpg';
       // Use user ID as the first folder name for RLS
       const filePath = `${user.id}/${Date.now()}_${dealerName.replace(/\s/g, '_')}.${fileExt}`;
 
-      // 1. Upload photo to Supabase Storage
+      // 2. Upload compressed photo to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('visit-photos')
-        .upload(filePath, file, {
+        .upload(filePath, compressedFile, {
           cacheControl: '3600',
           upsert: false,
+          contentType: 'image/jpeg', // Ensure correct content type for compressed file
         });
 
       if (uploadError) {
         throw new Error(`Photo upload failed: ${uploadError.message}`);
       }
 
-      // 2. Get public URL
+      // 3. Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('visit-photos')
         .getPublicUrl(filePath);
 
-      // 3. Insert visit record
+      // 4. Insert visit record
       const { error: insertError } = await supabase
         .from('sales_person_visits')
         .insert({
