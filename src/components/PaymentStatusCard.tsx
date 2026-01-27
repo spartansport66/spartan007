@@ -100,111 +100,113 @@ const PaymentStatusCard: React.FC = () => {
         })));
       }
 
-      // Build the query for orders, including payments directly
-      let query = supabase
-        .from('orders')
-        .select(`
-          id,
-          order_number,
-          order_date,
-          total_amount,
-          payment_due_date,
-          payment_status,
-          dealers (name, phone),
-          payments (
-            amount,
-            payment_method,
-            payment_date,
-            cheque_dd_no,
-            cheque_dd_date,
-            card_number,
-            card_holder_name,
-            expiry_date,
-            bank_name,
-            account_number,
-            ifsc_code,
-            upi_id,
-            transaction_id
-          )
-        `)
-        .eq('user_id', user.id) // Filter by current sales person
-        .order('payment_due_date', { ascending: true });
-
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO();
 
-      if (filterStatus === 'pending') {
-        query = query.eq('payment_status', 'pending');
-      } else if (filterStatus === 'paid') {
-        query = query.eq('payment_status', 'paid');
-      } else if (filterStatus === 'pending_approval') {
-        query = query.eq('payment_status', 'pending_approval');
-      } else if (filterStatus === 'overdue') {
-        query = query.eq('payment_status', 'pending').lte('payment_due_date', startOfUTCTodayISO);
-      } else if (filterStatus === 'upcoming') {
-        query = query.eq('payment_status', 'pending').gte('payment_due_date', endOfUTCTodayISO);
-      } else if (filterStatus === 'todays_due') {
-        query = query.eq('payment_status', 'pending')
-          .gte('payment_due_date', startOfUTCTodayISO)
-          .lte('payment_due_date', endOfUTCTodayISO);
-      } else if (filterStatus === 'opening_balance') {
-        // For opening balance, we'll fetch all orders but filter will be handled in UI
-        // No specific query filtering needed here
-      }
+      // --- 1. Fetch Orders (if not filtering purely by opening balance) ---
+      if (filterStatus !== 'opening_balance') {
+        // Build the query for orders, including payments directly
+        let query = supabase
+          .from('orders')
+          .select(`
+            id,
+            order_number,
+            order_date,
+            total_amount,
+            payment_due_date,
+            payment_status,
+            dealers (name, phone),
+            payments (
+              amount,
+              payment_method,
+              payment_date,
+              cheque_dd_no,
+              cheque_dd_date,
+              card_number,
+              card_holder_name,
+              expiry_date,
+              bank_name,
+              account_number,
+              ifsc_code,
+              upi_id,
+              transaction_id
+            )
+          `)
+          .eq('user_id', user.id) // Filter by current sales person
+          .order('payment_due_date', { ascending: true });
 
-      // Apply dealer filter
-      if (filterDealerId) {
-        query = query.eq('dealer_id', filterDealerId);
-      }
+        if (filterStatus === 'pending') {
+          query = query.eq('payment_status', 'pending');
+        } else if (filterStatus === 'paid') {
+          query = query.eq('payment_status', 'paid');
+        } else if (filterStatus === 'pending_approval') {
+          query = query.eq('payment_status', 'pending_approval');
+        } else if (filterStatus === 'overdue') {
+          query = query.eq('payment_status', 'pending').lte('payment_due_date', startOfUTCTodayISO);
+        } else if (filterStatus === 'upcoming') {
+          query = query.eq('payment_status', 'pending').gte('payment_due_date', endOfUTCTodayISO);
+        } else if (filterStatus === 'todays_due') {
+          query = query.eq('payment_status', 'pending')
+            .gte('payment_due_date', startOfUTCTodayISO)
+            .lte('payment_due_date', endOfUTCTodayISO);
+        }
 
-      // Apply date range filter for order_date
-      if (filterFromDate) {
-        const startOfDay = `${filterFromDate}T00:00:00.000Z`;
-        query = query.gte('order_date', startOfDay);
-      }
-      if (filterToDate) {
-        const endOfDay = `${filterToDate}T23:59:59.999Z`;
-        query = query.lte('order_date', endOfDay);
-      }
+        // Apply dealer filter
+        if (filterDealerId) {
+          query = query.eq('dealer_id', filterDealerId);
+        }
 
-      const { data: ordersData, error: ordersError } = await query;
-      if (ordersError) {
-        console.error('Error fetching orders:', ordersError.message);
-        showError('Failed to load orders.');
-        setOrders([]);
+        // Apply date range filter for order_date
+        if (filterFromDate) {
+          const startOfDay = `${filterFromDate}T00:00:00.000Z`;
+          query = query.gte('order_date', startOfDay);
+        }
+        if (filterToDate) {
+          const endOfDay = `${filterToDate}T23:59:59.999Z`;
+          query = query.lte('order_date', endOfDay);
+        }
+
+        const { data: ordersData, error: ordersError } = await query;
+        if (ordersError) {
+          console.error('Error fetching orders:', ordersError.message);
+          showError('Failed to load orders.');
+          setOrders([]);
+        } else {
+          const formattedOrders: Order[] = (ordersData || []).map((order: any) => {
+            // Payment details are now directly nested in order.payments
+            const paymentInfo = order.payments && order.payments.length > 0 ? order.payments[0] : null;
+            return {
+              id: order.id,
+              order_number: order.order_number,
+              order_date: order.order_date,
+              total_amount: order.total_amount,
+              dealer_name: order.dealers?.name || 'N/A',
+              dealer_phone: order.dealers?.phone || '',
+              payment_due_date: order.payment_due_date,
+              payment_status: order.payment_status,
+              // Payment details
+              payment_method: paymentInfo?.payment_method || null,
+              payment_amount: paymentInfo?.amount || null,
+              payment_date: paymentInfo?.payment_date || null,
+              cheque_dd_no: paymentInfo?.cheque_dd_no || null,
+              cheque_dd_date: paymentInfo?.cheque_dd_date || null,
+              card_number: paymentInfo?.card_number || null,
+              card_holder_name: paymentInfo?.card_holder_name || null,
+              expiry_date: paymentInfo?.expiry_date || null,
+              bank_name: paymentInfo?.bank_name || null,
+              account_number: paymentInfo?.account_number || null,
+              ifsc_code: paymentInfo?.ifsc_code || null,
+              upi_id: paymentInfo?.upi_id || null,
+              transaction_id: paymentInfo?.transaction_id || null,
+            };
+          });
+          setOrders(formattedOrders);
+        }
       } else {
-        const formattedOrders: Order[] = (ordersData || []).map((order: any) => {
-          // Payment details are now directly nested in order.payments
-          const paymentInfo = order.payments && order.payments.length > 0 ? order.payments[0] : null;
-          return {
-            id: order.id,
-            order_number: order.order_number,
-            order_date: order.order_date,
-            total_amount: order.total_amount,
-            dealer_name: order.dealers?.name || 'N/A',
-            dealer_phone: order.dealers?.phone || '',
-            payment_due_date: order.payment_due_date,
-            payment_status: order.payment_status,
-            // Payment details
-            payment_method: paymentInfo?.payment_method || null,
-            payment_amount: paymentInfo?.amount || null,
-            payment_date: paymentInfo?.payment_date || null,
-            cheque_dd_no: paymentInfo?.cheque_dd_no || null,
-            cheque_dd_date: paymentInfo?.cheque_dd_date || null,
-            card_number: paymentInfo?.card_number || null,
-            card_holder_name: paymentInfo?.card_holder_name || null,
-            expiry_date: paymentInfo?.expiry_date || null,
-            bank_name: paymentInfo?.bank_name || null,
-            account_number: paymentInfo?.account_number || null,
-            ifsc_code: paymentInfo?.ifsc_code || null,
-            upi_id: paymentInfo?.upi_id || null,
-            transaction_id: paymentInfo?.transaction_id || null,
-          };
-        });
-        setOrders(formattedOrders);
+        setOrders([]); // Clear orders if filtering by opening balance
       }
 
-      // Fetch dealer balances when showing opening balance or overdue payments
+      // --- 2. Fetch Dealer Balances (if filtering for opening balance or overdue payments) ---
       if (filterStatus === 'overdue' || filterStatus === 'opening_balance') {
         const { data: dealerBalancesData, error: dealerBalancesError } = await supabase
           .from('dealer_sales_persons')
@@ -411,11 +413,13 @@ const PaymentStatusCard: React.FC = () => {
 
         {/* Dealer Balances Section - Only shown when filtering for opening balance or overdue payments */}
         {(filterStatus === 'overdue' || filterStatus === 'opening_balance') && dealerBalances.length > 0 && (
-          <div className="mb-6 p-4 bg-muted rounded-lg">
-            <h3 className="text-lg font-semibold mb-3">Dealers with Opening Balance</h3>
-            <div className="max-h-40 overflow-y-auto">
+          <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+              <DollarSign className="h-5 w-5" /> Dealers with Outstanding Opening Balance
+            </h3>
+            <div className="max-h-40 overflow-y-auto border rounded-md bg-background">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-muted">
                   <TableRow>
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
@@ -425,12 +429,17 @@ const PaymentStatusCard: React.FC = () => {
                   {dealerBalances.map((dealer) => (
                     <TableRow key={dealer.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                      <TableCell className="text-right font-semibold">₹{dealer.opening_balance.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-semibold text-red-600">₹{dealer.opening_balance.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
+            {filterStatus === 'opening_balance' && orders.length > 0 && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Note: Orders below are also displayed based on date/dealer filters, but the primary focus above is on the Opening Balance.
+              </p>
+            )}
           </div>
         )}
 
@@ -440,8 +449,10 @@ const PaymentStatusCard: React.FC = () => {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading orders...</p>
             </div>
-          ) : orders.length === 0 ? (
+          ) : orders.length === 0 && filterStatus !== 'opening_balance' ? (
             <p className="text-center text-muted-foreground py-8">No orders found for the selected criteria.</p>
+          ) : orders.length === 0 && filterStatus === 'opening_balance' && dealerBalances.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No dealers found with an outstanding opening balance.</p>
           ) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
