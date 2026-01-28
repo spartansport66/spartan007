@@ -13,7 +13,6 @@ import { Label } from '@/components/ui/label';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
-import RecordBalancePaymentDialog from '@/components/RecordBalancePaymentDialog'; // Import new component
 
 interface Order {
   id: string;
@@ -78,11 +77,6 @@ const PaymentStatusCard: React.FC = () => {
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<Order | null>(null);
   const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
   const [selectedOrderForPaymentDetails, setSelectedOrderForPaymentDetails] = useState<Order | null>(null);
-  
-  // New state for balance payment dialog
-  const [isBalancePaymentDialogOpen, setIsBalancePaymentDialogOpen] = useState(false);
-  const [selectedDealerForBalancePayment, setSelectedDealerForBalancePayment] = useState<DealerBalance | null>(null);
-
 
   const fetchOrdersAndDealers = useCallback(async () => {
     if (!user) {
@@ -295,11 +289,6 @@ const PaymentStatusCard: React.FC = () => {
     setIsUpdatePaymentDialogOpen(true);
   };
 
-  const handleRecordBalancePayment = (dealer: DealerBalance) => {
-    setSelectedDealerForBalancePayment(dealer);
-    setIsBalancePaymentDialogOpen(true);
-  };
-
   const handleViewPaymentDetails = (order: Order) => {
     setSelectedOrderForPaymentDetails(order);
     setIsPaymentDetailsDialogOpen(true);
@@ -456,7 +445,6 @@ const PaymentStatusCard: React.FC = () => {
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
                     <TableHead className="text-muted-foreground text-right">Total Outstanding Balance</TableHead>
-                    <TableHead className="text-muted-foreground text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -465,16 +453,6 @@ const PaymentStatusCard: React.FC = () => {
                       <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">₹{dealer.opening_balance.toFixed(2)}</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">₹{dealer.current_balance.toFixed(2)}</TableCell>
-                      <TableCell className="text-center">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleRecordBalancePayment(dealer)} 
-                          title="Record Payment Against Balance"
-                        >
-                          <DollarSign className="h-4 w-4 text-green-600" />
-                        </Button>
-                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -605,13 +583,6 @@ const PaymentStatusCard: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
-      {/* Record Balance Payment Dialog */}
-      <RecordBalancePaymentDialog
-        dealerToUpdate={selectedDealerForBalancePayment}
-        isOpen={isBalancePaymentDialogOpen}
-        onOpenChange={setIsBalancePaymentDialogOpen}
-        onPaymentRecorded={handlePaymentUpdated} // Use the same handler to refresh data
-      />
     </Card>
   );
 };
