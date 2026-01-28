@@ -13,7 +13,6 @@ import { Label } from '@/components/ui/label';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
-import RecordBalancePaymentDialog from '@/components/RecordBalancePaymentDialog'; // New Import
 
 interface Order {
   id: string;
@@ -77,10 +76,6 @@ const PaymentStatusCard: React.FC = () => {
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<Order | null>(null);
   const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
   const [selectedOrderForPaymentDetails, setSelectedOrderForPaymentDetails] = useState<Order | null>(null);
-  
-  // New state for balance payment dialog
-  const [isBalancePaymentDialogOpen, setIsBalancePaymentDialogOpen] = useState(false);
-  const [selectedDealerForBalancePayment, setSelectedDealerForBalancePayment] = useState<DealerBalance | null>(null);
 
   const fetchOrdersAndDealers = useCallback(async () => {
     if (!user) {
@@ -283,11 +278,6 @@ const PaymentStatusCard: React.FC = () => {
     setSelectedOrderForPaymentUpdate(order);
     setIsUpdatePaymentDialogOpen(true);
   };
-  
-  const handleAddBalancePayment = (dealer: DealerBalance) => {
-    setSelectedDealerForBalancePayment(dealer);
-    setIsBalancePaymentDialogOpen(true);
-  };
 
   const handleViewPaymentDetails = (order: Order) => {
     setSelectedOrderForPaymentDetails(order);
@@ -433,44 +423,29 @@ const PaymentStatusCard: React.FC = () => {
         </div>
 
         {/* Dealer Balances Section - Only shown when filtering for opening balance */}
-        {filterStatus === 'opening_balance' && (
+        {filterStatus === 'opening_balance' && dealerBalances.length > 0 && (
           <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
             <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
               <DollarSign className="h-5 w-5" /> Dealers with Outstanding Opening Balance
             </h3>
-            {dealerBalances.length === 0 ? (
-              <p className="text-center text-muted-foreground py-4">No dealers found with an outstanding opening balance.</p>
-            ) : (
-              <div className="max-h-40 overflow-y-auto border rounded-md bg-background">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-muted">
-                    <TableRow>
-                      <TableHead className="text-muted-foreground">Dealer Name</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
-                      <TableHead className="text-muted-foreground text-center">Actions</TableHead>
+            <div className="max-h-40 overflow-y-auto border rounded-md bg-background">
+              <Table>
+                <TableHeader className="sticky top-0 bg-muted">
+                  <TableRow>
+                    <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dealerBalances.map((dealer) => (
+                    <TableRow key={dealer.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
+                      <TableCell className="text-right font-semibold text-red-600">₹{dealer.opening_balance.toFixed(2)}</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dealerBalances.map((dealer) => (
-                      <TableRow key={dealer.id} className="hover:bg-accent/50">
-                        <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                        <TableCell className="text-right font-semibold text-red-600">₹{dealer.opening_balance.toFixed(2)}</TableCell>
-                        <TableCell className="text-center">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleAddBalancePayment(dealer)} 
-                            title="Add Payment Details for Opening Balance"
-                          >
-                            <DollarSign className="h-4 w-4 text-green-600" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         )}
 
@@ -483,8 +458,7 @@ const PaymentStatusCard: React.FC = () => {
           ) : orders.length === 0 && filterStatus !== 'opening_balance' ? (
             <p className="text-center text-muted-foreground py-8">No orders found for the selected criteria.</p>
           ) : orders.length === 0 && filterStatus === 'opening_balance' && dealerBalances.length === 0 ? (
-            // This case is handled above, but kept here for completeness if the filter logic changes
-            null
+            <p className="text-center text-muted-foreground py-8">No dealers found with an outstanding opening balance.</p>
           ) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
@@ -575,14 +549,6 @@ const PaymentStatusCard: React.FC = () => {
           isOpen={isUpdatePaymentDialogOpen} 
           onOpenChange={setIsUpdatePaymentDialogOpen} 
           onPaymentUpdated={handlePaymentUpdated} 
-        />
-      )}
-      {selectedDealerForBalancePayment && (
-        <RecordBalancePaymentDialog
-          dealerInfo={selectedDealerForBalancePayment}
-          isOpen={isBalancePaymentDialogOpen}
-          onOpenChange={setIsBalancePaymentDialogOpen}
-          onPaymentRecorded={handlePaymentUpdated} // Use the same handler to refresh data
         />
       )}
     </Card>
