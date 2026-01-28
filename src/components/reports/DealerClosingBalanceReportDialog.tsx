@@ -129,7 +129,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             last_billing_date,
             created_at,
             dealer_balances(opening_balance),
-            orders(total_amount, payment_status, payments(amount, status)),
+            orders(order_date, total_amount, payment_status, payments(amount, status)),
             dealer_sales_persons!inner(sales_person_id)
           `)
           .eq('dealer_sales_persons.sales_person_id', filterSalesPersonId);
@@ -143,7 +143,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             last_billing_date,
             created_at,
             dealer_balances(opening_balance),
-            orders(total_amount, payment_status, payments(amount, status))
+            orders(order_date, total_amount, payment_status, payments(amount, status))
           `);
       }
 
@@ -164,10 +164,16 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           
           let totalSales = 0;
           let totalPayments = 0;
+          let latestOrderDate: string | null = null;
 
           (d.orders || []).forEach((order: any) => {
             // All orders are debits (increase amount owed)
             totalSales += order.total_amount;
+
+            // Track latest order date
+            if (order.order_date && (!latestOrderDate || new Date(order.order_date) > new Date(latestOrderDate))) {
+                latestOrderDate = order.order_date;
+            }
 
             // Iterate through payments associated with this order
             (order.payments || []).forEach((payment: any) => {
@@ -180,8 +186,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           // Calculation: Closing Balance = Opening Balance + Total Sales - Total Payments
           const closingBalance = openingBalance + totalSales - totalPayments;
           
-          // Determine the reference date for the balance: last_billing_date (updated on order) or created_at (if no orders)
-          const referenceDate = d.last_billing_date || d.created_at;
+          // Determine the reference date for the balance:
+          // 1. Latest Order Date (if available)
+          // 2. last_billing_date (if manually set or updated by dispatch)
+          // 3. created_at (fallback)
+          const referenceDate = latestOrderDate || d.last_billing_date || d.created_at;
           
           const daysSinceLastBill = calculateDaysSinceLastBill(referenceDate);
           
