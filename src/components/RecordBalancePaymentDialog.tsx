@@ -98,14 +98,13 @@ const RecordBalancePaymentDialog: React.FC<RecordBalancePaymentDialogProps> = ({
     if (!dealerToUpdate || !user) return;
     setLoading(true);
     try {
-      // 1. Insert a new payment record with status 'completed' (since it's a general balance payment, we assume it's cleared immediately)
-      // NOTE: We use a dummy order_id (000...000) to signify a general balance payment not tied to a specific order.
-      const DUMMY_ORDER_ID = '00000000-0000-0000-0000-000000000000';
-
+      // 1. Insert a new payment record with status 'completed'
+      // We now insert NULL for order_id, assuming the payments.order_id column allows NULLs.
+      
       const { error: paymentInsertError } = await supabase
         .from('payments')
         .insert({
-          order_id: DUMMY_ORDER_ID, // Use dummy ID for general balance payment
+          order_id: null, // Use NULL for general balance payment
           amount: values.amount,
           payment_method: values.paymentMethod,
           payment_date: new Date().toISOString(),
