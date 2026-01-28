@@ -138,14 +138,26 @@ const Login = () => {
         emailToLoginWith = data.email;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: emailToLoginWith,
         password: values.password,
       });
 
       if (error) {
+        // Optional: Log login failure here if the table exists, but for now, we only log success.
         throw error;
       }
+      
+      // --- LOG SUCCESSFUL LOGIN ---
+      if (data.user) {
+        // Note: IP address logging is omitted as it requires server-side context.
+        // We rely on the user's session being established here.
+        await supabase.from('login_logs').insert({
+          user_id: data.user.id,
+          success: true,
+        });
+      }
+      // --- END LOGGING ---
 
       showSuccess('Logged in successfully!');
       navigate('/'); // Redirect to index which handles role-based redirection
