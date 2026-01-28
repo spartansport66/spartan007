@@ -14,7 +14,8 @@ const SalesPersonPerformanceCard: React.FC = () => {
   const [targetAmount, setTargetAmount] = useState<number | null>(null);
   const [achievedSales, setAchievedSales] = useState<number | null>(null);
   const [pendingSales, setPendingSales] = useState<number | null>(null);
-  const [totalOverdueAmount, setTotalOverdueAmount] = useState<number | null>(null); // New state for total overdue
+  const [totalOverdueAmount, setTotalOverdueAmount] = useState<number | null>(null);
+  const [totalCurrentDealerBalance, setTotalCurrentDealerBalance] = useState<number | null>(null); // NEW STATE
 
   const fetchPerformanceData = useCallback(async () => {
     if (!user) return;
@@ -62,8 +63,9 @@ const SalesPersonPerformanceCard: React.FC = () => {
 
       setPendingSales(currentTarget - currentAchievedSales);
 
-      // --- Fetch Overdue Payments and Opening Balances ---
+      // --- Fetch Dealer Balances and Overdue Amounts ---
       let calculatedTotalOverdue = 0;
+      let calculatedTotalCurrentDealerBalance = 0; // NEW METRIC
 
       // 1. Fetch all dealers assigned to the current sales person
       const { data: assignedDealers, error: assignedDealersError } = await supabase
@@ -89,30 +91,53 @@ const SalesPersonPerformanceCard: React.FC = () => {
         }
         const openingBalancesMap = new Map((dealerBalances || []).map(b => [b.dealer_id, b.opening_balance || 0]));
 
-        // Add opening balances to total overdue
+        // Initialize balances with opening balances
         dealerIds.forEach(dealerId => {
-          calculatedTotalOverdue += openingBalancesMap.get(dealerId) || 0;
+          const openingBalance = openingBalancesMap.get(dealerId) || 0;
+          calculatedTotalCurrentDealerBalance += openingBalance;
         });
 
-        // 3. Fetch overdue orders for these dealers (payment_status = 'pending' and due date <= today)
-        const { data: overdueOrders, error: overdueOrdersError } = await supabase
+        // 3. Fetch ALL orders and ALL completed payments for these dealers
+        const { data: dealerTransactions, error: transactionsError } = await supabase
           .from('orders')
-          .select('total_amount')
-          .eq('payment_status', 'pending')
-          .lte('payment_due_date', today.toISOString()) // Orders due today or earlier
+          .select(`
+            total_amount,
+            dealer_id,
+            payment_due_date,
+            payment_status,
+            payments(amount, status)
+          `)
           .in('dealer_id', dealerIds);
 
-        if (overdueOrdersError) {
-          throw new Error(`Failed to fetch overdue orders: ${overdueOrdersError.message}`);
+        if (transactionsError) {
+          throw new Error(`Failed to fetch dealer transactions: ${transactionsError.message}`);
         }
 
-        // Add overdue order amounts to total overdue
-        (overdueOrders || []).forEach(order => {
-          calculatedTotalOverdue += order.total_amount;
+        // 4. Process transactions to calculate Total Overdue and Total Current Dealer Balance
+        (dealerTransactions || []).forEach(order => {
+          // Add order amount to Total Current Dealer Balance (Debit)
+          calculatedTotalCurrentDealerBalance += order.total_amount;
+
+          // Check if order is overdue (for existing calculatedTotalOverdue metric)
+          if (order.payment_status === 'pending' && order.payment_due_date) {
+            const dueDate = new Date(order.payment_due_date);
+            dueDate.setHours(0, 0, 0, 0);
+            if (dueDate <= today) {
+              calculatedTotalOverdue += order.total_amount;
+            }
+          }
+
+          // Subtract completed payments (Credit)
+          (order.payments || []).forEach(payment => {
+            if (payment.status === 'completed') {
+              calculatedTotalCurrentDealerBalance -= payment.amount;
+            }
+          });
         });
       }
       
       setTotalOverdueAmount(calculatedTotalOverdue);
+      setTotalCurrentDealerBalance(calculatedTotalCurrentDealerBalance); // SET NEW STATE
 
     } catch (error: any) {
       console.error('Error fetching sales person performance:', error.message);
@@ -120,7 +145,8 @@ const SalesPersonPerformanceCard: React.FC = () => {
       setTargetAmount(null);
       setAchievedSales(null);
       setPendingSales(null);
-      setTotalOverdueAmount(null); // Reset overdue amount on error
+      setTotalOverdueAmount(null);
+      setTotalCurrentDealerBalance(null); // Reset new state on error
     } finally {
       setLoading(false);
     }
@@ -186,17 +212,28 @@ const SalesPersonPerformanceCard: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-orange-600" />
-            <span className="text-muted-foreground">Pending Sales:</span>
+            <span className="text-muted-foreground">Pending Target:</span>
           </div>
           <span className={`text-lg font-bold ${pendingSales !== null && pendingSales > 0 ? 'text-red-600' : 'text-green-600'}`}>
             ₹{pendingSales !== null ? pendingSales.toFixed(2) : 'N/A'}
           </span>
         </div>
         <Separator />
+        {/* NEW METRIC: Total Current Dealer Balance */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-red-600" />
-            <span className="text-muted-foreground">Total Overdue (Dealers):</span>
+            <span className="text-muted-foreground">Total Dealer Balance:</span>
+          </div>
+          <span className="text-lg font-bold text-red-600">
+            ₹{totalCurrentDealerBalance !== null ? totalCurrentDealerBalance.toFixed(2) : 'N/A'}
+          </span>
+        </div>
+        {/* EXISTING METRIC: Total Overdue Amount */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-red-600" />
+            <span className="text-muted-foreground">Total Overdue (Orders Due):</span>
           </div>
           <span className="text-lg font-bold text-red-600">
             ₹{totalOverdueAmount !== null ? totalOverdueAmount.toFixed(2) : 'N/A'}

@@ -36,6 +36,9 @@ interface LoginLogReportDialogProps {
 }
 
 const SQL_COMMAND = `
+-- Ensure uuid-ossp extension is enabled if not already
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TABLE public.login_logs (
     id uuid NOT NULL DEFAULT uuid_generate_v4(),
     user_id uuid NOT NULL,
@@ -286,7 +289,7 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">User Login & Activity Report</DialogTitle>
           <DialogDescription>
-            View user login history and last recorded activity time.
+            View user login history and last recorded activity time. (Last Active Time updates every 5 minutes while the user is active in the app.)
           </DialogDescription>
         </DialogHeader>
 
