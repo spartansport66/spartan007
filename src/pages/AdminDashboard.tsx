@@ -35,7 +35,7 @@ import SalesPersonVisitReportDialog from '@/components/reports/SalesPersonVisitR
 import SalesPersonTodayFollowupsReportDialog from '@/components/reports/SalesPersonTodayFollowupsReportDialog';
 import LoginLogReportDialog from '@/components/reports/LoginLogReportDialog';
 import SalesPersonAccountStatementReportDialog from '@/components/reports/SalesPersonAccountStatementReportDialog';
-import OrderSummaryReportDialog from '@/components/reports/OrderSummaryReportDialog'; // New Import
+import OrderSummaryReportDialog from '@/components/reports/OrderSummaryReportDialog';
 import { updateAllDealerCreditDays } from '@/utils/supabase-actions';
 import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
 import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
@@ -63,7 +63,7 @@ const AdminDashboard = () => {
   const [isSalesPersonTodayFollowupsReportOpen, setIsSalesPersonTodayFollowupsReportOpen] = useState(false);
   const [isLoginLogReportOpen, setIsLoginLogReportOpen] = useState(false);
   const [isSalesPersonAccountStatementReportOpen, setIsSalesPersonAccountStatementReportOpen] = useState(false);
-  const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false); // New state initialization
+  const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -304,7 +304,7 @@ const AdminDashboard = () => {
               setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen}
               setIsLoginLogReportOpen={setIsLoginLogReportOpen}
               setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen}
-              setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen} // Pass new state setter
+              setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen}
             />
           </SheetContent>
         </Sheet>
