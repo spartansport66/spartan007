@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2, Search, Eye, FileText } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2, Search, Eye, FileText, Lock } from 'lucide-react';
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
@@ -269,9 +269,38 @@ const Dashboard = () => {
             Welcome, {salesPersonName || 'Sales Person'}!
           </h2>
         </div>
-        {/* Removed Sales Dashboard Title */}
         <div className="flex-shrink-0 flex items-center gap-2">
-          {/* Removed My Reports Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" /> My Reports
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>My Reports</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setIsSalesPersonSalesReportOpen(true)}>
+                Sales Detail Report
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonDealerReportOpen(true)}>
+                My Dealer Report
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonPaymentsReportOpen(true)}>
+                My Payments Report
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate('/add-dealer')}>
+                <PlusCircle className="h-4 w-4 mr-2" /> Add New Dealer
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/manage-dealers')}>
+                <Building className="h-4 w-4 mr-2" /> Manage Dealers
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate('/change-password')}>
+                <Lock className="h-4 w-4 mr-2" /> Change Password
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button onClick={handleLogout} variant="ghost" size="icon" className="text-black hover:text-black p-2">
             <LogOut className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>

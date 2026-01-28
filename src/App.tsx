@@ -19,9 +19,10 @@ import ComboOffersDashboard from "./pages/ComboOffersDashboard";
 import SheetConverterPage from "./pages/SheetConverterPage";
 import ForcePasswordReset from "./pages/ForcePasswordReset";
 import DailyVisitReport from "./pages/DailyVisitReport";
-import StockReceipts from "./pages/StockReceipts"; // Import new page
+import StockReceipts from "./pages/StockReceipts";
+import ChangePassword from "./pages/ChangePassword"; // Import new page
 import { SessionContextProvider } from "./contexts/SessionContext";
-import { useActivityTracker } from "./hooks/useActivityTracker"; // Import new hook
+import { useActivityTracker } from "./hooks/useActivityTracker";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,7 @@ const AppContent = () => {
       <Route path="/force-password-reset" element={<ForcePasswordReset />} />
       <Route path="/daily-visit-report" element={<DailyVisitReport />} />
       <Route path="/stock-receipts" element={<StockReceipts />} />
+      <Route path="/change-password" element={<ChangePassword />} /> {/* New Route */}
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>
