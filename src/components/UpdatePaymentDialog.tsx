@@ -14,7 +14,7 @@ import { Loader2 } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 
 interface PendingOrderPayment {
-  id: string; // Order ID
+  id: string; // Order ID (or Dealer ID if order_number is 0)
   order_number: number;
   total_amount: number;
   dealer_name: string;
@@ -120,48 +120,80 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!orderToUpdate) return;
     setLoading(true);
+    
+    const isGeneralBalancePayment = orderToUpdate.order_number === 0;
+    const dealerId = isGeneralBalancePayment ? orderToUpdate.id : null;
+
     try {
-      // 1. Update the order's payment status to 'pending_approval'
-      const { error: orderUpdateError } = await supabase
-        .from('orders')
-        .update({ payment_status: 'pending_approval' })
-        .eq('id', orderToUpdate.id);
+      if (isGeneralBalancePayment) {
+        // --- Scenario 2: Payment against General Balance (Opening Balance) ---
+        
+        // 1. Fetch current dealer balance to calculate new opening balance
+        const { data: currentBalanceData, error: fetchBalanceError } = await supabase
+          .from('dealer_balances')
+          .select('opening_balance')
+          .eq('dealer_id', dealerId)
+          .single();
+
+        if (fetchBalanceError && fetchBalanceError.code !== 'PGRST116') {
+          throw new Error(`Failed to fetch current balance: ${fetchBalanceError.message}`);
+        }
+        
+        const currentOpeningBalance = currentBalanceData?.opening_balance || 0;
+        const newOpeningBalance = Math.max(0, currentOpeningBalance - values.amount); // Ensure balance doesn't go negative
+
+        // 2. Update dealer_balances table
+        const { error: balanceUpdateError } = await supabase
+          .from('dealer_balances')
+          .upsert({
+            dealer_id: dealerId,
+            opening_balance: newOpeningBalance,
+          }, { onConflict: 'dealer_id' });
+
+        if (balanceUpdateError) {
+          throw new Error(`Failed to update dealer balance: ${balanceUpdateError.message}`);
+        }
+        
+        showSuccess(`Payment of ₹${values.amount.toFixed(2)} recorded against general balance for ${orderToUpdate.dealer_name}. New Opening Balance: ₹${newOpeningBalance.toFixed(2)}.`);
+        
+      } else {
+        // --- Scenario 1: Payment against a specific Order ---
+        
+        // 1. Update the order's payment status to 'pending_approval'
+        const { error: orderUpdateError } = await supabase
+          .from('orders')
+          .update({ payment_status: 'pending_approval' })
+          .eq('id', orderToUpdate.id);
+        
+        if (orderUpdateError) {
+          throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
+        }
+
+        // 2. Insert a new payment record with status 'pending_approval'
+        const { error: paymentInsertError } = await supabase
+          .from('payments')
+          .insert({
+            order_id: orderToUpdate.id, // Use the actual order ID
+            amount: values.amount,
+            payment_method: values.paymentMethod,
+            payment_date: new Date().toISOString(), // Record current date as payment date
+            status: 'pending_approval', // Payment is now pending approval
+            // Conditional fields based on payment method
+            cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
+            cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
+            transaction_id: 
+              values.paymentMethod === 'Card' ? values.cardTransactionId :
+              values.paymentMethod === 'Bank Transfer' ? values.bankTransactionId :
+              values.paymentMethod === 'UPI' ? values.upiTransactionId : null,
+          });
+
+        if (paymentInsertError) {
+          throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
+        }
+
+        showSuccess(`Payment for Order #${orderToUpdate.order_number} submitted for approval.`);
+      }
       
-      if (orderUpdateError) {
-        throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
-      }
-
-      // 2. Insert a new payment record with status 'pending_approval'
-      const { error: paymentInsertError } = await supabase
-        .from('payments')
-        .insert({
-          order_id: orderToUpdate.id,
-          amount: values.amount,
-          payment_method: values.paymentMethod,
-          payment_date: new Date().toISOString(), // Record current date as payment date
-          status: 'pending_approval', // Payment is now pending approval
-          // Conditional fields based on payment method
-          cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
-          cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
-          card_number: null, // Not collecting card details anymore
-          card_holder_name: null, // Not collecting card details anymore
-          expiry_date: null, // Not collecting card details anymore
-          cvv: null, // Not collecting card details anymore
-          bank_name: null, // Not collecting bank details anymore
-          account_number: null, // Not collecting bank details anymore
-          ifsc_code: null, // Not collecting bank details anymore
-          upi_id: null, // Not collecting UPI ID anymore
-          transaction_id: 
-            values.paymentMethod === 'Card' ? values.cardTransactionId :
-            values.paymentMethod === 'Bank Transfer' ? values.bankTransactionId :
-            values.paymentMethod === 'UPI' ? values.upiTransactionId : null,
-        });
-
-      if (paymentInsertError) {
-        throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
-      }
-
-      showSuccess(`Payment for Order #${orderToUpdate.order_number} submitted for approval.`);
       onPaymentUpdated();
       onOpenChange(false);
     } catch (error: any) {
@@ -178,9 +210,15 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Update Payment for Order #{orderToUpdate?.order_number}</DialogTitle>
+          <DialogTitle>
+            {orderToUpdate?.order_number === 0 
+              ? `Record Payment for Outstanding Balance` 
+              : `Update Payment for Order #${orderToUpdate?.order_number}`}
+          </DialogTitle>
           <DialogDescription>
-            Mark this order as paid and record the payment details.
+            {orderToUpdate?.order_number === 0 
+              ? `Record a payment against the dealer's general outstanding balance.`
+              : `Mark this order as paid and record the payment details.`}
           </DialogDescription>
         </DialogHeader>
         {orderToUpdate ? (
@@ -191,10 +229,12 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                 <Input value={orderToUpdate.dealer_name} readOnly className="bg-muted" />
               </div>
               <div className="space-y-2">
-                <Label>Total Amount Due:</Label>
+                <Label>
+                  {orderToUpdate.order_number === 0 ? 'Outstanding Balance:' : 'Total Amount Due:'}
+                </Label>
                 <Input value={`₹${orderToUpdate.total_amount.toFixed(2)}`} readOnly className="bg-muted" />
               </div>
-              {orderToUpdate.payment_due_date && (
+              {orderToUpdate.payment_due_date && orderToUpdate.order_number !== 0 && (
                 <div className="space-y-2">
                   <Label>Payment Due Date:</Label>
                   <Input value={new Date(orderToUpdate.payment_due_date).toLocaleDateString()} readOnly className="bg-muted" />
