@@ -74,22 +74,8 @@ const MultiItemOrderForm: React.FC = () => {
   const [chequeDdNo, setChequeDdNo, ] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
 
-  // Card fields (only transaction ID)
-  const [cardNumber, setCardNumber] = useState<string>('');
-  const [cardHolderName, setCardHolderName] = useState<string>('');
-  const [expiryDate, setExpiryDate] = useState<string>('');
-  const [cvv, setCvv] = useState<string>('');
-
-  // Bank Transfer fields
-  const [bankName, setBankName] = useState<string>('');
-  const [accountNumber, setAccountNumber] = useState<string>('');
-  const [ifscCode, setIfscCode] = useState<string>('');
-
-  // UPI fields
-  const [upiId, setUpiId] = useState<string>('');
+  // Transaction ID field (used for Card, Bank Transfer, UPI, Cash)
   const [transactionId, setTransactionId] = useState<string>('');
-
-  const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
 
   // State for searchable product dropdown
   const [popoverOpenStates, setPopoverOpenStates] = useState<Record<string, boolean>>({}); // Individual open states
@@ -418,18 +404,8 @@ const MultiItemOrderForm: React.FC = () => {
         return;
       }
 
-      if (paymentMethod === 'Card' && !transactionId) { // Only transaction ID is collected for card
-        showError('Please enter Transaction ID for Card payment.');
-        return;
-      }
-
-      if (paymentMethod === 'Bank Transfer' && !transactionId) { // Only transaction ID is collected for bank transfer
-        showError('Please enter Transaction ID for Bank Transfer.');
-        return;
-      }
-
-      if (paymentMethod === 'UPI' && !transactionId) { // Only transaction ID is collected for UPI
-        showError('Please enter Transaction ID for UPI payment.');
+      if (paymentMethod !== 'Cash' && paymentMethod !== 'Cheque/DD' && !transactionId) {
+        showError(`Please enter Transaction ID for ${paymentMethod} payment.`);
         return;
       }
     }
@@ -454,8 +430,7 @@ const MultiItemOrderForm: React.FC = () => {
           payment_method: paymentMethod,
           cheque_dd_no: paymentMethod === 'Cheque/DD' ? chequeDdNo : null,
           cheque_dd_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : null,
-          // Only transaction_id is collected for Card, Bank Transfer, UPI
-          transaction_id: transactionId,
+          transaction_id: transactionId || null, // Use transactionId for all methods
         };
       }
 
@@ -484,14 +459,6 @@ const MultiItemOrderForm: React.FC = () => {
       setPaymentAmount(0);
       setChequeDdNo('');
       setChequeDdDate('');
-      setCardNumber('');
-      setCardHolderName('');
-      setExpiryDate('');
-      setCvv('');
-      setBankName('');
-      setAccountNumber('');
-      setIfscCode('');
-      setUpiId('');
       setTransactionId('');
       setPaymentDueDate(null);
       setPendingPayments([]);
@@ -542,6 +509,8 @@ const MultiItemOrderForm: React.FC = () => {
   const disableAddItem = selectedDealer && availableCredit !== null && availableCredit <= 0;
 
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
+  
+  const calculatedPaymentStatus = isPaidAtOrderTime ? 'Pending Approval' : 'Pending';
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -619,7 +588,7 @@ const MultiItemOrderForm: React.FC = () => {
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Overdue Payments</AlertTitle>
                 <AlertDescription>
-                  This dealer has overdue payments totaling ₹${totalPendingAmount.toFixed(2)}. Please clear all overdue payments first.
+                  Cannot place order. Dealer has overdue payments totaling ₹{totalPendingAmount.toFixed(2)}. Please clear all overdue payments first.
                   <div className="mt-2 max-h-32 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -680,6 +649,12 @@ const MultiItemOrderForm: React.FC = () => {
                     <span className="font-medium">{formatDate(paymentDueDate)}</span>
                   </div>
                 )}
+                <div className="flex justify-between text-sm font-bold mt-2">
+                  <span>Calculated Order Payment Status:</span>
+                  <span className={calculatedPaymentStatus === 'Pending Approval' ? 'text-blue-600' : 'text-yellow-600'}>
+                    {calculatedPaymentStatus}
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -730,6 +705,7 @@ const MultiItemOrderForm: React.FC = () => {
                           role="combobox"
                           aria-expanded={popoverOpenStates[item.id]}
                           className="w-full justify-between"
+                          disabled={products.length === 0 || loading}
                         >
                           {item.product_id
                             ? products.find((product) => product.id === item.product_id)?.name
@@ -862,14 +838,6 @@ const MultiItemOrderForm: React.FC = () => {
                     setPaymentAmount(0);
                     setChequeDdNo('');
                     setChequeDdDate('');
-                    setCardNumber('');
-                    setCardHolderName('');
-                    setExpiryDate('');
-                    setCvv('');
-                    setBankName('');
-                    setAccountNumber('');
-                    setIfscCode('');
-                    setUpiId('');
                     setTransactionId('');
                   }
                 }}
@@ -933,57 +901,16 @@ const MultiItemOrderForm: React.FC = () => {
                   </>
                 )}
 
-                {paymentMethod === 'Card' && (
+                {(paymentMethod === 'Card' || paymentMethod === 'Bank Transfer' || paymentMethod === 'UPI' || paymentMethod === 'Cash') && (
                   <div>
-                    <Label htmlFor="transactionId">Transaction ID</Label>
+                    <Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label>
                     <Input
                       id="transactionId"
                       type="text"
                       value={transactionId}
                       onChange={(e) => setTransactionId(e.target.value)}
                       className="w-full"
-                      placeholder="e.g., TXN123456789"
-                    />
-                  </div>
-                )}
-
-                {paymentMethod === 'Bank Transfer' && (
-                  <div>
-                    <Label htmlFor="transactionId">Transaction ID</Label>
-                    <Input
-                      id="transactionId"
-                      type="text"
-                      value={transactionId}
-                      onChange={(e) => setTransactionId(e.target.value)}
-                      className="w-full"
-                      placeholder="e.g., TXN123456789"
-                    />
-                  </div>
-                )}
-
-                {paymentMethod === 'UPI' && (
-                  <div>
-                    <Label htmlFor="transactionId">Transaction ID</Label>
-                    <Input
-                      id="transactionId"
-                      type="text"
-                      value={transactionId}
-                      onChange={(e) => setTransactionId(e.target.value)}
-                      className="w-full"
-                      placeholder="e.g., UPI123456789"
-                    />
-                  </div>
-                )}
-                {paymentMethod === 'Cash' && (
-                  <div>
-                    <Label htmlFor="transactionId">Transaction ID (Optional)</Label>
-                    <Input
-                      id="transactionId"
-                      type="text"
-                      value={transactionId}
-                      onChange={(e) => setTransactionId(e.target.value)}
-                      className="w-full"
-                      placeholder="Cash transaction reference"
+                      placeholder={paymentMethod === 'Cash' ? 'Cash transaction reference' : 'e.g., TXN123456789'}
                     />
                   </div>
                 )}
