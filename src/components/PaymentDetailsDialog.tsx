@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Calendar, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
+import { formatDate } from '@/utils/date'; // Import formatDate
 
 interface PaymentDetails {
   id: string;
@@ -130,7 +131,7 @@ const PaymentDetailsDialog: React.FC<PaymentDetailsDialogProps> = ({ paymentId, 
             <AlertTriangle className="h-5 w-5" />
             <div>
               <p className="font-medium">Post-dated Payment</p>
-              <p>This payment is scheduled for {new Date(paymentDetails.cheque_dd_date!).toLocaleDateString()}.</p>
+              <p>This payment is scheduled for {formatDate(paymentDetails.cheque_dd_date!)}.</p>
               <p>It can only be approved on or after that date.</p>
             </div>
           </div>
@@ -140,15 +141,15 @@ const PaymentDetailsDialog: React.FC<PaymentDetailsDialogProps> = ({ paymentId, 
           <div>
             <h3 className="text-lg font-semibold">Payment Information</h3>
             <div className="mt-2 space-y-2">
-              <p><span className="font-medium">Order Number:</span> #{paymentDetails.order_number}</p>
+              <p><span className="font-medium">Order Number:</span> #{paymentDetails.order_number || 'N/A'}</p>
               <p><span className="font-medium">Payment Method:</span> {paymentDetails.payment_method}</p>
               <p><span className="font-medium">Amount:</span> ₹{paymentDetails.amount.toFixed(2)}</p>
-              <p><span className="font-medium">Payment Date:</span> {new Date(paymentDetails.payment_date).toLocaleDateString()}</p>
+              <p><span className="font-medium">Payment Date:</span> {formatDate(paymentDetails.payment_date)}</p>
               <p><span className="font-medium">Status:</span> <span className="capitalize">{paymentDetails.status.replace('_', ' ')}</span></p>
               {isPostDated && (
                 <p className="flex items-center gap-1">
                   <Calendar className="h-4 w-4" />
-                  <span className="font-medium">Due Date:</span> {new Date(paymentDetails.cheque_dd_date!).toLocaleDateString()}
+                  <span className="font-medium">Due Date:</span> {formatDate(paymentDetails.cheque_dd_date!)}
                 </p>
               )}
             </div>
@@ -173,7 +174,7 @@ const PaymentDetailsDialog: React.FC<PaymentDetailsDialogProps> = ({ paymentId, 
               <p><span className="font-medium">Cheque/DD Number:</span> {paymentDetails.cheque_dd_no || 'N/A'}</p>
               <p className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
-                <span className="font-medium">Cheque/DD Date:</span> {paymentDetails.cheque_dd_date ? new Date(paymentDetails.cheque_dd_date).toLocaleDateString() : 'N/A'}
+                <span className="font-medium">Cheque/DD Date:</span> {formatDate(paymentDetails.cheque_dd_date)}
               </p>
             </div>
           </div>

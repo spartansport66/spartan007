@@ -14,7 +14,7 @@ import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
 import PaymentDetailsDialog from '@/components/PaymentDetailsDialog';
-import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
+import { getStartOfUTCDayISO, getEndOfUTCDayISO, formatDate } from '@/utils/date';
 
 interface PaymentReportData {
   id: string; // Order ID
@@ -266,7 +266,7 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
       showError('Company name is required to send WhatsApp messages. Please contact an administrator.');
       return;
     }
-    const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
+    const formattedDueDate = dueDate ? formatDate(dueDate) : 'N/A';
     const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
     const encodedMessage = encodeURIComponent(message);
     window.open(`https://web.whatsapp.com/send?phone=${dealerPhone}&text=${encodedMessage}`, '_blank');
@@ -324,8 +324,8 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
         const dealerLabel = allDealers.find(d => d.value === filterDealerId)?.label;
         if (dealerLabel) filterDetails.push(`Dealer: ${dealerLabel}`);
       }
-      if (filterFromDate) filterDetails.push(`From Order Date: ${new Date(filterFromDate).toLocaleDateString()}`);
-      if (filterToDate) filterDetails.push(`To Order Date: ${new Date(filterToDate).toLocaleDateString()}`);
+      if (filterFromDate) filterDetails.push(`From Order Date: ${formatDate(filterFromDate)}`);
+      if (filterToDate) filterDetails.push(`To Order Date: ${formatDate(filterToDate)}`);
 
       if (filterDetails.length > 0) {
         doc.setFontSize(9);
@@ -347,10 +347,10 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
         `#${payment.order_number}`,
         payment.dealer_name,
         payment.dealer_phone || 'N/A',
-        new Date(payment.order_date).toLocaleDateString(),
+        formatDate(payment.order_date),
         payment.payment_method ? payment.payment_method.replace(/_/g, ' ') : 'N/A',
         payment.payment_status.replace(/_/g, ' ').toUpperCase(),
-        payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A',
+        formatDate(payment.payment_due_date),
         `₹${payment.total_amount.toFixed(2)}`,
       ]);
 
@@ -509,9 +509,9 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
                           </div>
                         </TableCell>
                         <TableCell className="text-foreground">
-                          {payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A'}
+                          {formatDate(payment.payment_due_date)}
                         </TableCell>
-                        <TableCell className="text-foreground">{new Date(payment.order_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-foreground">{formatDate(payment.order_date)}</TableCell>
                         <TableCell className="text-center">
                           <div className="flex justify-center gap-2">
                             {payment.payment_status === 'pending' && payment.dealer_phone && (

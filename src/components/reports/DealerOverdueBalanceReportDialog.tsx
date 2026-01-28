@@ -13,6 +13,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
+import { formatDate } from '@/utils/date'; // Import formatDate
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -243,7 +244,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
     setIsSendingWhatsApp(true);
     try {
       const formattedBalance = dealer.currentBalance.toFixed(2);
-      const formattedDueDate = dealer.oldestDueDate ? new Date(dealer.oldestDueDate).toLocaleDateString() : 'N/A';
+      const formattedDueDate = dealer.oldestDueDate ? formatDate(dealer.oldestDueDate) : 'N/A';
       const message = `Dear ${dealer.name},\n\nThis is a reminder from *${companyName}* that your current outstanding balance is *₹${formattedBalance}*, due from *${formattedDueDate}*. Please clear your balance as soon as possible.\n\nThank you!`;
 
       const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
@@ -318,7 +319,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
         dealer.city || 'N/A',
         dealer.state || 'N/A',
         dealer.currentBalance.toFixed(2),
-        dealer.oldestDueDate ? new Date(dealer.oldestDueDate).toLocaleDateString() : 'N/A',
+        formatDate(dealer.oldestDueDate),
         dealer.overdueMonths.toString(),
       ]);
 
@@ -364,7 +365,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
       doc.save('dealer_overdue_balance_report.pdf');
       showSuccess('Dealer overdue balance report generated successfully!');
     } catch (error: any) {
-      console.error('[DealerOverdueBalanceReportDialog] Error generating PDF:', error);
+      console.error('Error generating PDF:', error);
       showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`);
     }
   };
@@ -480,7 +481,7 @@ const DealerOverdueBalanceReportDialog: React.FC<DealerOverdueBalanceReportDialo
                       <TableCell className="text-foreground">{dealer.state || 'N/A'}</TableCell>
                       <TableCell className="text-foreground text-right font-medium">₹{dealer.currentBalance.toFixed(2)}</TableCell>
                       <TableCell className="text-foreground text-center">
-                        {dealer.oldestDueDate ? new Date(dealer.oldestDueDate).toLocaleDateString() : 'N/A'}
+                        {formatDate(dealer.oldestDueDate)}
                       </TableCell>
                       <TableCell className="text-foreground text-center">{dealer.overdueMonths}</TableCell>
                       <TableCell className="text-center">

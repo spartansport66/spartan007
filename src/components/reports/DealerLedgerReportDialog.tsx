@@ -17,6 +17,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { useSession } from '@/contexts/SessionContext'; // Import useSession
+import { formatDate } from '@/utils/date'; // Import formatDate
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -325,7 +326,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     setIsSendingWhatsApp(true);
     try {
       const dealerName = selectedDealerName || 'Dealer';
-      const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
+      const formattedDueDate = dueDate ? formatDate(dueDate) : 'N/A';
       const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
       
       const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {

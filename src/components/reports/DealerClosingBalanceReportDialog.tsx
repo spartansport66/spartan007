@@ -16,6 +16,7 @@ import { useSession } from '@/contexts/SessionContext';
 import { Checkbox } from '@/components/ui/checkbox';
 import RCSBulkMessageSender from '@/components/RCSBulkMessageSender'; // Import the new component
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/utils/date'; // Import formatDate
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -468,7 +469,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       const tableRows = sortedDealers.map(dealer => [
         dealer.name,
         dealer.closing_balance.toFixed(2),
-        dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A',
+        formatDate(dealer.last_billing_date),
         dealer.daysSinceLastBill !== null ? dealer.daysSinceLastBill.toString() : 'N/A',
         dealer.phone || 'N/A',
       ]);
@@ -671,7 +672,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                           {`₹${dealer.closing_balance.toFixed(2)}`}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
-                          {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
+                          {formatDate(dealer.last_billing_date)}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
                           {dealer.daysSinceLastBill !== null ? dealer.daysSinceLastBill : 'N/A'}

@@ -10,7 +10,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import PaymentDetailsDialog from '@/components/PaymentDetailsDialog';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
-import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
+import { getStartOfUTCDayISO, getEndOfUTCDayISO, formatDate } from '@/utils/date';
 
 interface PendingPaymentItem {
   type: 'order_due_today' | 'payment_pending_approval'; // Simplified type

@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
+import { formatDate } from '@/utils/date'; // Import formatDate
 
 interface VisitReportData {
   id: string;
@@ -137,7 +138,7 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
       new Date(visit.visit_time).toLocaleString(),
       visit.visit_status,
       visit.remarks || 'N/A',
-      visit.next_visit_date ? new Date(visit.next_visit_date).toLocaleDateString() : 'N/A',
+      formatDate(visit.next_visit_date),
       visit.photo_url ? 'View Photo' : 'N/A',
     ]);
 
@@ -251,7 +252,7 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
                       <TableCell className="text-foreground">{new Date(visit.visit_time).toLocaleString()}</TableCell>
                       <TableCell className="text-foreground">{visit.visit_status}</TableCell>
                       <TableCell className="text-foreground max-w-[200px] truncate" title={visit.remarks || ''}>{visit.remarks || 'N/A'}</TableCell>
-                      <TableCell className="text-foreground">{visit.next_visit_date ? new Date(visit.next_visit_date).toLocaleDateString() : 'N/A'}</TableCell>
+                      <TableCell className="text-foreground">{formatDate(visit.next_visit_date)}</TableCell>
                       <TableCell className="text-center">
                         {visit.photo_url ? (
                           <Button 

@@ -13,6 +13,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
+import { formatDate } from '@/utils/date'; // Import formatDate
 
 interface SaleReportData {
   id: string; // Sale ID
@@ -208,8 +209,8 @@ const SalesPersonSalesReport: React.FC<SalesPersonSalesReportProps> = ({ isOpen,
         const productLabel = allProducts.find(p => p.value === filterProductId)?.label;
         if (productLabel) filterDetails.push(`Product: ${productLabel}`);
       }
-      if (filterFromSaleDate) filterDetails.push(`From Date: ${new Date(filterFromSaleDate).toLocaleDateString()}`);
-      if (filterToSaleDate) filterDetails.push(`To Date: ${new Date(filterToSaleDate).toLocaleDateString()}`);
+      if (filterFromSaleDate) filterDetails.push(`From Date: ${formatDate(filterFromSaleDate)}`);
+      if (filterToSaleDate) filterDetails.push(`To Date: ${formatDate(filterToDate)}`);
 
       if (filterDetails.length > 0) {
         doc.setFontSize(9);
@@ -221,7 +222,7 @@ const SalesPersonSalesReport: React.FC<SalesPersonSalesReportProps> = ({ isOpen,
       ];
       const tableRows = sales.map(sale => [
         sale.order_number,
-        new Date(sale.sale_date).toLocaleDateString(),
+        formatDate(sale.sale_date),
         sale.product_code,
         sale.product_name,
         sale.product_size,
@@ -383,7 +384,7 @@ const SalesPersonSalesReport: React.FC<SalesPersonSalesReportProps> = ({ isOpen,
                   {sales.map((sale) => (
                     <TableRow key={sale.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">#{sale.order_number}</TableCell>
-                      <TableCell className="text-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-foreground">{formatDate(sale.sale_date)}</TableCell>
                       <TableCell className="text-foreground">{sale.product_code}</TableCell>
                       <TableCell className="text-foreground">{sale.product_name}</TableCell>
                       <TableCell className="text-foreground">{sale.product_size || 'N/A'}</TableCell>

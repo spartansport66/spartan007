@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
-import { getEndOfUTCDayISO } from '@/utils/date';
+import { getEndOfUTCDayISO, formatDate } from '@/utils/date';
 
 interface FollowupReportData {
   id: string;
@@ -74,7 +74,7 @@ const SalesPersonTodayFollowupsReportDialog: React.FC<SalesPersonTodayFollowupsR
         `)
         .not('next_visit_date', 'is', null) // Only consider visits that set a follow-up date
         .lte('next_visit_date', endOfTodayISO) // Follow-up date is today or earlier
-        .order('next_visit_date', { ascending: true });
+        .order('visit_time', { ascending: false });
 
       // Apply sales person filter
       if (filterSalesPersonId) {
@@ -159,14 +159,6 @@ const SalesPersonTodayFollowupsReportDialog: React.FC<SalesPersonTodayFollowupsR
 
   const handleClearFilters = () => {
     setFilterSalesPersonId('');
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
   };
 
   const handlePrint = () => {
@@ -285,7 +277,7 @@ const SalesPersonTodayFollowupsReportDialog: React.FC<SalesPersonTodayFollowupsR
                   {followups.map((visit) => (
                     <TableRow key={visit.id} className={visit.isOverdue ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-accent/50"}>
                       <TableCell className="font-medium text-foreground">
-                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${visit.isOverdue ? 'text-red-600 bg-red-100' : 'text-orange-600 bg-orange-100'}`}>
+                        <div className={`flex items-center justify-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${visit.isOverdue ? 'text-red-600 bg-red-100' : 'text-orange-600 bg-orange-100'}`}>
                             {visit.isOverdue ? <AlertTriangle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
                             {visit.isOverdue ? 'Overdue' : 'Due Today'}
                         </div>

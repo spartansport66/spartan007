@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { useSession } from '@/contexts/SessionContext';
+import { formatDate } from '@/utils/date'; // Import formatDate
 
 interface DealerBalanceInfo {
   id: string; // Dealer ID
