@@ -51,6 +51,14 @@ interface DealerBalance {
   current_balance: number; // New: Calculated ledger balance
 }
 
+interface PendingOrderPayment {
+  id: string; // Order ID
+  order_number: number;
+  total_amount: number;
+  dealer_name: string;
+  payment_due_date: string | null;
+}
+
 // Format date as dd/mm/yyyy
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
@@ -74,7 +82,7 @@ const PaymentStatusCard: React.FC = () => {
   const [filterToDate, setFilterToDate] = useState<string>('');
   // Dialog states
   const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
-  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<Order | null>(null);
+  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PendingOrderPayment | null>(null);
   const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
   const [selectedOrderForPaymentDetails, setSelectedOrderForPaymentDetails] = useState<Order | null>(null);
 
@@ -116,6 +124,7 @@ const PaymentStatusCard: React.FC = () => {
             total_amount,
             payment_due_date,
             payment_status,
+            dealer_id,
             dealers (name, phone),
             payments (
               amount,
@@ -207,8 +216,8 @@ const PaymentStatusCard: React.FC = () => {
         setOrders([]); // Clear orders if filtering by opening balance
       }
 
-      // --- 2. Fetch Dealer Balances (if filtering for opening balance or overdue payments) ---
-      if (filterStatus === 'overdue' || filterStatus === 'opening_balance') {
+      // --- 2. Fetch Dealer Balances (for Outstanding Balance Ledger view) ---
+      if (filterStatus === 'opening_balance') {
         // Fetch dealers assigned to the current user, including their balances and transactions
         const { data: dealerAssignments, error: assignmentsError } = await supabase
           .from('dealer_sales_persons')
@@ -285,8 +294,57 @@ const PaymentStatusCard: React.FC = () => {
   };
 
   const handleAddPaymentDetails = (order: Order) => {
-    setSelectedOrderForPaymentUpdate(order);
+    setSelectedOrderForPaymentUpdate({
+      id: order.id,
+      order_number: order.order_number,
+      total_amount: order.total_amount,
+      dealer_name: order.dealer_name,
+      payment_due_date: order.payment_due_date,
+    });
     setIsUpdatePaymentDialogOpen(true);
+  };
+  
+  const handleInitiatePaymentForBalance = async (dealerId: string, dealerName: string) => {
+    setLoading(true);
+    try {
+      // Find the oldest pending order for this dealer
+      const { data: orders, error } = await supabase
+        .from('orders')
+        .select('id, order_number, total_amount, payment_due_date')
+        .eq('dealer_id', dealerId)
+        .eq('payment_status', 'pending')
+        .order('order_date', { ascending: true }) // Oldest first
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (orders) {
+        setSelectedOrderForPaymentUpdate({
+          id: orders.id,
+          order_number: orders.order_number,
+          total_amount: orders.total_amount,
+          dealer_name: dealerName,
+          payment_due_date: orders.payment_due_date,
+        });
+        setIsUpdatePaymentDialogOpen(true);
+      } else {
+        // If no pending orders, check if the balance is purely from opening balance
+        const dealer = dealerBalances.find(d => d.id === dealerId);
+        if (dealer && dealer.current_balance > 0) {
+          showError(`Dealer ${dealerName} has an outstanding balance of ₹${dealer.current_balance.toFixed(2)}, but no specific pending orders were found to link the payment to. Please check the Dealer Ledger Report.`);
+        } else {
+          showError(`No pending orders found for ${dealerName}.`);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error initiating payment:', error.message);
+      showError(`Failed to initiate payment: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleViewPaymentDetails = (order: Order) => {
@@ -432,33 +490,53 @@ const PaymentStatusCard: React.FC = () => {
           </Button>
         </div>
 
-        {/* Dealer Balances Section - Only shown when filtering for opening balance or overdue payments */}
-        {(filterStatus === 'overdue' || filterStatus === 'opening_balance') && dealerBalances.length > 0 && (
+        {/* Dealer Balances Section - Only shown when filtering for opening balance */}
+        {filterStatus === 'opening_balance' && (
           <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
             <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
               <DollarSign className="h-5 w-5" /> Dealers with Total Outstanding Balance (Ledger)
             </h3>
             <div className="max-h-40 overflow-y-auto border rounded-md bg-background">
-              <Table>
-                <TableHeader className="sticky top-0 bg-muted">
-                  <TableRow>
-                    <TableHead className="text-muted-foreground">Dealer Name</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Total Outstanding Balance</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dealerBalances.map((dealer) => (
-                    <TableRow key={dealer.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                      <TableCell className="text-right font-semibold text-red-600">₹{dealer.opening_balance.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-semibold text-red-600">₹{dealer.current_balance.toFixed(2)}</TableCell>
+              {loading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : dealerBalances.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4">No dealers found with a positive outstanding balance.</p>
+              ) : (
+                <Table>
+                  <TableHeader className="sticky top-0 bg-muted">
+                    <TableRow>
+                      <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Total Outstanding Balance</TableHead>
+                      <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {dealerBalances.map((dealer) => (
+                      <TableRow key={dealer.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
+                        <TableCell className="text-right font-semibold text-red-600">₹{dealer.opening_balance.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-semibold text-red-600">₹{dealer.current_balance.toFixed(2)}</TableCell>
+                        <TableCell className="text-center">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleInitiatePaymentForBalance(dealer.id, dealer.name)}
+                            title="Add Payment for Oldest Pending Order"
+                            disabled={loading}
+                          >
+                            <DollarSign className="h-4 w-4 text-green-600" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </div>
-            {filterStatus === 'opening_balance' && orders.length > 0 && (
+            {orders.length > 0 && (
               <p className="mt-3 text-sm text-muted-foreground">
                 Note: Orders below are also displayed based on date/dealer filters, but the primary focus above is on the Total Outstanding Balance.
               </p>
