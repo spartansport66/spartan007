@@ -448,7 +448,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
       }
 
-      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Last Billing Date", "Days Since Last Bill", "Phone"];
+      // Renamed column header
+      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Opening Balance Date", "Days Since Last Bill", "Phone"];
       const tableRows = sortedDealers.map(dealer => [
         dealer.name,
         dealer.closing_balance.toFixed(2),
@@ -496,7 +497,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         columnStyles: {
           0: { cellWidth: 50 }, // Dealer Name
           1: { cellWidth: 30, halign: 'right' }, // Closing Balance
-          2: { cellWidth: 30, halign: 'center' }, // Last Billing Date
+          2: { cellWidth: 30, halign: 'center' }, // Opening Balance Date (formerly Last Billing Date)
           3: { cellWidth: 30, halign: 'center' }, // Days Since Last Bill
           4: { cellWidth: 30, halign: 'center' }, // Phone
         }
@@ -617,7 +618,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                         )}
                       </div>
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Last Billing Date</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-center">Opening Balance Date</TableHead>
                     <TableHead 
                       className="text-muted-foreground font-bold text-center cursor-pointer hover:bg-muted/70"
                       onClick={() => handleSort('daysSinceLastBill')}
@@ -655,7 +656,6 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                           {`₹${dealer.closing_balance.toFixed(2)}`}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
-                          {/* Display date in local format */}
                           {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
