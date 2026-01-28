@@ -4,16 +4,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle, XCircle, Eye, Calendar, DollarSign, Clock, AlertCircle, MessageCircle } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Eye, Calendar, Clock, AlertCircle, MessageCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import PaymentDetailsDialog from '@/components/PaymentDetailsDialog';
-import UpdatePaymentDialog from '@/components/UpdatePaymentDialog'; // Import UpdatePaymentDialog
+import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 
 interface PendingPaymentItem {
-  type: 'order_due_today' | 'payment_pending_approval_today'; // Removed 'payment_paid_today'
+  type: 'order_due_today' | 'payment_pending_approval'; // Simplified type
   id: string; // Order ID for 'order_due_today', Payment ID for others
   order_id: string; // Always the order ID
   order_number: number;
@@ -36,7 +36,7 @@ interface AllPendingPaymentsCardProps {
 const APPROVE_PAYMENT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/approve-payment";
 
 const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPaymentAction }) => {
-  const [paymentsToday, setPaymentsToday] = useState<PendingPaymentItem[]>([]);
+  const [paymentsPendingApproval, setPaymentsPendingApproval] = useState<PendingPaymentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
@@ -44,9 +44,6 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   // Dialog states
   const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
   const [selectedPaymentIdForDetails, setSelectedPaymentIdForDetails] = useState<string | null>(null); // This is the payment_id from the payments table
-
-  const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
-  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PendingPaymentItem | null>(null); // This is the order_id for 'order_pending'
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -61,53 +58,14 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       setCompanyName(data?.company_name || null);
     } catch (error: any) {
       console.error('Error fetching company info for WhatsApp message:', error.message);
-      showError('Failed to load company information for WhatsApp message.');
       setCompanyName(null);
     }
   }, []);
 
-  const fetchTodayPaymentActivities = useCallback(async () => {
+  const fetchPaymentsPendingApproval = useCallback(async () => {
     setLoading(true);
     try {
-      const startOfUTCToday = getStartOfUTCDayISO();
-      const endOfUTCToday = getEndOfUTCDayISO();
-
-      // 1. Fetch orders with payment_status = 'pending' and payment_due_date is today or earlier
-      const { data: ordersDueToday, error: ordersDueTodayError } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          order_number,
-          total_amount,
-          payment_due_date,
-          dealer_id,
-          dealers (name, phone)
-        `)
-        .eq('payment_status', 'pending')
-        .lte('payment_due_date', endOfUTCToday) // Due today or earlier
-        .order('payment_due_date', { ascending: true });
-
-      if (ordersDueTodayError) throw ordersDueTodayError;
-
-      const formattedOrdersDueToday: PendingPaymentItem[] = (ordersDueToday || []).map((order: any) => ({
-        type: 'order_due_today',
-        id: order.id, // Order ID
-        order_id: order.id,
-        order_number: order.order_number,
-        dealer_name: order.dealers?.name || 'N/A',
-        dealer_phone: order.dealers?.phone || '',
-        amount: order.total_amount,
-        payment_status: 'pending',
-        payment_due_date: order.payment_due_date,
-        payment_method: null,
-        payment_date: null,
-        cheque_dd_date: null,
-        approved_at: null,
-        dealer_id: order.dealer_id,
-      }));
-
-      // 2. Fetch payments with status = 'pending_approval'
-      // We need to fetch all pending_approval payments and then filter by their effective due date
+      // Fetch all payments with status = 'pending_approval'
       const { data: paymentsPendingApproval, error: paymentsPendingApprovalError } = await supabase
         .from('payments')
         .select(`
@@ -131,23 +89,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
 
       if (paymentsPendingApprovalError) throw paymentsPendingApprovalError;
 
-      const formattedPaymentsPendingApprovalToday: PendingPaymentItem[] = (paymentsPendingApproval || [])
-        .filter((payment: any) => {
-          let effectiveDueDate: Date | null = null;
-          if (payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date) {
-            effectiveDueDate = new Date(payment.cheque_dd_date);
-          } else if (payment.orders?.payment_due_date) {
-            effectiveDueDate = new Date(payment.orders.payment_due_date);
-          }
-
-          if (!effectiveDueDate) return false; // If no due date, don't show it as "due"
-          effectiveDueDate.setUTCHours(0, 0, 0, 0); // Normalize to start of day UTC
-
-          // Show if effective due date is today or earlier
-          return effectiveDueDate <= new Date(endOfUTCToday);
-        })
+      const formattedPayments: PendingPaymentItem[] = (paymentsPendingApproval || [])
         .map((payment: any) => ({
-          type: 'payment_pending_approval_today',
+          type: 'payment_pending_approval',
           id: payment.id, // Payment ID
           order_id: payment.order_id,
           order_number: payment.orders?.order_number || 'N/A',
@@ -163,22 +107,11 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
           dealer_id: payment.orders?.dealer_id || '',
         }));
 
-      // Combine only orders due today and pending approval payments due today/earlier
-      const combinedPayments = [
-        ...formattedOrdersDueToday,
-        ...formattedPaymentsPendingApprovalToday,
-      ].sort((a, b) => {
-        // Sort by effective due date, prioritizing earlier dates
-        const dateA = a.cheque_dd_date ? new Date(a.cheque_dd_date).getTime() : (a.payment_due_date ? new Date(a.payment_due_date).getTime() : 0);
-        const dateB = b.cheque_dd_date ? new Date(b.cheque_dd_date).getTime() : (b.payment_due_date ? new Date(b.payment_due_date).getTime() : 0);
-        return dateA - dateB;
-      });
-
-      setPaymentsToday(combinedPayments);
+      setPaymentsPendingApproval(formattedPayments);
     } catch (error: any) {
-      console.error('Error fetching today payment activities:', error.message);
-      showError('Failed to load today\'s payment activities.');
-      setPaymentsToday([]);
+      console.error('Error fetching pending approval payments:', error.message);
+      showError('Failed to load pending approval payments.');
+      setPaymentsPendingApproval([]);
     } finally {
       setLoading(false);
     }
@@ -186,28 +119,11 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
 
   useEffect(() => {
     fetchCompanyInfo();
-    fetchTodayPaymentActivities();
+    fetchPaymentsPendingApproval();
     
-    // Subscribe to changes in the orders and payments tables
-    const ordersChannel = supabase
-      .channel('orders_payment_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Listen to INSERT, UPDATE, DELETE
-          schema: 'public',
-          table: 'orders',
-        },
-        (payload) => {
-          console.log('Order change received!', payload);
-          fetchTodayPaymentActivities(); // Refetch on any order change
-          onPaymentAction(); // Notify parent
-        }
-      )
-      .subscribe();
-
+    // Subscribe to changes in the payments table
     const paymentsChannel = supabase
-      .channel('payments_changes')
+      .channel('payments_approval_changes')
       .on(
         'postgres_changes',
         {
@@ -217,7 +133,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         },
         (payload) => {
           console.log('Payment change received!', payload);
-          fetchTodayPaymentActivities(); // Refetch on any payment change
+          fetchPaymentsPendingApproval(); // Refetch on any payment change
           onPaymentAction(); // Notify parent
         }
       )
@@ -225,10 +141,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
 
     // Cleanup subscriptions on unmount
     return () => {
-      supabase.removeChannel(ordersChannel);
       supabase.removeChannel(paymentsChannel);
     };
-  }, [fetchCompanyInfo, fetchTodayPaymentActivities, onPaymentAction]);
+  }, [fetchCompanyInfo, fetchPaymentsPendingApproval, onPaymentAction]);
 
   const isOverdue = (dueDate: string | null, status: string) => {
     if (!dueDate || status !== 'pending') return false;
@@ -239,24 +154,47 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
     return due < today;
   };
 
-  const getStatusColor = (status: string, dueDate: string | null) => {
+  const getStatusColor = (status: string, dueDate: string | null, chequeDdDate: string | null) => {
     if (status === 'paid') return 'text-green-600 bg-green-100';
-    if (status === 'pending_approval') return 'text-blue-600 bg-blue-100';
+    if (status === 'pending_approval') {
+      const isDue = isPaymentDueForApproval(chequeDdDate, dueDate);
+      return isDue ? 'text-blue-600 bg-blue-100' : 'text-orange-600 bg-orange-100';
+    }
     if (isOverdue(dueDate, status)) return 'text-red-600 bg-red-100';
     if (status === 'pending') return 'text-yellow-600 bg-yellow-100';
     return 'text-gray-600 bg-gray-100';
   };
 
-  const getStatusIcon = (status: string, dueDate: string | null) => {
+  const getStatusIcon = (status: string, dueDate: string | null, chequeDdDate: string | null) => {
     if (status === 'paid') return <CheckCircle className="h-4 w-4 text-green-600" />;
-    if (status === 'pending_approval') return <Clock className="h-4 w-4 text-blue-600" />;
+    if (status === 'pending_approval') {
+      const isDue = isPaymentDueForApproval(chequeDdDate, dueDate);
+      return isDue ? <Clock className="h-4 w-4 text-blue-600" /> : <Calendar className="h-4 w-4 text-orange-600" />;
+    }
     if (isOverdue(dueDate, status)) return <AlertCircle className="h-4 w-4 text-red-600" />;
     if (status === 'pending') return <Clock className="h-4 w-4 text-yellow-600" />;
     return <Clock className="h-4 w-4 text-gray-600" />;
   };
 
+  const isPaymentDueForApproval = (chequeDdDate: string | null, orderDueDate: string | null) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let effectiveDueDate: Date | null = null;
+
+    if (chequeDdDate) {
+      effectiveDueDate = new Date(chequeDdDate);
+    } else if (orderDueDate) {
+      effectiveDueDate = new Date(orderDueDate);
+    }
+
+    if (!effectiveDueDate) return true; // If no due date, assume it's due (or can be approved)
+    effectiveDueDate.setHours(0, 0, 0, 0);
+    return effectiveDueDate <= today;
+  };
+
   const handleApproveRejectPayment = async (payment: PendingPaymentItem, action: 'approve' | 'reject') => {
-    if (payment.type !== 'payment_pending_approval_today' || !payment.id) {
+    if (payment.type !== 'payment_pending_approval' || !payment.id) {
       showError('Invalid action for this payment type.');
       return;
     }
@@ -280,7 +218,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         throw new Error(data.error || `Failed to ${action} payment`);
       }
       showSuccess(`Payment ${action === 'approve' ? 'approved' : 'rejected'} successfully!`);
-      fetchTodayPaymentActivities(); // Refresh the list
+      fetchPaymentsPendingApproval(); // Refresh the list
       onPaymentAction(); // Notify parent to refresh dashboard data
     } catch (error: any) {
       console.error(`Error ${action}ing payment:`, error);
@@ -290,44 +228,24 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
     }
   };
 
-  const handleAddPaymentDetails = (order: PendingPaymentItem) => {
-    setSelectedOrderForPaymentUpdate(order);
-    setIsUpdatePaymentDialogOpen(true);
-  };
-
   const handleViewPaymentDetails = (paymentId: string) => {
     setSelectedPaymentIdForDetails(paymentId);
     setIsPaymentDetailsDialogOpen(true);
   };
 
-  const handlePaymentUpdated = () => {
-    fetchTodayPaymentActivities(); // Refresh the list after a payment is updated
-    onPaymentAction(); // Notify parent to refresh dashboard data
-  };
-
-  const handleSendWhatsApp = (dealerPhone: string, dealerName: string, orderNumber: number, amountDue: number, dueDate: string | null) => {
-    if (!dealerPhone) {
-      showError('Dealer phone number is not available.');
-      return;
-    }
-    if (!companyName) {
-      showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
-      return;
-    }
-    const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
-    const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
-    const encodedMessage = encodeURIComponent(message);
-    // Open WhatsApp Web in a new tab
-    window.open(`https://web.whatsapp.com/send?phone=${dealerPhone}&text=${encodedMessage}`, '_blank');
-    showSuccess('WhatsApp message drafted. Please check the new tab.');
-  };
+  const sortedPayments = paymentsPendingApproval.sort((a, b) => {
+    // Sort by effective due date, prioritizing earlier dates
+    const dateA = a.cheque_dd_date ? new Date(a.cheque_dd_date).getTime() : (a.payment_due_date ? new Date(a.payment_due_date).getTime() : 0);
+    const dateB = b.cheque_dd_date ? new Date(b.cheque_dd_date).getTime() : (b.payment_due_date ? new Date(b.payment_due_date).getTime() : 0);
+    return dateA - dateB;
+  });
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">Today's Due Payments</CardTitle>
+        <CardTitle className="text-xl font-semibold">Payments Pending Approval</CardTitle>
         <CardDescription className="text-indigo-100 dark:text-indigo-200">
-          Orders due today or earlier, and payments pending approval with due dates today or earlier.
+          Payments submitted by sales persons awaiting final approval.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4">
@@ -335,10 +253,10 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading today's payments...</p>
+              <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading pending payments...</p>
             </div>
-          ) : paymentsToday.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No payments due today or earlier.</p>
+          ) : sortedPayments.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No payments currently pending approval.</p>
           ) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
@@ -347,141 +265,94 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
                     <TableHead className="text-muted-foreground">Order No.</TableHead>
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground text-right">Amount</TableHead>
-                    <TableHead className="text-muted-foreground">Status</TableHead>
-                    <TableHead className="text-muted-foreground">Due/Payment Date</TableHead>
+                    <TableHead className="text-muted-foreground">Method</TableHead>
+                    <TableHead className="text-muted-foreground">Submitted Date</TableHead>
+                    <TableHead className="text-muted-foreground">Due/Cheque Date</TableHead>
                     <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paymentsToday.map((payment) => {
+                  {sortedPayments.map((payment) => {
                     const displayStatus = payment.payment_status ?? 'unknown';
-                    const paymentIsDueForApproval = payment.cheque_dd_date ? (() => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      const dueDate = new Date(payment.cheque_dd_date);
-                      dueDate.setHours(0, 0, 0, 0);
-                      return dueDate <= today;
-                    })() : true; // Non post-dated payments are always due for approval
-
-                    const displayDate = payment.approved_at ? new Date(payment.approved_at).toLocaleDateString() :
-                                      payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() :
-                                      payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A';
+                    const isDueForApproval = isPaymentDueForApproval(payment.cheque_dd_date, payment.payment_due_date);
+                    const effectiveDueDate = payment.cheque_dd_date || payment.payment_due_date;
 
                     return (
                       <TableRow
                         key={`${payment.type}-${payment.id}`}
-                        className={isOverdue(payment.payment_due_date, payment.payment_status) ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-accent/50"}
+                        className={!isDueForApproval ? "bg-orange-50/50 hover:bg-orange-100/50" : "hover:bg-accent/50"}
                       >
                         <TableCell className="font-medium text-foreground">#{payment.order_number}</TableCell>
                         <TableCell className="text-muted-foreground">{payment.dealer_name}</TableCell>
                         <TableCell className="text-muted-foreground text-right">₹{payment.amount.toFixed(2)}</TableCell>
-                        <TableCell>
-                          <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(displayStatus, payment.payment_due_date)}`}>
-                            {getStatusIcon(displayStatus, payment.payment_due_date)}
-                            <span className="capitalize">{(displayStatus).replace('_', ' ')}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className={isOverdue(payment.payment_due_date, payment.payment_status) ? "text-destructive font-semibold" : "text-muted-foreground"}>
-                          {displayDate}
+                        <TableCell className="text-muted-foreground">{payment.payment_method}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatDate(payment.payment_date)}</TableCell>
+                        <TableCell className={!isDueForApproval ? "text-orange-600 font-semibold" : "text-muted-foreground"}>
+                          {formatDate(effectiveDueDate)}
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex justify-center gap-2">
-                            {payment.type === 'order_due_today' && (
-                              <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleViewPaymentDetails(payment.id)} // Pass payment_id
+                              title="View Payment Details"
+                            >
+                              <Eye className="h-4 w-4 text-blue-500" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => handleAddPaymentDetails(payment)}
-                                  title="Add Payment Details"
+                                  title={isDueForApproval ? "Approve Payment" : "Payment not yet due"}
+                                  disabled={isSubmittingAction || !isDueForApproval}
                                 >
-                                  <DollarSign className="h-4 w-4 text-green-600" />
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
                                 </Button>
-                                {payment.dealer_phone && (
-                                  <Button variant="ghost" size="icon" onClick={() => handleSendWhatsApp(
-                                    payment.dealer_phone,
-                                    payment.dealer_name,
-                                    payment.order_number,
-                                    payment.amount,
-                                    payment.payment_due_date
-                                  )} title="Send WhatsApp Reminder" className="hover:bg-blue-100">
-                                    <MessageCircle className="h-4 w-4 text-blue-500" />
-                                  </Button>
-                                )}
-                              </>
-                            )}
-                            {payment.type === 'payment_pending_approval_today' && payment.id && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleViewPaymentDetails(payment.id)} // Pass payment_id
-                                  title="View Payment Details"
-                                >
-                                  <Eye className="h-4 w-4 text-blue-500" />
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    {!isDueForApproval ? (
+                                      <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
+                                        <p className="font-medium">Post-dated/Upcoming Payment</p>
+                                        <p>This payment is scheduled for {formatDate(effectiveDueDate)}. It can only be approved on or after that date.</p>
+                                      </div>
+                                    ) : null}
+                                    Are you sure you want to approve the payment of ₹{payment.amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will mark the order as paid and update the dealer's credit.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'approve')} disabled={isSubmittingAction || !isDueForApproval}>
+                                    {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" title="Reject Payment" disabled={isSubmittingAction}>
+                                  <XCircle className="h-4 w-4 text-destructive" />
                                 </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      title={paymentIsDueForApproval ? "Approve Payment" : "Payment not yet due"}
-                                      disabled={isSubmittingAction || !paymentIsDueForApproval}
-                                    >
-                                      <CheckCircle className="h-4 w-4 text-green-600" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        {!paymentIsDueForApproval && payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date ? (
-                                          <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
-                                            <p className="font-medium">Post-dated Payment</p>
-                                            <p>This payment is scheduled for {new Date(payment.cheque_dd_date).toLocaleDateString()}.</p>
-                                            <p>It can only be approved on or after that date.</p>
-                                          </div>
-                                        ) : null}
-                                        {!paymentIsDueForApproval && payment.payment_method !== 'Cheque/DD' && payment.payment_due_date ? (
-                                          <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
-                                            <p className="font-medium">Payment Not Yet Due</p>
-                                            <p>This payment is due on {new Date(payment.payment_due_date).toLocaleDateString()}.</p>
-                                            <p>It can only be approved on or after that date.</p>
-                                          </div>
-                                        ) : null}
-                                        Are you sure you want to approve the payment of ₹{payment.amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will mark the order as paid and update the dealer's credit.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'approve')} disabled={isSubmittingAction || !paymentIsDueForApproval}>
-                                        {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" title="Reject Payment" disabled={isSubmittingAction}>
-                                      <XCircle className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Reject Payment?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Are you sure you want to reject the payment of ₹{payment.amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will revert the order to pending status.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'reject')} disabled={isSubmittingAction}>
-                                        {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reject'}
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </>
-                            )}
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Reject Payment?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to reject the payment of ₹{payment.amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will revert the order to pending status.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'reject')} disabled={isSubmittingAction}>
+                                    {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reject'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -499,21 +370,6 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
           paymentId={selectedPaymentIdForDetails}
           isOpen={isPaymentDetailsDialogOpen}
           onOpenChange={setIsPaymentDetailsDialogOpen}
-        />
-      )}
-
-      {selectedOrderForPaymentUpdate && (
-        <UpdatePaymentDialog
-          orderToUpdate={{
-            id: selectedOrderForPaymentUpdate.order_id,
-            order_number: selectedOrderForPaymentUpdate.order_number,
-            total_amount: selectedOrderForPaymentUpdate.amount,
-            dealer_name: selectedOrderForPaymentUpdate.dealer_name,
-            payment_due_date: selectedOrderForPaymentUpdate.payment_due_date,
-          }}
-          isOpen={isUpdatePaymentDialogOpen}
-          onOpenChange={setIsUpdatePaymentDialogOpen}
-          onPaymentUpdated={handlePaymentUpdated}
         />
       )}
     </Card>

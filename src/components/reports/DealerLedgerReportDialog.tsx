@@ -18,6 +18,9 @@ import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { useSession } from '@/contexts/SessionContext'; // Import useSession
 
+// IMPORTANT: Replace with the actual URL of your deployed Edge Function
+const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
+
 interface LedgerEntry {
   date: string; // YYYY-MM-DD
   description: string;
@@ -41,13 +44,6 @@ interface DealerLedgerReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const editBalanceFormSchema = z.object({
-  openingBalance: z.preprocess(
-    (val) => Number(val),
-    z.number().min(0, { message: 'Opening balance cannot be negative.' })
-  ),
-});
-
 // New interfaces for Supabase query results
 interface PrevPayment {
   amount: number;
@@ -60,6 +56,7 @@ interface FetchedPayment {
   payment_date: string;
   payment_method: string;
   transaction_id: string | null;
+  status: string; // Added status
   orders: {
     dealer_id: string;
     order_number: number;
@@ -77,13 +74,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null); // New state for dealer phone
   const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null); // New state for dealer name
-
-  const editForm = useForm<z.infer<typeof editBalanceFormSchema>>({
-    resolver: zodResolver(editBalanceFormSchema),
-    defaultValues: {
-      openingBalance: 0,
-    },
-  });
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -152,7 +143,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
       // Calculate balance from orders/payments before the filterFromDate
       if (fromDateISO) {
-        // Orders before fromDate
+        // Orders before fromDate (include pending and pending_approval as debits)
         const { data: prevOrders, error: prevOrdersError } = await supabase
           .from('orders')
           .select('total_amount')
@@ -163,7 +154,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         if (prevOrdersError) throw prevOrdersError;
         const prevOrdersTotal = (prevOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
 
-        // Payments before fromDate
+        // Payments before fromDate (only completed payments are credited)
         const { data: prevPayments, error: prevPaymentsError } = await supabase
           .from('payments')
           .select(`
@@ -182,7 +173,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
       const ledgerEntries: LedgerEntry[] = [];
 
-      // Add opening balance entry if it's the start of the report or if there's an actual opening balance
+      // Add opening balance entry if it's the start of the report or if there's an actual initial balance
       if (!fromDateISO || initialBalance !== 0) {
         ledgerEntries.push({
           date: filterFromDate || new Date().toISOString().split('T')[0],
@@ -222,7 +213,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         });
       });
 
-      // 3. Fetch payments within the date range
+      // 3. Fetch payments within the date range (include completed and pending_approval)
       let paymentsQuery = supabase
         .from('payments')
         .select(`
@@ -231,10 +222,14 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           payment_date,
           payment_method,
           transaction_id,
+          status,
           orders!inner(dealer_id, order_number)
         `)
         .eq('orders.dealer_id', dealerId)
-        .eq('status', 'completed');
+        .in('status', ['completed', 'pending_approval']); // Include pending_approval payments
+
+      if (fromDateISO) paymentsQuery = paymentsQuery.gte('payment_date', fromDateISO);
+      if (toDateISO) paymentsQuery = paymentsQuery.lte('payment_date', toDateISO);
 
       const { data: paymentsData, error: paymentsError } = await paymentsQuery as { data: FetchedPayment[] | null; error: any };
       if (paymentsError) throw paymentsError;
@@ -242,14 +237,20 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       (paymentsData || []).forEach(payment => {
         const orderNumber = payment.orders?.order_number || 'N/A';
         const transactionDetail = payment.transaction_id ? ` (Txn: ${payment.transaction_id})` : '';
+        const statusText = payment.status === 'completed' ? 'Cleared' : 'Pending Approval';
+        
+        // Only completed payments affect the balance (credit > 0)
+        const creditAmount = payment.status === 'completed' ? payment.amount : 0;
+
         ledgerEntries.push({
           date: payment.payment_date.split('T')[0],
-          description: `Payment for Order #${orderNumber} (${payment.payment_method})${transactionDetail}`,
+          description: `Payment for Order #${orderNumber} (${payment.payment_method}) - ${statusText}${transactionDetail}`,
           debit: 0,
-          credit: payment.amount,
+          credit: creditAmount,
           balance: 0, // Will be calculated later
           type: 'payment',
           refId: payment.id,
+          payment_status: payment.status, // Store payment status
         });
       });
 
@@ -263,6 +264,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         if (entry.type === 'opening_balance') {
           finalLedger.push(entry);
         } else {
+          // Only completed payments (credit > 0) affect the balance
           currentBalance = currentBalance + entry.debit - entry.credit;
           finalLedger.push({ ...entry, balance: currentBalance });
         }
@@ -306,7 +308,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     setFilterToDate('');
   };
 
-  const handleSendOrderWhatsApp = (orderNumber: number, amountDue: number, dueDate: string | null) => {
+  const handleSendOrderWhatsApp = async (orderNumber: number, amountDue: number, dueDate: string | null) => {
     if (!selectedDealerPhone) {
       showError('Dealer phone number is not available.');
       return;
@@ -315,16 +317,45 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
       return;
     }
-    const dealerName = selectedDealerName || 'Dealer';
-    const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
-    const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
-    const encodedMessage = encodeURIComponent(message);
-    // Open WhatsApp Web in a new tab
-    window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
-    showSuccess('WhatsApp message drafted. Please check the new tab.');
+    if (!user) {
+      showError('User not authenticated.');
+      return;
+    }
+
+    setIsSendingWhatsApp(true);
+    try {
+      const dealerName = selectedDealerName || 'Dealer';
+      const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
+      const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
+      
+      const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealerIds: [filterDealerId],
+          message: message,
+          comboOfferId: null,
+          sentByUserId: user.id,
+          messageType: 'order_due_reminder',
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to log WhatsApp message send attempt');
+
+      const encodedMessage = encodeURIComponent(message);
+      // Open WhatsApp Web in a new tab
+      window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
+      showSuccess('WhatsApp message drafted. Please check the new tab.');
+    } catch (error: any) {
+      console.error('Error sending WhatsApp message:', error);
+      showError(`Failed to send WhatsApp message: ${error.message}`);
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
   };
 
-  const handleSendBalanceWhatsApp = (balance: number) => {
+  const handleSendBalanceWhatsApp = async (balance: number) => {
     if (!selectedDealerPhone) {
       showError('Dealer phone number is not available.');
       return;
@@ -337,16 +368,43 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       showError('Current balance is zero or negative. No reminder needed.');
       return;
     }
+    if (!user) {
+      showError('User not authenticated.');
+      return;
+    }
 
-    const dealerName = selectedDealerName || 'Dealer';
-    const formattedBalance = balance.toFixed(2);
-    
-    const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that your current outstanding balance is *₹${formattedBalance}*. Please clear your balance as soon as possible.\n\nThank you!`;
-    const encodedMessage = encodeURIComponent(message);
-    
-    // Open WhatsApp Web in a new tab
-    window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
-    showSuccess('WhatsApp balance reminder drafted. Please check the new tab.');
+    setIsSendingWhatsApp(true);
+    try {
+      const dealerName = selectedDealerName || 'Dealer';
+      const formattedBalance = balance.toFixed(2);
+      
+      const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that your current outstanding balance is *₹${formattedBalance}*. Please clear your balance as soon as possible.\n\nThank you!`;
+      
+      const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealerIds: [filterDealerId],
+          message: message,
+          comboOfferId: null,
+          sentByUserId: user.id,
+          messageType: 'balance_reminder',
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to log WhatsApp message send attempt');
+
+      const encodedMessage = encodeURIComponent(message);
+      // Open WhatsApp Web in a new tab
+      window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
+      showSuccess('WhatsApp balance reminder drafted. Please check the new tab.');
+    } catch (error: any) {
+      console.error('Error sending WhatsApp message:', error);
+      showError(`Failed to send WhatsApp message: ${error.message}`);
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
   };
 
   const handlePrint = () => {
@@ -512,7 +570,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                                 size="icon"
                                 onClick={() => handleSendOrderWhatsApp(entry.order_number!, entry.debit, entry.payment_due_date || null)}
                                 title="Send WhatsApp Reminder for this Pending Order"
-                                disabled={!selectedDealerPhone}
+                                disabled={!selectedDealerPhone || isSendingWhatsApp}
                               >
                                 <MessageCircle className="h-4 w-4 text-blue-500" />
                               </Button>
@@ -524,7 +582,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                                 size="icon"
                                 onClick={() => handleSendBalanceWhatsApp(entry.balance)}
                                 title="Send WhatsApp Reminder for Current Balance"
-                                disabled={!selectedDealerPhone}
+                                disabled={!selectedDealerPhone || isSendingWhatsApp}
                               >
                                 <MessageCircle className="h-4 w-4 text-green-500" />
                               </Button>

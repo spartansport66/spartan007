@@ -26,11 +26,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO();
 
-      console.log("DEBUG: PaymentOverviewCard - Start of UTC Today:", startOfUTCTodayISO);
-      console.log("DEBUG: PaymentOverviewCard - End of UTC Today:", endOfUTCTodayISO);
-
       // 1. Total Pending Amount (from orders table, payment_status = 'pending')
-      console.log("DEBUG: PaymentOverviewCard - Querying for total pending orders...");
       const { data: pendingOrders, error: pendingOrdersError } = await supabase
         .from('orders')
         .select('total_amount')
@@ -39,12 +35,9 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       if (pendingOrdersError) throw pendingOrdersError;
 
       const calculatedTotalPending = (pendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
-      console.log("DEBUG: PaymentOverviewCard - Raw pendingOrders data:", pendingOrders);
-      console.log("DEBUG: PaymentOverviewCard - Calculated Total Pending Amount:", calculatedTotalPending);
       setTotalPendingAmount(calculatedTotalPending);
 
       // 2. Total Received Amount (from payments table, status = 'completed')
-      console.log("DEBUG: PaymentOverviewCard - Querying for total received payments...");
       const { data: receivedPayments, error: receivedPaymentsError } = await supabase
         .from('payments')
         .select('amount')
@@ -53,26 +46,20 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       if (receivedPaymentsError) throw receivedPaymentsError;
 
       const calculatedTotalReceived = (receivedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
-      console.log("DEBUG: PaymentOverviewCard - Raw receivedPayments data:", receivedPayments);
-      console.log("DEBUG: PaymentOverviewCard - Calculated Total Received Amount:", calculatedTotalReceived);
       setTotalReceivedAmount(calculatedTotalReceived);
 
       // 3. Total Pending for Approval Amount (from payments table, status = 'pending_approval')
-      console.log("DEBUG: PaymentOverviewCard - Querying for total pending_approval payments...");
       const { data: pendingApprovalPayments, error: pendingApprovalPaymentsError } = await supabase
         .from('payments')
         .select('amount')
         .eq('status', 'pending_approval');
 
-      console.log("DEBUG: PaymentOverviewCard - Raw pendingApprovalPayments data:", pendingApprovalPayments);
       if (pendingApprovalPaymentsError) throw pendingApprovalPaymentsError;
 
       const calculatedTotalPendingApproval = (pendingApprovalPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
-      console.log("DEBUG: PaymentOverviewCard - Calculated Total Pending for Approval Amount:", calculatedTotalPendingApproval);
       setTotalPendingApprovalAmount(calculatedTotalPendingApproval);
 
       // 4. Today Received Amount (from payments table, status = 'completed', approved_at is today)
-      console.log("DEBUG: PaymentOverviewCard - Querying for today received payments (approved_at)...");
       const { data: todayReceived, error: todayReceivedError } = await supabase
         .from('payments')
         .select('amount')
@@ -80,15 +67,12 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
         .gte('approved_at', startOfUTCTodayISO)
         .lte('approved_at', endOfUTCTodayISO);
 
-      console.log("DEBUG: PaymentOverviewCard - Raw todayReceived data (approved_at):", todayReceived);
       if (todayReceivedError) throw todayReceivedError;
 
       const calculatedTodayReceived = (todayReceived || []).reduce((sum, payment) => sum + payment.amount, 0);
-      console.log("DEBUG: PaymentOverviewCard - Calculated Today Received Amount:", calculatedTodayReceived);
       setTodayReceivedAmount(calculatedTodayReceived);
 
       // 5. Today Pending for Approval Amount (from payments table, status = 'pending_approval', payment_date is today)
-      console.log("DEBUG: PaymentOverviewCard - Querying for today pending approval payments (payment_date)...");
       const { data: todayPendingApproval, error: todayPendingApprovalError } = await supabase
         .from('payments')
         .select('amount')
@@ -96,11 +80,9 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
         .gte('payment_date', startOfUTCTodayISO)
         .lte('payment_date', endOfUTCTodayISO);
 
-      console.log("DEBUG: PaymentOverviewCard - Raw todayPendingApproval data (payment_date):", todayPendingApproval);
       if (todayPendingApprovalError) throw todayPendingApprovalError;
 
       const calculatedTodayPendingApproval = (todayPendingApproval || []).reduce((sum, payment) => sum + payment.amount, 0);
-      console.log("DEBUG: PaymentOverviewCard - Calculated Today Pending for Approval Amount (payment_date):", calculatedTodayPendingApproval);
       setTodayPendingApprovalAmount(calculatedTodayPendingApproval);
 
     } catch (error: any) {
@@ -117,7 +99,6 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
   }, []);
 
   useEffect(() => {
-    console.log("DEBUG: PaymentOverviewCard - useEffect triggered");
     fetchOverviewData();
   }, [fetchOverviewData]);
 
