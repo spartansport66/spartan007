@@ -149,9 +149,6 @@ const PaymentStatusCard: React.FC = () => {
           query = query.eq('payment_status', 'pending')
             .gte('payment_due_date', startOfUTCTodayISO)
             .lte('payment_due_date', endOfUTCTodayISO);
-        } else if (filterStatus === 'all') {
-          // Include all statuses for 'all' filter
-          query = query.in('payment_status', ['pending', 'paid', 'pending_approval']);
         }
 
         // Apply dealer filter
@@ -209,8 +206,8 @@ const PaymentStatusCard: React.FC = () => {
         setOrders([]); // Clear orders if filtering by opening balance
       }
 
-      // --- 2. Fetch Dealer Balances (if filtering for opening balance) ---
-      if (filterStatus === 'opening_balance') {
+      // --- 2. Fetch Dealer Balances (if filtering for opening balance or overdue payments) ---
+      if (filterStatus === 'overdue' || filterStatus === 'opening_balance') {
         // Fetch dealers assigned to the current user, including their balances
         const { data: dealerAssignments, error: assignmentsError } = await supabase
           .from('dealer_sales_persons')
@@ -422,8 +419,8 @@ const PaymentStatusCard: React.FC = () => {
           </Button>
         </div>
 
-        {/* Dealer Balances Section - Only shown when filtering for opening balance */}
-        {filterStatus === 'opening_balance' && dealerBalances.length > 0 && (
+        {/* Dealer Balances Section - Only shown when filtering for opening balance or overdue payments */}
+        {(filterStatus === 'overdue' || filterStatus === 'opening_balance') && dealerBalances.length > 0 && (
           <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
             <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
               <DollarSign className="h-5 w-5" /> Dealers with Outstanding Opening Balance
@@ -446,6 +443,11 @@ const PaymentStatusCard: React.FC = () => {
                 </TableBody>
               </Table>
             </div>
+            {filterStatus === 'opening_balance' && orders.length > 0 && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                Note: Orders below are also displayed based on date/dealer filters, but the primary focus above is on the Opening Balance.
+              </p>
+            )}
           </div>
         )}
 
@@ -494,7 +496,6 @@ const PaymentStatusCard: React.FC = () => {
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
-                          {/* Action to add payment details (only for 'pending' status) */}
                           {order.payment_status === 'pending' && (
                             <Button 
                               variant="ghost" 
@@ -505,7 +506,6 @@ const PaymentStatusCard: React.FC = () => {
                               <DollarSign className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
-                          {/* Action to view payment details (for 'paid' or 'pending_approval' status) */}
                           {(order.payment_status === 'paid' || order.payment_status === 'pending_approval') && order.payment_method && (
                             <Button 
                               variant="ghost" 
@@ -526,22 +526,23 @@ const PaymentStatusCard: React.FC = () => {
           )}
         </div>
 
-        {/* Payment Details Dialog (using Order data to populate) */}
-        <Dialog open={isPaymentDetailsDialogOpen} onOpenChange={setIsPaymentDetailsDialogOpen}>
-          <DialogContent className="sm:max-w-[600px]">
-            <DialogHeader>
-              <DialogTitle>Payment Details</DialogTitle>
-              <DialogDescription>
-                Detailed information about the payment for this order.
-              </DialogDescription>
-            </DialogHeader>
-            {selectedOrderForPaymentDetails && (
-              <div className="py-4">
-                {renderPaymentDetails(selectedOrderForPaymentDetails)}
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        {/* Payment Details Section - Always visible below the table */}
+        <div className="mt-6 p-4 bg-muted rounded-lg">
+          <h3 className="text-lg font-semibold mb-3">Payment Details</h3>
+          {orders.filter(order => order.payment_status === 'paid' || order.payment_status === 'pending_approval').length === 0 ? (
+            <p className="text-muted-foreground">No paid orders with payment details available.</p>
+          ) : (
+            <div className="space-y-4 max-h-60 overflow-y-auto">
+              {orders
+                .filter(order => order.payment_status === 'paid' || order.payment_status === 'pending_approval')
+                .map(order => (
+                  <div key={`payment-${order.id}`} className="p-3 bg-background rounded-md border">
+                    {renderPaymentDetails(order)}
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
       </CardContent>
       {selectedOrderForPaymentUpdate && (
         <UpdatePaymentDialog 
@@ -551,6 +552,22 @@ const PaymentStatusCard: React.FC = () => {
           onPaymentUpdated={handlePaymentUpdated} 
         />
       )}
+      {/* Payment Details Dialog */}
+      <Dialog open={isPaymentDetailsDialogOpen} onOpenChange={setIsPaymentDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Payment Details</DialogTitle>
+            <DialogDescription>
+              Detailed information about the payment for this order.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedOrderForPaymentDetails && (
+            <div className="py-4">
+              {renderPaymentDetails(selectedOrderForPaymentDetails)}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
