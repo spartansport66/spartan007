@@ -14,8 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger }
-  from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
 interface Product {
@@ -57,7 +56,7 @@ const MultiItemOrderForm: React.FC = () => {
   const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
   const [loading, setLoading] = useState(false); // Local loading state for this component's data
-  const [dealerBalance, setDealerBalance] = useState<number | null>(null);
+  const [dealerBalance, setDealerBalance] = useState<number | null>(null); // Net transaction balance (Orders - Completed Payments)
   const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
@@ -280,27 +279,38 @@ const MultiItemOrderForm: React.FC = () => {
         setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
       }
 
-      // Fetch total spent by this dealer from BOTH 'pending' AND 'pending_approval' orders
+      // --- START FIX: Calculate Net Transaction Balance (Orders - Completed Payments) ---
       try {
-        const { data, error } = await supabase
+        const { data: transactions, error: transactionsError } = await supabase
           .from('orders')
-          .select('total_amount')
-          .eq('dealer_id', selectedDealer)
-          .in('payment_status', ['pending', 'pending_approval']);
+          .select(`
+            total_amount,
+            payments(amount, status)
+          `)
+          .eq('dealer_id', selectedDealer);
 
-        if (error) {
-          console.error('Error fetching dealer balance:', error);
-          showError(`Failed to calculate dealer balance: ${error.message}`);
+        if (transactionsError) {
+          console.error('Error fetching dealer transactions:', transactionsError);
+          showError(`Failed to calculate dealer balance: ${transactionsError.message}`);
           setDealerBalance(null);
         } else {
-          const totalSpent = data.reduce((sum, order) => sum + order.total_amount, 0);
-          setDealerBalance(totalSpent);
+          let netBalance = 0;
+          (transactions || []).forEach(order => {
+            netBalance += order.total_amount; // Add order amount (Debit)
+            (order.payments || []).forEach(payment => {
+              if (payment.status === 'completed') {
+                netBalance -= payment.amount; // Subtract completed payment (Credit)
+              }
+            });
+          });
+          setDealerBalance(netBalance); // This is the net balance from transactions (Orders - Completed Payments)
         }
       } catch (error: any) {
         console.error('Error fetching dealer balance:', error);
         showError(`Failed to calculate dealer balance: ${error.message}`);
         setDealerBalance(null);
       }
+      // --- END FIX ---
 
       // Set payment amount to total order value if paid at order time
       if (isPaidAtOrderTime) {
@@ -642,18 +652,18 @@ const MultiItemOrderForm: React.FC = () => {
                   <span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>Credit Limit (Current Month):</span>
-                  <span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Used Credit (Pending Orders):</span>
+                  <span>Net Transaction Balance (Orders - Payments):</span>
                   <span className="font-medium">₹{dealerBalance !== null ? dealerBalance.toFixed(2) : '0.00'}</span>
                 </div>
                 <div className="flex justify-between text-sm font-semibold">
-                  <span>Total Used Credit (Opening + Pending):</span>
+                  <span>Total Outstanding Balance (Ledger):</span>
                   <span className={usedCredit !== null && usedCredit > dealerCreditLimit ? "text-destructive" : "text-primary"}>
                     ₹{usedCredit !== null ? usedCredit.toFixed(2) : '0.00'}
                   </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Credit Limit (Current Month):</span>
+                  <span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Available Credit:</span>
