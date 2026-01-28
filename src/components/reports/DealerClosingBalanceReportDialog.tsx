@@ -449,7 +449,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       }
 
       // Updated column header for PDF
-      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Last Bill Date", "Days Since Last Bill", "Phone"];
+      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Opening Balance Date", "Days Since Opening Balance", "Phone"];
       const tableRows = sortedDealers.map(dealer => [
         dealer.name,
         dealer.closing_balance.toFixed(2),
@@ -497,8 +497,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         columnStyles: {
           0: { cellWidth: 50 }, // Dealer Name
           1: { cellWidth: 30, halign: 'right' }, // Closing Balance
-          2: { cellWidth: 30, halign: 'center' }, // Last Bill Date
-          3: { cellWidth: 30, halign: 'center' }, // Days Since Last Bill
+          2: { cellWidth: 30, halign: 'center' }, // Opening Balance Date
+          3: { cellWidth: 30, halign: 'center' }, // Days Since Opening Balance
           4: { cellWidth: 30, halign: 'center' }, // Phone
         }
       });
@@ -618,13 +618,13 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                         )}
                       </div>
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Last Bill Date</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-center">Opening Balance Date</TableHead>
                     <TableHead 
                       className="text-muted-foreground font-bold text-center cursor-pointer hover:bg-muted/70"
                       onClick={() => handleSort('daysSinceLastBill')}
                     >
                       <div className="flex items-center justify-center">
-                        Days Since Last Bill
+                        Days Since Opening Balance
                         {sortKey === 'daysSinceLastBill' ? (
                           sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
                         ) : (
@@ -641,13 +641,9 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                     const isDealerSent = sentDealerIds.has(dealer.id);
                     const isDealerSelected = selectedDealerIds.includes(dealer.id);
                     const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
-                    const isOverdue = dealer.daysSinceLastBill !== null && dealer.daysSinceLastBill > OVERDUE_THRESHOLD_DAYS;
 
                     return (
-                      <TableRow 
-                        key={dealer.id} 
-                        className={cn("hover:bg-accent/50", isOverdue && "bg-red-50/50 hover:bg-red-100/50")}
-                      >
+                      <TableRow key={dealer.id} className="hover:bg-accent/50">
                         <TableCell>
                           <Checkbox
                             checked={isDealerSelected}
@@ -662,7 +658,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                         <TableCell className="text-center text-muted-foreground">
                           {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
                         </TableCell>
-                        <TableCell className={cn("text-center text-muted-foreground", isOverdue && "font-semibold text-red-800 dark:text-red-200")}>
+                        <TableCell className="text-center text-muted-foreground">
                           {dealer.daysSinceLastBill !== null ? dealer.daysSinceLastBill : 'N/A'}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
