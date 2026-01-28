@@ -655,6 +655,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                           {`₹${dealer.closing_balance.toFixed(2)}`}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
+                          {/* Display date in local format */}
                           {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
