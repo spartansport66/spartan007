@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Loader2, Search, Printer, CheckCircle, XCircle, Clock, Database } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -33,11 +33,48 @@ interface LoginLogReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const SQL_COMMAND = `
+CREATE TABLE public.login_logs (
+    id uuid NOT NULL DEFAULT uuid_generate_v4(),
+    user_id uuid NOT NULL,
+    login_time timestamp with time zone NOT NULL DEFAULT now(),
+    success boolean NOT NULL,
+    ip_address text NULL,
+    CONSTRAINT login_logs_pkey PRIMARY KEY (id),
+    CONSTRAINT login_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+);
+
+-- Optional: Create a function and trigger to log successful logins
+CREATE OR REPLACE FUNCTION public.log_successful_login()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+  -- Check if the user is logging in (event 'SIGNED_IN')
+  IF NEW.email_confirmed_at IS NOT NULL AND OLD.email_confirmed_at IS NULL THEN
+    INSERT INTO public.login_logs (user_id, success, ip_address)
+    VALUES (NEW.id, TRUE, current_setting('request.ip', TRUE));
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+-- Note: Supabase currently doesn't support triggers on auth.users table directly.
+-- A common workaround is to use a custom API endpoint or a database function 
+-- called after successful login via a custom client flow, or rely on RLS 
+-- and insert logs from the client side on successful login.
+-- For simplicity, the client-side login logic in src/pages/Login.tsx 
+-- should be updated to insert a log entry on success.
+-- For now, this table definition is sufficient.
+`;
+
 const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const [logs, setLogs] = useState<LoginLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [allUsers, setAllUsers] = useState<FilterOption[]>([]);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [tableMissing, setTableMissing] = useState(false); // New state for missing table
 
   // Filter states
   const [filterUserId, setFilterUserId] = useState<string>('');
@@ -64,6 +101,7 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
 
   const fetchLoginLogs = useCallback(async () => {
     setLoading(true);
+    setTableMissing(false);
     try {
       // 1. Fetch all users (profiles) for mapping and filtering
       const { data: profilesData, error: profilesError } = await supabase
@@ -106,7 +144,16 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
       }
 
       const { data: logsData, error: logsError } = await query;
-      if (logsError) throw logsError;
+      if (logsError) {
+        // Check for common "table not found" error codes (e.g., 404 or specific PostgreSQL codes)
+        if (logsError.code === '42P01' || logsError.message.includes('relation "login_logs" does not exist')) {
+          setTableMissing(true);
+          showError('Failed to load login log data. The required `login_logs` table is missing.');
+          setLogs([]);
+          return;
+        }
+        throw logsError;
+      }
 
       const formattedLogs: LoginLog[] = (logsData || []).map((log: any) => {
         const userInfo = userMap.get(log.user_id) || { name: 'Unknown User', type: 'N/A' };
@@ -121,12 +168,14 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
 
     } catch (error: any) {
       console.error('Error fetching login logs:', error.message);
-      showError('Failed to load login log data. Ensure the `login_logs` table exists.');
+      if (!tableMissing) { // Only show generic error if tableMissing wasn't set
+        showError('Failed to load login log data. Ensure the `login_logs` table exists and is accessible.');
+      }
       setLogs([]);
     } finally {
       setLoading(false);
     }
-  }, [filterUserId, filterStatus, filterFromDate, filterToDate]);
+  }, [filterUserId, filterStatus, filterFromDate, filterToDate, tableMissing]);
 
   useEffect(() => {
     if (isOpen) {
@@ -143,6 +192,10 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
   };
 
   const handlePrint = () => {
+    if (tableMissing) {
+      showError('Cannot print report: The required database table is missing.');
+      return;
+    }
     try {
       const doc = new jsPDF({
         orientation: 'portrait'
@@ -221,115 +274,138 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">User Login Log Report</DialogTitle>
           <DialogDescription>
-            View and filter user login history. (Requires `login_logs` table in Supabase)
+            View and filter user login history.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
-          <div className="flex-1 min-w-[180px]">
-            <Label htmlFor="filterUser">User</Label>
-            <Select value={filterUserId || "all"} onValueChange={(value) => setFilterUserId(value === "all" ? "" : value)} disabled={loading}>
-              <SelectTrigger id="filterUser" className="w-full">
-                <SelectValue placeholder="All Users" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Users</SelectItem>
-                {allUsers.map(user => (
-                  <SelectItem key={user.value} value={user.value}>{user.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {tableMissing ? (
+          <div className="p-6 space-y-4">
+            <Alert variant="destructive">
+              <Database className="h-4 w-4" />
+              <AlertTitle>Database Table Missing</AlertTitle>
+              <AlertDescription>
+                The required table <code>public.login_logs</code> does not exist. Please run the following SQL command in your Supabase SQL Editor to enable this feature:
+              </AlertDescription>
+            </Alert>
+            <pre className="bg-gray-100 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-sm">
+              <code>{SQL_COMMAND}</code>
+            </pre>
+            <p className="text-sm text-muted-foreground">
+              Note: After creating the table, you may need to update your application's login logic (`src/pages/Login.tsx`) to insert log entries on successful login.
+            </p>
+            <Button onClick={fetchLoginLogs} disabled={loading} className="flex items-center gap-2">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Retry Fetch
+            </Button>
           </div>
-          <div className="flex-1 min-w-[120px]">
-            <Label htmlFor="filterStatus">Status</Label>
-            <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as typeof filterStatus)} disabled={loading}>
-              <SelectTrigger id="filterStatus" className="w-full">
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="success">Success</SelectItem>
-                <SelectItem value="failure">Failure</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterFromDate">From Date</Label>
-            <Input
-              id="filterFromDate"
-              type="date"
-              value={filterFromDate}
-              onChange={(e) => setFilterFromDate(e.target.value)}
-              className="w-full"
-              disabled={loading}
-            />
-          </div>
-          <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterToDate">To Date</Label>
-            <Input
-              id="filterToDate"
-              type="date"
-              value={filterToDate}
-              onChange={(e) => setFilterToDate(e.target.value)}
-              className="w-full"
-              disabled={loading}
-            />
-          </div>
-          <Button onClick={fetchLoginLogs} disabled={loading} className="flex items-center gap-2 bg-primary hover:bg-primary/90">
-            <Search className="h-4 w-4" /> Apply Filters
-          </Button>
-          <Button variant="outline" onClick={handleClearFilters} disabled={loading} className="flex items-center gap-2">
-            Clear Filters
-          </Button>
-        </div>
-
-        <div className="overflow-x-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="ml-2 text-lg text-foreground">Loading login logs...</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
+              <div className="flex-1 min-w-[180px]">
+                <Label htmlFor="filterUser">User</Label>
+                <Select value={filterUserId || "all"} onValueChange={(value) => setFilterUserId(value === "all" ? "" : value)} disabled={loading}>
+                  <SelectTrigger id="filterUser" className="w-full">
+                    <SelectValue placeholder="All Users" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Users</SelectItem>
+                    {allUsers.map(user => (
+                      <SelectItem key={user.value} value={user.value}>{user.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 min-w-[120px]">
+                <Label htmlFor="filterStatus">Status</Label>
+                <Select value={filterStatus} onValueChange={(value) => setFilterStatus(value as typeof filterStatus)} disabled={loading}>
+                  <SelectTrigger id="filterStatus" className="w-full">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="success">Success</SelectItem>
+                    <SelectItem value="failure">Failure</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 min-w-[150px]">
+                <Label htmlFor="filterFromDate">From Date</Label>
+                <Input
+                  id="filterFromDate"
+                  type="date"
+                  value={filterFromDate}
+                  onChange={(e) => setFilterFromDate(e.target.value)}
+                  className="w-full"
+                  disabled={loading}
+                />
+              </div>
+              <div className="flex-1 min-w-[150px]">
+                <Label htmlFor="filterToDate">To Date</Label>
+                <Input
+                  id="filterToDate"
+                  type="date"
+                  value={filterToDate}
+                  onChange={(e) => setFilterToDate(e.target.value)}
+                  className="w-full"
+                  disabled={loading}
+                />
+              </div>
+              <Button onClick={fetchLoginLogs} disabled={loading} className="flex items-center gap-2 bg-primary hover:bg-primary/90">
+                <Search className="h-4 w-4" /> Apply Filters
+              </Button>
+              <Button variant="outline" onClick={handleClearFilters} disabled={loading} className="flex items-center gap-2">
+                Clear Filters
+              </Button>
             </div>
-          ) : logs.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No login logs found matching your criteria.</p>
-          ) : (
-            <div className="max-h-[400px] overflow-y-auto border rounded-md">
-              <Table>
-                <TableHeader className="sticky top-0 bg-muted">
-                  <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground font-bold">User Name</TableHead>
-                    <TableHead className="text-muted-foreground font-bold">User Type</TableHead>
-                    <TableHead className="text-muted-foreground font-bold">Login Time</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Status</TableHead>
-                    <TableHead className="text-muted-foreground font-bold">IP Address</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logs.map((log) => (
-                    <TableRow key={log.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{log.user_name}</TableCell>
-                      <TableCell className="text-foreground capitalize">{log.user_type.replace('_', ' ')}</TableCell>
-                      <TableCell className="text-foreground">{new Date(log.login_time).toLocaleString()}</TableCell>
-                      <TableCell className="text-center">
-                        <div className={`flex items-center justify-center gap-1 px-3 py-1 rounded-full text-xs font-semibold w-fit mx-auto ${log.success ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'}`}>
-                          {log.success ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                          {log.success ? 'Success' : 'Failure'}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-foreground">{log.ip_address || 'N/A'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </div>
 
-        <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={handlePrint} disabled={logs.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground">
-            <Printer className="mr-2 h-4 w-4" /> Print Report
-          </Button>
-          <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
-        </DialogFooter>
+            <div className="overflow-x-auto">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="ml-2 text-lg text-foreground">Loading login logs...</p>
+                </div>
+              ) : logs.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No login logs found matching your criteria.</p>
+              ) : (
+                <div className="max-h-[400px] overflow-y-auto border rounded-md">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-muted">
+                      <TableRow className="bg-muted hover:bg-muted/90">
+                        <TableHead className="text-muted-foreground font-bold">User Name</TableHead>
+                        <TableHead className="text-muted-foreground font-bold">User Type</TableHead>
+                        <TableHead className="text-muted-foreground font-bold">Login Time</TableHead>
+                        <TableHead className="text-muted-foreground font-bold text-center">Status</TableHead>
+                        <TableHead className="text-muted-foreground font-bold">IP Address</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {logs.map((log) => (
+                        <TableRow key={log.id} className="hover:bg-accent/50">
+                          <TableCell className="font-medium text-foreground">{log.user_name}</TableCell>
+                          <TableCell className="text-foreground capitalize">{log.user_type.replace('_', ' ')}</TableCell>
+                          <TableCell className="text-foreground">{new Date(log.login_time).toLocaleString()}</TableCell>
+                          <TableCell className="text-center">
+                            <div className={`flex items-center justify-center gap-1 px-3 py-1 rounded-full text-xs font-semibold w-fit mx-auto ${log.success ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'}`}>
+                              {log.success ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                              {log.success ? 'Success' : 'Failure'}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-foreground">{log.ip_address || 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={handlePrint} disabled={logs.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground">
+                <Printer className="mr-2 h-4 w-4" /> Print Report
+              </Button>
+              <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
