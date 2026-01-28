@@ -24,7 +24,8 @@ interface AdminSidebarProps {
   setIsSalesPersonVisitReportOpen: (isOpen: boolean) => void;
   setIsSalesPersonTodayFollowupsReportOpen: (isOpen: boolean) => void;
   setIsLoginLogReportOpen: (isOpen: boolean) => void;
-  setIsSalesPersonAccountStatementReportOpen: (isOpen: boolean) => void; // New prop
+  setIsSalesPersonAccountStatementReportOpen: (isOpen: boolean) => void;
+  setIsOrderSummaryReportOpen: (isOpen: boolean) => void; // New prop
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -43,7 +44,8 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsSalesPersonVisitReportOpen,
   setIsSalesPersonTodayFollowupsReportOpen,
   setIsLoginLogReportOpen,
-  setIsSalesPersonAccountStatementReportOpen, // Destructure new prop
+  setIsSalesPersonAccountStatementReportOpen,
+  setIsOrderSummaryReportOpen, // Destructure new prop
 }) => {
   const navigate = useNavigate();
 
@@ -121,6 +123,18 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
               Dispatched Orders
             </DropdownMenuItem>
           </SheetClose>
+          <DropdownMenuSeparator />
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsOrderSummaryReportOpen(true)}>
+              Order Summary Report
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsSalesReportsDialogOpen(true)}>
+              Sales Detail Report
+            </DropdownMenuItem>
+          </SheetClose>
+          <DropdownMenuSeparator />
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsSalesPersonPerformanceReportOpen(true)}>
               Sales Person Performance
@@ -131,19 +145,10 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
               Sales Person Account Statement
             </DropdownMenuItem>
           </SheetClose>
+          <DropdownMenuSeparator />
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDealerReportOpen(true)}>
               Dealer Report
-            </DropdownMenuItem>
-          </SheetClose>
-          <SheetClose asChild>
-            <DropdownMenuItem onClick={() => setIsPaymentsReportOpen(true)}>
-              Payments Report
-            </DropdownMenuItem>
-          </SheetClose>
-          <SheetClose asChild>
-            <DropdownMenuItem onClick={() => setIsSalesReportsDialogOpen(true)}>
-              Sales Report
             </DropdownMenuItem>
           </SheetClose>
           <SheetClose asChild>
@@ -159,6 +164,12 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDealerClosingBalanceReportOpen(true)}>
               Closing Balance Report
+            </DropdownMenuItem>
+          </SheetClose>
+          <DropdownMenuSeparator />
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsPaymentsReportOpen(true)}>
+              Payments Report
             </DropdownMenuItem>
           </SheetClose>
           <DropdownMenuSeparator />

@@ -34,7 +34,8 @@ import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosing
 import SalesPersonVisitReportDialog from '@/components/reports/SalesPersonVisitReportDialog';
 import SalesPersonTodayFollowupsReportDialog from '@/components/reports/SalesPersonTodayFollowupsReportDialog';
 import LoginLogReportDialog from '@/components/reports/LoginLogReportDialog';
-import SalesPersonAccountStatementReportDialog from '@/components/reports/SalesPersonAccountStatementReportDialog'; // New Import
+import SalesPersonAccountStatementReportDialog from '@/components/reports/SalesPersonAccountStatementReportDialog';
+import OrderSummaryReportDialog from '@/components/reports/OrderSummaryReportDialog'; // New Import
 import { updateAllDealerCreditDays } from '@/utils/supabase-actions';
 import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
 import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
@@ -61,7 +62,8 @@ const AdminDashboard = () => {
   const [isSalesPersonVisitReportOpen, setIsSalesPersonVisitReportOpen] = useState(false);
   const [isSalesPersonTodayFollowupsReportOpen, setIsSalesPersonTodayFollowupsReportOpen] = useState(false);
   const [isLoginLogReportOpen, setIsLoginLogReportOpen] = useState(false);
-  const [isSalesPersonAccountStatementReportOpen, setIsSalesPersonAccountStatementReportOpen] = useState(false); // New state
+  const [isSalesPersonAccountStatementReportOpen, setIsSalesPersonAccountStatementReportOpen] = useState(false);
+  const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false); // New state
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -301,7 +303,8 @@ const AdminDashboard = () => {
               setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen}
               setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen}
               setIsLoginLogReportOpen={setIsLoginLogReportOpen}
-              setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen} // Pass new state setter
+              setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen}
+              setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen} // Pass new state setter
             />
           </SheetContent>
         </Sheet>
@@ -384,6 +387,10 @@ const AdminDashboard = () => {
       <SalesReportsDialog 
         isOpen={isSalesReportsDialogOpen} 
         onOpenChange={setIsSalesReportsDialogOpen} 
+      />
+      <OrderSummaryReportDialog
+        isOpen={isOrderSummaryReportOpen}
+        onOpenChange={setIsOrderSummaryReportOpen}
       />
       <CompanyInfoDialog 
         isOpen={isCompanyInfoDialogOpen} 
