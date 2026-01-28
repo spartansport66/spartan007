@@ -33,10 +33,15 @@ const calculateDaysSinceLastBill = (lastBillingDate: string | null): number | nu
   lastBill.setUTCHours(0, 0, 0, 0);
   today.setUTCHours(0, 0, 0, 0);
 
+  // If the last bill date is today or in the future, the overdue period is 0 days.
+  if (lastBill.getTime() >= today.getTime()) {
+    return 0;
+  }
+
   const diffTime = today.getTime() - lastBill.getTime();
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   
-  return diffDays > 0 ? diffDays : 0;
+  return diffDays;
 };
 
 const SalesPersonOverdueBalanceCard: React.FC = () => {
