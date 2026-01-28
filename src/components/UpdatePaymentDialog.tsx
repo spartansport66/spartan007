@@ -88,6 +88,9 @@ const formSchema = z.object({
 
 const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
 
+// IMPORTANT: Replace with the actual URL of your deployed Edge Function
+const RECORD_GENERAL_PAYMENT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/record-general-payment";
+
 const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate, isOpen, onOpenChange, onPaymentUpdated }) => {
   const [loading, setLoading] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
@@ -128,33 +131,24 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
       if (isGeneralBalancePayment) {
         // --- Scenario 2: Payment against General Balance (Opening Balance) ---
         
-        // 1. Fetch current dealer balance to calculate new opening balance
-        const { data: currentBalanceData, error: fetchBalanceError } = await supabase
-          .from('dealer_balances')
-          .select('opening_balance')
-          .eq('dealer_id', dealerId)
-          .single();
+        const response = await fetch(RECORD_GENERAL_PAYMENT_EDGE_FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            dealerId: dealerId,
+            amount: values.amount,
+          }),
+        });
 
-        if (fetchBalanceError && fetchBalanceError.code !== 'PGRST116') {
-          throw new Error(`Failed to fetch current balance: ${fetchBalanceError.message}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to record general payment');
         }
         
-        const currentOpeningBalance = currentBalanceData?.opening_balance || 0;
-        const newOpeningBalance = Math.max(0, currentOpeningBalance - values.amount); // Ensure balance doesn't go negative
-
-        // 2. Update dealer_balances table
-        const { error: balanceUpdateError } = await supabase
-          .from('dealer_balances')
-          .upsert({
-            dealer_id: dealerId,
-            opening_balance: newOpeningBalance,
-          }, { onConflict: 'dealer_id' });
-
-        if (balanceUpdateError) {
-          throw new Error(`Failed to update dealer balance: ${balanceUpdateError.message}`);
-        }
-        
-        showSuccess(`Payment of ₹${values.amount.toFixed(2)} recorded against general balance for ${orderToUpdate.dealer_name}. New Opening Balance: ₹${newOpeningBalance.toFixed(2)}.`);
+        showSuccess(`Payment of ₹${values.amount.toFixed(2)} recorded against general balance for ${orderToUpdate.dealer_name}. New Outstanding Balance: ₹${data.new_opening_balance.toFixed(2)}.`);
         
       } else {
         // --- Scenario 1: Payment against a specific Order ---
