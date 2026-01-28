@@ -142,11 +142,12 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
           }),
         });
 
-        const data = await response.json();
-
         if (!response.ok) {
-          throw new Error(data.error || 'Failed to record general payment');
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error during fetch.' }));
+          throw new Error(errorData.error || `Edge Function failed with status ${response.status}`);
         }
+        
+        const data = await response.json();
         
         showSuccess(`Payment of ₹${values.amount.toFixed(2)} recorded against general balance for ${orderToUpdate.dealer_name}. New Outstanding Balance: ₹${data.new_opening_balance.toFixed(2)}.`);
         
