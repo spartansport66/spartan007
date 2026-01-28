@@ -453,7 +453,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       }
 
       // Updated column header for PDF
-      const tableColumn = ["Dealer Name", "Opening Balance (₹)", "Closing Balance (₹)", "Balance Reference Date", "Days Since Reference Date", "Phone"];
+      const tableColumn = ["Dealer Name", "Opening Balance (₹)", "Closing Balance (₹)", "Last Bill Date", "Days Since Last Bill", "Phone"];
       const tableRows = sortedDealers.map(dealer => [
         dealer.name,
         dealer.opening_balance.toFixed(2),
@@ -505,8 +505,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           0: { cellWidth: 40 }, // Dealer Name
           1: { cellWidth: 30, halign: 'right' }, // Opening Balance
           2: { cellWidth: 30, halign: 'right' }, // Closing Balance
-          3: { cellWidth: 30, halign: 'center' }, // Balance Reference Date
-          4: { cellWidth: 30, halign: 'center' }, // Days Since Reference Date
+          3: { cellWidth: 30, halign: 'center' }, // Last Bill Date
+          4: { cellWidth: 30, halign: 'center' }, // Days Since Last Bill
           5: { cellWidth: 30, halign: 'center' }, // Phone
         }
       });
@@ -639,13 +639,13 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                         )}
                       </div>
                     </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Balance Reference Date</TableHead>
+                    <TableHead className="text-muted-foreground font-bold text-center">Last Bill Date</TableHead>
                     <TableHead 
                       className="text-muted-foreground font-bold text-center cursor-pointer hover:bg-muted/70"
                       onClick={() => handleSort('daysSinceLastBill')}
                     >
                       <div className="flex items-center justify-center">
-                        Days Since Reference Date
+                        Days Since Last Bill
                         {sortKey === 'daysSinceLastBill' ? (
                           sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
                         ) : (
