@@ -734,16 +734,11 @@ const MultiItemOrderForm: React.FC = () => {
                                 {filteredProducts.map((product) => (
                                   <CommandItem
                                     key={product.id}
-                                    // Set value to the searchable string (name + code)
-                                    value={`${product.name} ${product.code}`}
-                                    onSelect={(currentValue) => {
-                                      // Find the product by matching the name/code string
-                                      const selectedProduct = products.find(p => 
-                                        `${p.name} ${p.code}`.toLowerCase() === currentValue.toLowerCase()
-                                      );
-                                      
+                                    // Refactored: Use product.id as the value for reliable selection
+                                    value={product.id} 
+                                    onSelect={(productId) => {
                                       // Update the order item with the selected product ID
-                                      updateOrderItem(item.id, 'product_id', selectedProduct?.id || '');
+                                      updateOrderItem(item.id, 'product_id', productId);
                                       
                                       // Close the popover and clear search
                                       setPopoverOpenStates(prev => ({ ...prev, [item.id]: false }));
