@@ -448,8 +448,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
       }
 
-      // Renamed column header
-      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Opening Balance Date", "Days Since Last Bill", "Phone"];
+      // Updated column header for PDF
+      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Opening Balance Date", "Days Since Opening Balance", "Phone"];
       const tableRows = sortedDealers.map(dealer => [
         dealer.name,
         dealer.closing_balance.toFixed(2),
@@ -497,8 +497,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         columnStyles: {
           0: { cellWidth: 50 }, // Dealer Name
           1: { cellWidth: 30, halign: 'right' }, // Closing Balance
-          2: { cellWidth: 30, halign: 'center' }, // Opening Balance Date (formerly Last Billing Date)
-          3: { cellWidth: 30, halign: 'center' }, // Days Since Last Bill
+          2: { cellWidth: 30, halign: 'center' }, // Opening Balance Date
+          3: { cellWidth: 30, halign: 'center' }, // Days Since Opening Balance
           4: { cellWidth: 30, halign: 'center' }, // Phone
         }
       });
@@ -624,7 +624,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                       onClick={() => handleSort('daysSinceLastBill')}
                     >
                       <div className="flex items-center justify-center">
-                        Days Since Last Bill
+                        Days Since Opening Balance
                         {sortKey === 'daysSinceLastBill' ? (
                           sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
                         ) : (

@@ -237,7 +237,7 @@ const SalesPersonOverdueBalanceCard: React.FC = () => {
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground text-right">Closing Balance</TableHead>
                     <TableHead className="text-muted-foreground text-center">Opening Balance Date</TableHead>
-                    <TableHead className="text-muted-foreground text-center">Days Overdue</TableHead>
+                    <TableHead className="text-muted-foreground text-center">Days Since Opening Balance</TableHead>
                     <TableHead className="text-muted-foreground text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
