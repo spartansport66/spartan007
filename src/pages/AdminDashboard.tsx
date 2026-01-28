@@ -33,6 +33,7 @@ import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdue
 import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog';
 import SalesPersonVisitReportDialog from '@/components/reports/SalesPersonVisitReportDialog';
 import SalesPersonTodayFollowupsReportDialog from '@/components/reports/SalesPersonTodayFollowupsReportDialog';
+import LoginLogReportDialog from '@/components/reports/LoginLogReportDialog'; // New Import
 import { updateAllDealerCreditDays } from '@/utils/supabase-actions';
 import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
 import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
@@ -58,6 +59,7 @@ const AdminDashboard = () => {
   const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false);
   const [isSalesPersonVisitReportOpen, setIsSalesPersonVisitReportOpen] = useState(false);
   const [isSalesPersonTodayFollowupsReportOpen, setIsSalesPersonTodayFollowupsReportOpen] = useState(false);
+  const [isLoginLogReportOpen, setIsLoginLogReportOpen] = useState(false); // New state for Login Log Report
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   // Removed creditDaysUpdated state
@@ -297,6 +299,7 @@ const AdminDashboard = () => {
               setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen}
               setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen}
               setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen}
+              setIsLoginLogReportOpen={setIsLoginLogReportOpen} // Pass new state setter
             />
           </SheetContent>
         </Sheet>
@@ -408,6 +411,10 @@ const AdminDashboard = () => {
       <SalesPersonTodayFollowupsReportDialog
         isOpen={isSalesPersonTodayFollowupsReportOpen}
         onOpenChange={setIsSalesPersonTodayFollowupsReportOpen}
+      />
+      <LoginLogReportDialog
+        isOpen={isLoginLogReportOpen}
+        onOpenChange={setIsLoginLogReportOpen}
       />
     </div>
   );
