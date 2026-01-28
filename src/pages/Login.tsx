@@ -16,7 +16,8 @@ import { showSuccess, showError } from '@/utils/toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Lock } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const CREATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-user";
@@ -39,11 +40,16 @@ const loginFormSchema = z.object({
   password: z.string().min(1, { message: 'Password is required.' }),
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email({ message: 'Please enter a valid email address.' }),
+});
+
 const Login = () => {
   const navigate = useNavigate();
   const { session, loading } = useSession();
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isForgotPasswordDialogOpen, setIsForgotPasswordDialogOpen] = useState(false);
 
   const signupForm = useForm<z.infer<typeof signupFormSchema>>({
     resolver: zodResolver(signupFormSchema),
@@ -62,6 +68,13 @@ const Login = () => {
     defaultValues: {
       identifier: '',
       password: '',
+    },
+  });
+  
+  const forgotPasswordForm = useForm<z.infer<typeof forgotPasswordSchema>>({
+    resolver: zodResolver(forgotPasswordSchema),
+    defaultValues: {
+      email: '',
     },
   });
 
@@ -164,6 +177,26 @@ const Login = () => {
     } catch (error: any) {
       console.error('Error logging in:', error);
       showError(`Login failed: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  const onForgotPasswordSubmit = async (values: z.infer<typeof forgotPasswordSchema>) => {
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
+        redirectTo: `${window.location.origin}/force-password-reset`, // Use the existing force-password-reset route
+      });
+
+      if (error) throw error;
+
+      showSuccess('Password reset link sent! Check your email to continue.');
+      setIsForgotPasswordDialogOpen(false);
+      forgotPasswordForm.reset();
+    } catch (error: any) {
+      console.error('Error sending password reset email:', error);
+      showError(`Failed to send reset link: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -338,6 +371,13 @@ const Login = () => {
                   </Button>
                 </form>
               </Form>
+              <Button 
+                variant="link" 
+                onClick={() => setIsForgotPasswordDialogOpen(true)} 
+                className="mt-2 w-full text-sm text-muted-foreground hover:text-primary p-0 h-auto"
+              >
+                Forgot Password?
+              </Button>
             </CardContent>
           </Card>
         )}
@@ -351,6 +391,42 @@ const Login = () => {
         </Button>
       </div>
       <MadeWithDyad />
+      
+      {/* Forgot Password Dialog */}
+      <Dialog open={isForgotPasswordDialogOpen} onOpenChange={setIsForgotPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5" /> Reset Password
+            </DialogTitle>
+            <DialogDescription>
+              Enter your email address. We will send you a link to reset your password.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...forgotPasswordForm}>
+            <form onSubmit={forgotPasswordForm.handleSubmit(onForgotPasswordSubmit)} className="grid gap-4 py-4">
+              <FormField
+                control={forgotPasswordForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="your.email@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Send Reset Link'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
