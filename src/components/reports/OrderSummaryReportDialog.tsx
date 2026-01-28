@@ -12,7 +12,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
-import { formatDate } from '@/utils/date'; // Import formatDate
 
 interface OrderSummaryData {
   id: string;
@@ -119,7 +118,7 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
         query = query.gte('order_date', startOfDay);
       }
       if (filterToOrderDate) {
-        const endOfDay = `${filterToOrderDate}T23:59:59.999Z`;
+        const endOfDay = `${filterToDate}T23:59:59.999Z`;
         query = query.lte('order_date', endOfDay);
       }
 
@@ -189,8 +188,8 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
         const dealerLabel = allDealers.find(d => d.value === filterDealerId)?.label;
         if (dealerLabel) filterDetails.push(`Dealer: ${dealerLabel}`);
       }
-      if (filterFromOrderDate) filterDetails.push(`From Date: ${formatDate(filterFromOrderDate)}`);
-      if (filterToOrderDate) filterDetails.push(`To Date: ${formatDate(filterToOrderDate)}`);
+      if (filterFromOrderDate) filterDetails.push(`From Date: ${new Date(filterFromOrderDate).toLocaleDateString()}`);
+      if (filterToOrderDate) filterDetails.push(`To Date: ${new Date(filterToOrderDate).toLocaleDateString()}`);
 
       if (filterDetails.length > 0) {
         doc.setFontSize(9);
@@ -202,8 +201,8 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
       ];
       const tableRows = orders.map(order => [
         `#${order.order_number}`,
-        formatDate(order.order_date),
-        order.dispatched && order.dispatch_date ? formatDate(order.dispatch_date) : 'Pending',
+        new Date(order.order_date).toLocaleDateString(),
+        order.dispatched && order.dispatch_date ? new Date(order.dispatch_date).toLocaleDateString() : 'Pending',
         order.dealer_name,
         order.sales_person_name,
         order.total_amount.toFixed(2),
@@ -311,7 +310,7 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
               id="filterToOrderDate" 
               type="date" 
               value={filterToOrderDate} 
-              onChange={(e) => setFilterToDate(e.target.value)} 
+              onChange={(e) => setFilterToOrderDate(e.target.value)} 
               className="w-full" 
             />
           </div>
@@ -349,9 +348,9 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
                   {orders.map((order) => (
                     <TableRow key={order.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
-                      <TableCell className="text-foreground">{formatDate(order.order_date)}</TableCell>
+                      <TableCell className="text-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
                       <TableCell className="text-foreground">
-                        {order.dispatched && order.dispatch_date ? formatDate(order.dispatch_date) : 'Pending'}
+                        {order.dispatched && order.dispatch_date ? new Date(order.dispatch_date).toLocaleDateString() : 'Pending'}
                       </TableCell>
                       <TableCell className="text-foreground">{order.dealer_name}</TableCell>
                       <TableCell className="text-foreground">{order.sales_person_name}</TableCell>

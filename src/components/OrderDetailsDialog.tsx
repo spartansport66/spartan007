@@ -9,7 +9,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast'; // Added showSuccess
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; // Explicitly imported autoTable
-import { formatDate } from '@/utils/date'; // Import formatDate
 
 interface OrderItemDetail {
   product_name: string;
@@ -106,6 +105,16 @@ interface FetchedOrderData {
     payment_date: string | null;
   }[] | null; // New
 }
+
+// Format date as dd/mm/yyyy
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   orderId,

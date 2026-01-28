@@ -12,7 +12,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
-import { formatDate } from '@/utils/date'; // Import formatDate
 
 interface OrderToDispatch {
   id: string;
@@ -130,7 +129,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
     const tableRows = orders.map(order => [
       order.order_number,
       order.dealer_name,
-      formatDate(order.order_date),
+      new Date(order.order_date).toLocaleDateString(),
       `₹${order.total_amount.toFixed(2)}`,
     ]);
 
@@ -239,7 +238,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
                     <TableRow key={order.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{formatDate(order.order_date)}</TableCell>
+                      <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}

@@ -12,7 +12,7 @@ import { useSession } from '@/contexts/SessionContext';
 import { Label } from '@/components/ui/label';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { getStartOfUTCDayISO, getEndOfUTCDayISO, formatDate } from '@/utils/date';
+import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 import RecordBalancePaymentDialog from '@/components/RecordBalancePaymentDialog'; // New Import
 
 interface Order {
@@ -50,6 +50,16 @@ interface DealerBalance {
   name: string;
   opening_balance: number;
 }
+
+// Format date as dd/mm/yyyy
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 const PaymentStatusCard: React.FC = () => {
   const { user } = useSession();

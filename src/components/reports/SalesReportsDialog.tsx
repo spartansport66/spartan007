@@ -12,7 +12,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
-import { formatDate } from '@/utils/date'; // Import formatDate
 
 interface SaleReportData {
   id: string; // Sale ID
@@ -144,7 +143,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
         query = query.gte('sale_date', startOfDay);
       }
       if (filterToSaleDate) {
-        const endOfDay = `${filterToDate}T23:59:59.999Z`;
+        const endOfDay = `${filterToSaleDate}T23:59:59.999Z`;
         query = query.lte('sale_date', endOfDay);
       }
 
@@ -211,7 +210,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
     ];
     const tableRows = sales.map(sale => [
       sale.order_number,
-      formatDate(sale.sale_date),
+      new Date(sale.sale_date).toLocaleDateString(),
       sale.product_code,
       sale.product_name,
       sale.product_size,
@@ -331,8 +330,8 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
             <Input 
               id="filterToSaleDate" 
               type="date" 
-              value={filterToDate} 
-              onChange={(e) => setFilterToDate(e.target.value)} 
+              value={filterToSaleDate} 
+              onChange={(e) => setFilterToSaleDate(e.target.value)} 
               className="w-full" 
             />
           </div>
@@ -376,7 +375,7 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
                   {sales.map((sale) => (
                     <TableRow key={sale.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">#{sale.order_number}</TableCell>
-                      <TableCell className="text-foreground">{formatDate(sale.sale_date)}</TableCell>
+                      <TableCell className="text-foreground">{new Date(sale.sale_date).toLocaleDateString()}</TableCell>
                       <TableCell className="text-foreground">{sale.product_code}</TableCell>
                       <TableCell className="text-foreground">{sale.product_name}</TableCell>
                       <TableCell className="text-foreground">{sale.product_size || 'N/A'}</TableCell>
