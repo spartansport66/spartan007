@@ -23,7 +23,6 @@ const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.su
 interface DealerClosingBalance {
   id: string; // Dealer ID
   name: string; // Dealer Name
-  opening_balance: number; // New: Opening balance
   closing_balance: number; // Calculated field
   last_billing_date: string | null; // Now directly from dealers table
   phone: string; // Added phone number
@@ -57,7 +56,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const [isRCSBulkSenderOpen, setIsRCSBulkSenderOpen] = useState(false); // New state for RCS dialog
   
   // Sorting states
-  const [sortKey, setSortKey] = useState<'name' | 'opening_balance' | 'closing_balance' | 'daysSinceLastBill'>('name');
+  const [sortKey, setSortKey] = useState<'name' | 'closing_balance' | 'daysSinceLastBill'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const fetchCompanyInfo = useCallback(async () => {
@@ -184,12 +183,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             id: d.id,
             name: d.name,
             phone: d.phone || '',
-            opening_balance: openingBalance, // Include opening balance
             closing_balance: closingBalance,
             last_billing_date: d.last_billing_date,
             daysSinceLastBill: daysSinceLastBill,
           };
-        }).filter(d => d.closing_balance > 0 || d.opening_balance > 0); // Show dealers with any positive balance
+        }).filter(d => d.closing_balance > 0); // Only show dealers with positive closing balance
         
         // Apply overdue period filter
         const filteredByOverdue = formattedDealers.filter(dealer => {
@@ -388,7 +386,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     }
   };
 
-  const handleSort = (key: 'name' | 'opening_balance' | 'closing_balance' | 'daysSinceLastBill') => {
+  const handleSort = (key: 'name' | 'closing_balance' | 'daysSinceLastBill') => {
     if (sortKey === key) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -405,8 +403,6 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
       if (sortKey === 'name') {
         comparison = a.name.localeCompare(b.name);
-      } else if (sortKey === 'opening_balance') {
-        comparison = a.opening_balance - b.opening_balance;
       } else if (sortKey === 'closing_balance') {
         comparison = a.closing_balance - b.closing_balance;
       } else if (sortKey === 'daysSinceLastBill') {
@@ -426,14 +422,14 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const handlePrint = () => {
     try {
       const doc = new jsPDF({
-        orientation: 'landscape' // Changed to landscape for more columns
+        orientation: 'portrait'
       });
 
       const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
       doc.setFontSize(22);
       doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
       doc.setFontSize(18);
-      doc.text("Dealer Balance Summary Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
+      doc.text("Dealer Closing Balance Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
       doc.setFontSize(10);
       doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
@@ -453,17 +449,15 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       }
 
       // Updated column header for PDF
-      const tableColumn = ["Dealer Name", "Opening Balance (₹)", "Closing Balance (₹)", "Last Bill Date", "Days Since Last Bill", "Phone"];
+      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Last Bill Date", "Days Since Last Bill", "Phone"];
       const tableRows = sortedDealers.map(dealer => [
         dealer.name,
-        dealer.opening_balance.toFixed(2),
         dealer.closing_balance.toFixed(2),
         dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A',
         dealer.daysSinceLastBill !== null ? dealer.daysSinceLastBill.toString() : 'N/A',
         dealer.phone || 'N/A',
       ]);
 
-      const totalOpeningBalance = sortedDealers.reduce((sum, dealer) => sum + dealer.opening_balance, 0);
       const totalClosingBalance = sortedDealers.reduce((sum, dealer) => sum + dealer.closing_balance, 0);
 
       autoTable(doc, {
@@ -471,8 +465,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         body: tableRows,
         foot: [
           [
-            { content: 'Totals', styles: { halign: 'right', fontStyle: 'bold' }, colSpan: 1 },
-            `₹${totalOpeningBalance.toFixed(2)}`,
+            { content: 'Total Closing Balance', styles: { halign: 'right', fontStyle: 'bold' }, colSpan: 2 },
             `₹${totalClosingBalance.toFixed(2)}`,
             '',
             '',
@@ -502,17 +495,16 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         },
         margin: { top: 10, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 40 }, // Dealer Name
-          1: { cellWidth: 30, halign: 'right' }, // Opening Balance
-          2: { cellWidth: 30, halign: 'right' }, // Closing Balance
-          3: { cellWidth: 30, halign: 'center' }, // Last Bill Date
-          4: { cellWidth: 30, halign: 'center' }, // Days Since Last Bill
-          5: { cellWidth: 30, halign: 'center' }, // Phone
+          0: { cellWidth: 50 }, // Dealer Name
+          1: { cellWidth: 30, halign: 'right' }, // Closing Balance
+          2: { cellWidth: 30, halign: 'center' }, // Last Bill Date
+          3: { cellWidth: 30, halign: 'center' }, // Days Since Last Bill
+          4: { cellWidth: 30, halign: 'center' }, // Phone
         }
       });
 
-      doc.save('dealer_balance_summary_report.pdf');
-      showSuccess('Dealer Balance Summary report generated successfully!');
+      doc.save('dealer_closing_balance_report.pdf');
+      showSuccess('Dealer closing balance report generated successfully!');
     } catch (error: any) {
       console.error('Error generating PDF:', error);
       showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`);
@@ -525,11 +517,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-primary">Dealer Balance Summary Report</DialogTitle>
+          <DialogTitle className="text-2xl font-bold text-primary">Dealer Closing Balance Report</DialogTitle>
           <DialogDescription>
-            View and manage dealers with outstanding balances (Opening Balance + Total Sales - Total Payments).
+            View and manage dealers with outstanding closing balances (Opening Balance + Total Sales - Total Payments).
           </DialogDescription>
         </DialogHeader>
 
@@ -586,7 +578,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
               <p className="ml-2 text-lg text-foreground">Loading data...</p>
             </div>
           ) : dealers.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No dealer balance data found matching your criteria.</p>
+            <p className="text-center text-muted-foreground py-8">No dealer closing balance data found matching your criteria.</p>
           ) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
@@ -607,19 +599,6 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                       <div className="flex items-center justify-between">
                         Dealer Name
                         {sortKey === 'name' ? (
-                          sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
-                        ) : (
-                          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead 
-                      className="text-muted-foreground font-bold text-right cursor-pointer hover:bg-muted/70"
-                      onClick={() => handleSort('opening_balance')}
-                    >
-                      <div className="flex items-center justify-end">
-                        Opening Balance (₹)
-                        {sortKey === 'opening_balance' ? (
                           sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
                         ) : (
                           <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
@@ -677,9 +656,6 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                           />
                         </TableCell>
                         <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                        <TableCell className="text-right">
-                          {`₹${dealer.opening_balance.toFixed(2)}`}
-                        </TableCell>
                         <TableCell className="text-right">
                           {`₹${dealer.closing_balance.toFixed(2)}`}
                         </TableCell>
