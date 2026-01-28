@@ -3,7 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } => 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu } from 'lucide-react';
@@ -66,6 +66,7 @@ const AdminDashboard = () => {
   const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [lastActiveTime, setLastActiveTime] = useState<string | null>(null); // New state for debugging
 
   const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
   const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
@@ -92,6 +93,24 @@ const AdminDashboard = () => {
     } catch (error: any) {
       console.error('Error fetching company name:', error.message);
       setCompanyName(null);
+    }
+  }, []);
+  
+  const fetchLastActiveTime = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_activity_logs')
+        .select('last_active_at')
+        .eq('user_id', userId)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+      setLastActiveTime(data?.last_active_at || null);
+    } catch (error: any) {
+      console.error('Error fetching last active time:', error.message);
+      setLastActiveTime('Error fetching time');
     }
   }, []);
 
@@ -157,13 +176,16 @@ const AdminDashboard = () => {
         }));
         setMonthlySalesData(formattedMonthlySales);
       }
+      
+      // Fetch last active time for debugging
+      fetchLastActiveTime(user.id);
 
     } catch (error: any) {
       console.error('AdminDashboard: Error fetching dashboard data:', error);
     } finally {
       setLoadingData(false);
     }
-  }, [user]);
+  }, [user, fetchLastActiveTime]);
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -275,6 +297,10 @@ const AdminDashboard = () => {
               {companyName}
             </h2>
           )}
+          {/* Debugging info for Last Active Time */}
+          <p className="text-xs text-muted-foreground mt-1">
+            Last Active: {lastActiveTime ? new Date(lastActiveTime).toLocaleString() : 'N/A'}
+          </p>
         </div>
         <h1 className="text-center text-3xl sm:text-4xl font-bold text-primary">Admin Dashboard</h1>
         <Sheet>
