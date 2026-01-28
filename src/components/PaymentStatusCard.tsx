@@ -307,7 +307,7 @@ const PaymentStatusCard: React.FC = () => {
   const handleInitiatePaymentForBalance = async (dealerId: string, dealerName: string) => {
     setLoading(true);
     try {
-      // Find the oldest pending order for this dealer
+      // 1. Find the oldest pending order for this dealer
       const { data: orders, error } = await supabase
         .from('orders')
         .select('id, order_number, total_amount, payment_due_date')
@@ -321,7 +321,11 @@ const PaymentStatusCard: React.FC = () => {
         throw error;
       }
 
+      const dealer = dealerBalances.find(d => d.id === dealerId);
+      const currentBalance = dealer?.current_balance || 0;
+
       if (orders) {
+        // Found a pending order, link payment to it
         setSelectedOrderForPaymentUpdate({
           id: orders.id,
           order_number: orders.order_number,
@@ -330,14 +334,19 @@ const PaymentStatusCard: React.FC = () => {
           payment_due_date: orders.payment_due_date,
         });
         setIsUpdatePaymentDialogOpen(true);
+      } else if (currentBalance > 0) {
+        // FIX: No pending orders found, but there is a positive closing balance (likely from opening balance).
+        // Create a mock order object to carry the payment amount.
+        setSelectedOrderForPaymentUpdate({
+          id: dealerId, // Use dealer ID as a unique identifier for this mock payment
+          order_number: 0, // Use 0 or a special number for mock order
+          total_amount: currentBalance, // Use the full current balance as the amount to be paid
+          dealer_name: dealerName,
+          payment_due_date: null,
+        });
+        setIsUpdatePaymentDialogOpen(true);
       } else {
-        // If no pending orders, check if the balance is purely from opening balance
-        const dealer = dealerBalances.find(d => d.id === dealerId);
-        if (dealer && dealer.current_balance > 0) {
-          showError(`Dealer ${dealerName} has an outstanding balance of ₹${dealer.current_balance.toFixed(2)}, but no specific pending orders were found to link the payment to. Please check the Dealer Ledger Report.`);
-        } else {
-          showError(`No pending orders found for ${dealerName}.`);
-        }
+        showError(`Dealer ${dealerName} has no outstanding balance or pending orders.`);
       }
     } catch (error: any) {
       console.error('Error initiating payment:', error.message);
@@ -524,7 +533,7 @@ const PaymentStatusCard: React.FC = () => {
                             variant="ghost" 
                             size="icon" 
                             onClick={() => handleInitiatePaymentForBalance(dealer.id, dealer.name)}
-                            title="Add Payment for Oldest Pending Order"
+                            title="Add Payment for Outstanding Balance"
                             disabled={loading}
                           >
                             <DollarSign className="h-4 w-4 text-green-600" />
