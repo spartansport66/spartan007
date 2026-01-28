@@ -63,7 +63,7 @@ const AdminDashboard = () => {
   const [isSalesPersonTodayFollowupsReportOpen, setIsSalesPersonTodayFollowupsReportOpen] = useState(false);
   const [isLoginLogReportOpen, setIsLoginLogReportOpen] = useState(false);
   const [isSalesPersonAccountStatementReportOpen, setIsSalesPersonAccountStatementReportOpen] = useState(false);
-  const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false); // New state
+  const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false); // New state initialization
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
