@@ -7,15 +7,16 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
+import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown, ChevronsUpDown, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
 import { Checkbox } from '@/components/ui/checkbox';
-import RCSBulkMessageSender from '@/components/RCSBulkMessageSender'; // Import the new component
+import RCSBulkMessageSender from '@/components/RCSBulkMessageSender';
 import { cn } from '@/lib/utils';
+import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -39,6 +40,14 @@ interface DealerClosingBalanceReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+interface PendingOrderPayment {
+  id: string; // Order ID
+  order_number: number;
+  total_amount: number;
+  dealer_name: string;
+  payment_due_date: string | null;
+}
+
 const OVERDUE_THRESHOLD_DAYS = 60;
 
 const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialogProps> = ({ isOpen, onOpenChange }) => {
@@ -54,6 +63,10 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(new Set());
   const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]); // State for bulk selection
   const [isRCSBulkSenderOpen, setIsRCSBulkSenderOpen] = useState(false); // New state for RCS dialog
+  
+  // New states for payment action
+  const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
+  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PendingOrderPayment | null>(null);
   
   // Sorting states
   const [sortKey, setSortKey] = useState<'name' | 'closing_balance' | 'daysSinceLastBill'>('name');
@@ -240,6 +253,53 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       setSelectedDealerIds([]);
     }
   }, [isOpen, fetchCompanyInfo, fetchClosingBalances]);
+
+  const handleInitiatePayment = async (dealerId: string, dealerName: string) => {
+    setLoading(true); // Use main loading state temporarily
+    try {
+      // Find the oldest pending order for this dealer
+      const { data: orders, error } = await supabase
+        .from('orders')
+        .select('id, order_number, total_amount, payment_due_date')
+        .eq('dealer_id', dealerId)
+        .eq('payment_status', 'pending')
+        .order('order_date', { ascending: true }) // Oldest first
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      if (orders) {
+        setSelectedOrderForPaymentUpdate({
+          id: orders.id,
+          order_number: orders.order_number,
+          total_amount: orders.total_amount,
+          dealer_name: dealerName,
+          payment_due_date: orders.payment_due_date,
+        });
+        setIsUpdatePaymentDialogOpen(true);
+      } else {
+        // If no pending orders, check if the balance is purely from opening balance
+        const dealer = dealers.find(d => d.id === dealerId);
+        if (dealer && dealer.closing_balance > 0) {
+          showError(`Dealer ${dealerName} has an outstanding balance of ₹${dealer.closing_balance.toFixed(2)}, but no specific pending orders were found to link the payment to. Please check the Dealer Ledger Report.`);
+        } else {
+          showError(`No pending orders found for ${dealerName}.`);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error initiating payment:', error.message);
+      showError(`Failed to initiate payment: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePaymentUpdated = () => {
+    fetchClosingBalances(); // Refresh the report data
+  };
 
   const handleClearFilters = () => {
     setFilterDealerName('');
@@ -694,6 +754,16 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                                 <MessageCircle className="h-4 w-4 text-blue-500" />
                               )}
                             </Button>
+                            {/* NEW: Add Payment Button */}
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleInitiatePayment(dealer.id, dealer.name)}
+                              title="Add Payment for Oldest Pending Order"
+                              disabled={loading || isSendingWhatsApp}
+                            >
+                              <DollarSign className="h-4 w-4 text-green-600" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -750,6 +820,15 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         selectedDealers={selectedDealersForRCS}
         companyName={companyName}
       />
+      
+      {selectedOrderForPaymentUpdate && (
+        <UpdatePaymentDialog
+          orderToUpdate={selectedOrderForPaymentUpdate}
+          isOpen={isUpdatePaymentDialogOpen}
+          onOpenChange={setIsUpdatePaymentDialogOpen}
+          onPaymentUpdated={handlePaymentUpdated}
+        />
+      )}
     </Dialog>
   );
 };
