@@ -146,7 +146,7 @@ const RecordBalancePaymentDialog: React.FC<RecordBalancePaymentDialogProps> = ({
             <DollarSign className="h-5 w-5" /> Record Balance Payment
           </DialogTitle>
           <DialogDescription>
-            Record a general payment against the outstanding balance of {dealerToUpdate?.dealer_name || 'the selected dealer'}.
+            Record a general payment against the outstanding balance of {dealerToUpdate?.dealer_name}.
           </DialogDescription>
         </DialogHeader>
         {dealerToUpdate ? (
