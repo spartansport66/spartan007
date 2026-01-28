@@ -48,6 +48,7 @@ interface DealerBalance {
   id: string;
   name: string;
   opening_balance: number;
+  current_balance: number; // New: Calculated ledger balance
 }
 
 // Format date as dd/mm/yyyy
@@ -208,7 +209,7 @@ const PaymentStatusCard: React.FC = () => {
 
       // --- 2. Fetch Dealer Balances (if filtering for opening balance or overdue payments) ---
       if (filterStatus === 'overdue' || filterStatus === 'opening_balance') {
-        // Fetch dealers assigned to the current user, including their balances
+        // Fetch dealers assigned to the current user, including their balances and transactions
         const { data: dealerAssignments, error: assignmentsError } = await supabase
           .from('dealer_sales_persons')
           .select('dealer_id')
@@ -219,30 +220,42 @@ const PaymentStatusCard: React.FC = () => {
         const assignedDealerIds = (dealerAssignments || []).map(a => a.dealer_id);
 
         if (assignedDealerIds.length > 0) {
-          const { data: dealersWithBalances, error: balancesError } = await supabase
+          const { data: dealersWithTransactions, error: transactionsError } = await supabase
             .from('dealers')
             .select(`
               id,
               name,
-              dealer_balances(opening_balance)
+              dealer_balances(opening_balance),
+              orders(total_amount, payments(amount, status))
             `)
             .in('id', assignedDealerIds);
 
-          if (balancesError) throw balancesError;
+          if (transactionsError) throw transactionsError;
           
-          console.log("DEBUG: Raw Dealers with Balances Data:", dealersWithBalances);
-
-          const formattedBalances: DealerBalance[] = (dealersWithBalances || [])
+          const formattedBalances: DealerBalance[] = (dealersWithTransactions || [])
             .map((dealer: any) => {
-              // Access dealer_balances as an object, not an array
               const openingBalance = dealer.dealer_balances?.opening_balance || 0;
+              
+              let netTransactionBalance = 0;
+              (dealer.orders || []).forEach((order: any) => {
+                netTransactionBalance += order.total_amount; // Debit
+                (order.payments || []).forEach((payment: any) => {
+                  if (payment.status === 'completed') {
+                    netTransactionBalance -= payment.amount; // Credit
+                  }
+                });
+              });
+              
+              const currentBalance = openingBalance + netTransactionBalance; // Ledger Balance
+              
               return {
                 id: dealer.id,
                 name: dealer.name,
-                opening_balance: openingBalance
+                opening_balance: openingBalance,
+                current_balance: currentBalance,
               };
             })
-            .filter((dealer: DealerBalance) => dealer.opening_balance > 0); // Only dealers with positive opening balance
+            .filter((dealer: DealerBalance) => dealer.current_balance > 0); // Only show dealers with positive ledger balance
           
           setDealerBalances(formattedBalances);
         } else {
@@ -384,7 +397,7 @@ const PaymentStatusCard: React.FC = () => {
                 <SelectItem value="overdue">Overdue</SelectItem>
                 <SelectItem value="todays_due">Today's Due</SelectItem>
                 <SelectItem value="upcoming">Upcoming</SelectItem>
-                <SelectItem value="opening_balance">Opening Balance</SelectItem>
+                <SelectItem value="opening_balance">Outstanding Balance (Ledger)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -423,7 +436,7 @@ const PaymentStatusCard: React.FC = () => {
         {(filterStatus === 'overdue' || filterStatus === 'opening_balance') && dealerBalances.length > 0 && (
           <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
             <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
-              <DollarSign className="h-5 w-5" /> Dealers with Outstanding Opening Balance
+              <DollarSign className="h-5 w-5" /> Dealers with Total Outstanding Balance (Ledger)
             </h3>
             <div className="max-h-40 overflow-y-auto border rounded-md bg-background">
               <Table>
@@ -431,6 +444,7 @@ const PaymentStatusCard: React.FC = () => {
                   <TableRow>
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Total Outstanding Balance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -438,6 +452,7 @@ const PaymentStatusCard: React.FC = () => {
                     <TableRow key={dealer.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
                       <TableCell className="text-right font-semibold text-red-600">₹{dealer.opening_balance.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-semibold text-red-600">₹{dealer.current_balance.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -445,7 +460,7 @@ const PaymentStatusCard: React.FC = () => {
             </div>
             {filterStatus === 'opening_balance' && orders.length > 0 && (
               <p className="mt-3 text-sm text-muted-foreground">
-                Note: Orders below are also displayed based on date/dealer filters, but the primary focus above is on the Opening Balance.
+                Note: Orders below are also displayed based on date/dealer filters, but the primary focus above is on the Total Outstanding Balance.
               </p>
             )}
           </div>
