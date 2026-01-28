@@ -17,6 +17,7 @@ serve(async (req) => {
 
   try {
     const { dealerId, amount } = await req.json();
+    console.log(`[record-general-payment] Received request for dealer ${dealerId} with amount ${amount}`); // Added log
 
     if (!dealerId || typeof amount !== 'number' || amount <= 0) {
       return new Response(JSON.stringify({ error: 'Missing or invalid dealerId or amount.' }), {
