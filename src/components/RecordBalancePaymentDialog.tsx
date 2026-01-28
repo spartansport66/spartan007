@@ -154,7 +154,7 @@ const RecordBalancePaymentDialog: React.FC<RecordBalancePaymentDialogProps> = ({
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
               <div className="space-y-2">
                 <Label>Dealer:</Label>
-                <Input value={dealerToUpdate?.dealer_name || 'N/A'} readOnly className="bg-muted" />
+                <Input value={dealerToUpdate.dealer_name} readOnly className="bg-muted" />
               </div>
               <div className="space-y-2">
                 <Label>Current Outstanding Balance:</Label>
