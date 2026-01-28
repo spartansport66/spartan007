@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'; // Import Alert components
 
 interface LoginLog {
   id: string;
@@ -21,6 +22,7 @@ interface LoginLog {
   ip_address: string | null;
   user_name: string;
   user_type: string;
+  last_active_at: string | null; // New field
 }
 
 interface FilterOption {
@@ -44,29 +46,20 @@ CREATE TABLE public.login_logs (
     CONSTRAINT login_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
--- Optional: Create a function and trigger to log successful logins
-CREATE OR REPLACE FUNCTION public.log_successful_login()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
-AS $function$
-BEGIN
-  -- Check if the user is logging in (event 'SIGNED_IN')
-  IF NEW.email_confirmed_at IS NOT NULL AND OLD.email_confirmed_at IS NULL THEN
-    INSERT INTO public.login_logs (user_id, success, ip_address)
-    VALUES (NEW.id, TRUE, current_setting('request.ip', TRUE));
-  END IF;
-  RETURN NEW;
-END;
-$function$;
+-- Table for tracking active usage
+CREATE TABLE public.user_activity_logs (
+    user_id uuid NOT NULL,
+    last_active_at timestamp with time zone NOT NULL DEFAULT now(),
+    CONSTRAINT user_activity_logs_pkey PRIMARY KEY (user_id),
+    CONSTRAINT user_activity_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+);
 
--- Note: Supabase currently doesn't support triggers on auth.users table directly.
--- A common workaround is to use a custom API endpoint or a database function 
--- called after successful login via a custom client flow, or rely on RLS 
--- and insert logs from the client side on successful login.
--- For simplicity, the client-side login logic in src/pages/Login.tsx 
--- should be updated to insert a log entry on success.
--- For now, this table definition is sufficient.
+-- Enable RLS for user_activity_logs
+ALTER TABLE public.user_activity_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can update their own activity log" ON public.user_activity_logs FOR UPDATE TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "Admins and Sales Persons can read all activity logs" ON public.user_activity_logs FOR SELECT TO authenticated USING (TRUE);
+
+-- Note: Client-side logic in src/pages/Login.tsx and src/hooks/useActivityTracker.tsx handles inserts/updates.
 `;
 
 const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onOpenChange }) => {
@@ -74,7 +67,7 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
   const [loading, setLoading] = useState(true);
   const [allUsers, setAllUsers] = useState<FilterOption[]>([]);
   const [companyName, setCompanyName] = useState<string | null>(null);
-  const [tableMissing, setTableMissing] = useState(false); // New state for missing table
+  const [tableMissing, setTableMissing] = useState(false);
 
   // Filter states
   const [filterUserId, setFilterUserId] = useState<string>('');
@@ -145,22 +138,39 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
 
       const { data: logsData, error: logsError } = await query;
       if (logsError) {
-        // Check for common "table not found" error codes (e.g., 404 or specific PostgreSQL codes)
         if (logsError.code === '42P01' || logsError.message.includes('relation "login_logs" does not exist')) {
           setTableMissing(true);
-          showError('Failed to load login log data. The required `login_logs` table is missing.');
           setLogs([]);
           return;
         }
         throw logsError;
       }
 
+      // 3. Fetch last active times for all users in the logs
+      const userIdsInLogs = [...new Set(logsData.map(log => log.user_id))];
+      let activityMap = new Map<string, string>();
+      
+      if (userIdsInLogs.length > 0) {
+        const { data: activityData, error: activityError } = await supabase
+          .from('user_activity_logs')
+          .select('user_id, last_active_at')
+          .in('user_id', userIdsInLogs);
+
+        if (activityError && !activityError.message.includes('relation "user_activity_logs" does not exist')) {
+          console.warn('Error fetching activity logs:', activityError.message);
+        } else if (activityData) {
+          activityMap = new Map(activityData.map(a => [a.user_id, a.last_active_at]));
+        }
+      }
+
+      // 4. Format logs
       const formattedLogs: LoginLog[] = (logsData || []).map((log: any) => {
         const userInfo = userMap.get(log.user_id) || { name: 'Unknown User', type: 'N/A' };
         return {
           ...log,
           user_name: userInfo.name,
           user_type: userInfo.type,
+          last_active_at: activityMap.get(log.user_id) || null,
         };
       });
       
@@ -168,8 +178,8 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
 
     } catch (error: any) {
       console.error('Error fetching login logs:', error.message);
-      if (!tableMissing) { // Only show generic error if tableMissing wasn't set
-        showError('Failed to load login log data. Ensure the `login_logs` table exists and is accessible.');
+      if (!tableMissing) {
+        showError('Failed to load login log data. Ensure the required tables exist and are accessible.');
       }
       setLogs([]);
     } finally {
@@ -198,14 +208,14 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
     }
     try {
       const doc = new jsPDF({
-        orientation: 'portrait'
+        orientation: 'landscape'
       });
 
       const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
       doc.setFontSize(22);
       doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
       doc.setFontSize(18);
-      doc.text("User Login Log Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
+      doc.text("User Login & Activity Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
       doc.setFontSize(10);
       doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
@@ -223,11 +233,12 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
         doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
       }
 
-      const tableColumn = ["User Name", "User Type", "Login Time", "Status", "IP Address"];
+      const tableColumn = ["User Name", "User Type", "Login Time", "Last Active Time", "Status", "IP Address"];
       const tableRows = logs.map(log => [
         log.user_name,
         log.user_type,
         new Date(log.login_time).toLocaleString(),
+        log.last_active_at ? new Date(log.last_active_at).toLocaleString() : 'N/A',
         log.success ? 'Success' : 'Failure',
         log.ip_address || 'N/A',
       ]);
@@ -252,16 +263,17 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
         },
         margin: { top: 10, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 40 },
-          1: { cellWidth: 30, halign: 'center' },
-          2: { cellWidth: 40 },
-          3: { cellWidth: 20, halign: 'center' },
-          4: { cellWidth: 30, halign: 'center' },
+          0: { cellWidth: 30 },
+          1: { cellWidth: 25, halign: 'center' },
+          2: { cellWidth: 35 },
+          3: { cellWidth: 35 },
+          4: { cellWidth: 20, halign: 'center' },
+          5: { cellWidth: 30, halign: 'center' },
         }
       });
 
-      doc.save('login_log_report.pdf');
-      showSuccess('Login log report generated successfully!');
+      doc.save('user_login_activity_report.pdf');
+      showSuccess('User Login & Activity report generated successfully!');
     } catch (error: any) {
       console.error('Error generating PDF:', error);
       showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`);
@@ -270,11 +282,11 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-primary">User Login Log Report</DialogTitle>
+          <DialogTitle className="text-2xl font-bold text-primary">User Login & Activity Report</DialogTitle>
           <DialogDescription>
-            View and filter user login history.
+            View user login history and last recorded activity time.
           </DialogDescription>
         </DialogHeader>
 
@@ -282,16 +294,16 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
           <div className="p-6 space-y-4">
             <Alert variant="destructive">
               <Database className="h-4 w-4" />
-              <AlertTitle>Database Table Missing</AlertTitle>
+              <AlertTitle>Database Tables Missing</AlertTitle>
               <AlertDescription>
-                The required table <code>public.login_logs</code> does not exist. Please run the following SQL command in your Supabase SQL Editor to enable this feature:
+                The required tables <code>public.login_logs</code> and <code>public.user_activity_logs</code> do not exist. Please run the following SQL command in your Supabase SQL Editor to enable this feature:
               </AlertDescription>
             </Alert>
             <pre className="bg-gray-100 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-sm">
               <code>{SQL_COMMAND}</code>
             </pre>
             <p className="text-sm text-muted-foreground">
-              Note: After creating the table, you may need to update your application's login logic (`src/pages/Login.tsx`) to insert log entries on successful login.
+              Note: After creating the tables, successful logins will be logged automatically, and activity will be tracked every 5 minutes when the app is open.
             </p>
             <Button onClick={fetchLoginLogs} disabled={loading} className="flex items-center gap-2">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Retry Fetch
@@ -372,7 +384,8 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
                       <TableRow className="bg-muted hover:bg-muted/90">
                         <TableHead className="text-muted-foreground font-bold">User Name</TableHead>
                         <TableHead className="text-muted-foreground font-bold">User Type</TableHead>
-                        <TableHead className="text-muted-foreground font-bold">Login Time</TableHead>
+                        <TableHead className="text-muted-foreground font-bold">Last Login Time</TableHead>
+                        <TableHead className="text-muted-foreground font-bold">Last Active Time</TableHead>
                         <TableHead className="text-muted-foreground font-bold text-center">Status</TableHead>
                         <TableHead className="text-muted-foreground font-bold">IP Address</TableHead>
                       </TableRow>
@@ -383,6 +396,9 @@ const LoginLogReportDialog: React.FC<LoginLogReportDialogProps> = ({ isOpen, onO
                           <TableCell className="font-medium text-foreground">{log.user_name}</TableCell>
                           <TableCell className="text-foreground capitalize">{log.user_type.replace('_', ' ')}</TableCell>
                           <TableCell className="text-foreground">{new Date(log.login_time).toLocaleString()}</TableCell>
+                          <TableCell className="text-foreground">
+                            {log.last_active_at ? new Date(log.last_active_at).toLocaleString() : 'N/A'}
+                          </TableCell>
                           <TableCell className="text-center">
                             <div className={`flex items-center justify-center gap-1 px-3 py-1 rounded-full text-xs font-semibold w-fit mx-auto ${log.success ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'}`}>
                               {log.success ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}

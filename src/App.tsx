@@ -21,8 +21,36 @@ import ForcePasswordReset from "./pages/ForcePasswordReset";
 import DailyVisitReport from "./pages/DailyVisitReport";
 import StockReceipts from "./pages/StockReceipts"; // Import new page
 import { SessionContextProvider } from "./contexts/SessionContext";
+import { useActivityTracker } from "./hooks/useActivityTracker"; // Import new hook
 
 const queryClient = new QueryClient();
+
+const AppContent = () => {
+  useActivityTracker(); // Run the activity tracker hook
+  
+  return (
+    <Routes>
+      <Route path="/" element={<Index />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/admin-dashboard" element={<AdminDashboard />} />
+      <Route path="/add-dealer" element={<AddDealer />} />
+      <Route path="/manage-dealers" element={<ManageDealers />} />
+      <Route path="/add-product" element={<AddProduct />} />
+      <Route path="/manage-products" element={<ManageProducts />} />
+      <Route path="/manage-users" element={<ManageUsers />} />
+      <Route path="/product-management-console" element={<ProductManagementConsole />} />
+      <Route path="/bulk-add-products" element={<BulkAddProducts />} />
+      <Route path="/combo-offers-dashboard" element={<ComboOffersDashboard />} />
+      <Route path="/sheet-converter" element={<SheetConverterPage />} />
+      <Route path="/force-password-reset" element={<ForcePasswordReset />} />
+      <Route path="/daily-visit-report" element={<DailyVisitReport />} />
+      <Route path="/stock-receipts" element={<StockReceipts />} />
+      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -31,26 +59,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <SessionContextProvider>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/admin-dashboard" element={<AdminDashboard />} />
-            <Route path="/add-dealer" element={<AddDealer />} />
-            <Route path="/manage-dealers" element={<ManageDealers />} />
-            <Route path="/add-product" element={<AddProduct />} />
-            <Route path="/manage-products" element={<ManageProducts />} />
-            <Route path="/manage-users" element={<ManageUsers />} />
-            <Route path="/product-management-console" element={<ProductManagementConsole />} />
-            <Route path="/bulk-add-products" element={<BulkAddProducts />} />
-            <Route path="/combo-offers-dashboard" element={<ComboOffersDashboard />} />
-            <Route path="/sheet-converter" element={<SheetConverterPage />} />
-            <Route path="/force-password-reset" element={<ForcePasswordReset />} />
-            <Route path="/daily-visit-report" element={<DailyVisitReport />} />
-            <Route path="/stock-receipts" element={<StockReceipts />} /> {/* New route */}
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppContent />
         </SessionContextProvider>
       </BrowserRouter>
     </TooltipProvider>
