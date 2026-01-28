@@ -127,6 +127,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             name,
             phone,
             last_billing_date,
+            created_at,
             dealer_balances(opening_balance),
             orders(total_amount, payment_status, payments(amount, status)),
             dealer_sales_persons!inner(sales_person_id)
@@ -140,6 +141,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             name,
             phone,
             last_billing_date,
+            created_at,
             dealer_balances(opening_balance),
             orders(total_amount, payment_status, payments(amount, status))
           `);
@@ -177,14 +179,18 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
           // Calculation: Closing Balance = Opening Balance + Total Sales - Total Payments
           const closingBalance = openingBalance + totalSales - totalPayments;
-          const daysSinceLastBill = calculateDaysSinceLastBill(d.last_billing_date);
+          
+          // Determine the reference date for the balance: last_billing_date (updated on order) or created_at (if no orders)
+          const referenceDate = d.last_billing_date || d.created_at;
+          
+          const daysSinceLastBill = calculateDaysSinceLastBill(referenceDate);
           
           return {
             id: d.id,
             name: d.name,
             phone: d.phone || '',
             closing_balance: closingBalance,
-            last_billing_date: d.last_billing_date,
+            last_billing_date: referenceDate, // Use the determined reference date
             daysSinceLastBill: daysSinceLastBill,
           };
         }).filter(d => d.closing_balance > 0); // Only show dealers with positive closing balance
