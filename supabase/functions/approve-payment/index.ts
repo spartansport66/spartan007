@@ -18,8 +18,8 @@ serve(async (req) => {
   try {
     const { paymentId, orderId, dealerId, amount, action } = await req.json();
 
-    if (!paymentId || !orderId || !dealerId || typeof amount !== 'number' || !['approve', 'reject'].includes(action)) {
-      return new Response(JSON.stringify({ error: 'Missing or invalid parameters.' }), {
+    if (!paymentId || !dealerId || typeof amount !== 'number' || !['approve', 'reject'].includes(action)) {
+      return new Response(JSON.stringify({ error: 'Missing or invalid parameters (paymentId, dealerId, amount, action).' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -43,32 +43,37 @@ serve(async (req) => {
       throw new Error(`Failed to fetch payment details: ${paymentError.message}`);
     }
 
-    // Fetch order details (payment_due_date)
-    const { data: orderData, error: orderFetchError } = await supabaseAdmin
-      .from('orders')
-      .select('payment_due_date')
-      .eq('id', orderId)
-      .single();
+    let effectiveDueDate: Date | null = null;
+    let isBalancePayment = orderId === null;
 
-    if (orderFetchError) {
-      throw new Error(`Failed to fetch order details: ${orderFetchError.message}`);
+    if (!isBalancePayment) {
+        // If it's an order payment, fetch order details for due date
+        const { data: orderData, error: orderFetchError } = await supabaseAdmin
+            .from('orders')
+            .select('payment_due_date')
+            .eq('id', orderId)
+            .single();
+
+        if (orderFetchError) {
+            throw new Error(`Failed to fetch order details: ${orderFetchError.message}`);
+        }
+        
+        // Determine effective due date based on payment method or order due date
+        if (paymentData.payment_method === 'Cheque/DD' && paymentData.cheque_dd_date) {
+            effectiveDueDate = new Date(paymentData.cheque_dd_date);
+        } else if (orderData.payment_due_date) {
+            effectiveDueDate = new Date(orderData.payment_due_date);
+        }
+    } else {
+        // If it's a balance payment, use cheque_dd_date if available, otherwise assume it's due immediately
+        if (paymentData.payment_method === 'Cheque/DD' && paymentData.cheque_dd_date) {
+            effectiveDueDate = new Date(paymentData.cheque_dd_date);
+        }
     }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Normalize today to start of day UTC
-
-    let effectiveDueDate: Date | null = null;
-
-    // Determine the effective due date for approval
-    if (paymentData.payment_method === 'Cheque/DD' && paymentData.cheque_dd_date) {
-      // For Cheque/DD, prioritize the cheque_dd_date
-      effectiveDueDate = new Date(paymentData.cheque_dd_date);
-      effectiveDueDate.setHours(0, 0, 0, 0); // Normalize to start of day UTC
-    } else if (orderData.payment_due_date) {
-      // For other payment methods, use the order's payment_due_date
-      effectiveDueDate = new Date(orderData.payment_due_date);
-      effectiveDueDate.setHours(0, 0, 0, 0); // Normalize to start of day UTC
-    }
+    if (effectiveDueDate) effectiveDueDate.setHours(0, 0, 0, 0); // Normalize effectiveDueDate
 
     // Apply the due date check if an effective due date exists and action is 'approve'
     if (action === 'approve' && effectiveDueDate && effectiveDueDate > today) {
@@ -89,29 +94,36 @@ serve(async (req) => {
         throw new Error(`Failed to update payment status: ${paymentUpdateError.message}`);
       }
 
-      // 2. Update order payment status to 'paid'
-      const { error: orderUpdateError } = await supabaseAdmin
-        .from('orders')
-        .update({ payment_status: 'paid' })
-        .eq('id', orderId);
+      // 2. Update order payment status to 'paid' (only if it's an order payment)
+      if (!isBalancePayment) {
+        const { error: orderUpdateError } = await supabaseAdmin
+          .from('orders')
+          .update({ payment_status: 'paid' })
+          .eq('id', orderId);
 
-      if (orderUpdateError) {
-        throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
+        if (orderUpdateError) {
+          throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
+        }
       }
+      
+      // Note: The dealer_balances table is automatically updated by a database trigger
+      // (handle_payment_completion) when a payment status changes to 'completed'.
 
       return new Response(JSON.stringify({ message: 'Payment approved and credit freed up successfully.' }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     } else if (action === 'reject') {
-      // 1. Revert order payment status to 'pending'
-      const { error: orderUpdateError } = await supabaseAdmin
-        .from('orders')
-        .update({ payment_status: 'pending' })
-        .eq('id', orderId);
+      // 1. Revert order payment status to 'pending' (only if it's an order payment)
+      if (!isBalancePayment) {
+        const { error: orderUpdateError } = await supabaseAdmin
+          .from('orders')
+          .update({ payment_status: 'pending' })
+          .eq('id', orderId);
 
-      if (orderUpdateError) {
-        throw new Error(`Failed to revert order payment status: ${orderUpdateError.message}`);
+        if (orderUpdateError) {
+          throw new Error(`Failed to revert order payment status: ${orderUpdateError.message}`);
+        }
       }
 
       // 2. Delete the payment record
@@ -124,7 +136,7 @@ serve(async (req) => {
         throw new Error(`Failed to delete payment record: ${paymentDeleteError.message}`);
       }
 
-      return new Response(JSON.stringify({ message: 'Payment rejected and order reverted to pending.' }), {
+      return new Response(JSON.stringify({ message: `Payment rejected and ${isBalancePayment ? 'record deleted' : 'order reverted to pending'}.` }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
