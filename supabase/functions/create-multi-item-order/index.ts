@@ -158,7 +158,7 @@ serve(async (req) => {
         payment_status: paymentStatus || 'pending', // New: payment status
         payment_due_date: paymentDueDate, // New: payment due date
       })
-      .select('id, order_number') // Select the new order_number
+      .select('id, order_number, order_date') // Select the new order_number AND order_date
       .single();
     
     if (orderError) {
@@ -169,7 +169,18 @@ serve(async (req) => {
       throw new Error('Order creation failed, no order ID returned.');
     }
     
-    // 4. Insert sales items linked to the new order
+    // 4. Update dealers.last_billing_date to the new order_date
+    const { error: updateDealerDateError } = await supabaseAdmin
+      .from('dealers')
+      .update({ last_billing_date: newOrder.order_date })
+      .eq('id', dealerId);
+
+    if (updateDealerDateError) {
+        console.error('Failed to update dealer last_billing_date:', updateDealerDateError.message);
+        // Log error but don't throw, as the order is already placed.
+    }
+
+    // 5. Insert sales items linked to the new order
     const salesWithOrderId = salesToInsert.map(sale => ({
       ...sale,
       order_id: newOrder.id
@@ -184,7 +195,7 @@ serve(async (req) => {
       throw new Error(`Failed to insert sales items: ${salesInsertError.message}`);
     }
     
-    // 5. If payment details are provided, insert into payments table
+    // 6. If payment details are provided, insert into payments table
     if (paymentDetails) {
       const { error: paymentInsertError } = await supabaseAdmin
         .from('payments')
@@ -212,7 +223,7 @@ serve(async (req) => {
       }
     }
     
-    // 6. Update product stock levels and manage production alerts
+    // 7. Update product stock levels and manage production alerts
     const productionAlertsToUpsert = [];
     const productionAlertsToResolve = [];
     
@@ -310,7 +321,7 @@ serve(async (req) => {
       }
     }
     
-    // 7. If this is the first order for a dealer with an opening balance, update the opening balance to 0
+    // 8. If this is the first order for a dealer with an opening balance, update the opening balance to 0
     if (openingBalance > 0) {
       const { data: orderCountData, error: orderCountError } = await supabaseAdmin
         .from('orders')
