@@ -403,21 +403,11 @@ const MultiItemOrderForm: React.FC = () => {
       return;
     }
 
-    // --- CRITICAL VALIDATION CHECK ---
-    // If it's a credit order (not paid at order time), the dealer must have credit days allotted.
-    // If it's a paid order, the payment details must be valid.
-    
-    const isCreditOrderValid = !isPaidAtOrderTime && !!paymentDueDate;
+    // --- CRITICAL VALIDATION CHECK: Payment at order time is mandatory ---
     const isPaidOrderValid = isPaidAtOrderTime && isPaymentDetailsValid;
 
-    if (!isCreditOrderValid && !isPaidOrderValid) {
-        if (!isPaidAtOrderTime && !paymentDueDate) {
-            showError('Payment due date could not be determined. Please select a dealer with allotted credit days OR check "Payment Received at Order Time".');
-        } else if (isPaidAtOrderTime && !isPaymentDetailsValid) {
-            showError('Please complete all required payment details.');
-        } else {
-            showError('Order submission failed due to missing payment information.');
-        }
+    if (!isPaidOrderValid) {
+        showError('Payment must be received at order time, and all required payment details must be completed.');
         return;
     }
     // --- END CRITICAL VALIDATION CHECK ---
@@ -432,10 +422,12 @@ const MultiItemOrderForm: React.FC = () => {
           product_id: item.product_id,
           quantity: item.quantity,
         })),
-        paymentStatus: isPaidAtOrderTime ? 'pending_approval' : 'pending',
-        paymentDueDate: paymentDueDate,
+        // Payment status is always pending_approval since payment is mandatory at order time
+        paymentStatus: 'pending_approval', 
+        paymentDueDate: paymentDueDate, // Keep due date for consistency, although it's irrelevant for paid orders
       };
 
+      // Payment details are always included now
       if (isPaidAtOrderTime) {
         payload.paymentDetails = {
           amount: paymentAmount,
@@ -534,12 +526,12 @@ const MultiItemOrderForm: React.FC = () => {
 
     if (baseChecks) return true;
 
-    // Payment/Credit Path Validation
-    const isCreditOrderValid = !isPaidAtOrderTime && !!paymentDueDate;
+    // Payment Path Validation: MUST be paid at order time AND details must be valid.
     const isPaidOrderValid = isPaidAtOrderTime && isPaymentDetailsValid;
 
-    return !isCreditOrderValid && !isPaidOrderValid;
-  }, [loading, selectedDealer, remainingCredit, totalPendingAmount, orderItems, isPaidAtOrderTime, paymentDueDate, isPaymentDetailsValid]);
+    // Submission is disabled if the paid path is NOT valid.
+    return !isPaidOrderValid;
+  }, [loading, selectedDealer, remainingCredit, totalPendingAmount, orderItems, isPaidAtOrderTime, isPaymentDetailsValid]);
 
 
   return (
