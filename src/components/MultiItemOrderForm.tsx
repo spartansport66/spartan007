@@ -94,6 +94,9 @@ const MultiItemOrderForm: React.FC = () => {
     return `${day}/${month}/${year}`;
   };
 
+  // Payment methods options
+  const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
+
   // Fetch dealers and products
   useEffect(() => {
     const fetchData = async () => {
@@ -352,6 +355,25 @@ const MultiItemOrderForm: React.FC = () => {
   // Calculate remaining credit after this order
   const remainingCredit = availableCredit !== null ? availableCredit - totalOrderValue : null;
 
+  const isPaymentDetailsValid = useMemo(() => {
+    if (!isPaidAtOrderTime) return true;
+
+    if (!paymentMethod || paymentAmount <= 0) return false;
+
+    if (paymentMethod === 'Cheque/DD') {
+      if (!chequeDdNo || !chequeDdDate) return false;
+    }
+
+    // For Card, Bank Transfer, UPI, we require a transaction ID
+    if (paymentMethod === 'Card' || paymentMethod === 'Bank Transfer' || paymentMethod === 'UPI') {
+      if (!transactionId) return false;
+    }
+    
+    // Cash allows optional transaction ID, so no strict check needed here.
+
+    return true;
+  }, [isPaidAtOrderTime, paymentMethod, paymentAmount, chequeDdNo, chequeDdDate, transactionId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -386,28 +408,11 @@ const MultiItemOrderForm: React.FC = () => {
       showError('Payment due date could not be determined. Please select a dealer with allotted credit days.');
       return;
     }
-
-    if (isPaidAtOrderTime) {
-      if (!paymentMethod) {
-        showError('Please select a payment method.');
-        return;
-      }
-
-      if (paymentAmount <= 0) {
-        showError('Payment amount must be positive.');
-        return;
-      }
-
-      // Conditional validation for specific payment methods
-      if (paymentMethod === 'Cheque/DD' && (!chequeDdNo || !chequeDdDate)) {
-        showError('Please enter Cheque/DD number and date.');
-        return;
-      }
-
-      if (paymentMethod !== 'Cash' && paymentMethod !== 'Cheque/DD' && !transactionId) {
-        showError(`Please enter Transaction ID for ${paymentMethod} payment.`);
-        return;
-      }
+    
+    // Enforce payment details validity if paid at order time
+    if (isPaidAtOrderTime && !isPaymentDetailsValid) {
+      showError('Please complete all required payment details.');
+      return;
     }
 
     setLoading(true);
@@ -926,9 +931,9 @@ const MultiItemOrderForm: React.FC = () => {
               !selectedDealer ||
               (remainingCredit !== null && remainingCredit < 0) ||
               totalPendingAmount > 0 ||
-              (orderItems.some(item => !item.product_id || item.quantity <= 0)) || // Added check for valid order items
-              (!isPaidAtOrderTime && !paymentDueDate) || // Ensure paymentDueDate is set if not paid at order time
-              (isPaidAtOrderTime && (!paymentMethod || paymentAmount <= 0 || (paymentMethod === 'Cheque/DD' && (!chequeDdNo || !chequeDdDate)) || (paymentMethod !== 'Cheque/DD' && paymentMethod !== 'Cash' && !transactionId))) // Payment validation
+              (orderItems.some(item => !item.product_id || item.quantity <= 0)) || // Check for valid order items
+              (!isPaidAtOrderTime && !paymentDueDate) || // Check for credit order due date
+              (isPaidAtOrderTime && !isPaymentDetailsValid) // Check for payment details validity
             }
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}
