@@ -403,17 +403,24 @@ const MultiItemOrderForm: React.FC = () => {
       return;
     }
 
-    // Require payment option - either paid at order time or credit
-    if (!isPaidAtOrderTime && !paymentDueDate) { // If not paid at order time, paymentDueDate must be set
-      showError('Payment due date could not be determined. Please select a dealer with allotted credit days.');
-      return;
-    }
+    // --- CRITICAL VALIDATION CHECK ---
+    // If it's a credit order (not paid at order time), the dealer must have credit days allotted.
+    // If it's a paid order, the payment details must be valid.
     
-    // Enforce payment details validity if paid at order time
-    if (isPaidAtOrderTime && !isPaymentDetailsValid) {
-      showError('Please complete all required payment details.');
-      return;
+    const isCreditOrderValid = !isPaidAtOrderTime && !!paymentDueDate;
+    const isPaidOrderValid = isPaidAtOrderTime && isPaymentDetailsValid;
+
+    if (!isCreditOrderValid && !isPaidOrderValid) {
+        if (!isPaidAtOrderTime && !paymentDueDate) {
+            showError('Payment due date could not be determined. Please select a dealer with allotted credit days OR check "Payment Received at Order Time".');
+        } else if (isPaidAtOrderTime && !isPaymentDetailsValid) {
+            showError('Please complete all required payment details.');
+        } else {
+            showError('Order submission failed due to missing payment information.');
+        }
+        return;
     }
+    // --- END CRITICAL VALIDATION CHECK ---
 
     setLoading(true);
 
@@ -516,6 +523,24 @@ const MultiItemOrderForm: React.FC = () => {
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
   
   const calculatedPaymentStatus = isPaidAtOrderTime ? 'Pending Approval' : 'Pending';
+
+  // Determine if the submit button should be disabled based on all conditions
+  const isSubmitDisabled = useMemo(() => {
+    const baseChecks = loading ||
+      !selectedDealer ||
+      (remainingCredit !== null && remainingCredit < 0) ||
+      totalPendingAmount > 0 ||
+      (orderItems.some(item => !item.product_id || item.quantity <= 0));
+
+    if (baseChecks) return true;
+
+    // Payment/Credit Path Validation
+    const isCreditOrderValid = !isPaidAtOrderTime && !!paymentDueDate;
+    const isPaidOrderValid = isPaidAtOrderTime && isPaymentDetailsValid;
+
+    return !isCreditOrderValid && !isPaidOrderValid;
+  }, [loading, selectedDealer, remainingCredit, totalPendingAmount, orderItems, isPaidAtOrderTime, paymentDueDate, isPaymentDetailsValid]);
+
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -921,15 +946,7 @@ const MultiItemOrderForm: React.FC = () => {
           <Button
             type="submit"
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-            disabled={
-              loading ||
-              !selectedDealer ||
-              (remainingCredit !== null && remainingCredit < 0) ||
-              totalPendingAmount > 0 ||
-              (orderItems.some(item => !item.product_id || item.quantity <= 0)) || // Check for valid order items
-              (!isPaidAtOrderTime && !paymentDueDate) || // Check for credit order due date
-              (isPaidAtOrderTime && !isPaymentDetailsValid) // Check for payment details validity
-            }
+            disabled={isSubmitDisabled}
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}
           </Button>
