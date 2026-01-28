@@ -17,6 +17,8 @@ interface OrderSummaryData {
   id: string;
   order_number: number;
   order_date: string;
+  dispatch_date: string | null; // New
+  dispatched: boolean; // New
   total_amount: number;
   dealer_name: string;
   sales_person_name: string;
@@ -96,6 +98,8 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
           id,
           order_number,
           order_date,
+          dispatch_date,
+          dispatched,
           total_amount,
           dealers (name),
           profiles (first_name, last_name)
@@ -129,6 +133,8 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
           id: order.id,
           order_number: order.order_number,
           order_date: order.order_date,
+          dispatch_date: order.dispatch_date,
+          dispatched: order.dispatched,
           total_amount: order.total_amount,
           dealer_name: order.dealers?.name || 'N/A',
           sales_person_name: `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim() || 'N/A',
@@ -191,11 +197,12 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
       }
 
       const tableColumn = [
-        "Order No.", "Order Date", "Dealer Name", "Sales Person", "Total Amount (₹)"
+        "Order No.", "Order Date", "Dispatch Date", "Dealer Name", "Sales Person", "Total Amount (₹)"
       ];
       const tableRows = orders.map(order => [
         `#${order.order_number}`,
         new Date(order.order_date).toLocaleDateString(),
+        order.dispatched && order.dispatch_date ? new Date(order.dispatch_date).toLocaleDateString() : 'Pending',
         order.dealer_name,
         order.sales_person_name,
         order.total_amount.toFixed(2),
@@ -206,7 +213,7 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        foot: [[{ content: 'Total Sales', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalSum.toFixed(2)}`]],
+        foot: [[{ content: 'Total Sales', colSpan: 5, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalSum.toFixed(2)}`]],
         startY: 45,
         styles: {
           fontSize: 8
@@ -228,11 +235,12 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
         },
         margin: { top: 10, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 25, halign: 'center' },
-          1: { cellWidth: 30, halign: 'center' },
-          2: { cellWidth: 40 },
-          3: { cellWidth: 40 },
-          4: { cellWidth: 30, halign: 'right' },
+          0: { cellWidth: 20, halign: 'center' },
+          1: { cellWidth: 25, halign: 'center' },
+          2: { cellWidth: 25, halign: 'center' },
+          3: { cellWidth: 35 },
+          4: { cellWidth: 35 },
+          5: { cellWidth: 30, halign: 'right' },
         }
       });
 
@@ -330,6 +338,7 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground font-bold">Order No.</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Order Date</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Dispatch Date</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Sales Person</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Total Amount (₹)</TableHead>
@@ -340,6 +349,9 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
                     <TableRow key={order.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
                       <TableCell className="text-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-foreground">
+                        {order.dispatched && order.dispatch_date ? new Date(order.dispatch_date).toLocaleDateString() : 'Pending'}
+                      </TableCell>
                       <TableCell className="text-foreground">{order.dealer_name}</TableCell>
                       <TableCell className="text-foreground">{order.sales_person_name}</TableCell>
                       <TableCell className="text-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
