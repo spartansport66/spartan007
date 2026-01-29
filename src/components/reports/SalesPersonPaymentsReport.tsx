@@ -14,6 +14,7 @@ import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
 import PaymentDetailsDialog from '@/components/PaymentDetailsDialog';
+import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 
 interface PaymentReportData {
@@ -50,6 +51,10 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
   // Dialog states
   const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
   const [selectedPaymentIdForDetails, setSelectedPaymentIdForDetails] = useState<string | null>(null);
+
+  // Dialog states for adding payment details
+  const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
+  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PaymentReportData | null>(null);
 
   // Filter states
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
@@ -278,9 +283,29 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
     showSuccess('WhatsApp message drafted. Please check the new tab.');
   };
 
+  const handleUpdatePaymentClick = (order: PaymentReportData) => {
+    // This component is for Sales Person, so they can only add payment details to pending orders.
+    if (order.payment_status !== 'pending') {
+      showError('Only pending orders can have payment details added.');
+      return;
+    }
+    setSelectedOrderForPaymentUpdate({
+      id: order.id,
+      order_number: order.order_number,
+      total_amount: order.total_amount,
+      dealer_name: order.dealer_name,
+      payment_due_date: order.payment_due_date,
+    });
+    setIsUpdatePaymentDialogOpen(true);
+  };
+
   const handleViewPaymentDetails = (paymentId: string) => {
     setSelectedPaymentIdForDetails(paymentId);
     setIsPaymentDetailsDialogOpen(true);
+  };
+
+  const handlePaymentUpdated = () => {
+    fetchPaymentsAndDealers();
   };
 
   const isOverdue = (dueDate: string | null, status: string) => {
@@ -584,4 +609,4 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
   );
 };
 
-export default PaymentsReportDialog;
+export default SalesPersonPaymentsReport;
