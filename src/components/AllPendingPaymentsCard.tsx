@@ -135,17 +135,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         .filter((payment: any) => {
           let effectiveDueDate: Date | null = null;
           
-          // Determine effective due date based on whether it's an order payment or general payment
-          if (payment.order_id) {
-            // Order Payment
-            if (payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date) {
-              effectiveDueDate = new Date(payment.cheque_dd_date);
-            } else if (payment.orders?.payment_due_date) {
-              effectiveDueDate = new Date(payment.orders.payment_due_date);
-            }
-          } else if (payment.dealer_id) {
-            // General Payment (against opening balance)
-            // For general payments, we treat the payment_date as the due date for approval
+          // Determine effective due date for approval:
+          // Use payment_date (which holds the PDC date for Cheque/DD, or the submission date for others)
+          if (payment.payment_date) {
             effectiveDueDate = new Date(payment.payment_date);
           }
 
@@ -186,8 +178,8 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         ...formattedPaymentsPendingApprovalToday,
       ].sort((a, b) => {
         // Sort by effective due date, prioritizing earlier dates
-        const dateA = a.cheque_dd_date ? new Date(a.cheque_dd_date).getTime() : (a.payment_due_date ? new Date(a.payment_due_date).getTime() : 0);
-        const dateB = b.cheque_dd_date ? new Date(b.cheque_dd_date).getTime() : (b.payment_due_date ? new Date(b.payment_due_date).getTime() : 0);
+        const dateA = a.payment_date ? new Date(a.payment_date).getTime() : (a.payment_due_date ? new Date(a.payment_due_date).getTime() : 0);
+        const dateB = b.payment_date ? new Date(b.payment_date).getTime() : (b.payment_due_date ? new Date(b.payment_due_date).getTime() : 0);
         return dateA - dateB;
       });
 
@@ -278,16 +270,12 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
 
     let effectiveDueDate: Date | null = null;
 
-    if (payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date) {
-      effectiveDueDate = new Date(payment.cheque_dd_date);
-    } else if (payment.payment_due_date) {
-      effectiveDueDate = new Date(payment.payment_due_date);
-    } else if (payment.type === 'payment_pending_approval_today' && payment.payment_date) {
-      // For general payments, use the payment date as the due date for approval
+    // Use payment_date (PDC date) for approval check
+    if (payment.payment_date) {
       effectiveDueDate = new Date(payment.payment_date);
     }
 
-    if (!effectiveDueDate) return true; // If no due date, assume it's due (or can be approved)
+    if (!effectiveDueDate) return true; // Should not happen if payment_date is set on submission
     effectiveDueDate.setHours(0, 0, 0, 0);
     return effectiveDueDate <= today;
   };
@@ -380,8 +368,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
                     const displayStatus = payment.payment_status ?? 'unknown';
                     const paymentIsDueForApproval = isPaymentDueForApproval(payment);
 
-                    const displayDate = payment.cheque_dd_date ? new Date(payment.cheque_dd_date).toLocaleDateString() :
-                                      payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() :
+                    const displayDate = payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() :
                                       payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A';
 
                     return (

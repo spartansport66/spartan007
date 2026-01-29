@@ -35,6 +35,7 @@ const formSchema = z.object({
     (val) => Number(val),
     z.number().min(0.01, { message: 'Amount must be a positive number.' })
   ),
+  paymentDate: z.string().min(1, { message: 'Payment date is required.' }), // New field for effective payment date
   // Cheque/DD fields
   chequeDdNo: z.string().optional(),
   chequeDdDate: z.string().optional(),
@@ -61,12 +62,13 @@ const formSchema = z.object({
         path: ['chequeDdNo'],
       });
     }
-    if (!data.chequeDdDate) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Cheque/DD Date is required for Cheque/DD payment.',
-        path: ['chequeDdDate'],
-      });
+    // For Cheque/DD, paymentDate must be the cheque date (chequeDdDate)
+    if (data.paymentDate !== data.chequeDdDate) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Payment Date must match Cheque/DD Date.',
+            path: ['paymentDate'],
+        });
     }
   } else if (data.paymentMethod === 'Card') {
     if (!data.cardTransactionId) {
@@ -109,6 +111,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     defaultValues: {
       paymentMethod: '',
       amount: 0,
+      paymentDate: new Date().toISOString().split('T')[0], // Default to today
       chequeDdNo: '',
       chequeDdDate: '',
       cardTransactionId: '',
@@ -125,12 +128,26 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     },
   });
 
+  const selectedPaymentMethod = form.watch('paymentMethod');
+  const selectedChequeDdDate = form.watch('chequeDdDate');
+
+  useEffect(() => {
+    if (selectedPaymentMethod === 'Cheque/DD' && selectedChequeDdDate) {
+        // If Cheque/DD is selected and date is set, force paymentDate to match chequeDdDate
+        form.setValue('paymentDate', selectedChequeDdDate, { shouldValidate: true });
+    } else if (selectedPaymentMethod !== 'Cheque/DD' && form.getValues('paymentDate') === selectedChequeDdDate) {
+        // If method changes away from Cheque/DD, reset paymentDate to today if it was previously set to cheque date
+        form.setValue('paymentDate', new Date().toISOString().split('T')[0], { shouldValidate: true });
+    }
+  }, [selectedPaymentMethod, selectedChequeDdDate, form]);
+
   useEffect(() => {
     if (orderToUpdate && isOpen) {
       form.reset({
         paymentMethod: '',
         // Set amount to total_amount if it's an order, or keep it editable if it's a general balance payment (Order #0)
         amount: orderToUpdate.order_number === 0 ? 0 : orderToUpdate.total_amount,
+        paymentDate: new Date().toISOString().split('T')[0], // Default to today
         chequeDdNo: '',
         chequeDdDate: '',
         cardTransactionId: '',
@@ -184,7 +201,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         dealer_id: dealerId,
         amount: values.amount,
         payment_method: values.paymentMethod,
-        payment_date: new Date().toISOString(),
+        payment_date: values.paymentDate, // Use the user-provided payment date (PDC date)
         status: 'pending_approval',
         cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
         cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
@@ -238,7 +255,6 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     }
   };
 
-  const selectedPaymentMethod = form.watch('paymentMethod');
   const isAmountEditable = orderToUpdate?.order_number === 0;
 
   return (
@@ -319,6 +335,24 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                   </FormItem>
                 )}
               />
+              
+              {/* Payment Date Field (Effective Date) */}
+              {selectedPaymentMethod !== 'Cheque/DD' && (
+                <FormField
+                  control={form.control}
+                  name="paymentDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label htmlFor="paymentDate">Payment Date (Date Received)</Label>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               {selectedPaymentMethod === 'Cheque/DD' && (
                 <>
                   <FormField
@@ -339,9 +373,22 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                     name="chequeDdDate"
                     render={({ field }) => (
                       <FormItem>
-                        <Label htmlFor="chequeDdDate">Cheque/DD Date</Label>
+                        <Label htmlFor="chequeDdDate">Cheque/DD Date (Effective Date)</Label>
                         <FormControl>
                           <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="paymentDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="paymentDate">Payment Date (Must match Cheque/DD Date)</Label>
+                        <FormControl>
+                          <Input type="date" {...field} readOnly className="bg-muted" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

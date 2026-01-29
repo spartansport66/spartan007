@@ -31,6 +31,7 @@ interface PaymentReportData {
   dealer_id: string; // New: to pass to the approve-payment edge function
   payment_method: string | null; // Added
   cheque_dd_date: string | null; // Added
+  payment_date: string | null; // New: Effective payment date (PDC date)
 }
 
 interface DealerOption {
@@ -210,6 +211,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
           let currentDealerId: string;
           let currentPaymentMethod: string | null;
           let currentChequeDdDate: string | null;
+          let currentPaymentDate: string | null; // New: Effective payment date
 
           if (filterStatus === 'pending_approval' || filterStatus === 'paid') {
             // When querying payments directly
@@ -227,6 +229,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
             currentDealerId = item.dealer_id;
             currentPaymentMethod = item.payment_method;
             currentChequeDdDate = item.cheque_dd_date;
+            currentPaymentDate = item.payment_date; // Effective payment date
           } else {
             // When querying orders directly
             currentPaymentStatus = item.payment_status;
@@ -241,6 +244,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
             currentDealerId = item.dealer_id;
             currentPaymentMethod = item.payments?.[0]?.payment_method || null;
             currentChequeDdDate = item.payments?.[0]?.cheque_dd_date || null;
+            currentPaymentDate = item.payments?.[0]?.payment_date || null; // Effective payment date
           }
 
           console.log(`DEBUG: Processing item:`, item, `Mapped payment_status: ${currentPaymentStatus}`);
@@ -258,6 +262,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
             dealer_id: currentDealerId,
             payment_method: currentPaymentMethod,
             cheque_dd_date: currentChequeDdDate,
+            payment_date: currentPaymentDate, // New
           };
         });
         setPayments(formattedPayments);
@@ -321,13 +326,11 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
 
     let effectiveDueDate: Date | null = null;
 
-    if (payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date) {
-      effectiveDueDate = new Date(payment.cheque_dd_date);
+    // Use payment_date (PDC date) for approval check
+    if (payment.payment_date) {
+      effectiveDueDate = new Date(payment.payment_date);
     } else if (payment.payment_due_date) {
       effectiveDueDate = new Date(payment.payment_due_date);
-    } else if (payment.order_number === 0 && payment.order_date) {
-      // For general payments, use the payment date as the approval due date
-      effectiveDueDate = new Date(payment.order_date);
     }
 
     if (!effectiveDueDate) return true; // If no due date, assume it's due (or can be approved)
