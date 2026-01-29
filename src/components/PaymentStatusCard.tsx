@@ -311,22 +311,31 @@ const PaymentStatusCard: React.FC = () => {
 
           if (transactionsError) throw transactionsError;
           
+          // Fetch all completed payments (orders + general) for assigned dealers
+          const { data: allCompletedPayments, error: completedPaymentsError } = await supabase
+            .from('payments')
+            .select('dealer_id, amount')
+            .eq('status', 'completed')
+            .in('dealer_id', assignedDealerIds);
+
+          if (completedPaymentsError) throw completedPaymentsError;
+          
+          const totalCompletedPaymentsMap = new Map<string, number>();
+          (allCompletedPayments || []).forEach(p => {
+            totalCompletedPaymentsMap.set(p.dealer_id, (totalCompletedPaymentsMap.get(p.dealer_id) || 0) + p.amount);
+          });
+
           const formattedBalances: DealerBalance[] = (dealersWithTransactions || [])
             .map((dealer: any) => {
               const openingBalance = dealer.dealer_balances?.opening_balance || 0;
               
               let totalSales = 0; // Total Orders (Debit)
-              let totalPaymentsReceived = 0; // Total Completed Payments (Credit)
-
+              
               (dealer.orders || []).forEach((order: any) => {
                 totalSales += order.total_amount;
-                
-                (order.payments || []).forEach((payment: any) => {
-                  if (payment.status === 'completed') {
-                    totalPaymentsReceived += payment.amount;
-                  }
-                });
               });
+              
+              const totalPaymentsReceived = totalCompletedPaymentsMap.get(dealer.id) || 0;
               
               // Calculate Net Transaction Balance (Orders - Completed Payments)
               const netTransactionBalance = totalSales - totalPaymentsReceived;
