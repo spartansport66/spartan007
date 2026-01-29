@@ -795,35 +795,6 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                             >
                               <DollarSign className="h-4 w-4 text-green-600" />
                             </Button>
-                            {/* New: Reset Opening Balance Button */}
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  title="Manually Reset Opening Balance to Zero"
-                                  disabled={loading || isSendingWhatsApp}
-                                >
-                                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Confirm Manual Balance Reset</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you absolutely sure you want to manually reset the **Opening Balance** for **{dealer.name}** to **₹0.00**? 
-                                    This action is irreversible and should only be used for administrative correction if the balance was cleared outside the system.
-                                    <p className="mt-2 font-bold text-red-600">Current Closing Balance: ₹{dealer.closing_balance.toFixed(2)}</p>
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleResetOpeningBalance(dealer.id, dealer.name)} disabled={loading}>
-                                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reset Balance to Zero'}
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>

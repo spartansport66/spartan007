@@ -129,7 +129,8 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     if (orderToUpdate && isOpen) {
       form.reset({
         paymentMethod: '',
-        amount: orderToUpdate.total_amount,
+        // Set amount to total_amount if it's an order, or keep it editable if it's a general balance payment (Order #0)
+        amount: orderToUpdate.order_number === 0 ? 0 : orderToUpdate.total_amount,
         chequeDdNo: '',
         chequeDdDate: '',
         cardTransactionId: '',
@@ -238,6 +239,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
   };
 
   const selectedPaymentMethod = form.watch('paymentMethod');
+  const isAmountEditable = orderToUpdate?.order_number === 0;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -263,7 +265,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
               </div>
               <div className="space-y-2">
                 <Label>
-                  {orderToUpdate.order_number === 0 ? 'Outstanding Balance:' : 'Total Amount Due:'}
+                  {orderToUpdate.order_number === 0 ? 'Total Outstanding Balance:' : 'Total Amount Due:'}
                 </Label>
                 <Input value={`₹${orderToUpdate.total_amount.toFixed(2)}`} readOnly className="bg-muted" />
               </div>
@@ -304,7 +306,14 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                   <FormItem>
                     <Label htmlFor="amount">Amount Paid</Label>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="e.g., 1000.00" {...field} />
+                      <Input 
+                        type="number" 
+                        step="0.01" 
+                        placeholder="e.g., 1000.00" 
+                        {...field} 
+                        readOnly={!isAmountEditable}
+                        className={isAmountEditable ? "" : "bg-muted"}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
