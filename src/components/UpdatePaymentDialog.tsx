@@ -37,12 +37,11 @@ const formSchema = z.object({
   // Cheque/DD fields
   chequeDdNo: z.string().optional(),
   chequeDdDate: z.string().optional(),
-  // Card fields (only transaction ID)
+  // Transaction ID fields (consolidated)
   cardTransactionId: z.string().optional(),
-  // Bank Transfer fields (only transaction ID)
   bankTransactionId: z.string().optional(),
-  // UPI fields (only transaction ID)
   upiTransactionId: z.string().optional(),
+  cashTransactionId: z.string().optional(), // Added cash transaction ID
 }).superRefine((data, ctx) => {
   if (data.paymentMethod === 'Cheque/DD') {
     if (!data.chequeDdNo) {
@@ -84,12 +83,10 @@ const formSchema = z.object({
       });
     }
   }
+  // Cash transaction ID is optional
 });
 
 const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
-
-// IMPORTANT: Replace with the actual URL of your deployed Edge Function
-const RECORD_GENERAL_PAYMENT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/record-general-payment";
 
 const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate, isOpen, onOpenChange, onPaymentUpdated }) => {
   const [loading, setLoading] = useState(false);
@@ -103,6 +100,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
       cardTransactionId: '',
       bankTransactionId: '',
       upiTransactionId: '',
+      cashTransactionId: '',
     },
   });
 
@@ -116,6 +114,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         cardTransactionId: '',
         bankTransactionId: '',
         upiTransactionId: '',
+        cashTransactionId: '',
       });
     }
   }, [orderToUpdate, isOpen, form]);
@@ -125,31 +124,40 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     setLoading(true);
     
     const isGeneralBalancePayment = orderToUpdate.order_number === 0;
-    const dealerId = isGeneralBalancePayment ? orderToUpdate.id : null;
+    const dealerId = orderToUpdate.id; // orderToUpdate.id is the dealerId here if it's a general payment
 
     try {
+      // Determine transaction ID based on method
+      let transactionId = null;
+      if (values.paymentMethod === 'Card') transactionId = values.cardTransactionId;
+      else if (values.paymentMethod === 'Bank Transfer') transactionId = values.bankTransactionId;
+      else if (values.paymentMethod === 'UPI') transactionId = values.upiTransactionId;
+      else if (values.paymentMethod === 'Cash') transactionId = values.cashTransactionId;
+
       if (isGeneralBalancePayment) {
         // --- Scenario 2: Payment against General Balance (Opening Balance) ---
         
-        const response = await fetch(RECORD_GENERAL_PAYMENT_EDGE_FUNCTION_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            dealerId: dealerId,
+        // 1. Insert a new payment record with status 'pending_approval'
+        // order_id is set to null, dealer_id is set to the dealer's ID
+        const { error: paymentInsertError } = await supabase
+          .from('payments')
+          .insert({
+            order_id: null, // Now allowed by schema change
+            dealer_id: dealerId, // New column
             amount: values.amount,
-          }),
-        });
+            payment_method: values.paymentMethod,
+            payment_date: new Date().toISOString(),
+            status: 'pending_approval',
+            cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
+            cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
+            transaction_id: transactionId,
+          });
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Unknown error during fetch.' }));
-          throw new Error(errorData.error || `Edge Function failed with status ${response.status}`);
+        if (paymentInsertError) {
+          throw new Error(`Failed to record general payment details: ${paymentInsertError.message}`);
         }
         
-        const data = await response.json();
-        
-        showSuccess(`Payment of ₹${values.amount.toFixed(2)} recorded against general balance for ${orderToUpdate.dealer_name}. New Outstanding Balance: ₹${data.new_opening_balance.toFixed(2)}.`);
+        showSuccess(`Payment of ₹${values.amount.toFixed(2)} submitted for approval against general balance for ${orderToUpdate.dealer_name}.`);
         
       } else {
         // --- Scenario 1: Payment against a specific Order ---
@@ -176,10 +184,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
             // Conditional fields based on payment method
             cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
             cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
-            transaction_id: 
-              values.paymentMethod === 'Card' ? values.cardTransactionId :
-              values.paymentMethod === 'Bank Transfer' ? values.bankTransactionId :
-              values.paymentMethod === 'UPI' ? values.upiTransactionId : null,
+            transaction_id: transactionId,
           });
 
         if (paymentInsertError) {
@@ -212,8 +217,8 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
           </DialogTitle>
           <DialogDescription>
             {orderToUpdate?.order_number === 0 
-              ? `Record a payment against the dealer's general outstanding balance.`
-              : `Mark this order as paid and record the payment details.`}
+              ? `Record a payment against the dealer's general outstanding balance. This payment requires Admin approval.`
+              : `Mark this order as paid and record the payment details. This payment requires Admin approval.`}
           </DialogDescription>
         </DialogHeader>
         {orderToUpdate ? (
@@ -341,6 +346,21 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                       <Label htmlFor="upiTransactionId">Transaction ID</Label>
                       <FormControl>
                         <Input type="text" placeholder="e.g., UPI123456789" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              {selectedPaymentMethod === 'Cash' && (
+                <FormField
+                  control={form.control}
+                  name="cashTransactionId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label htmlFor="cashTransactionId">Transaction ID (Optional)</Label>
+                      <FormControl>
+                        <Input type="text" placeholder="e.g., Cash reference number" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

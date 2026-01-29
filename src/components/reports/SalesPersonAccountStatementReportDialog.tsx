@@ -156,8 +156,22 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
           const ordersBefore = (dealer.orders || []).filter((o: any) => new Date(o.dispatch_date) < new Date(fromDateISO));
           const ordersBeforeTotal = ordersBefore.reduce((sum, order) => sum + order.total_amount, 0);
 
-          // Payments before fromDate
+          // Payments before fromDate (Order payments and General payments)
           let paymentsBeforeTotal = 0;
+          
+          // Fetch general payments before fromDate
+          const { data: generalPaymentsBefore, error: gpError } = await supabase
+            .from('payments')
+            .select('amount')
+            .eq('dealer_id', dealerId)
+            .is('order_id', null)
+            .lte('payment_date', fromDateISO)
+            .eq('status', 'completed');
+            
+          if (gpError) console.error('Error fetching general payments before date:', gpError);
+          paymentsBeforeTotal += (generalPaymentsBefore || []).reduce((sum, p) => sum + p.amount, 0);
+
+          // Order payments before fromDate
           ordersBefore.forEach((order: any) => {
             (order.payments || []).forEach((payment: any) => {
               if (payment.status === 'completed' && new Date(payment.payment_date) < new Date(fromDateISO)) {
@@ -255,6 +269,46 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
             }
           }
         }
+        
+        // --- 3. Process General Payments within the Date Range ---
+        const { data: generalPaymentsInPeriod, error: gpInPeriodError } = await supabase
+            .from('payments')
+            .select('id, amount, payment_date, payment_method, cheque_dd_date, transaction_id, status')
+            .eq('dealer_id', dealerId)
+            .is('order_id', null)
+            .in('status', ['completed', 'pending_approval']);
+            
+        if (gpInPeriodError) console.error('Error fetching general payments in period:', gpInPeriodError);
+        
+        (generalPaymentsInPeriod || []).forEach((payment: any) => {
+            const paymentDate = payment.payment_date.split('T')[0];
+            const paymentDateObj = new Date(paymentDate);
+            const isPaymentInPeriod = fromDateISO ? paymentDateObj >= new Date(fromDateISO) : true;
+            const isPaymentBeforeTo = toDateISO ? paymentDateObj <= new Date(toDateISO) : true;
+
+            if (isPaymentInPeriod && isPaymentBeforeTo) {
+                const statusText = payment.status === 'completed' ? 'Cleared' : 'Pending Approval';
+                
+                if (payment.status === 'completed') {
+                    currentBalance -= payment.amount;
+                }
+                
+                allEntries.push({
+                    date: paymentDate,
+                    description: `General Payment - ${statusText} (${payment.payment_method})`,
+                    debit: 0,
+                    credit: payment.amount,
+                    balance: currentBalance,
+                    type: 'payment',
+                    payment_method: payment.payment_method,
+                    payment_amount: payment.amount,
+                    payment_date: paymentDate,
+                    cheque_dd_date: payment.cheque_dd_date,
+                    transaction_id: payment.transaction_id,
+                });
+            }
+        });
+
 
         // Sort all entries chronologically
         allEntries.sort((a, b) => {
@@ -271,7 +325,11 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
         let finalRunningBalance = initialBalance;
         const sortedEntriesWithBalance = allEntries.map(entry => {
             if (entry.type !== 'opening_balance') {
-                finalRunningBalance = finalRunningBalance + entry.debit - entry.credit;
+                // Only update balance if it's a completed transaction (debit is always an order/completed transaction)
+                // For payments, only completed payments affect the balance calculation here.
+                if (entry.type === 'order' || (entry.type === 'payment' && entry.description.includes('Cleared'))) {
+                    finalRunningBalance = finalRunningBalance + entry.debit - entry.credit;
+                }
                 return { ...entry, balance: finalRunningBalance };
             }
             return entry;
@@ -577,7 +635,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
                       <TableBody>
                         {dealerStatement.entries.map((entry, index) => {
                           const isOverdue = entry.type === 'order' && entry.days_overdue && entry.days_overdue > 0;
-                          const isPendingApproval = entry.type === 'payment' && entry.payment_status === 'pending_approval';
+                          const isPendingApproval = entry.type === 'payment' && entry.description.includes('Pending Approval');
                           const isOrder = entry.type === 'order';
                           const isPayment = entry.type === 'payment';
 

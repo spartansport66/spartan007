@@ -18,6 +18,9 @@ import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { useSession } from '@/contexts/SessionContext'; // Import useSession
 
+// IMPORTANT: Replace with the actual URL of your deployed Edge Function
+const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
+
 interface LedgerEntry {
   date: string; // YYYY-MM-DD
   description: string;
@@ -60,6 +63,8 @@ interface FetchedPayment {
   payment_date: string;
   payment_method: string;
   transaction_id: string | null;
+  order_id: string | null; // Now nullable
+  dealer_id: string | null; // New
   orders: {
     dealer_id: string;
     order_number: number;
@@ -163,16 +168,13 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         if (prevOrdersError) throw prevOrdersError;
         const prevOrdersTotal = (prevOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
 
-        // Payments before fromDate
+        // Payments before fromDate (both order payments and general payments)
         const { data: prevPayments, error: prevPaymentsError } = await supabase
           .from('payments')
-          .select(`
-            amount,
-            orders!inner(dealer_id)
-          `)
-          .eq('orders.dealer_id', dealerId)
+          .select(`amount`)
+          .or(`order_id.eq.${dealerId},dealer_id.eq.${dealerId}`) // Filter by order_id or new dealer_id column
           .lte('payment_date', fromDateISO)
-          .eq('status', 'completed') as { data: PrevPayment[] | null; error: any };
+          .eq('status', 'completed');
 
         if (prevPaymentsError) throw prevPaymentsError;
         const prevPaymentsTotal = (prevPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
@@ -222,7 +224,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         });
       });
 
-      // 3. Fetch payments within the date range
+      // 3. Fetch payments within the date range (both order payments and general payments)
       let paymentsQuery = supabase
         .from('payments')
         .select(`
@@ -231,20 +233,26 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           payment_date,
           payment_method,
           transaction_id,
-          orders!inner(dealer_id, order_number)
+          order_id,
+          orders(order_number)
         `)
-        .eq('orders.dealer_id', dealerId)
+        .eq('dealer_id', dealerId) // Use the new dealer_id column
         .eq('status', 'completed');
+
+      if (fromDateISO) paymentsQuery = paymentsQuery.gte('payment_date', fromDateISO);
+      if (toDateISO) paymentsQuery = paymentsQuery.lte('payment_date', toDateISO);
 
       const { data: paymentsData, error: paymentsError } = await paymentsQuery as { data: FetchedPayment[] | null; error: any };
       if (paymentsError) throw paymentsError;
 
       (paymentsData || []).forEach(payment => {
-        const orderNumber = payment.orders?.order_number || 'N/A';
+        const isGeneralPayment = !payment.order_id;
+        const orderNumber = isGeneralPayment ? 'General' : payment.orders?.order_number || 'N/A';
         const transactionDetail = payment.transaction_id ? ` (Txn: ${payment.transaction_id})` : '';
+        
         ledgerEntries.push({
           date: payment.payment_date.split('T')[0],
-          description: `Payment for Order #${orderNumber} (${payment.payment_method})${transactionDetail}`,
+          description: `Payment for ${isGeneralPayment ? 'General Balance' : `Order #${orderNumber}`} (${payment.payment_method})${transactionDetail}`,
           debit: 0,
           credit: payment.amount,
           balance: 0, // Will be calculated later

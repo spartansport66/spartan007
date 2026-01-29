@@ -52,7 +52,7 @@ interface DealerBalance {
 }
 
 interface PendingOrderPayment {
-  id: string; // Order ID
+  id: string; // Order ID (or Dealer ID if order_number is 0)
   order_number: number;
   total_amount: number;
   dealer_name: string;

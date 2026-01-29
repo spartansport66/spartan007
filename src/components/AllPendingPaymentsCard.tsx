@@ -13,9 +13,9 @@ import UpdatePaymentDialog from '@/components/UpdatePaymentDialog'; // Import Up
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 
 interface PendingPaymentItem {
-  type: 'order_due_today' | 'payment_pending_approval_today'; // Removed 'payment_paid_today'
+  type: 'order_due_today' | 'payment_pending_approval_today';
   id: string; // Order ID for 'order_due_today', Payment ID for others
-  order_id: string; // Always the order ID
+  order_id: string; // Always the order ID (or dealer ID for general payment)
   order_number: number;
   dealer_name: string;
   dealer_phone: string;
@@ -107,12 +107,12 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       }));
 
       // 2. Fetch payments with status = 'pending_approval'
-      // We need to fetch all pending_approval payments and then filter by their effective due date
       const { data: paymentsPendingApproval, error: paymentsPendingApprovalError } = await supabase
         .from('payments')
         .select(`
           id,
           order_id,
+          dealer_id,
           amount,
           payment_method,
           payment_date,
@@ -124,7 +124,8 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
             payment_due_date,
             dealer_id,
             dealers (name, phone)
-          )
+          ),
+          dealers (name, phone)
         `)
         .eq('status', 'pending_approval')
         .order('payment_date', { ascending: true }); // Order by payment_date for consistency
@@ -134,34 +135,51 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       const formattedPaymentsPendingApprovalToday: PendingPaymentItem[] = (paymentsPendingApproval || [])
         .filter((payment: any) => {
           let effectiveDueDate: Date | null = null;
-          if (payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date) {
-            effectiveDueDate = new Date(payment.cheque_dd_date);
-          } else if (payment.orders?.payment_due_date) {
-            effectiveDueDate = new Date(payment.orders.payment_due_date);
+          
+          // Determine effective due date based on whether it's an order payment or general payment
+          if (payment.order_id) {
+            // Order Payment
+            if (payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date) {
+              effectiveDueDate = new Date(payment.cheque_dd_date);
+            } else if (payment.orders?.payment_due_date) {
+              effectiveDueDate = new Date(payment.orders.payment_due_date);
+            }
+          } else if (payment.dealer_id) {
+            // General Payment (against opening balance)
+            // For general payments, we treat the payment_date as the due date for approval
+            effectiveDueDate = new Date(payment.payment_date);
           }
 
-          if (!effectiveDueDate) return false; // If no due date, don't show it as "due"
-          effectiveDueDate.setUTCHours(0, 0, 0, 0); // Normalize to start of day UTC
+          if (!effectiveDueDate) return false;
+          effectiveDueDate.setUTCHours(0, 0, 0, 0);
 
           // Show if effective due date is today or earlier
           return effectiveDueDate <= new Date(endOfUTCToday);
         })
-        .map((payment: any) => ({
-          type: 'payment_pending_approval_today',
-          id: payment.id, // Payment ID
-          order_id: payment.order_id,
-          order_number: payment.orders?.order_number || 'N/A',
-          dealer_name: payment.orders?.dealers?.name || 'N/A',
-          dealer_phone: payment.orders?.dealers?.phone || '',
-          amount: payment.amount,
-          payment_status: payment.status, // 'pending_approval'
-          payment_due_date: payment.orders?.payment_due_date || null,
-          payment_method: payment.payment_method,
-          payment_date: payment.payment_date,
-          cheque_dd_date: payment.cheque_dd_date,
-          approved_at: null,
-          dealer_id: payment.orders?.dealer_id || '',
-        }));
+        .map((payment: any) => {
+          const isGeneralPayment = !payment.order_id;
+          const dealerName = isGeneralPayment ? payment.dealers?.name : payment.orders?.dealers?.name;
+          const dealerPhone = isGeneralPayment ? payment.dealers?.phone : payment.orders?.dealers?.phone;
+          const orderNumber = isGeneralPayment ? 0 : payment.orders?.order_number;
+          const paymentDueDate = isGeneralPayment ? null : payment.orders?.payment_due_date;
+
+          return {
+            type: 'payment_pending_approval_today',
+            id: payment.id, // Payment ID
+            order_id: payment.order_id || payment.dealer_id, // Use dealer ID if order_id is null
+            order_number: orderNumber || 0,
+            dealer_name: dealerName || 'N/A',
+            dealer_phone: dealerPhone || '',
+            amount: payment.amount,
+            payment_status: payment.status, // 'pending_approval'
+            payment_due_date: paymentDueDate || null,
+            payment_method: payment.payment_method,
+            payment_date: payment.payment_date,
+            cheque_dd_date: payment.cheque_dd_date,
+            approved_at: null,
+            dealer_id: payment.dealer_id,
+          };
+        });
 
       // Combine only orders due today and pending approval payments due today/earlier
       const combinedPayments = [
@@ -255,6 +273,26 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
     return <Clock className="h-4 w-4 text-gray-600" />;
   };
 
+  const isPaymentDueForApproval = (payment: PendingPaymentItem) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let effectiveDueDate: Date | null = null;
+
+    if (payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date) {
+      effectiveDueDate = new Date(payment.cheque_dd_date);
+    } else if (payment.payment_due_date) {
+      effectiveDueDate = new Date(payment.payment_due_date);
+    } else if (payment.type === 'payment_pending_approval_today' && payment.payment_date) {
+      // For general payments, use the payment date as the approval due date
+      effectiveDueDate = new Date(payment.payment_date);
+    }
+
+    if (!effectiveDueDate) return true; // Should not happen for pending approval payments
+    effectiveDueDate.setHours(0, 0, 0, 0);
+    return effectiveDueDate <= today;
+  };
+
   const handleApproveRejectPayment = async (payment: PendingPaymentItem, action: 'approve' | 'reject') => {
     if (payment.type !== 'payment_pending_approval_today' || !payment.id) {
       showError('Invalid action for this payment type.');
@@ -269,7 +307,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         },
         body: JSON.stringify({
           paymentId: payment.id, // This is the payment record ID
-          orderId: payment.order_id, // This is the order ID
+          orderId: payment.order_number === 0 ? null : payment.order_id, // Pass null if general payment
           dealerId: payment.dealer_id,
           amount: payment.amount,
           action: action,
@@ -355,15 +393,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
                 <TableBody>
                   {paymentsToday.map((payment) => {
                     const displayStatus = payment.payment_status ?? 'unknown';
-                    const paymentIsDueForApproval = payment.cheque_dd_date ? (() => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      const dueDate = new Date(payment.cheque_dd_date);
-                      dueDate.setHours(0, 0, 0, 0);
-                      return dueDate <= today;
-                    })() : true; // Non post-dated payments are always due for approval
+                    const paymentIsDueForApproval = isPaymentDueForApproval(payment);
 
-                    const displayDate = payment.approved_at ? new Date(payment.approved_at).toLocaleDateString() :
+                    const displayDate = payment.cheque_dd_date ? new Date(payment.cheque_dd_date).toLocaleDateString() :
                                       payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() :
                                       payment.payment_due_date ? new Date(payment.payment_due_date).toLocaleDateString() : 'N/A';
 
@@ -372,7 +404,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
                         key={`${payment.type}-${payment.id}`}
                         className={isOverdue(payment.payment_due_date, payment.payment_status) ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-accent/50"}
                       >
-                        <TableCell className="font-medium text-foreground">#{payment.order_number}</TableCell>
+                        <TableCell className="font-medium text-foreground">
+                          {payment.order_number === 0 ? 'General Balance' : `#${payment.order_number}`}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{payment.dealer_name}</TableCell>
                         <TableCell className="text-muted-foreground text-right">₹{payment.amount.toFixed(2)}</TableCell>
                         <TableCell>
@@ -434,21 +468,14 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        {!paymentIsDueForApproval && payment.payment_method === 'Cheque/DD' && payment.cheque_dd_date ? (
+                                        {!paymentIsDueForApproval && payment.cheque_dd_date ? (
                                           <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
                                             <p className="font-medium">Post-dated Payment</p>
                                             <p>This payment is scheduled for {new Date(payment.cheque_dd_date).toLocaleDateString()}.</p>
                                             <p>It can only be approved on or after that date.</p>
                                           </div>
                                         ) : null}
-                                        {!paymentIsDueForApproval && payment.payment_method !== 'Cheque/DD' && payment.payment_due_date ? (
-                                          <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
-                                            <p className="font-medium">Payment Not Yet Due</p>
-                                            <p>This payment is due on {new Date(payment.payment_due_date).toLocaleDateString()}.</p>
-                                            <p>It can only be approved on or after that date.</p>
-                                          </div>
-                                        ) : null}
-                                        Are you sure you want to approve the payment of ₹{payment.amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will mark the order as paid and update the dealer's credit.
+                                        Are you sure you want to approve the payment of ₹{payment.amount.toFixed(2)} for {payment.order_number === 0 ? 'General Balance' : `Order #${payment.order_number}`} from {payment.dealer_name}? This will {payment.order_number === 0 ? 'update the dealer\'s opening balance' : 'mark the order as paid'} and update the dealer's credit.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
@@ -469,7 +496,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Reject Payment?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        Are you sure you want to reject the payment of ₹{payment.amount.toFixed(2)} for Order #{payment.order_number} from {payment.dealer_name}? This will revert the order to pending status.
+                                        Are you sure you want to reject the payment of ₹{payment.amount.toFixed(2)} for {payment.order_number === 0 ? 'General Balance' : `Order #${payment.order_number}`} from {payment.dealer_name}? This will delete the payment record and {payment.order_number === 0 ? 'require re-entry' : 'revert the order to pending status'}.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>

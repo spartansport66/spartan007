@@ -768,7 +768,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                               variant="ghost" 
                               size="icon" 
                               onClick={() => handleInitiatePayment(dealer.id, dealer.name)}
-                              title="Add Payment for Oldest Pending Order"
+                              title="Add Payment for Outstanding Balance"
                               disabled={loading || isSendingWhatsApp}
                             >
                               <DollarSign className="h-4 w-4 text-green-600" />
