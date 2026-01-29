@@ -152,7 +152,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     setLoading(true);
     
     const isGeneralBalancePayment = orderToUpdate.order_number === 0;
-    let dealerId = orderToUpdate.order_number === 0 ? orderToUpdate.id : null;
+    let dealerId = orderToUpdate.order_number === 0 ? orderToUpdate.id : null; // If general payment, ID is the dealer ID
 
     try {
         if (!dealerId) {
