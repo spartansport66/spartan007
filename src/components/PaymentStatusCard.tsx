@@ -37,7 +37,6 @@ interface Order {
   ifsc_code: string | null;
   upi_id: string | null;
   transaction_id: string | null;
-  has_pending_approval_payment: boolean; // New field
 }
 
 interface DealerOption {
@@ -50,7 +49,6 @@ interface DealerBalance {
   name: string;
   opening_balance: number;
   current_balance: number; // New: Calculated ledger balance
-  has_pending_approval_payment: boolean; // New field
 }
 
 interface PendingOrderPayment {
@@ -141,8 +139,7 @@ const PaymentStatusCard: React.FC = () => {
               account_number,
               ifsc_code,
               upi_id,
-              transaction_id,
-              status
+              transaction_id
             )
           `)
           .eq('user_id', user.id) // Filter by current sales person
@@ -188,10 +185,6 @@ const PaymentStatusCard: React.FC = () => {
           const formattedOrders: Order[] = (ordersData || []).map((order: any) => {
             // Payment details are now directly nested in order.payments
             const paymentInfo = order.payments && order.payments.length > 0 ? order.payments[0] : null;
-            
-            // Check if any payment is pending approval for this order
-            const hasPendingApproval = (order.payments || []).some((p: any) => p.status === 'pending_approval');
-
             return {
               id: order.id,
               order_number: order.order_number,
@@ -215,7 +208,6 @@ const PaymentStatusCard: React.FC = () => {
               ifsc_code: paymentInfo?.ifsc_code || null,
               upi_id: paymentInfo?.upi_id || null,
               transaction_id: paymentInfo?.transaction_id || null,
-              has_pending_approval_payment: hasPendingApproval, // Set new field
             };
           });
           setOrders(formattedOrders);
@@ -243,8 +235,7 @@ const PaymentStatusCard: React.FC = () => {
               id,
               name,
               dealer_balances(opening_balance),
-              orders(total_amount, payments(amount, status)),
-              payments!general_payments (status)
+              orders(total_amount, payments(amount, status))
             `)
             .in('id', assignedDealerIds);
 
@@ -266,15 +257,11 @@ const PaymentStatusCard: React.FC = () => {
               
               const currentBalance = openingBalance + netTransactionBalance; // Ledger Balance
               
-              // Check for pending approval general payments
-              const hasPendingApproval = (dealer.payments_general_payments || []).some((p: any) => p.status === 'pending_approval');
-              
               return {
                 id: dealer.id,
                 name: dealer.name,
                 opening_balance: openingBalance,
                 current_balance: currentBalance,
-                has_pending_approval_payment: hasPendingApproval, // Set new field
               };
             })
             .filter((dealer: DealerBalance) => dealer.current_balance > 0); // Only show dealers with positive ledger balance
@@ -307,35 +294,24 @@ const PaymentStatusCard: React.FC = () => {
   };
 
   const handleAddPaymentDetails = (order: Order) => {
-    // Only allow adding payment if status is 'pending' and no payment is already pending approval
-    if (order.payment_status === 'pending' && !order.has_pending_approval_payment) {
-      setSelectedOrderForPaymentUpdate({
-        id: order.id,
-        order_number: order.order_number,
-        total_amount: order.total_amount,
-        dealer_name: order.dealer_name,
-        payment_due_date: order.payment_due_date,
-      });
-      setIsUpdatePaymentDialogOpen(true);
-    } else if (order.has_pending_approval_payment) {
-      showError(`Payment for Order #${order.order_number} is already pending approval.`);
-    }
+    setSelectedOrderForPaymentUpdate({
+      id: order.id,
+      order_number: order.order_number,
+      total_amount: order.total_amount,
+      dealer_name: order.dealer_name,
+      payment_due_date: order.payment_due_date,
+    });
+    setIsUpdatePaymentDialogOpen(true);
   };
   
-  const handleInitiatePaymentForBalance = async (dealer: DealerBalance) => {
-    // Only allow adding payment if no payment is already pending approval for this general balance
-    if (dealer.has_pending_approval_payment) {
-      showError(`Payment for ${dealer.name}'s outstanding balance is already pending approval.`);
-      return;
-    }
-    
+  const handleInitiatePaymentForBalance = async (dealerId: string, dealerName: string) => {
     setLoading(true);
     try {
       // 1. Find the oldest pending order for this dealer
       const { data: orders, error } = await supabase
         .from('orders')
         .select('id, order_number, total_amount, payment_due_date')
-        .eq('dealer_id', dealer.id)
+        .eq('dealer_id', dealerId)
         .eq('payment_status', 'pending')
         .order('order_date', { ascending: true }) // Oldest first
         .limit(1)
@@ -345,7 +321,8 @@ const PaymentStatusCard: React.FC = () => {
         throw error;
       }
 
-      const currentBalance = dealer.current_balance || 0;
+      const dealer = dealerBalances.find(d => d.id === dealerId);
+      const currentBalance = dealer?.current_balance || 0;
 
       if (orders) {
         // Found a pending order, link payment to it
@@ -353,23 +330,23 @@ const PaymentStatusCard: React.FC = () => {
           id: orders.id,
           order_number: orders.order_number,
           total_amount: orders.total_amount,
-          dealer_name: dealer.name,
+          dealer_name: dealerName,
           payment_due_date: orders.payment_due_date,
         });
         setIsUpdatePaymentDialogOpen(true);
       } else if (currentBalance > 0) {
-        // No pending orders found, but there is a positive closing balance (likely from opening balance).
+        // FIX: No pending orders found, but there is a positive closing balance (likely from opening balance).
         // Create a mock order object to carry the payment amount.
         setSelectedOrderForPaymentUpdate({
-          id: dealer.id, // Use dealer ID as a unique identifier for this mock payment
+          id: dealerId, // Use dealer ID as a unique identifier for this mock payment
           order_number: 0, // Use 0 or a special number for mock order
           total_amount: currentBalance, // Use the full current balance as the amount to be paid
-          dealer_name: dealer.name,
+          dealer_name: dealerName,
           payment_due_date: null,
         });
         setIsUpdatePaymentDialogOpen(true);
       } else {
-        showError(`Dealer ${dealer.name} has no outstanding balance or pending orders.`);
+        showError(`Dealer ${dealerName} has no outstanding balance or pending orders.`);
       }
     } catch (error: any) {
       console.error('Error initiating payment:', error.message);
@@ -555,11 +532,11 @@ const PaymentStatusCard: React.FC = () => {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            onClick={() => handleInitiatePaymentForBalance(dealer)}
-                            title={dealer.has_pending_approval_payment ? "Payment Pending Approval" : "Add Payment for Outstanding Balance"}
-                            disabled={loading || dealer.has_pending_approval_payment}
+                            onClick={() => handleInitiatePaymentForBalance(dealer.id, dealer.name)}
+                            title="Add Payment for Outstanding Balance"
+                            disabled={loading}
                           >
-                            {dealer.has_pending_approval_payment ? <Clock className="h-4 w-4 text-blue-600" /> : <DollarSign className="h-4 w-4 text-green-600" />}
+                            <DollarSign className="h-4 w-4 text-green-600" />
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -621,7 +598,7 @@ const PaymentStatusCard: React.FC = () => {
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
-                          {order.payment_status === 'pending' && !order.has_pending_approval_payment && (
+                          {order.payment_status === 'pending' && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -631,7 +608,7 @@ const PaymentStatusCard: React.FC = () => {
                               <DollarSign className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
-                          {(order.payment_status === 'paid' || order.payment_status === 'pending_approval' || order.has_pending_approval_payment) && (
+                          {(order.payment_status === 'paid' || order.payment_status === 'pending_approval') && order.payment_method && (
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -651,22 +628,23 @@ const PaymentStatusCard: React.FC = () => {
           )}
         </div>
 
-        {/* Payment Details Dialog (for viewing details of paid/pending_approval orders) */}
-        <Dialog open={isPaymentDetailsDialogOpen} onOpenChange={setIsPaymentDetailsDialogOpen}>
-          <DialogContent className="sm:max-w-[600px]">
-            <DialogHeader>
-              <DialogTitle>Payment Details</DialogTitle>
-              <DialogDescription>
-                Detailed information about the payment for this order.
-              </DialogDescription>
-            </DialogHeader>
-            {selectedOrderForPaymentDetails && (
-              <div className="py-4">
-                {renderPaymentDetails(selectedOrderForPaymentDetails)}
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        {/* Payment Details Section - Always visible below the table */}
+        <div className="mt-6 p-4 bg-muted rounded-lg">
+          <h3 className="text-lg font-semibold mb-3">Payment Details</h3>
+          {orders.filter(order => order.payment_status === 'paid' || order.payment_status === 'pending_approval').length === 0 ? (
+            <p className="text-muted-foreground">No paid orders with payment details available.</p>
+          ) : (
+            <div className="space-y-4 max-h-60 overflow-y-auto">
+              {orders
+                .filter(order => order.payment_status === 'paid' || order.payment_status === 'pending_approval')
+                .map(order => (
+                  <div key={`payment-${order.id}`} className="p-3 bg-background rounded-md border">
+                    {renderPaymentDetails(order)}
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
       </CardContent>
       {selectedOrderForPaymentUpdate && (
         <UpdatePaymentDialog 
@@ -676,6 +654,22 @@ const PaymentStatusCard: React.FC = () => {
           onPaymentUpdated={handlePaymentUpdated} 
         />
       )}
+      {/* Payment Details Dialog */}
+      <Dialog open={isPaymentDetailsDialogOpen} onOpenChange={setIsPaymentDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Payment Details</DialogTitle>
+            <DialogDescription>
+              Detailed information about the payment for this order.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedOrderForPaymentDetails && (
+            <div className="py-4">
+              {renderPaymentDetails(selectedOrderForPaymentDetails)}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
