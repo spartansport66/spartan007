@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown, ChevronsUpDown, DollarSign } from 'lucide-react';
+import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown, ChevronsUpDown, DollarSign, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import RCSBulkMessageSender from '@/components/RCSBulkMessageSender';
 import { cn } from '@/lib/utils';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -469,6 +470,28 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       setIsSendingWhatsApp(false);
     }
   };
+  
+  const handleResetOpeningBalance = async (dealerId: string, dealerName: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('dealer_balances')
+        .upsert(
+          { dealer_id: dealerId, opening_balance: 0 },
+          { onConflict: 'dealer_id' }
+        );
+
+      if (error) throw error;
+
+      showSuccess(`Opening balance for ${dealerName} manually reset to ₹0.00 successfully!`);
+      fetchClosingBalances(); // Refresh data
+    } catch (error: any) {
+      console.error('Error resetting opening balance:', error);
+      showError(`Failed to reset opening balance: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSort = (key: 'name' | 'closing_balance' | 'daysSinceLastBill') => {
     if (sortKey === key) {
@@ -601,7 +624,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+      <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-primary">Dealer Closing Balance Report</DialogTitle>
           <DialogDescription>
@@ -763,7 +786,6 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                                 <MessageCircle className="h-4 w-4 text-blue-500" />
                               )}
                             </Button>
-                            {/* NEW: Add Payment Button */}
                             <Button 
                               variant="ghost" 
                               size="icon" 
@@ -773,6 +795,35 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                             >
                               <DollarSign className="h-4 w-4 text-green-600" />
                             </Button>
+                            {/* New: Reset Opening Balance Button */}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  title="Manually Reset Opening Balance to Zero"
+                                  disabled={loading || isSendingWhatsApp}
+                                >
+                                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirm Manual Balance Reset</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you absolutely sure you want to manually reset the **Opening Balance** for **{dealer.name}** to **₹0.00**? 
+                                    This action is irreversible and should only be used for administrative correction if the balance was cleared outside the system.
+                                    <p className="mt-2 font-bold text-red-600">Current Closing Balance: ₹{dealer.closing_balance.toFixed(2)}</p>
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleResetOpeningBalance(dealer.id, dealer.name)} disabled={loading}>
+                                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reset Balance to Zero'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </TableCell>
                       </TableRow>
