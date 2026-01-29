@@ -18,7 +18,11 @@ serve(async (req) => {
     const body = await req.json();
     const { paymentId, orderId, dealerId, amount, action } = body;
 
+    // Coerce amount to number defensively
+    const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+
     console.log(`[approve-payment] Received body:`, body);
+    console.log(`[approve-payment] Coerced amount: ${numericAmount}`);
 
     // Detailed validation check
     if (typeof paymentId !== 'string' || paymentId.length === 0) {
@@ -29,8 +33,8 @@ serve(async (req) => {
       console.error(`[approve-payment] Validation failed: dealerId is invalid (received: ${dealerId})`);
       return new Response(JSON.stringify({ error: 'Missing or invalid parameter: dealerId (must be a non-empty string).' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
-      console.error(`[approve-payment] Validation failed: amount is invalid (received: ${amount})`);
+    if (typeof numericAmount !== 'number' || isNaN(numericAmount) || numericAmount <= 0) {
+      console.error(`[approve-payment] Validation failed: amount is invalid (received: ${amount}, coerced: ${numericAmount}).`);
       return new Response(JSON.stringify({ error: `Missing or invalid parameter: amount (received ${amount}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     if (!['approve', 'reject'].includes(action)) {
