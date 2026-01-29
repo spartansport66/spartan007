@@ -24,6 +24,13 @@ serve(async (req) => {
     console.log(`[approve-payment] Received body:`, body);
     console.log(`[approve-payment] Coerced amount: ${numericAmount}`);
 
+    // --- STRICT INITIAL CHECK ---
+    if (!paymentId || !dealerId || !amount || !action) {
+        console.error(`[approve-payment] Strict check failed. Missing required fields.`);
+        return new Response(JSON.stringify({ error: 'Missing required parameters: paymentId, dealerId, amount, or action.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    // --- END STRICT INITIAL CHECK ---
+
     // Detailed validation checks for all required fields
     if (typeof paymentId !== 'string' || paymentId.length === 0) {
       console.error(`[approve-payment] Validation failed: paymentId is invalid (received: ${paymentId})`);
