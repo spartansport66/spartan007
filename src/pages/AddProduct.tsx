@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,33 +11,32 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { showSuccess, showError } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Loader2, Upload } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-// import ExcelUpload from '@/components/ExcelUpload'; // Removed import
 
 // Zod schema for product validation
 const productSchema = z.object({
-  code: z.string().min(1, { message: 'Product Code is required.' }).trim(), // Added .trim()
-  name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }).trim(), // Added .trim()
-  description: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
-  size: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
-  hsn: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
-  gst: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  code: z.string().min(1, { message: 'Product Code is required.' }).trim(),
+  name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }).trim(),
+  description: z.string().nullable().optional().transform(val => val ? val.trim() : null),
+  size: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null),
+  hsn: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null),
+  gst: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null),
   dp: z.preprocess(
     (val) => {
       if (typeof val === 'string') {
         const trimmedVal = val.trim();
         if (trimmedVal === '') return undefined;
         const num = parseFloat(trimmedVal);
-        return isNaN(num) ? trimmedVal : num; // Pass number if valid, else original string for Zod to error on
+        return isNaN(num) ? trimmedVal : num;
       }
       return val;
     },
     z.coerce.number()
-      .min(0, { message: 'Dealer Price cannot be negative.' }) // Apply min before transform
-      .transform(val => Math.round(val)) // Round to nearest integer first
-      .default(0) // Default to 0
+      .min(0, { message: 'Dealer Price cannot be negative.' })
+      .transform(val => Math.round(val))
+      .default(0)
   ),
   stock: z.preprocess(
     (val) => {
@@ -45,52 +44,16 @@ const productSchema = z.object({
         const trimmedVal = val.trim();
         if (trimmedVal === '') return undefined;
         const num = parseFloat(trimmedVal);
-        return isNaN(num) ? trimmedVal : num; // Pass number if valid, else original string for Zod to error on
+        return isNaN(num) ? trimmedVal : num;
       }
       return val;
     },
     z.coerce.number()
-      .min(0, { message: 'Stock cannot be negative.' }) // Apply min before transform
-      .transform(val => Math.round(val)) // Round to nearest integer first
-      .default(0) // Default to 0
+      .min(0, { message: 'Stock cannot be negative.' })
+      .transform(val => Math.round(val))
+      .default(0)
   ),
 });
-
-// Define display headers for the ExcelUpload component
-const productDisplayHeaders = [
-  { key: 'code', label: 'Product Code' },
-  { key: 'name', label: 'Product Name' },
-  { key: 'description', label: 'Description' },
-  { key: 'size', label: 'Size' },
-  { key: 'hsn', label: 'HSN' },
-  { key: 'gst', label: 'GST (%)' },
-  { key: 'dp', label: 'Dealer Price (DP)' },
-  { key: 'stock', label: 'Stock' },
-];
-
-// Sample data for the ExcelUpload component
-const productSampleData = [
-  {
-    "Product Code": 'P001',
-    "Product Name": 'Laptop Pro X',
-    "Description": 'High-performance laptop for professionals.',
-    "Size": '15 inch',
-    "HSN": '8471',
-    "GST (%)": "18", 
-    "Dealer Price (DP)": 1000, // Changed to integer
-    "Stock": 50
-  },
-  {
-    "Product Code": 'P002',
-    "Product Name": 'Wireless Mouse',
-    "Description": 'Ergonomic wireless mouse.',
-    "Size": 'Small',
-    "HSN": '8471',
-    "GST (%)": "Exempt", 
-    "Dealer Price (DP)": 15, // Changed to integer
-    "Stock": 200
-  }
-];
 
 const AddProduct = () => {
   const navigate = useNavigate();
@@ -103,8 +66,8 @@ const AddProduct = () => {
       description: '',
       size: '',
       hsn: '',
-      gst: '', // Default to empty string
-      dp: 0, // Default to 0
+      gst: '',
+      dp: 0,
       stock: 0,
     },
   });
@@ -114,7 +77,7 @@ const AddProduct = () => {
       navigate('/login');
     } else if (!sessionLoading && user && !isAdmin) {
       showError('Access Denied: Only administrators can add products.');
-      navigate('/dashboard'); // Sales persons go to their dashboard
+      navigate('/dashboard');
     }
   }, [sessionLoading, user, isAdmin, navigate]);
 
@@ -129,7 +92,7 @@ const AddProduct = () => {
       .from('products')
       .insert([
         {
-          user_id: user.id, // Creator of the product (admin)
+          user_id: user.id,
           code: values.code,
           name: values.name,
           description: values.description,
@@ -153,8 +116,6 @@ const AddProduct = () => {
     }
   };
 
-  // Removed handleBulkUpload function
-
   if (sessionLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -165,7 +126,7 @@ const AddProduct = () => {
   }
 
   if (!isAdmin) {
-    return null; // Render nothing if not admin, as they are redirected
+    return null;
   }
 
   return (
@@ -261,7 +222,7 @@ const AddProduct = () => {
                       <FormItem>
                         <FormLabel>GST (%)</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., 18 or Exempt" {...field} /> {/* Changed type to text */}
+                          <Input placeholder="e.g., 18 or Exempt" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -274,7 +235,7 @@ const AddProduct = () => {
                       <FormItem>
                         <FormLabel>Dealer Price (DP)</FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="e.g., 1000" {...field} /> {/* Removed step="0.01" */}
+                          <Input type="number" placeholder="e.g., 1000" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
