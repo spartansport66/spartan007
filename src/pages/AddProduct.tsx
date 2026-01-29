@@ -14,7 +14,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { ArrowLeft, Loader2, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import ExcelUpload from '@/components/ExcelUpload'; // Updated import
+// import ExcelUpload from '@/components/ExcelUpload'; // Removed import
 
 // Zod schema for product validation
 const productSchema = z.object({
@@ -153,35 +153,7 @@ const AddProduct = () => {
     }
   };
 
-  const handleBulkUpload = async (productsToUpload: z.infer<typeof productSchema>[]) => {
-    if (!user) {
-      showError('You must be logged in to bulk add products.');
-      return;
-    }
-
-    const itemsToInsert = productsToUpload.map(product => ({
-      user_id: user.id,
-      code: product.code,
-      name: product.name,
-      description: product.description,
-      size: product.size,
-      hsn: product.hsn,
-      gst: product.gst,
-      dp: product.dp,
-      stock: product.stock,
-    }));
-
-    const { data: insertedItems, error: insertError } = await supabase
-      .from('products')
-      .insert(itemsToInsert)
-      .select();
-
-    if (insertError) {
-      throw insertError;
-    }
-    showSuccess(`Successfully uploaded ${insertedItems.length} products!`);
-    navigate('/manage-products'); // Navigate after successful bulk upload
-  };
+  // Removed handleBulkUpload function
 
   if (sessionLoading) {
     return (
@@ -208,7 +180,7 @@ const AddProduct = () => {
           Back to Admin Dashboard
         </Button>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <Card className="bg-card text-card-foreground shadow-lg">
             <CardHeader>
               <CardTitle className="text-2xl font-semibold text-primary">Add New Product</CardTitle>
@@ -328,39 +300,6 @@ const AddProduct = () => {
               </Form>
             </CardContent>
           </Card>
-          
-          <div className="space-y-6">
-            <ExcelUpload
-              onUpload={handleBulkUpload}
-              sampleData={productSampleData}
-              sampleFileName="sample_products.xlsx"
-              uploadButtonText="Upload Products"
-              displayHeaders={productDisplayHeaders}
-              validationSchema={productSchema}
-              // Exclude 'MRP' from mapping
-              excludedSourceHeaders={['MRP']}
-            />
-            
-            <Card className="bg-card text-card-foreground shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  Bulk Upload Instructions
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="list-disc pl-5 space-y-2 text-sm">
-                  <li>Download the sample Excel file to see the required format</li>
-                  <li>Required columns: Product Code, Product Name, Dealer Price (DP), Stock</li>
-                  <li>Description, Size, HSN, GST are optional</li>
-                  <li>Prices (DP) should be whole numbers (e.g., 1000, 15)</li>
-                  <li>GST can be a number or text (e.g., 18 or Exempt)</li>
-                  <li>Stock should be a whole number (e.g., 100)</li>
-                  <li>Save your file as .xlsx or .xls format</li>
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       </div>
       <MadeWithDyad />
