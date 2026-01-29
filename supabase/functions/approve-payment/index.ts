@@ -15,23 +15,30 @@ serve(async (req) => {
   }
 
   try {
-    const { paymentId, orderId, dealerId, amount, action } = await req.json();
+    const body = await req.json();
+    const { paymentId, orderId, dealerId, amount, action } = body;
+
+    console.log(`[approve-payment] Received body:`, body);
 
     // Detailed validation check
     if (typeof paymentId !== 'string' || paymentId.length === 0) {
-      return new Response(JSON.stringify({ error: 'Missing or invalid parameter: paymentId (must be a string).' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.error(`[approve-payment] Validation failed: paymentId is invalid (received: ${paymentId})`);
+      return new Response(JSON.stringify({ error: 'Missing or invalid parameter: paymentId (must be a non-empty string).' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     if (typeof dealerId !== 'string' || dealerId.length === 0) {
-      return new Response(JSON.stringify({ error: 'Missing or invalid parameter: dealerId (must be a string).' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.error(`[approve-payment] Validation failed: dealerId is invalid (received: ${dealerId})`);
+      return new Response(JSON.stringify({ error: 'Missing or invalid parameter: dealerId (must be a non-empty string).' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    if (typeof amount !== 'number' || isNaN(amount)) {
+    if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
+      console.error(`[approve-payment] Validation failed: amount is invalid (received: ${amount})`);
       return new Response(JSON.stringify({ error: `Missing or invalid parameter: amount (received ${amount}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     if (!['approve', 'reject'].includes(action)) {
+      console.error(`[approve-payment] Validation failed: action is invalid (received: ${action})`);
       return new Response(JSON.stringify({ error: `Missing or invalid parameter: action (received ${action}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     
-    console.log(`[approve-payment] Processing action: ${action} for paymentId: ${paymentId}, orderId: ${orderId}, dealerId: ${dealerId}, amount: ${amount}`);
+    console.log(`[approve-payment] All initial parameters validated successfully.`);
 
     const supabaseAdmin = createClient(
       // @ts-ignore
@@ -45,6 +52,7 @@ serve(async (req) => {
     let paymentData = null;
 
     if (orderId) {
+      console.log(`[approve-payment] Processing order payment (orderId: ${orderId}).`);
       // Fetch payment details (payment_method, cheque_dd_date)
       const { data: pd, error: paymentError } = await supabaseAdmin
         .from('payments')
@@ -87,6 +95,8 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+    } else {
+        console.log(`[approve-payment] Processing general balance payment (orderId is null).`);
     }
     // --- End Due Date Check ---
 
