@@ -68,8 +68,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
   const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
 
-  // Payment at order time states
-  const [isPaidAtOrderTime, setIsPaidAtOrderTime] = useState(false);
+  // Payment at order time states - ALWAYS TRUE NOW
+  const isPaidAtOrderTime = true;
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
 
@@ -472,7 +472,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setSelectedDealer('');
       setOrderItems([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
       setDealerBalance(null);
-      setIsPaidAtOrderTime(false);
+      // isPaidAtOrderTime is always true, no need to reset
       setPaymentMethod('');
       setPaymentAmount(0);
       setChequeDdNo('');
@@ -856,99 +856,82 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             </div>
           )}
 
-          {/* Payment at Order Time Section */}
+          {/* Payment at Order Time Section - Now always visible */}
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex items-center space-x-2">
-              <Checkbox
-                id="paidAtOrderTime"
-                checked={isPaidAtOrderTime}
-                onCheckedChange={(checked) => {
-                  setIsPaidAtOrderTime(!!checked);
-                  if (!!checked) {
-                    setPaymentAmount(parseFloat(totalOrderValue.toFixed(2))); // Use parseFloat for amount
-                  } else {
-                    setPaymentMethod('');
-                    setPaymentAmount(0);
-                    setChequeDdNo('');
-                    setChequeDdDate('');
-                    setTransactionId('');
-                  }
-                }}
-              />
-              <Label htmlFor="paidAtOrderTime" className="text-base font-medium">
-                Payment Received at Order Time
+              <Check className="h-5 w-5 text-green-600" />
+              <Label className="text-base font-medium text-green-600">
+                Payment Received at Order Time (Mandatory)
               </Label>
             </div>
 
-            {isPaidAtOrderTime && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="paymentMethod">Payment Method</Label>
-                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                    <SelectTrigger id="paymentMethod" className="w-full">
-                      <SelectValue placeholder="Select payment method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {paymentMethodsOptions.map((method) => (
-                        <SelectItem key={method} value={method}>
-                          {method}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="paymentAmount">Amount Paid</Label>
-                  <Input
-                    id="paymentAmount"
-                    type="number"
-                    step="0.01" // Allow decimal input
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)} // Use parseFloat
-                    className="w-full"
-                  />
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="paymentMethod">Payment Method</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger id="paymentMethod" className="w-full">
+                    <SelectValue placeholder="Select payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentMethodsOptions.map((method) => (
+                      <SelectItem key={method} value={method}>
+                        {method}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="paymentAmount">Amount Paid</Label>
+                <Input
+                  id="paymentAmount"
+                  type="number"
+                  step="0.01" // Allow decimal input
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)} // Use parseFloat
+                  className="w-full"
+                />
+              </div>
 
-                {paymentMethod === 'Cheque/DD' && (
-                  <>
-                    <div>
-                      <Label htmlFor="chequeDdNo">Cheque/DD Number</Label>
-                      <Input
-                        id="chequeDdNo"
-                        type="text"
-                        value={chequeDdNo}
-                        onChange={(e) => setChequeDdNo(e.target.value)}
-                        className="w-full"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="chequeDdDate">Cheque/DD Date</Label>
-                      <Input
-                        id="chequeDdDate"
-                        type="date"
-                        value={chequeDdDate}
-                        onChange={(e) => setChequeDdDate(e.target.value)}
-                        className="w-full"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {(paymentMethod === 'Card' || paymentMethod === 'Bank Transfer' || paymentMethod === 'UPI' || paymentMethod === 'Cash') && (
+              {paymentMethod === 'Cheque/DD' && (
+                <>
                   <div>
-                    <Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label>
+                    <Label htmlFor="chequeDdNo">Cheque/DD Number</Label>
                     <Input
-                      id="transactionId"
+                      id="chequeDdNo"
                       type="text"
-                      value={transactionId}
-                      onChange={(e) => setTransactionId(e.target.value)}
+                      value={chequeDdNo}
+                      onChange={(e) => setChequeDdNo(e.target.value)}
                       className="w-full"
-                      placeholder={paymentMethod === 'Cash' ? 'Cash transaction reference' : 'e.g., TXN123456789'}
                     />
                   </div>
-                )}
-              </div>
-            )}
+                  <div>
+                    <Label htmlFor="chequeDdDate">Cheque/DD Date</Label>
+                    <Input
+                      id="chequeDdDate"
+                      type="date"
+                      value={chequeDdDate}
+                      onChange={(e) => setChequeDdDate(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                </>
+              )}
+
+              {(paymentMethod === 'Card' || paymentMethod === 'Bank Transfer' || paymentMethod === 'UPI' || paymentMethod === 'Cash') && (
+                <div>
+                  <Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label>
+                  <Input
+                    id="transactionId"
+                    type="text"
+                    value={transactionId}
+                    onChange={(e) => setTransactionId(e.target.value)}
+                    className="w-full"
+                    placeholder={paymentMethod === 'Cash' ? 'Cash transaction reference' : 'e.g., TXN123456789'}
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           <Button
