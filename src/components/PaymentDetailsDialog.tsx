@@ -9,7 +9,7 @@ import { showError } from '@/utils/toast';
 
 interface PaymentDetails {
   id: string;
-  order_id: string;
+  order_id: string | null;
   order_number: number;
   amount: number;
   payment_method: string;
@@ -81,7 +81,7 @@ const PaymentDetailsDialog: React.FC<PaymentDetailsDialogProps> = ({ paymentId, 
         setPaymentDetails({
           id: data.id,
           order_id: data.order_id,
-          order_number: data.orders?.[0]?.order_number || 0,
+          order_number: data.orders?.order_number || 0,
           amount: data.amount,
           payment_method: data.payment_method,
           payment_date: data.payment_date,
@@ -140,7 +140,7 @@ const PaymentDetailsDialog: React.FC<PaymentDetailsDialogProps> = ({ paymentId, 
           <div>
             <h3 className="text-lg font-semibold">Payment Information</h3>
             <div className="mt-2 space-y-2">
-              <p><span className="font-medium">Order Number:</span> #{paymentDetails.order_number}</p>
+              <p><span className="font-medium">Reference:</span> {paymentDetails.order_number === 0 ? 'General Balance' : `Order #${paymentDetails.order_number}`}</p>
               <p><span className="font-medium">Payment Method:</span> {paymentDetails.payment_method}</p>
               <p><span className="font-medium">Amount:</span> ₹{paymentDetails.amount.toFixed(2)}</p>
               <p><span className="font-medium">Payment Date:</span> {new Date(paymentDetails.payment_date).toLocaleDateString()}</p>
@@ -157,9 +157,13 @@ const PaymentDetailsDialog: React.FC<PaymentDetailsDialogProps> = ({ paymentId, 
           <div>
             <h3 className="text-lg font-semibold">Transaction Details</h3>
             <div className="mt-2 space-y-2">
-              {paymentDetails.transaction_id ? (
+              {paymentDetails.transaction_id && (
                 <p><span className="font-medium">Transaction ID:</span> {paymentDetails.transaction_id}</p>
-              ) : (
+              )}
+              {paymentDetails.upi_id && (
+                <p><span className="font-medium">UPI ID:</span> {paymentDetails.upi_id}</p>
+              )}
+              {(!paymentDetails.transaction_id && !paymentDetails.upi_id) && (
                 <p><span className="font-medium">Transaction ID:</span> N/A</p>
               )}
             </div>
@@ -197,15 +201,6 @@ const PaymentDetailsDialog: React.FC<PaymentDetailsDialogProps> = ({ paymentId, 
               <p><span className="font-medium">Bank Name:</span> {paymentDetails.bank_name || 'N/A'}</p>
               <p><span className="font-medium">Account Number:</span> {paymentDetails.account_number ? `****${paymentDetails.account_number.slice(-4)}` : 'N/A'}</p>
               <p><span className="font-medium">IFSC Code:</span> {paymentDetails.ifsc_code || 'N/A'}</p>
-            </div>
-          </div>
-        )}
-
-        {paymentDetails.payment_method === 'UPI' && (
-          <div className="border-t pt-4">
-            <h3 className="text-lg font-semibold">UPI Details</h3>
-            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-              <p><span className="font-medium">UPI ID:</span> {paymentDetails.upi_id || 'N/A'}</p>
             </div>
           </div>
         )}

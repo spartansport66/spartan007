@@ -15,7 +15,7 @@ import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 interface PendingPaymentItem {
   type: 'order_due_today' | 'payment_pending_approval_today';
   id: string; // Order ID for 'order_due_today', Payment ID for others
-  order_id: string; // Always the order ID (or dealer ID for general payment)
+  order_id: string | null; // Actual Order ID (null for general payment)
   order_number: number;
   dealer_name: string;
   dealer_phone: string;
@@ -166,7 +166,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
           return {
             type: 'payment_pending_approval_today',
             id: payment.id, // Payment ID
-            order_id: payment.order_id || payment.dealer_id, // Use dealer ID if order_id is null
+            order_id: payment.order_id, // Actual Order ID (can be null)
             order_number: orderNumber || 0,
             dealer_name: dealerName || 'N/A',
             dealer_phone: dealerPhone || '',
@@ -307,7 +307,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         },
         body: JSON.stringify({
           paymentId: payment.id, // This is the payment record ID
-          orderId: payment.order_number === 0 ? null : payment.order_id, // Pass null if general payment
+          orderId: payment.order_id, // Actual order ID (can be null for general payment)
           dealerId: payment.dealer_id,
           amount: payment.amount,
           action: action,
@@ -349,7 +349,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       return;
     }
     if (!companyName) {
-      showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
+      showError('Company name is required to send WhatsApp messages. Please contact an administrator.');
       return;
     }
     const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
@@ -532,7 +532,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       {selectedOrderForPaymentUpdate && (
         <UpdatePaymentDialog
           orderToUpdate={{
-            id: selectedOrderForPaymentUpdate.order_id,
+            id: selectedOrderForPaymentUpdate.order_id || selectedOrderForPaymentUpdate.dealer_id, // Use dealer_id if order_id is null
             order_number: selectedOrderForPaymentUpdate.order_number,
             total_amount: selectedOrderForPaymentUpdate.amount,
             dealer_name: selectedOrderForPaymentUpdate.dealer_name,
