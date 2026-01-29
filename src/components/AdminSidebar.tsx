@@ -64,8 +64,10 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           className
         )}
       >
-        {icon}
-        {label}
+        <span className="flex items-center gap-2">
+          {icon}
+          {label}
+        </span>
       </Button>
     </SheetClose>
   );
