@@ -685,7 +685,8 @@ const PaymentStatusCard: React.FC = () => {
                         </div>
                       </TableCell>
                       <TableCell className={isOverdue(order.payment_due_date, order.payment_status) ? "text-destructive font-semibold" : "text-muted-foreground"}>
-                        {formatDate(order.payment_due_date)}
+                        {/* Display payment_date if it's a general balance payment, otherwise use payment_due_date */}
+                        {order.order_number === 0 ? formatDate(order.payment_date) : formatDate(order.payment_due_date)}
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
