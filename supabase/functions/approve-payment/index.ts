@@ -31,6 +31,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: `Missing or invalid parameter: action (received ${action}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     
+    // orderId can be null for general payments, so we don't validate its presence.
+    
     console.log(`[approve-payment] Processing action: ${action} for paymentId: ${paymentId}, orderId: ${orderId}, dealerId: ${dealerId}, amount: ${amount}`);
 
     const supabaseAdmin = createClient(
@@ -117,31 +119,19 @@ serve(async (req) => {
         });
       } else {
         // 2b. General Payment: Update dealer_balances (reduce opening_balance by amount)
-        const { data: currentBalanceData, error: fetchBalanceError } = await supabaseAdmin
-          .from('dealer_balances')
-          .select('opening_balance')
-          .eq('dealer_id', dealerId)
-          .single();
-
-        if (fetchBalanceError && fetchBalanceError.code !== 'PGRST116') {
-          throw new Error(`Failed to fetch current balance for general payment: ${fetchBalanceError.message}`);
-        }
-
-        const currentOpeningBalance = currentBalanceData?.opening_balance || 0;
-        const newOpeningBalance = Math.max(0, currentOpeningBalance - amount);
-
-        const { error: balanceUpdateError } = await supabaseAdmin
-          .from('dealer_balances')
-          .upsert({
-            dealer_id: dealerId,
-            opening_balance: newOpeningBalance,
-          }, { onConflict: 'dealer_id' });
-
-        if (balanceUpdateError) {
-          throw new Error(`Failed to update dealer balance after general payment approval: ${balanceUpdateError.message}`);
-        }
-
-        return new Response(JSON.stringify({ message: 'General payment approved and dealer balance updated successfully.' }), {
+        // NOTE: The client-side logic for calculating the closing balance already accounts for all transactions.
+        // However, since the general payment was submitted against the *outstanding balance*, 
+        // we must ensure that the payment is correctly credited against the dealer's ledger.
+        // Since we don't have a separate 'closing_balance' column, and the ledger is calculated dynamically,
+        // the approval of a general payment should ideally just mark the payment as completed.
+        // The current implementation in the Edge Function attempts to reduce the 'opening_balance', 
+        // which is incorrect if the payment is meant to clear recent orders.
+        
+        // FIX: Since the ledger is calculated dynamically (Opening + Orders - Payments), 
+        // marking the payment as 'completed' is sufficient. The client-side reports will automatically reflect the credit.
+        // We remove the incorrect logic that modifies `dealer_balances.opening_balance`.
+        
+        return new Response(JSON.stringify({ message: 'General payment approved and credited successfully.' }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
