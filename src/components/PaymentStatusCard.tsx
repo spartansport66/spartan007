@@ -48,8 +48,8 @@ interface DealerBalance {
   id: string;
   name: string;
   opening_balance: number;
-  net_transaction_balance: number; // New: Orders - Completed Payments
-  current_balance: number; // New: Calculated ledger balance (Opening + Net Transaction)
+  total_payments_received: number; // New: Total Payments Received (Completed Payments)
+  current_balance: number; // Total Outstanding Balance (Ledger)
 }
 
 interface PendingOrderPayment {
@@ -315,24 +315,31 @@ const PaymentStatusCard: React.FC = () => {
             .map((dealer: any) => {
               const openingBalance = dealer.dealer_balances?.opening_balance || 0;
               
-              let netTransactionBalance = 0;
+              let totalSales = 0; // Total Orders (Debit)
+              let totalPaymentsReceived = 0; // Total Completed Payments (Credit)
+
               (dealer.orders || []).forEach((order: any) => {
-                netTransactionBalance += order.total_amount; // Debit
+                totalSales += order.total_amount;
+                
                 (order.payments || []).forEach((payment: any) => {
                   if (payment.status === 'completed') {
-                    netTransactionBalance -= payment.amount; // Credit
+                    totalPaymentsReceived += payment.amount;
                   }
                 });
               });
               
-              const currentBalance = openingBalance + netTransactionBalance; // Ledger Balance
+              // Calculate Net Transaction Balance (Orders - Completed Payments)
+              const netTransactionBalance = totalSales - totalPaymentsReceived;
+              
+              // Calculate Total Outstanding Balance (Ledger)
+              const currentBalance = openingBalance + netTransactionBalance; 
               
               return {
                 id: dealer.id,
                 name: dealer.name,
                 opening_balance: openingBalance,
-                net_transaction_balance: netTransactionBalance, // Store net transaction balance
-                current_balance: currentBalance, // Use calculated current balance
+                total_payments_received: totalPaymentsReceived, // New field
+                current_balance: currentBalance, // Total Outstanding Balance (Ledger)
               };
             })
             .filter((dealer: DealerBalance) => dealer.current_balance > 0); // Only show dealers with positive ledger balance
@@ -406,7 +413,7 @@ const PaymentStatusCard: React.FC = () => {
         });
         setIsUpdatePaymentDialogOpen(true);
       } else if (currentBalance > 0) {
-        // FIX: No pending orders found, but there is a positive closing balance (likely from opening balance).
+        // No pending orders found, but there is a positive closing balance (likely from opening balance).
         // Create a mock order object to carry the payment amount.
         setSelectedOrderForPaymentUpdate({
           id: dealerId, // Use dealer ID as a unique identifier for this mock payment
@@ -589,8 +596,8 @@ const PaymentStatusCard: React.FC = () => {
                     <TableRow>
                       <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                       <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Net Transaction Balance</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Total Outstanding Balance</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Received</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Balance Payment</TableHead>
                       <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -599,7 +606,7 @@ const PaymentStatusCard: React.FC = () => {
                       <TableRow key={dealer.id} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
                         <TableCell className="text-right font-semibold text-red-600">₹{dealer.opening_balance.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-semibold text-red-600">₹{dealer.net_transaction_balance.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-semibold text-green-600">₹{dealer.total_payments_received.toFixed(2)}</TableCell>
                         <TableCell className="text-right font-semibold text-red-600">₹{dealer.current_balance.toFixed(2)}</TableCell>
                         <TableCell className="text-center">
                           <Button 
