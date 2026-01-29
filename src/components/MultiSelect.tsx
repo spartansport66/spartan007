@@ -55,7 +55,8 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
           className={cn("w-full justify-between", className)}
           disabled={disabled}
         >
-          <React.Fragment>
+          {/* Ensure only one root element is passed inside the Button */}
+          <span className="flex items-center justify-between w-full">
             <div className="flex flex-wrap gap-1">
               {value.length === 0 ? (
                 <span className="text-muted-foreground">{placeholder}</span>
@@ -82,7 +83,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
               )}
             </div>
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </React.Fragment>
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
