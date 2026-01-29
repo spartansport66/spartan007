@@ -69,6 +69,7 @@ const Dashboard = () => {
   const { user, loading: sessionLoading, isAdmin, session } = useSession(); // Added session here
   const [orders, setOrders] = useState<OrderDisplay[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [loadingOrders, setLoadingOrders] = useState(true); // New state for orders loading
   const [salesPersonName, setSalesPersonName] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>(() => {
@@ -101,15 +102,14 @@ const Dashboard = () => {
 
   const handleRefreshData = useCallback(() => {
     setRefreshKey(prev => prev + 1);
+    // Also trigger order fetch explicitly if needed, although useEffect below handles it
   }, []);
 
-  const fetchDashboardData = useCallback(async () => {
+  const fetchInitialData = useCallback(async () => {
     if (!user) {
       setLoadingData(false);
       return;
     }
-
-    setLoadingData(true);
 
     // Fetch sales person name
     const { data: profileData, error: profileError } = await supabase
@@ -136,6 +136,16 @@ const Dashboard = () => {
       const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
       setAllDealers(formattedDealers);
     }
+    
+    setLoadingData(false);
+  }, [user]);
+
+  const fetchRecentOrders = useCallback(async () => {
+    if (!user) {
+      setLoadingOrders(false);
+      return;
+    }
+    setLoadingOrders(true);
 
     // Fetch orders and their associated sales items
     let ordersQuery = supabase
@@ -195,9 +205,10 @@ const Dashboard = () => {
       setOrders(processedOrders);
     }
 
-    setLoadingData(false);
+    setLoadingOrders(false);
   }, [user, filterDealerId, filterFromDate, filterToDate, refreshKey]); // Added refreshKey dependency
 
+  // Effect for initial data load (runs once)
   useEffect(() => {
     if (!sessionLoading) {
       if (!user) {
@@ -205,10 +216,17 @@ const Dashboard = () => {
       } else if (isAdmin) {
         navigate('/admin-dashboard');
       } else {
-        fetchDashboardData();
+        fetchInitialData();
       }
     }
-  }, [user, sessionLoading, isAdmin, fetchDashboardData, navigate]);
+  }, [user, sessionLoading, isAdmin, fetchInitialData, navigate]);
+  
+  // Effect for fetching orders (runs when filters or refreshKey change)
+  useEffect(() => {
+    if (user && !isAdmin) {
+      fetchRecentOrders();
+    }
+  }, [user, isAdmin, fetchRecentOrders]);
 
   const handleLogout = async () => {
     try {
@@ -231,6 +249,11 @@ const Dashboard = () => {
     }
   };
 
+  const handleApplyOrderFilters = () => {
+    // Trigger fetchRecentOrders by updating the refreshKey
+    setRefreshKey(prev => prev + 1);
+  };
+
   const handleClearFilters = () => {
     setFilterDealerId('');
     const today = new Date();
@@ -248,6 +271,9 @@ const Dashboard = () => {
 
     setFilterFromDate(thirtyDaysAgoString); // Reset to 30 days ago
     setFilterToDate(todayString); // Reset to today
+    
+    // Trigger fetchRecentOrders
+    setRefreshKey(prev => prev + 1);
   };
 
   const handleViewOrderDetails = (orderId: string) => {
@@ -382,7 +408,7 @@ const Dashboard = () => {
                 className="w-full"
               />
             </div>
-            <Button onClick={fetchDashboardData} className="flex items-center gap-2">
+            <Button onClick={handleApplyOrderFilters} className="flex items-center gap-2">
               <Search className="h-4 w-4" /> Apply Filters
             </Button>
             <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
@@ -390,7 +416,12 @@ const Dashboard = () => {
             </Button>
           </div>
           <div className="overflow-x-auto">
-            {orders.length === 0 ? (
+            {loadingOrders ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading orders...</p>
+              </div>
+            ) : orders.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No orders recorded yet or matching your filters.</p>
             ) : (
               <div className="max-h-[400px] overflow-y-auto border rounded-md">
