@@ -109,8 +109,12 @@ const PaymentStatusCard: React.FC = () => {
         })));
       }
 
+      const assignedDealerIds = (assignedDealersData || []).map((item: any) => item.dealers.id);
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO();
+      
+      let fetchedOrders: Order[] = [];
+      let fetchedGeneralPayments: Order[] = [];
 
       // --- 1. Fetch Orders (if not filtering purely by opening balance) ---
       if (filterStatus !== 'opening_balance') {
@@ -182,7 +186,7 @@ const PaymentStatusCard: React.FC = () => {
           showError('Failed to load orders.');
           setOrders([]);
         } else {
-          const formattedOrders: Order[] = (ordersData || []).map((order: any) => {
+          fetchedOrders = (ordersData || []).map((order: any) => {
             // Payment details are now directly nested in order.payments
             const paymentInfo = order.payments && order.payments.length > 0 ? order.payments[0] : null;
             return {
@@ -210,24 +214,89 @@ const PaymentStatusCard: React.FC = () => {
               transaction_id: paymentInfo?.transaction_id || null,
             };
           });
-          setOrders(formattedOrders);
         }
-      } else {
-        setOrders([]); // Clear orders if filtering by opening balance
       }
 
-      // --- 2. Fetch Dealer Balances (for Outstanding Balance Ledger view) ---
+      // --- 2. Fetch General Balance Payments (Pending Approval) ---
+      if (filterStatus === 'pending_approval' || filterStatus === 'all') {
+        let generalPaymentQuery = supabase
+          .from('payments')
+          .select(`
+            id,
+            dealer_id,
+            amount,
+            payment_method,
+            payment_date,
+            cheque_dd_date,
+            status,
+            dealers (name, phone)
+          `)
+          .is('order_id', null) // Filter for general balance payments
+          .eq('status', 'pending_approval')
+          .in('dealer_id', assignedDealerIds); // Only show for assigned dealers
+
+        if (filterDealerId) {
+          generalPaymentQuery = generalPaymentQuery.eq('dealer_id', filterDealerId);
+        }
+        // Date filters apply to payment_date for general payments
+        if (filterFromDate) {
+          const startOfDay = `${filterFromDate}T00:00:00.000Z`;
+          generalPaymentQuery = generalPaymentQuery.gte('payment_date', startOfDay);
+        }
+        if (filterToDate) {
+          const endOfDay = `${filterToDate}T23:59:59.999Z`;
+          generalPaymentQuery = generalPaymentQuery.lte('payment_date', endOfDay);
+        }
+
+        const { data: generalPaymentsData, error: generalPaymentsError } = await generalPaymentQuery;
+
+        if (generalPaymentsError) {
+          console.error('Error fetching general payments:', generalPaymentsError.message);
+        } else {
+          fetchedGeneralPayments = (generalPaymentsData || []).map((payment: any) => ({
+            id: payment.dealer_id, // Use dealer ID as the main ID for this entry
+            order_number: 0, // Special marker for general balance payment
+            order_date: payment.payment_date,
+            total_amount: payment.amount,
+            dealer_name: payment.dealers?.name || 'N/A',
+            dealer_phone: payment.dealers?.phone || '',
+            payment_due_date: null,
+            payment_status: payment.status, // 'pending_approval'
+            // Payment details
+            payment_method: payment.payment_method,
+            payment_amount: payment.amount,
+            payment_date: payment.payment_date,
+            cheque_dd_no: null,
+            cheque_dd_date: payment.cheque_dd_date,
+            card_number: null,
+            card_holder_name: null,
+            expiry_date: null,
+            bank_name: null,
+            account_number: null,
+            ifsc_code: null,
+            upi_id: null,
+            transaction_id: null,
+          }));
+        }
+      }
+      
+      // Combine and sort orders and general payments
+      let combinedResults = [...fetchedOrders, ...fetchedGeneralPayments];
+      
+      // If filtering by 'pending_approval', only show pending approval items
+      if (filterStatus === 'pending_approval') {
+        combinedResults = combinedResults.filter(item => item.payment_status === 'pending_approval');
+      }
+      
+      // If filtering by 'all', sort by order_date/payment_date
+      if (filterStatus === 'all') {
+        combinedResults.sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime());
+      }
+
+      setOrders(combinedResults);
+
+      // --- 3. Fetch Dealer Balances (for Outstanding Balance Ledger view) ---
       if (filterStatus === 'opening_balance') {
-        // Fetch dealers assigned to the current user, including their balances and transactions
-        const { data: dealerAssignments, error: assignmentsError } = await supabase
-          .from('dealer_sales_persons')
-          .select('dealer_id')
-          .eq('sales_person_id', user.id);
-
-        if (assignmentsError) throw assignmentsError;
-
-        const assignedDealerIds = (dealerAssignments || []).map(a => a.dealer_id);
-
         if (assignedDealerIds.length > 0) {
           const { data: dealersWithTransactions, error: transactionsError } = await supabase
             .from('dealers')
@@ -394,7 +463,7 @@ const PaymentStatusCard: React.FC = () => {
     if (!order.payment_method) return null;
     return (
       <div className="space-y-2">
-        <h3 className="text-lg font-semibold">Payment Details for Order #{order.order_number}</h3>
+        <h3 className="text-lg font-semibold">Payment Details for {order.order_number === 0 ? 'General Balance' : `Order #${order.order_number}`}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           <div>
             <p><strong>Payment Method:</strong> {order.payment_method}</p>
@@ -583,7 +652,9 @@ const PaymentStatusCard: React.FC = () => {
                       key={order.id} 
                       className={isOverdue(order.payment_due_date, order.payment_status) ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-accent/50"}
                     >
-                      <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
+                      <TableCell className="font-medium text-foreground">
+                        {order.order_number === 0 ? 'General Balance' : `#${order.order_number}`}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(order.order_date)}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
@@ -598,7 +669,7 @@ const PaymentStatusCard: React.FC = () => {
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
-                          {order.payment_status === 'pending' && (
+                          {order.payment_status === 'pending' && order.order_number !== 0 && (
                             <Button 
                               variant="ghost" 
                               size="icon" 

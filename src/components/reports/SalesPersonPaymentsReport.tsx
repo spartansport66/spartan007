@@ -17,7 +17,7 @@ import PaymentDetailsDialog from '@/components/PaymentDetailsDialog';
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 
 interface PaymentReportData {
-  id: string; // Order ID
+  id: string; // Order ID (or Dealer ID for general payment)
   order_number: number;
   dealer_name: string;
   dealer_phone: string;
@@ -96,6 +96,8 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
           label: item.dealers.name
         })));
       }
+      
+      const assignedDealerIds = (assignedDealersData || []).map((item: any) => item.dealers.id);
 
       let fetchedData: any[] | null = null;
       let fetchError: any = null;
@@ -107,18 +109,18 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
         let query = supabase
           .from('payments')
           .select(`
-            id, order_id, amount, payment_method, payment_date, approved_at, status, cheque_dd_date,
-            orders!inner (
+            id, order_id, dealer_id, amount, payment_method, payment_date, approved_at, status, cheque_dd_date,
+            orders (
               id, order_number, order_date, total_amount, payment_status, payment_due_date, dealer_id, user_id,
               dealers (name, phone)
-            )
+            ),
+            dealers (name, phone)
           `)
           .eq('status', filterStatus === 'paid' ? 'completed' : 'pending_approval')
-          .eq('orders.user_id', user.id) // Filter by current user's orders
-          .order('payment_date', { ascending: true });
-
+          .or(`orders.user_id.eq.${user.id},dealer_id.in.(${assignedDealerIds.join(',')})`); // Filter by user's orders OR general payments for assigned dealers
+          
         if (filterDealerId) {
-          query = query.eq('orders.dealer_id', filterDealerId);
+          query = query.or(`orders.dealer_id.eq.${filterDealerId},dealer_id.eq.${filterDealerId}`);
         }
         if (filterFromDate) {
           const startOfDay = `${filterFromDate}T00:00:00.000Z`;
@@ -193,14 +195,16 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
 
           if (filterStatus === 'pending_approval' || filterStatus === 'paid') {
             // When querying payments directly
+            const isGeneralPayment = !item.order_id;
+            
             currentPaymentStatus = item.status === 'completed' ? 'paid' : item.status;
-            currentOrderId = item.orders.id;
-            currentOrderNumber = item.orders.order_number;
-            currentDealerName = item.orders.dealers?.name || 'N/A';
-            currentDealerPhone = item.orders.dealers?.phone || '';
+            currentOrderId = isGeneralPayment ? item.dealer_id : item.orders.id; // Use dealer ID if general payment
+            currentOrderNumber = isGeneralPayment ? 0 : item.orders.order_number;
+            currentDealerName = isGeneralPayment ? item.dealers?.name || 'N/A' : item.orders?.dealers?.name || 'N/A';
+            currentDealerPhone = isGeneralPayment ? item.dealers?.phone || '' : item.orders?.dealers?.phone || '';
             currentTotalAmount = item.amount; // Payment amount from the payment record
-            currentPaymentDueDate = item.orders.payment_due_date;
-            currentOrderDate = item.orders.order_date;
+            currentPaymentDueDate = isGeneralPayment ? null : item.orders?.payment_due_date;
+            currentOrderDate = isGeneralPayment ? item.payment_date : item.orders?.order_date; // Use payment date for general payment
             currentPaymentId = item.id; // This is the payment record ID
             currentPaymentMethod = item.payment_method;
             currentChequeDdDate = item.cheque_dd_date;
@@ -231,6 +235,7 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
             payment_id: currentPaymentId,
             payment_method: currentPaymentMethod,
             cheque_dd_date: currentChequeDdDate,
+            dealer_id: item.dealer_id, // Ensure dealer_id is always present
           };
         });
         setPayments(formattedPayments);
@@ -344,7 +349,7 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
       ];
 
       const tableRows = payments.map(payment => [
-        `#${payment.order_number}`,
+        payment.order_number === 0 ? 'General Balance' : `#${payment.order_number}`,
         payment.dealer_name,
         payment.dealer_phone || 'N/A',
         new Date(payment.order_date).toLocaleDateString(),
@@ -383,7 +388,7 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
         },
         margin: { top: 10, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 20, halign: 'center' },
+          0: { cellWidth: 25, halign: 'center' },
           1: { cellWidth: 35 },
           2: { cellWidth: 25 },
           3: { cellWidth: 25, halign: 'center' },
@@ -490,7 +495,7 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
                     <TableHead className="text-muted-foreground font-bold text-right">Amount</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Status</TableHead>
                     <TableHead className="text-muted-foreground font-bold">Due Date</TableHead>
-                    <TableHead className="text-muted-foreground font-bold">Order Date</TableHead>
+                    <TableHead className="text-muted-foreground font-bold">Order/Payment Date</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -499,7 +504,9 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
                     const displayStatus = payment.payment_status ?? 'unknown';
                     return (
                       <TableRow key={payment.id} className="hover:bg-accent/50">
-                        <TableCell className="font-medium text-foreground">#{payment.order_number}</TableCell>
+                        <TableCell className="font-medium text-foreground">
+                          {payment.order_number === 0 ? 'General Balance' : `#${payment.order_number}`}
+                        </TableCell>
                         <TableCell className="text-foreground">{payment.dealer_name}</TableCell>
                         <TableCell className="text-foreground text-right font-medium">₹{payment.total_amount.toFixed(2)}</TableCell>
                         <TableCell>
@@ -514,7 +521,12 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
                         <TableCell className="text-foreground">{new Date(payment.order_date).toLocaleDateString()}</TableCell>
                         <TableCell className="text-center">
                           <div className="flex justify-center gap-2">
-                            {payment.payment_status === 'pending' && payment.dealer_phone && (
+                            {payment.payment_status === 'pending' && payment.order_number !== 0 && (
+                              <Button variant="ghost" size="icon" onClick={() => handleUpdatePaymentClick(payment)} title="Add Payment" className="hover:bg-green-100">
+                                <DollarSign className="h-4 w-4 text-green-600" />
+                              </Button>
+                            )}
+                            {payment.payment_status === 'pending' && payment.order_number !== 0 && payment.dealer_phone && (
                               <Button variant="ghost" size="icon" onClick={() => handleSendWhatsApp(
                                 payment.dealer_phone,
                                 payment.dealer_name,
@@ -553,6 +565,14 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
           <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
         </DialogFooter>
       </DialogContent>
+      {selectedOrderForPaymentUpdate && (
+        <UpdatePaymentDialog
+          orderToUpdate={selectedOrderForPaymentUpdate}
+          isOpen={isUpdatePaymentDialogOpen}
+          onOpenChange={setIsUpdatePaymentDialogOpen}
+          onPaymentUpdated={handlePaymentUpdated}
+        />
+      )}
       {selectedPaymentIdForDetails && (
         <PaymentDetailsDialog
           paymentId={selectedPaymentIdForDetails}
@@ -564,4 +584,4 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
   );
 };
 
-export default SalesPersonPaymentsReport;
+export default PaymentsReportDialog;
