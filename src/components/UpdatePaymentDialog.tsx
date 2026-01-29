@@ -12,6 +12,7 @@ import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import PaymentDetailsDialog from '@/components/PaymentDetailsDialog'; // Ensure this is imported correctly
 
 interface PendingOrderPayment {
   id: string; // Order ID (or Dealer ID if order_number is 0)
@@ -99,6 +100,10 @@ const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/D
 
 const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate, isOpen, onOpenChange, onPaymentUpdated }) => {
   const [loading, setLoading] = useState(false);
+  // State for PaymentDetailsDialog (used if we need to view details after submission, though usually handled by parent)
+  const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
+  const [selectedPaymentIdForDetails, setSelectedPaymentIdForDetails] = useState<string | null>(null);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -147,15 +152,25 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     setLoading(true);
     
     const isGeneralBalancePayment = orderToUpdate.order_number === 0;
-    const dealerId = orderToUpdate.order_number === 0 ? orderToUpdate.id : (await supabase.from('orders').select('dealer_id').eq('id', orderToUpdate.id).single()).data?.dealer_id;
-
-    if (!dealerId) {
-        showError('Could not determine dealer ID.');
-        setLoading(false);
-        return;
-    }
+    let dealerId = orderToUpdate.order_number === 0 ? orderToUpdate.id : null;
 
     try {
+        if (!dealerId) {
+            // If it's an order payment, fetch the dealer ID from the order
+            const { data: orderData, error: orderFetchError } = await supabase
+                .from('orders')
+                .select('dealer_id')
+                .eq('id', orderToUpdate.id)
+                .single();
+            
+            if (orderFetchError) throw new Error(`Failed to fetch dealer ID for order: ${orderFetchError.message}`);
+            dealerId = orderData.dealer_id;
+        }
+
+        if (!dealerId) {
+            throw new Error('Could not determine dealer ID.');
+        }
+
       // Determine transaction ID based on method
       let transactionId = null;
       if (values.paymentMethod === 'Card') transactionId = values.cardTransactionId;
@@ -201,9 +216,10 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
       }
 
       // 2. Insert a new payment record with status 'pending_approval'
-      const { error: paymentInsertError } = await supabase
+      const { error: paymentInsertError, data: insertedPayment } = await supabase
         .from('payments')
-        .insert(paymentData);
+        .insert(paymentData)
+        .select('id');
 
       if (paymentInsertError) {
         throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
@@ -490,15 +506,9 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
           <p className="text-center text-muted-foreground py-8">No order selected for payment update.</p>
         )}
       </DialogContent>
-      {selectedPaymentIdForDetails && (
-        <PaymentDetailsDialog
-          paymentId={selectedPaymentIdForDetails}
-          isOpen={isPaymentDetailsDialogOpen}
-          onOpenChange={setIsPaymentDetailsDialogOpen}
-        />
-      )}
+      {/* Removed the nested PaymentDetailsDialog reference */}
     </Dialog>
   );
 };
 
-export default SalesPersonPaymentsReport;
+export default UpdatePaymentDialog;
