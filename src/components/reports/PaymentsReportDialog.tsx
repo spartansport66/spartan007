@@ -344,18 +344,22 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
     }
     setIsSubmittingAction(true);
     try {
+      const payload = {
+        paymentId: payment.payment_id,
+        orderId: payment.order_number === 0 ? null : payment.id, // payment.id is the order ID here
+        dealerId: payment.dealer_id,
+        amount: payment.total_amount,
+        action: action,
+      };
+      
+      console.log(`[PaymentsReportDialog] Sending payload for ${action}:`, payload); // ADDED LOGGING
+
       const response = await fetch(APPROVE_PAYMENT_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          paymentId: payment.payment_id,
-          orderId: payment.order_number === 0 ? null : payment.id, // Pass null if general payment
-          dealerId: payment.dealer_id,
-          amount: payment.total_amount,
-          action: action,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok) {

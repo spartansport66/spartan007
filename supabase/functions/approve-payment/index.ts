@@ -1,4 +1,3 @@
-// @ts-ignore
 /// <reference lib="deno.ns" />
 // @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -18,14 +17,21 @@ serve(async (req) => {
   try {
     const { paymentId, orderId, dealerId, amount, action } = await req.json();
 
-    // Ensure required parameters are present. orderId can be null.
-    if (!paymentId || !dealerId || typeof amount !== 'number' || !['approve', 'reject'].includes(action)) {
-      console.error("Validation failed: Missing or invalid parameters.", { paymentId, dealerId, amount, action });
-      return new Response(JSON.stringify({ error: 'Missing or invalid parameters.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // Detailed validation check
+    if (!paymentId) {
+      return new Response(JSON.stringify({ error: 'Missing required parameter: paymentId.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+    if (!dealerId) {
+      return new Response(JSON.stringify({ error: 'Missing required parameter: dealerId.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (typeof amount !== 'number') {
+      return new Response(JSON.stringify({ error: `Missing or invalid parameter: amount (received ${amount}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    if (!['approve', 'reject'].includes(action)) {
+      return new Response(JSON.stringify({ error: `Missing or invalid parameter: action (received ${action}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    
+    console.log(`[approve-payment] Processing action: ${action} for paymentId: ${paymentId}, orderId: ${orderId}, dealerId: ${dealerId}, amount: ${amount}`);
 
     const supabaseAdmin = createClient(
       // @ts-ignore

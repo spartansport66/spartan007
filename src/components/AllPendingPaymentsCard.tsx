@@ -300,18 +300,22 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
     }
     setIsSubmittingAction(true);
     try {
+      const payload = {
+        paymentId: payment.id, // This is the payment record ID
+        orderId: payment.order_id, // Actual order ID (can be null for general payment)
+        dealerId: payment.dealer_id,
+        amount: payment.amount,
+        action: action,
+      };
+      
+      console.log(`[AllPendingPaymentsCard] Sending payload for ${action}:`, payload); // ADDED LOGGING
+
       const response = await fetch(APPROVE_PAYMENT_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          paymentId: payment.id, // This is the payment record ID
-          orderId: payment.order_id, // Actual order ID (can be null for general payment)
-          dealerId: payment.dealer_id,
-          amount: payment.amount,
-          action: action,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok) {
