@@ -29,11 +29,13 @@ serve(async (req) => {
       console.error(`[approve-payment] Validation failed: paymentId is invalid (received: ${paymentId})`);
       return new Response(JSON.stringify({ error: `Missing or invalid parameter: paymentId (received ${paymentId}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    // orderId can be null, so we only check if it's provided and not a string
-    if (orderId !== null && typeof orderId !== 'string') {
+    
+    // orderId must be null, undefined, or a non-empty string.
+    if (orderId !== null && orderId !== undefined && (typeof orderId !== 'string' || orderId.length === 0)) {
       console.error(`[approve-payment] Validation failed: orderId is invalid (received: ${orderId}).`);
       return new Response(JSON.stringify({ error: `Invalid parameter type: orderId (received ${orderId}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+    
     if (typeof dealerId !== 'string' || dealerId.length === 0) {
       console.error(`[approve-payment] Validation failed: dealerId is invalid (received: ${dealerId})`);
       return new Response(JSON.stringify({ error: `Missing or invalid parameter: dealerId (received ${dealerId}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
