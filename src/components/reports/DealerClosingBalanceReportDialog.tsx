@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown, ChevronsUpDown, DollarSign, AlertTriangle } from 'lucide-react';
+import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown, ChevronsUpDown, DollarSign, AlertTriangle, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -18,6 +18,7 @@ import RCSBulkMessageSender from '@/components/RCSBulkMessageSender';
 import { cn } from '@/lib/utils';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import DealerPaymentsReceivedDialog from '@/components/reports/DealerPaymentsReceivedDialog'; // NEW IMPORT
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
@@ -29,6 +30,8 @@ interface DealerClosingBalance {
   last_billing_date: string | null; // Now directly from dealers table
   phone: string; // Added phone number
   daysSinceLastBill: number | null; // New: Calculated days since last bill
+  totalSales: number; // NEW
+  totalPaymentsReceived: number; // NEW
 }
 
 interface FilterOption {
@@ -57,17 +60,21 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const [loading, setLoading] = useState(true);
   const [filterDealerName, setFilterDealerName] = useState<string>('');
   const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
-  const [filterOverduePeriod, setFilterOverduePeriod] = useState<'all' | 'less_than_60' | 'more_than_60'>('all'); // New filter state
+  const [filterOverduePeriod, setFilterOverduePeriod] = useState<'all' | 'less_than_60' | 'more_than_60'>('all');
   const [allSalesPersons, setAllSalesPersons] = useState<FilterOption[]>([]);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
   const [sentDealerIds, setSentDealerIds] = useState<Set<string>>(new Set());
-  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]); // State for bulk selection
-  const [isRCSBulkSenderOpen, setIsRCSBulkSenderOpen] = useState(false); // New state for RCS dialog
+  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]);
+  const [isRCSBulkSenderOpen, setIsRCSBulkSenderOpen] = useState(false);
   
   // New states for payment action
   const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PendingOrderPayment | null>(null);
+  
+  // New states for viewing received payments
+  const [isPaymentsReceivedDialogOpen, setIsPaymentsReceivedDialogOpen] = useState(false);
+  const [selectedDealerForPayments, setSelectedDealerForPayments] = useState<{ id: string; name: string } | null>(null);
   
   // Sorting states
   const [sortKey, setSortKey] = useState<'name' | 'closing_balance' | 'daysSinceLastBill'>('name');
@@ -95,11 +102,9 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     const lastBill = new Date(lastBillingDate);
     const today = new Date();
     
-    // Normalize dates to midnight UTC for accurate day difference calculation
     lastBill.setUTCHours(0, 0, 0, 0);
     today.setUTCHours(0, 0, 0, 0);
 
-    // If the last bill date is today or in the future, the overdue period is 0 days.
     if (lastBill.getTime() >= today.getTime()) {
       return 0;
     }
@@ -201,9 +206,6 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           const closingBalance = openingBalance + totalSales - totalPayments;
           
           // Determine the reference date for the balance:
-          // 1. Latest Order Date (if available)
-          // 2. last_billing_date (if manually set or updated by dispatch)
-          // 3. created_at (fallback)
           const referenceDate = latestOrderDate || d.last_billing_date || d.created_at;
           
           const daysSinceLastBill = calculateDaysSinceLastBill(referenceDate);
@@ -215,6 +217,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             closing_balance: closingBalance,
             last_billing_date: referenceDate, // Use the determined reference date
             daysSinceLastBill: daysSinceLastBill,
+            totalSales: totalSales, // ADDED
+            totalPaymentsReceived: totalPayments, // ADDED
           };
         }).filter(d => d.closing_balance > 0); // Only show dealers with positive closing balance
         
@@ -309,6 +313,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
   const handlePaymentUpdated = () => {
     fetchClosingBalances(); // Refresh the report data
+  };
+
+  const handleViewPayments = (dealer: DealerClosingBalance) => { // NEW HANDLER
+    setSelectedDealerForPayments({ id: dealer.id, name: dealer.name });
+    setIsPaymentsReceivedDialogOpen(true);
   };
 
   const handleClearFilters = () => {
@@ -471,28 +480,6 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     }
   };
   
-  const handleResetOpeningBalance = async (dealerId: string, dealerName: string) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from('dealer_balances')
-        .upsert(
-          { dealer_id: dealerId, opening_balance: 0 },
-          { onConflict: 'dealer_id' }
-        );
-
-      if (error) throw error;
-
-      showSuccess(`Opening balance for ${dealerName} manually reset to ₹0.00 successfully!`);
-      fetchClosingBalances(); // Refresh data
-    } catch (error: any) {
-      console.error('Error resetting opening balance:', error);
-      showError(`Failed to reset opening balance: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSort = (key: 'name' | 'closing_balance' | 'daysSinceLastBill') => {
     if (sortKey === key) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -529,7 +516,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const handlePrint = () => {
     try {
       const doc = new jsPDF({
-        orientation: 'portrait'
+        orientation: 'landscape' // Changed to landscape for more columns
       });
 
       const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
@@ -556,9 +543,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       }
 
       // Updated column header for PDF
-      const tableColumn = ["Dealer Name", "Closing Balance (₹)", "Last Billing Date", "Days Since Last Bill", "Phone"];
+      const tableColumn = ["Dealer Name", "Total Sales (₹)", "Total Payments (₹)", "Closing Balance (₹)", "Last Billing Date", "Days Since Last Bill", "Phone"];
       const tableRows = sortedDealers.map(dealer => [
         dealer.name,
+        dealer.totalSales.toFixed(2),
+        dealer.totalPaymentsReceived.toFixed(2),
         dealer.closing_balance.toFixed(2),
         dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A',
         dealer.daysSinceLastBill !== null ? dealer.daysSinceLastBill.toString() : 'N/A',
@@ -566,13 +555,17 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       ]);
 
       const totalClosingBalance = sortedDealers.reduce((sum, dealer) => sum + dealer.closing_balance, 0);
+      const totalSales = sortedDealers.reduce((sum, dealer) => sum + dealer.totalSales, 0);
+      const totalPaymentsReceived = sortedDealers.reduce((sum, dealer) => sum + dealer.totalPaymentsReceived, 0);
 
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
         foot: [
           [
-            { content: 'Total Closing Balance', styles: { halign: 'right', fontStyle: 'bold' }, colSpan: 2 },
+            { content: 'Totals', styles: { halign: 'right', fontStyle: 'bold' }, colSpan: 1 },
+            `₹${totalSales.toFixed(2)}`,
+            `₹${totalPaymentsReceived.toFixed(2)}`,
             `₹${totalClosingBalance.toFixed(2)}`,
             '',
             '',
@@ -581,7 +574,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         ],
         startY: 45,
         styles: {
-          fontSize: 8,
+          fontSize: 7,
           cellPadding: 2,
           valign: 'middle',
         },
@@ -602,11 +595,13 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         },
         margin: { top: 10, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 50 }, // Dealer Name
-          1: { cellWidth: 30, halign: 'right' }, // Closing Balance
-          2: { cellWidth: 30, halign: 'center' }, // Last Billing Date
-          3: { cellWidth: 30, halign: 'center' }, // Days Since Last Bill
-          4: { cellWidth: 30, halign: 'center' }, // Phone
+          0: { cellWidth: 40 }, // Dealer Name
+          1: { cellWidth: 25, halign: 'right' }, // Total Sales
+          2: { cellWidth: 25, halign: 'right' }, // Total Payments
+          3: { cellWidth: 25, halign: 'right' }, // Closing Balance
+          4: { cellWidth: 25, halign: 'center' }, // Last Billing Date
+          5: { cellWidth: 25, halign: 'center' }, // Days Since Last Bill
+          6: { cellWidth: 25, halign: 'center' }, // Phone
         }
       });
 
@@ -623,244 +618,272 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const selectedDealersForRCS = dealers.filter(d => selectedDealerIds.includes(d.id));
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-primary">Dealer Closing Balance Report</DialogTitle>
-          <DialogDescription>
-            View and manage dealers with outstanding closing balances (Opening Balance + Total Sales - Total Payments).
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-primary">Dealer Closing Balance Report</DialogTitle>
+            <DialogDescription>
+              View and manage dealers with outstanding closing balances (Opening Balance + Total Sales - Total Payments).
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
-          <div className="flex-1 min-w-[180px]">
-            <Label htmlFor="filterDealerName">Dealer Name</Label>
-            <Input
-              id="filterDealerName"
-              placeholder="Filter by dealer name"
-              value={filterDealerName}
-              onChange={(e) => setFilterDealerName(e.target.value)}
-              className="w-full"
-            />
-          </div>
-          <div className="flex-1 min-w-[180px]">
-            <Label htmlFor="filterSalesPerson">Sales Person</Label>
-            <Select value={filterSalesPersonId || "all"} onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}>
-              <SelectTrigger id="filterSalesPerson" className="w-full">
-                <SelectValue placeholder="All Sales Persons" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sales Persons</SelectItem>
-                {allSalesPersons.map(sp => (
-                  <SelectItem key={sp.value} value={sp.value}>{sp.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1 min-w-[180px]">
-            <Label htmlFor="filterOverduePeriod">Overdue Period</Label>
-            <Select value={filterOverduePeriod} onValueChange={(value) => setFilterOverduePeriod(value as typeof filterOverduePeriod)}>
-              <SelectTrigger id="filterOverduePeriod" className="w-full">
-                <SelectValue placeholder="All Balances" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Positive Balances</SelectItem>
-                <SelectItem value="less_than_60">Less than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem>
-                <SelectItem value="more_than_60">More than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Button onClick={fetchClosingBalances} className="flex items-center gap-2 bg-primary hover:bg-primary/90">
-            <Search className="h-4 w-4" /> Apply Filter
-          </Button>
-          <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
-            Clear Filters
-          </Button>
-        </div>
-
-        <div className="overflow-x-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="ml-2 text-lg text-foreground">Loading data...</p>
+          <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
+            <div className="flex-1 min-w-[180px]">
+              <Label htmlFor="filterDealerName">Dealer Name</Label>
+              <Input
+                id="filterDealerName"
+                placeholder="Filter by dealer name"
+                value={filterDealerName}
+                onChange={(e) => setFilterDealerName(e.target.value)}
+                className="w-full"
+              />
             </div>
-          ) : dealers.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No dealer closing balance data found matching your criteria.</p>
-          ) : (
-            <div className="max-h-[400px] overflow-y-auto border rounded-md">
-              <Table>
-                <TableHeader className="sticky top-0 bg-muted">
-                  <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="w-10 text-muted-foreground font-bold">
-                      <Checkbox
-                        checked={allDealersSelected}
-                        onCheckedChange={handleSelectAll}
-                        aria-label="Select all dealers"
-                        disabled={isSendingWhatsApp}
-                      />
-                    </TableHead>
-                    <TableHead 
-                      className="text-muted-foreground font-bold cursor-pointer hover:bg-muted/70"
-                      onClick={() => handleSort('name')}
-                    >
-                      <div className="flex items-center justify-between">
-                        Dealer Name
-                        {sortKey === 'name' ? (
-                          sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
-                        ) : (
-                          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead 
-                      className="text-muted-foreground font-bold text-right cursor-pointer hover:bg-muted/70"
-                      onClick={() => handleSort('closing_balance')}
-                    >
-                      <div className="flex items-center justify-end">
-                        Closing Balance (₹)
-                        {sortKey === 'closing_balance' ? (
-                          sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
-                        ) : (
-                          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Last Billing Date</TableHead>
-                    <TableHead 
-                      className="text-muted-foreground font-bold text-center cursor-pointer hover:bg-muted/70"
-                      onClick={() => handleSort('daysSinceLastBill')}
-                    >
-                      <div className="flex items-center justify-center">
-                        Days Since Last Bill
-                        {sortKey === 'daysSinceLastBill' ? (
-                          sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
-                        ) : (
-                          <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Phone</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedDealers.map((dealer) => {
-                    const isDealerSent = sentDealerIds.has(dealer.id);
-                    const isDealerSelected = selectedDealerIds.includes(dealer.id);
-                    const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
-
-                    return (
-                      <TableRow key={dealer.id} className="hover:bg-accent/50">
-                        <TableCell>
-                          <Checkbox
-                            checked={isDealerSelected}
-                            onCheckedChange={(checked) => handleSelectDealer(dealer.id, !!checked)}
-                            disabled={isSendingWhatsApp}
-                          />
-                        </TableCell>
-                        <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                        <TableCell className="text-right">
-                          {`₹${dealer.closing_balance.toFixed(2)}`}
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground">
-                          {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground">
-                          {dealer.daysSinceLastBill !== null ? dealer.daysSinceLastBill : 'N/A'}
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground">
-                          {dealer.phone || 'N/A'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex justify-center gap-2">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              onClick={() => handleSendWhatsApp(dealer)}
-                              title={isDealerSent ? "Message Sent" : "Send WhatsApp Reminder"}
-                              disabled={!canSend}
-                            >
-                              {isSendingWhatsApp && isDealerSent ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <MessageCircle className="h-4 w-4 text-blue-500" />
-                              )}
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              onClick={() => handleInitiatePayment(dealer.id, dealer.name)}
-                              title="Add Payment for Outstanding Balance"
-                              disabled={loading || isSendingWhatsApp}
-                            >
-                              <DollarSign className="h-4 w-4 text-green-600" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+            <div className="flex-1 min-w-[180px]">
+              <Label htmlFor="filterSalesPerson">Sales Person</Label>
+              <Select value={filterSalesPersonId || "all"} onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}>
+                <SelectTrigger id="filterSalesPerson" className="w-full">
+                  <SelectValue placeholder="All Sales Persons" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sales Persons</SelectItem>
+                  {allSalesPersons.map(sp => (
+                    <SelectItem key={sp.value} value={sp.value}>{sp.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          )}
-        </div>
-
-        <div className="flex justify-between items-center mt-4">
-          <Button
-            onClick={handleBulkSendWhatsApp}
-            disabled={isSendingWhatsApp || selectedDealerIds.length === 0}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-          >
-            <Send className="h-4 w-4" /> 
-            {isSendingWhatsApp ? <Loader2 className="h-4 w-4 animate-spin" /> : `Send Bulk WhatsApp (${selectedDealerIds.length})`}
-          </Button>
-          
-          <Button
-            onClick={() => setIsRCSBulkSenderOpen(true)}
-            disabled={selectedDealerIds.length === 0}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700"
-          >
-            <MessageCircle className="h-4 w-4" /> 
-            Send Bulk RCS (Mock)
-          </Button>
-
-          {sentDealerIds.size > 0 && (
-            <Button 
-              variant="outline" 
-              onClick={handleResetSentStatus} 
-              disabled={isSendingWhatsApp}
-              className="flex items-center gap-2"
-            >
-              <RotateCcw className="h-4 w-4" /> Enable All to Resend
+            <div className="flex-1 min-w-[180px]">
+              <Label htmlFor="filterOverduePeriod">Overdue Period</Label>
+              <Select value={filterOverduePeriod} onValueChange={(value) => setFilterOverduePeriod(value as typeof filterOverduePeriod)}>
+                <SelectTrigger id="filterOverduePeriod" className="w-full">
+                  <SelectValue placeholder="All Balances" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Positive Balances</SelectItem>
+                  <SelectItem value="less_than_60">Less than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem>
+                  <SelectItem value="more_than_60">More than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={fetchClosingBalances} className="flex items-center gap-2 bg-primary hover:bg-primary/90">
+              <Search className="h-4 w-4" /> Apply Filter
             </Button>
-          )}
-        </div>
+            <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
+              Clear Filters
+            </Button>
+          </div>
 
-        <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={handlePrint} disabled={dealers.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground">
-            <Printer className="mr-2 h-4 w-4" /> Print Report
-          </Button>
-          <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
-        </DialogFooter>
-      </DialogContent>
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="ml-2 text-lg text-foreground">Loading data...</p>
+              </div>
+            ) : dealers.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No dealer closing balance data found matching your criteria.</p>
+            ) : (
+              <div className="max-h-[400px] overflow-y-auto border rounded-md">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-muted">
+                    <TableRow className="bg-muted hover:bg-muted/90">
+                      <TableHead className="w-10 text-muted-foreground font-bold">
+                        <Checkbox
+                          checked={allDealersSelected}
+                          onCheckedChange={handleSelectAll}
+                          aria-label="Select all dealers"
+                          disabled={isSendingWhatsApp}
+                        />
+                      </TableHead>
+                      <TableHead 
+                        className="text-muted-foreground font-bold cursor-pointer hover:bg-muted/70"
+                        onClick={() => handleSort('name')}
+                      >
+                        <div className="flex items-center justify-between">
+                          Dealer Name
+                          {sortKey === 'name' ? (
+                            sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
+                          ) : (
+                            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-muted-foreground font-bold text-right">Total Sales (₹)</TableHead>
+                      <TableHead className="text-muted-foreground font-bold text-right">Total Payments (₹)</TableHead>
+                      <TableHead 
+                        className="text-muted-foreground font-bold text-right cursor-pointer hover:bg-muted/70"
+                        onClick={() => handleSort('closing_balance')}
+                      >
+                        <div className="flex items-center justify-end">
+                          Closing Balance (₹)
+                          {sortKey === 'closing_balance' ? (
+                            sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
+                          ) : (
+                            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-muted-foreground font-bold text-center">Last Billing Date</TableHead>
+                      <TableHead 
+                        className="text-muted-foreground font-bold text-center cursor-pointer hover:bg-muted/70"
+                        onClick={() => handleSort('daysSinceLastBill')}
+                      >
+                        <div className="flex items-center justify-center">
+                          Days Since Last Bill
+                          {sortKey === 'daysSinceLastBill' ? (
+                            sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
+                          ) : (
+                            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-30" />
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-muted-foreground font-bold text-center">Phone</TableHead>
+                      <TableHead className="text-muted-foreground font-bold text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedDealers.map((dealer) => {
+                      const isDealerSent = sentDealerIds.has(dealer.id);
+                      const isDealerSelected = selectedDealerIds.includes(dealer.id);
+                      const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
+
+                      return (
+                        <TableRow key={dealer.id} className="hover:bg-accent/50">
+                          <TableCell>
+                            <Checkbox
+                              checked={isDealerSelected}
+                              onCheckedChange={(checked) => handleSelectDealer(dealer.id, !!checked)}
+                              disabled={isSendingWhatsApp}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
+                          <TableCell className="text-right text-blue-600 font-medium">
+                            {`₹${dealer.totalSales.toFixed(2)}`}
+                          </TableCell>
+                          <TableCell className="text-right text-green-600 font-medium">
+                            {`₹${dealer.totalPaymentsReceived.toFixed(2)}`}
+                          </TableCell>
+                          <TableCell className="text-right font-bold">
+                            {`₹${dealer.closing_balance.toFixed(2)}`}
+                          </TableCell>
+                          <TableCell className="text-center text-muted-foreground">
+                            {dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-center text-muted-foreground">
+                            {dealer.daysSinceLastBill !== null ? dealer.daysSinceLastBill : 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-center text-muted-foreground">
+                            {dealer.phone || 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex justify-center gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleSendWhatsApp(dealer)}
+                                title={isDealerSent ? "Message Sent" : "Send WhatsApp Reminder"}
+                                disabled={!canSend}
+                              >
+                                {isSendingWhatsApp && isDealerSent ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <MessageCircle className="h-4 w-4 text-blue-500" />
+                                )}
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleInitiatePayment(dealer.id, dealer.name)}
+                                title="Add Payment for Outstanding Balance"
+                                disabled={loading || isSendingWhatsApp}
+                              >
+                                <DollarSign className="h-4 w-4 text-green-600" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleViewPayments(dealer)} // NEW BUTTON
+                                title="View Received Payments"
+                                disabled={loading || isSendingWhatsApp}
+                              >
+                                <Eye className="h-4 w-4 text-purple-500" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-between items-center mt-4">
+            <Button
+              onClick={handleBulkSendWhatsApp}
+              disabled={isSendingWhatsApp || selectedDealerIds.length === 0}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+            >
+              <Send className="h-4 w-4" /> 
+              {isSendingWhatsApp ? <Loader2 className="h-4 w-4 animate-spin" /> : `Send Bulk WhatsApp (${selectedDealerIds.length})`}
+            </Button>
+            
+            <Button
+              onClick={() => setIsRCSBulkSenderOpen(true)}
+              disabled={selectedDealerIds.length === 0}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700"
+            >
+              <MessageCircle className="h-4 w-4" /> 
+              Send Bulk RCS (Mock)
+            </Button>
+
+            {sentDealerIds.size > 0 && (
+              <Button 
+                variant="outline" 
+                onClick={handleResetSentStatus} 
+                disabled={isSendingWhatsApp}
+                className="flex items-center gap-2"
+              >
+                <RotateCcw className="h-4 w-4" /> Enable All to Resend
+              </Button>
+            )}
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={handlePrint} disabled={dealers.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground">
+              <Printer className="mr-2 h-4 w-4" /> Print Report
+            </Button>
+            <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
+          </DialogFooter>
+        </DialogContent>
+        
+        <RCSBulkMessageSender
+          isOpen={isRCSBulkSenderOpen}
+          onOpenChange={setIsRCSBulkSenderOpen}
+          selectedDealers={selectedDealersForRCS}
+          companyName={companyName}
+        />
+        
+        {selectedOrderForPaymentUpdate && (
+          <UpdatePaymentDialog
+            orderToUpdate={selectedOrderForPaymentUpdate}
+            isOpen={isUpdatePaymentDialogOpen}
+            onOpenChange={setIsUpdatePaymentDialogOpen}
+            onPaymentUpdated={handlePaymentUpdated}
+          />
+        )}
+      </Dialog>
       
-      <RCSBulkMessageSender
-        isOpen={isRCSBulkSenderOpen}
-        onOpenChange={setIsRCSBulkSenderOpen}
-        selectedDealers={selectedDealersForRCS}
-        companyName={companyName}
-      />
-      
-      {selectedOrderForPaymentUpdate && (
-        <UpdatePaymentDialog
-          orderToUpdate={selectedOrderForPaymentUpdate}
-          isOpen={isUpdatePaymentDialogOpen}
-          onOpenChange={setIsUpdatePaymentDialogOpen}
-          onPaymentUpdated={handlePaymentUpdated}
+      {selectedDealerForPayments && (
+        <DealerPaymentsReceivedDialog
+          dealerId={selectedDealerForPayments.id}
+          dealerName={selectedDealerForPayments.name}
+          isOpen={isPaymentsReceivedDialogOpen}
+          onOpenChange={setIsPaymentsReceivedDialogOpen}
         />
       )}
-    </Dialog>
+    </>
   );
 };
 
