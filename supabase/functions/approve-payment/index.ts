@@ -31,8 +31,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: `Missing or invalid parameter: action (received ${action}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     
-    // orderId can be null for general payments, so we don't validate its presence.
-    
     console.log(`[approve-payment] Processing action: ${action} for paymentId: ${paymentId}, orderId: ${orderId}, dealerId: ${dealerId}, amount: ${amount}`);
 
     const supabaseAdmin = createClient(
@@ -118,19 +116,7 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       } else {
-        // 2b. General Payment: Update dealer_balances (reduce opening_balance by amount)
-        // NOTE: The client-side logic for calculating the closing balance already accounts for all transactions.
-        // However, since the general payment was submitted against the *outstanding balance*, 
-        // we must ensure that the payment is correctly credited against the dealer's ledger.
-        // Since we don't have a separate 'closing_balance' column, and the ledger is calculated dynamically,
-        // the approval of a general payment should ideally just mark the payment as completed.
-        // The current implementation in the Edge Function attempts to reduce the 'opening_balance', 
-        // which is incorrect if the payment is meant to clear recent orders.
-        
-        // FIX: Since the ledger is calculated dynamically (Opening + Orders - Payments), 
-        // marking the payment as 'completed' is sufficient. The client-side reports will automatically reflect the credit.
-        // We remove the incorrect logic that modifies `dealer_balances.opening_balance`.
-        
+        // 2b. General Payment: Only marking the payment as completed is sufficient.
         return new Response(JSON.stringify({ message: 'General payment approved and credited successfully.' }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
