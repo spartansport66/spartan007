@@ -55,32 +55,34 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
           className={cn("w-full justify-between", className)}
           disabled={disabled}
         >
-          <div className="flex flex-wrap gap-1">
-            {value.length === 0 ? (
-              <span className="text-muted-foreground">{placeholder}</span>
-            ) : (
-              value.map((itemValue) => { // Use itemValue to avoid conflict with prop 'value'
-                const option = options.find((opt) => opt.value === itemValue);
-                return (
-                  <Badge key={itemValue} variant="secondary" className="flex items-center gap-1">
-                    {option?.label}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelect(itemValue);
-                      }}
-                      className="ml-1 text-muted-foreground hover:text-foreground"
-                      disabled={disabled}
-                    >
-                      &times;
-                    </button>
-                  </Badge>
-                );
-              })
-            )}
-          </div>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <React.Fragment>
+            <div className="flex flex-wrap gap-1">
+              {value.length === 0 ? (
+                <span className="text-muted-foreground">{placeholder}</span>
+              ) : (
+                value.map((itemValue) => { // Use itemValue to avoid conflict with prop 'value'
+                  const option = options.find((opt) => opt.value === itemValue);
+                  return (
+                    <Badge key={itemValue} variant="secondary" className="flex items-center gap-1">
+                      {option?.label}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelect(itemValue);
+                        }}
+                        className="ml-1 text-muted-foreground hover:text-foreground"
+                        disabled={disabled}
+                      >
+                        &times;
+                      </button>
+                    </Badge>
+                  );
+                })
+              )}
+            </div>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </React.Fragment>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
