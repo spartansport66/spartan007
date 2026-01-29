@@ -18,7 +18,9 @@ serve(async (req) => {
   try {
     const { paymentId, orderId, dealerId, amount, action } = await req.json();
 
+    // Ensure required parameters are present. orderId can be null.
     if (!paymentId || !dealerId || typeof amount !== 'number' || !['approve', 'reject'].includes(action)) {
+      console.error("Validation failed: Missing or invalid parameters.", { paymentId, dealerId, amount, action });
       return new Response(JSON.stringify({ error: 'Missing or invalid parameters.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -32,7 +34,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // --- Due Date Check (Only relevant for order payments) ---
+    // --- Due Date Check (Only relevant for order payments and cheque/DD) ---
     let effectiveDueDate: Date | null = null;
     let paymentData = null;
 
