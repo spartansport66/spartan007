@@ -18,13 +18,13 @@ serve(async (req) => {
     const { paymentId, orderId, dealerId, amount, action } = await req.json();
 
     // Detailed validation check
-    if (!paymentId) {
-      return new Response(JSON.stringify({ error: 'Missing required parameter: paymentId.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (typeof paymentId !== 'string' || paymentId.length === 0) {
+      return new Response(JSON.stringify({ error: 'Missing or invalid parameter: paymentId (must be a string).' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    if (!dealerId) {
-      return new Response(JSON.stringify({ error: 'Missing required parameter: dealerId.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (typeof dealerId !== 'string' || dealerId.length === 0) {
+      return new Response(JSON.stringify({ error: 'Missing or invalid parameter: dealerId (must be a string).' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    if (typeof amount !== 'number') {
+    if (typeof amount !== 'number' || isNaN(amount)) {
       return new Response(JSON.stringify({ error: `Missing or invalid parameter: amount (received ${amount}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     if (!['approve', 'reject'].includes(action)) {
