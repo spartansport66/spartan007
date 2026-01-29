@@ -33,6 +33,31 @@ export const updateAllDealerCreditDays = async (days: number) => {
  */
 export const approveRejectPayment = async ({ paymentId, orderId, dealerId, action }: { paymentId: string, orderId: string | null, dealerId: string, action: 'approve' | 'reject' }) => {
   try {
+    // Fetch payment amount and current opening balance if it's a general payment
+    let paymentAmount = 0;
+    let currentOpeningBalance = 0;
+
+    if (!orderId) {
+      // This is a general balance payment (Order #0)
+      const { data: paymentData, error: paymentFetchError } = await supabase
+        .from('payments')
+        .select('amount')
+        .eq('id', paymentId)
+        .single();
+
+      if (paymentFetchError) throw new Error(`Failed to fetch payment amount: ${paymentFetchError.message}`);
+      paymentAmount = paymentData.amount;
+
+      const { data: balanceData, error: balanceFetchError } = await supabase
+        .from('dealer_balances')
+        .select('opening_balance')
+        .eq('dealer_id', dealerId)
+        .single();
+
+      if (balanceFetchError && balanceFetchError.code !== 'PGRST116') throw new Error(`Failed to fetch dealer balance: ${balanceFetchError.message}`);
+      currentOpeningBalance = balanceData?.opening_balance || 0;
+    }
+
     if (action === 'approve') {
       // 1. Update payment status to 'completed' and set approved_at timestamp
       const { error: paymentUpdateError } = await supabase
@@ -56,8 +81,18 @@ export const approveRejectPayment = async ({ paymentId, orderId, dealerId, actio
         }
         showSuccess('Order payment approved and credit freed up successfully.');
       } else {
-        // 2b. General Payment: Only marking the payment as completed is sufficient.
-        showSuccess('General payment approved and credited successfully.');
+        // 2b. General Payment: Reduce the dealer's opening balance by the payment amount
+        const newOpeningBalance = Math.max(0, currentOpeningBalance - paymentAmount); // Ensure balance doesn't go negative
+
+        const { error: balanceUpdateError } = await supabase
+          .from('dealer_balances')
+          .update({ opening_balance: newOpeningBalance })
+          .eq('dealer_id', dealerId);
+
+        if (balanceUpdateError) {
+          throw new Error(`Failed to update dealer opening balance: ${balanceUpdateError.message}`);
+        }
+        showSuccess('General payment approved and opening balance reduced successfully.');
       }
 
     } else if (action === 'reject') {
