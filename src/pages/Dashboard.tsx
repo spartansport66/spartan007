@@ -95,6 +95,13 @@ const Dashboard = () => {
   const [isSalesPersonSalesReportOpen, setIsSalesPersonSalesReportOpen] = useState(false);
   const [isSalesPersonDealerReportOpen, setIsSalesPersonDealerReportOpen] = useState(false);
   const [isSalesPersonPaymentsReportOpen, setIsSalesPersonPaymentsReportOpen] = useState(false);
+  
+  // State to force explicit refresh of dashboard data
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleRefreshData = useCallback(() => {
+    setRefreshKey(prev => prev + 1);
+  }, []);
 
   const fetchDashboardData = useCallback(async () => {
     if (!user) {
@@ -189,7 +196,7 @@ const Dashboard = () => {
     }
 
     setLoadingData(false);
-  }, [user, filterDealerId, filterFromDate, filterToDate]);
+  }, [user, filterDealerId, filterFromDate, filterToDate, refreshKey]); // Added refreshKey dependency
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -309,23 +316,23 @@ const Dashboard = () => {
 
       {/* Sales Person Performance Card and Daily Visit Progress Card */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <SalesPersonPerformanceCard />
-        <DailyVisitProgressCard />
+        <SalesPersonPerformanceCard key={`performance-${refreshKey}`} />
+        <DailyVisitProgressCard key={`visits-${refreshKey}`} />
       </div>
       
       {/* Dealer Follow-ups Card - New Row */}
       <div className="grid grid-cols-1 mb-6">
-        <SalesPersonFollowupsCard />
+        <SalesPersonFollowupsCard key={`followups-${refreshKey}`} />
       </div>
 
       {/* Multi-Item Order Form - Full Width */}
       <div className="mb-6">
-        <MultiItemOrderForm />
+        <MultiItemOrderForm onOrderPlaced={handleRefreshData} />
       </div>
 
       {/* Payment Status Card */}
       <div className="mb-6">
-        <PaymentStatusCard />
+        <PaymentStatusCard key={`payment-status-${refreshKey}`} />
       </div>
 
       {/* Recent Activities (Orders) */}
@@ -393,7 +400,7 @@ const Dashboard = () => {
                       <TableHead className="text-muted-foreground">Order No.</TableHead>
                       <TableHead className="text-muted-foreground">Dealer</TableHead>
                       <TableHead className="text-muted-foreground">Order Date</TableHead>
-                      <TableHead className="text-muted-foreground">Total Amount</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
                       <TableHead className="text-muted-foreground">Payment Status</TableHead>
                       <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                     </TableRow>
@@ -404,7 +411,7 @@ const Dashboard = () => {
                         <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
                         <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
                         <TableCell className="text-muted-foreground">{formatDate(order.order_date)}</TableCell>
-                        <TableCell className="text-muted-foreground">₹{order.total_amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                         <TableCell className="text-muted-foreground">{order.payment_status || 'N/A'}</TableCell>
                         <TableCell className="text-center">
                           <Button

@@ -46,10 +46,14 @@ interface PendingPayment {
   payment_due_date: string | null;
 }
 
+interface MultiItemOrderFormProps {
+  onOrderPlaced: () => void; // New prop
+}
+
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-multi-item-order";
 
-const MultiItemOrderForm: React.FC = () => {
+const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }) => {
   const { user, loading: sessionLoading } = useSession(); // Get session loading state
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -480,6 +484,8 @@ const MultiItemOrderForm: React.FC = () => {
       setPopoverOpenStates({}); // Clear all product popover states
       setSearchValue(""); // Clear global product search value
       setDealerSearchValue(""); // Clear dealer search value
+      
+      onOrderPlaced(); // Explicitly call the refresh callback
     } catch (error: any) {
       console.error('Error placing order:', error);
       showError(`Failed to place order: ${error.message}`);

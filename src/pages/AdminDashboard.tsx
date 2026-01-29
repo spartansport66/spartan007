@@ -224,6 +224,7 @@ const AdminDashboard = () => {
     setSelectedOrderIdForDetails(dispatchedOrderId);
     setIsOrderDetailsDialogOpen(true);
     setShouldPrintOrderDetails(true);
+    setRefreshKey(prev => prev + 1); // Trigger refresh
     fetchDashboardData();
   };
 
@@ -354,25 +355,25 @@ const AdminDashboard = () => {
       
       {/* 2. Sales Person Lead Management Section (MOVED HERE) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <AdminTodayFollowupsCard onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} />
-        <AdminTodayVisitsCard onViewReport={() => setIsSalesPersonVisitReportOpen(true)} />
-        <AdminTotalPendingOrdersCard onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} />
+        <AdminTodayFollowupsCard key={`admin-followups-${refreshKey}`} onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} />
+        <AdminTodayVisitsCard key={`admin-visits-${refreshKey}`} onViewReport={() => setIsSalesPersonVisitReportOpen(true)} />
+        <AdminTotalPendingOrdersCard key={`admin-pending-orders-${refreshKey}`} onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} />
       </div>
       
       {/* 3. Orders to Dispatch / Dispatched Orders */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <OrdersToDispatchCard onDispatchSuccess={handleDispatchSuccessAndPrint} />
-        <DispatchedOrdersCard />
+        <OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccessAndPrint} />
+        <DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} />
       </div>
       
       {/* 4. Production Alerts / Performance Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <ProductionAlertsCard />
-        <SalesPersonPerformanceOverviewCard onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
+        <ProductionAlertsCard key={`production-alerts-${refreshKey}`} />
+        <SalesPersonPerformanceOverviewCard key={`performance-overview-${refreshKey}`} onViewDetails={() => setIsSalesPersonPerformanceReportOpen(true)} />
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <PaymentOverviewCard onViewReport={handleViewPaymentsReport} />
+        <PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} />
         <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
       </div>
 
