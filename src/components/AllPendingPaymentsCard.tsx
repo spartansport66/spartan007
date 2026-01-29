@@ -284,7 +284,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
     } else if (payment.payment_due_date) {
       effectiveDueDate = new Date(payment.payment_due_date);
     } else if (payment.type === 'payment_pending_approval_today' && payment.payment_date) {
-      // For general payments, use the payment date as the approval due date
+      // For general payments, use the payment date as the due date for approval
       effectiveDueDate = new Date(payment.payment_date);
     }
 
@@ -304,11 +304,11 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         paymentId: payment.id, // This is the payment record ID
         orderId: payment.order_id, // Actual order ID (can be null for general payment)
         dealerId: payment.dealer_id,
-        amount: payment.amount,
+        amount: Number(payment.amount), // Ensure amount is explicitly a number
         action: action,
       };
       
-      console.log(`[AllPendingPaymentsCard] Sending payload for ${action}:`, payload); // ADDED LOGGING
+      console.log(`[AllPendingPaymentsCard] Sending payload for ${action}:`, payload);
 
       const response = await fetch(APPROVE_PAYMENT_EDGE_FUNCTION_URL, {
         method: 'POST',
