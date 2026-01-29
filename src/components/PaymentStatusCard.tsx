@@ -48,7 +48,8 @@ interface DealerBalance {
   id: string;
   name: string;
   opening_balance: number;
-  current_balance: number; // New: Calculated ledger balance
+  net_transaction_balance: number; // New: Orders - Completed Payments
+  current_balance: number; // New: Calculated ledger balance (Opening + Net Transaction)
 }
 
 interface PendingOrderPayment {
@@ -330,7 +331,8 @@ const PaymentStatusCard: React.FC = () => {
                 id: dealer.id,
                 name: dealer.name,
                 opening_balance: openingBalance,
-                current_balance: currentBalance,
+                net_transaction_balance: netTransactionBalance, // Store net transaction balance
+                current_balance: currentBalance, // Use calculated current balance
               };
             })
             .filter((dealer: DealerBalance) => dealer.current_balance > 0); // Only show dealers with positive ledger balance
@@ -587,6 +589,7 @@ const PaymentStatusCard: React.FC = () => {
                     <TableRow>
                       <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                       <TableHead className="text-muted-foreground text-right">Opening Balance</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Net Transaction Balance</TableHead>
                       <TableHead className="text-muted-foreground text-right">Total Outstanding Balance</TableHead>
                       <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                     </TableRow>
@@ -596,6 +599,7 @@ const PaymentStatusCard: React.FC = () => {
                       <TableRow key={dealer.id} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
                         <TableCell className="text-right font-semibold text-red-600">₹{dealer.opening_balance.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-semibold text-red-600">₹{dealer.net_transaction_balance.toFixed(2)}</TableCell>
                         <TableCell className="text-right font-semibold text-red-600">₹{dealer.current_balance.toFixed(2)}</TableCell>
                         <TableCell className="text-center">
                           <Button 
@@ -719,7 +723,13 @@ const PaymentStatusCard: React.FC = () => {
       </CardContent>
       {selectedOrderForPaymentUpdate && (
         <UpdatePaymentDialog 
-          orderToUpdate={selectedOrderForPaymentUpdate} 
+          orderToUpdate={{
+            id: selectedOrderForPaymentUpdate.id,
+            order_number: selectedOrderForPaymentUpdate.order_number,
+            total_amount: selectedOrderForPaymentUpdate.total_amount,
+            dealer_name: selectedOrderForPaymentUpdate.dealer_name,
+            payment_due_date: selectedOrderForPaymentUpdate.payment_due_date,
+          }}
           isOpen={isUpdatePaymentDialogOpen} 
           onOpenChange={setIsUpdatePaymentDialogOpen} 
           onPaymentUpdated={handlePaymentUpdated} 
