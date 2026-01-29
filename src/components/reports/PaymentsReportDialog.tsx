@@ -16,6 +16,7 @@ import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import PaymentDetailsDialog from '@/components/PaymentDetailsDialog'; // Import PaymentDetailsDialog
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
+import { approveRejectPayment } from '@/utils/supabase-actions'; // Import new utility
 
 interface PaymentReportData {
   id: string; // Order ID (or Dealer ID for general payment)
@@ -45,9 +46,6 @@ interface PaymentsReportDialogProps {
   initialFilterFromDate?: string; // YYYY-MM-DD
   initialFilterToDate?: string; // YYYY-MM-DD
 }
-
-// IMPORTANT: Replace with the actual URL of your deployed Edge Function
-const APPROVE_PAYMENT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/approve-payment";
 
 const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
   isOpen,
@@ -343,36 +341,18 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
       return;
     }
     setIsSubmittingAction(true);
-    try {
-      const payload = {
+    
+    const success = await approveRejectPayment({
         paymentId: payment.payment_id,
         orderId: payment.order_number === 0 ? null : payment.id, // payment.id is the order ID here
         dealerId: payment.dealer_id,
-        amount: payment.total_amount,
         action: action,
-      };
-      
-      console.log(`[PaymentsReportDialog] Sending payload for ${action}:`, payload); // ADDED LOGGING
+    });
 
-      const response = await fetch(APPROVE_PAYMENT_EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || `Failed to ${action} payment`);
-      }
-      showSuccess(`Payment ${action === 'approve' ? 'approved' : 'rejected'} successfully!`);
-      fetchPaymentsAndDealers(); // Refresh the list
-    } catch (error: any) {
-      console.error(`Error ${action}ing payment:`, error);
-      showError(`Failed to ${action} payment: ${error.message}`);
-    } finally {
-      setIsSubmittingAction(false);
+    if (success) {
+        fetchPaymentsAndDealers(); // Refresh the list
     }
+    setIsSubmittingAction(false);
   };
 
   // Function to get status color
@@ -601,7 +581,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                 <TableBody>
                   {payments.map((payment) => {
                     const displayStatus = payment.payment_status ?? 'unknown';
-                    const paymentIsDue = isPaymentDue(payment);
+                    const paymentIsDueForApproval = isPaymentDue(payment);
 
                     return (
                       <TableRow key={payment.id} className="hover:bg-accent/50">
@@ -652,7 +632,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                               <>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
-                                    <Button variant="ghost" size="icon" title={paymentIsDue ? "Approve Payment" : "Payment not yet due"} disabled={isSubmittingAction || !paymentIsDue}>
+                                    <Button variant="ghost" size="icon" title={paymentIsDueForApproval ? "Approve Payment" : "Payment not yet due"} disabled={isSubmittingAction || !paymentIsDueForApproval}>
                                       <CheckCircle className="h-4 w-4 text-green-600" />
                                     </Button>
                                   </AlertDialogTrigger>
@@ -660,7 +640,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Approve Payment?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        {!paymentIsDue && payment.cheque_dd_date ? (
+                                        {!paymentIsDueForApproval && payment.cheque_dd_date ? (
                                           <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
                                             <p className="font-medium">Post-dated Payment</p>
                                             <p>This payment is scheduled for {new Date(payment.cheque_dd_date).toLocaleDateString()}.</p>
@@ -672,7 +652,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'approve')} disabled={isSubmittingAction || !paymentIsDue}>
+                                      <AlertDialogAction onClick={() => handleApproveRejectPayment(payment, 'approve')} disabled={isSubmittingAction || !paymentIsDueForApproval}>
                                         {isSubmittingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Approve'}
                                       </AlertDialogAction>
                                     </AlertDialogFooter>
@@ -721,7 +701,13 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
       </DialogContent>
       {selectedOrderForPaymentUpdate && (
         <UpdatePaymentDialog
-          orderToUpdate={selectedOrderForPaymentUpdate}
+          orderToUpdate={{
+            id: selectedOrderForPaymentUpdate.id,
+            order_number: selectedOrderForPaymentUpdate.order_number,
+            total_amount: selectedOrderForPaymentUpdate.total_amount,
+            dealer_name: selectedOrderForPaymentUpdate.dealer_name,
+            payment_due_date: selectedOrderForPaymentUpdate.payment_due_date,
+          }}
           isOpen={isUpdatePaymentDialogOpen}
           onOpenChange={setIsUpdatePaymentDialogOpen}
           onPaymentUpdated={handlePaymentUpdated}

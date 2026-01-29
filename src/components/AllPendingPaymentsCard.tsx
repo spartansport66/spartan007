@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import PaymentDetailsDialog from '@/components/PaymentDetailsDialog';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog'; // Import UpdatePaymentDialog
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
+import { approveRejectPayment } from '@/utils/supabase-actions'; // Import new utility
 
 interface PendingPaymentItem {
   type: 'order_due_today' | 'payment_pending_approval_today';
@@ -32,8 +33,6 @@ interface PendingPaymentItem {
 interface AllPendingPaymentsCardProps {
   onPaymentAction: () => void; // Callback to refresh parent data
 }
-
-const APPROVE_PAYMENT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/approve-payment";
 
 const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPaymentAction }) => {
   const [paymentsToday, setPaymentsToday] = useState<PendingPaymentItem[]>([]);
@@ -288,7 +287,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       effectiveDueDate = new Date(payment.payment_date);
     }
 
-    if (!effectiveDueDate) return true; // Should not happen for pending approval payments
+    if (!effectiveDueDate) return true; // If no due date, assume it's due (or can be approved)
     effectiveDueDate.setHours(0, 0, 0, 0);
     return effectiveDueDate <= today;
   };
@@ -299,37 +298,19 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       return;
     }
     setIsSubmittingAction(true);
-    try {
-      const payload = {
+    
+    const success = await approveRejectPayment({
         paymentId: payment.id, // This is the payment record ID
         orderId: payment.order_id, // Actual order ID (can be null for general payment)
         dealerId: payment.dealer_id,
-        amount: Number(payment.amount), // Ensure amount is explicitly a number
         action: action,
-      };
-      
-      console.log(`[AllPendingPaymentsCard] Sending payload for ${action}:`, payload);
+    });
 
-      const response = await fetch(APPROVE_PAYMENT_EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || `Failed to ${action} payment`);
-      }
-      showSuccess(`Payment ${action === 'approve' ? 'approved' : 'rejected'} successfully!`);
-      fetchTodayPaymentActivities(); // Refresh the list
-      onPaymentAction(); // Notify parent to refresh dashboard data
-    } catch (error: any) {
-      console.error(`Error ${action}ing payment:`, error);
-      showError(`Failed to ${action} payment: ${error.message}`);
-    } finally {
-      setIsSubmittingAction(false);
+    if (success) {
+        fetchTodayPaymentActivities(); // Refresh the list
+        onPaymentAction(); // Notify parent to refresh dashboard data
     }
+    setIsSubmittingAction(false);
   };
 
   const handleAddPaymentDetails = (order: PendingPaymentItem) => {
