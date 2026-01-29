@@ -24,14 +24,19 @@ serve(async (req) => {
     console.log(`[approve-payment] Received body:`, body);
     console.log(`[approve-payment] Coerced amount: ${numericAmount}`);
 
-    // Detailed validation check
+    // Detailed validation checks for all required fields
     if (typeof paymentId !== 'string' || paymentId.length === 0) {
       console.error(`[approve-payment] Validation failed: paymentId is invalid (received: ${paymentId})`);
-      return new Response(JSON.stringify({ error: 'Missing or invalid parameter: paymentId (must be a non-empty string).' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: `Missing or invalid parameter: paymentId (received ${paymentId}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    // orderId can be null, so we only check if it's provided and not a string
+    if (orderId !== null && typeof orderId !== 'string') {
+      console.error(`[approve-payment] Validation failed: orderId is invalid (received: ${orderId}).`);
+      return new Response(JSON.stringify({ error: `Invalid parameter type: orderId (received ${orderId}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     if (typeof dealerId !== 'string' || dealerId.length === 0) {
       console.error(`[approve-payment] Validation failed: dealerId is invalid (received: ${dealerId})`);
-      return new Response(JSON.stringify({ error: 'Missing or invalid parameter: dealerId (must be a non-empty string).' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: `Missing or invalid parameter: dealerId (received ${dealerId}).` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     if (typeof numericAmount !== 'number' || isNaN(numericAmount) || numericAmount <= 0) {
       console.error(`[approve-payment] Validation failed: amount is invalid (received: ${amount}, coerced: ${numericAmount}).`);
