@@ -78,7 +78,7 @@ const DailyVisitProgressCard: React.FC = () => {
       </CardHeader>
       <CardContent className="p-4 space-y-4">
         <div className="flex justify-between items-center">
-          <span className="text-lg font-medium">Visits Completed: {visitsToday}</span>
+          <span className="text-lg font-medium">Completed: {visitsToday}</span>
           {isGoalMet && <CheckCircle className="h-6 w-6 text-green-600" />}
         </div>
         <Progress value={progressPercentage} className="w-full" indicatorColor={isGoalMet ? "bg-green-600" : "bg-yellow-500"} />
