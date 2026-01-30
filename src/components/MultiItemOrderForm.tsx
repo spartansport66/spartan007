@@ -767,11 +767,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                                 {filteredProducts.map((product) => (
                                   <CommandItem
                                     key={product.id}
-                                    // Refactored: Use product.id as the value for reliable selection
-                                    value={product.id} 
-                                    onSelect={(productId) => {
+                                    // Set value to a searchable string (name + code)
+                                    value={`${product.name} ${product.code}`} 
+                                    onSelect={() => {
                                       // Update the order item with the selected product ID
-                                      updateOrderItem(item.id, 'product_id', productId);
+                                      updateOrderItem(item.id, 'product_id', product.id);
                                       
                                       // Close the popover and clear search
                                       setPopoverOpenStates(prev => ({ ...prev, [item.id]: false }));
