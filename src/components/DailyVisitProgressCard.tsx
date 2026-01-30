@@ -57,7 +57,7 @@ const DailyVisitProgressCard: React.FC = () => {
       <Card className="bg-card text-card-foreground shadow-lg h-full">
         <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
           <CardTitle className="text-xl font-semibold">Daily Goal</CardTitle>
-          <CardDescription className="text-green-100 dark:text-green-200">Goal: {DAILY_VISIT_GOAL} visits</CardDescription>
+          <CardDescription className="text-green-100 dark:text-green-200">Goal: {DAILY_VISIT_GOAL}</CardDescription>
         </CardHeader>
         <CardContent className="p-4 flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -73,7 +73,7 @@ const DailyVisitProgressCard: React.FC = () => {
           <Target className="h-5 w-5" /> Daily Goal
         </CardTitle>
         <CardDescription className="text-green-100 dark:text-green-200">
-          Goal: {DAILY_VISIT_GOAL} visits.
+          Goal: {DAILY_VISIT_GOAL}.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
@@ -83,7 +83,7 @@ const DailyVisitProgressCard: React.FC = () => {
         </div>
         <Progress value={progressPercentage} className="w-full" indicatorColor={isGoalMet ? "bg-green-600" : "bg-yellow-500"} />
         <p className="text-sm text-muted-foreground">
-          {isGoalMet ? "Goal achieved! Keep up the great work." : `You need ${DAILY_VISIT_GOAL - visitsToday} more visits to complete your daily task.`}
+          {isGoalMet ? "Goal achieved! Keep up the great work." : `You need ${DAILY_VISIT_GOAL - visitsToday} more to complete your daily task.`}
         </p>
         <Button 
           onClick={() => navigate('/daily-visit-report')} 
