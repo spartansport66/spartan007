@@ -123,7 +123,7 @@ const SalesPersonFollowupsCard: React.FC = () => {
       <Card className="bg-card text-card-foreground shadow-lg h-full lg:col-span-2">
         <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
           <CardTitle className="text-xl font-semibold">Dealer Follow-ups</CardTitle>
-          <CardDescription className="text-blue-100 dark:text-blue-200">Upcoming and overdue dealer visits.</CardDescription>
+          <CardDescription className="text-blue-100 dark:text-blue-200">Upcoming and overdue dealer activities.</CardDescription>
         </CardHeader>
         <CardContent className="p-4 flex items-center justify-center py-8">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -140,7 +140,7 @@ const SalesPersonFollowupsCard: React.FC = () => {
           <CalendarCheck className="h-5 w-5" /> Dealer Follow-ups
         </CardTitle>
         <CardDescription className="text-blue-100 dark:text-blue-200">
-          Upcoming and overdue dealer visits based on your last visit reports.
+          Upcoming and overdue dealer activities based on your last reports.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4">
@@ -153,9 +153,9 @@ const SalesPersonFollowupsCard: React.FC = () => {
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted hover:bg-muted/90">
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
-                    <TableHead className="text-muted-foreground">Last Visit</TableHead>
+                    <TableHead className="text-muted-foreground">Last Log</TableHead>
                     <TableHead className="text-muted-foreground">Follow-up Date</TableHead>
-                    <TableHead className="text-muted-foreground">Last Visit Status & Remarks</TableHead>
+                    <TableHead className="text-muted-foreground">Last Status & Remarks</TableHead>
                     <TableHead className="text-muted-foreground text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -179,9 +179,9 @@ const SalesPersonFollowupsCard: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => navigate('/daily-visit-report')}
-                          title="Log New Visit"
+                          title="Log New"
                         >
-                          Log Visit <ArrowRight className="ml-1 h-4 w-4" />
+                          Log New <ArrowRight className="ml-1 h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>

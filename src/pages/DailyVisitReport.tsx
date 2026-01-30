@@ -32,7 +32,7 @@ const fileSchema = z.instanceof(File, { message: 'A photo is required.' })
 
 const formSchema = z.object({
   dealerId: z.string().uuid({ message: 'Please select a dealer.' }),
-  visitStatus: z.enum(VISIT_STATUS_OPTIONS as [string, ...string[]], { message: 'Please select a visit status.' }),
+  visitStatus: z.enum(VISIT_STATUS_OPTIONS as [string, ...string[]], { message: 'Please select a status.' }),
   remarks: z.string().min(1, { message: 'Remarks are required.' }).max(500, { message: 'Remarks cannot exceed 500 characters.' }),
   photoFile: fileSchema, // Use the custom file schema
   nextVisitDate: z.string().min(1, { message: 'Next Follow-up Date is required.' }),
@@ -209,16 +209,16 @@ const DailyVisitReport: React.FC = () => {
       if (insertError) {
         // Attempt to delete the uploaded file if DB insertion fails
         await supabase.storage.from('visit-photos').remove([filePath]);
-        throw new Error(`Visit record failed: ${insertError.message}`);
+        throw new Error(`Log record failed: ${insertError.message}`);
       }
 
-      showSuccess(`Visit logged successfully for ${dealerName}!`);
+      showSuccess(`Activity logged successfully for ${dealerName}!`);
       form.reset({ dealerId: '', visitStatus: 'Routine Visit', remarks: '', photoFile: undefined, nextVisitDate: '' });
       setSelectedFileName(null); // Clear file name state
       fetchInitialData(); // Refresh progress
     } catch (error: any) {
-      console.error('Error logging visit:', error);
-      showError(`Failed to log visit: ${error.message}`);
+      console.error('Error logging activity:', error);
+      showError(`Failed to log activity: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -231,7 +231,7 @@ const DailyVisitReport: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading visit report...</p>
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading report...</p>
       </div>
     );
   }
@@ -250,9 +250,9 @@ const DailyVisitReport: React.FC = () => {
         
         <Card className="bg-card text-card-foreground shadow-lg">
           <CardHeader>
-            <CardTitle className="text-2xl font-semibold text-primary">Log Daily Dealer Visit</CardTitle>
+            <CardTitle className="text-2xl font-semibold text-primary">Log Daily Dealer</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Record your visit and capture a photo for verification.
+              Record your daily activity and capture a photo for verification.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -261,7 +261,7 @@ const DailyVisitReport: React.FC = () => {
                 <Target className="h-5 w-5 text-green-600" /> Daily Goal Progress
               </h3>
               <div className="flex justify-between items-center">
-                <span className="font-medium">Visits Today: {visitsToday} / {DAILY_VISIT_GOAL}</span>
+                <span className="font-medium">Completed: {visitsToday} / {DAILY_VISIT_GOAL}</span>
                 {isGoalMet && <CheckCircle className="h-6 w-6 text-green-600" />}
               </div>
               <Progress value={progressPercentage} className="w-full" indicatorColor={isGoalMet ? "bg-green-600" : "bg-yellow-500"} />
@@ -299,11 +299,11 @@ const DailyVisitReport: React.FC = () => {
                   name="visitStatus"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Visit Status</FormLabel>
+                      <FormLabel>Status</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select visit status" />
+                            <SelectValue placeholder="Select status" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -326,7 +326,7 @@ const DailyVisitReport: React.FC = () => {
                     <FormItem>
                       <FormLabel>Remarks (Required)</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Any notes about the visit..." {...field} disabled={isSubmitting} />
+                        <Textarea placeholder="Any notes about the activity..." {...field} disabled={isSubmitting} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -384,7 +384,7 @@ const DailyVisitReport: React.FC = () => {
                 />
 
                 <div className="space-y-2">
-                  <FormLabel>Visit Time</FormLabel>
+                  <FormLabel>Time</FormLabel>
                   <Input 
                     type="text" 
                     value={new Date().toLocaleString()} 
@@ -399,7 +399,7 @@ const DailyVisitReport: React.FC = () => {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      <Upload className="mr-2 h-4 w-4" /> Log Visit
+                      <Upload className="mr-2 h-4 w-4" /> Log
                     </>
                   )}
                 </Button>

@@ -89,7 +89,7 @@ const DailyVisitProgressCard: React.FC = () => {
           onClick={() => navigate('/daily-visit-report')} 
           className="w-full bg-green-600 hover:bg-green-700 text-white"
         >
-          Log New Visit <ArrowRight className="ml-2 h-4 w-4" />
+          Log New <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </CardContent>
     </Card>
