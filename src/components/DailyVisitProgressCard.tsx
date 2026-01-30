@@ -56,7 +56,7 @@ const DailyVisitProgressCard: React.FC = () => {
     return (
       <Card className="bg-card text-card-foreground shadow-lg h-full">
         <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
-          <CardTitle className="text-xl font-semibold">Daily Visit Goal</CardTitle>
+          <CardTitle className="text-xl font-semibold">Daily Goal</CardTitle>
           <CardDescription className="text-green-100 dark:text-green-200">Goal: {DAILY_VISIT_GOAL} visits</CardDescription>
         </CardHeader>
         <CardContent className="p-4 flex items-center justify-center py-8">
@@ -70,10 +70,10 @@ const DailyVisitProgressCard: React.FC = () => {
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold flex items-center gap-2">
-          <Target className="h-5 w-5" /> Daily Visit Goal
+          <Target className="h-5 w-5" /> Daily Goal
         </CardTitle>
         <CardDescription className="text-green-100 dark:text-green-200">
-          Goal: {DAILY_VISIT_GOAL} visits completed today.
+          Goal: {DAILY_VISIT_GOAL} visits.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
