@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { ArrowLeft, Edit, Trash2, Eye, Loader2, PlusCircle } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Eye, Loader2, PlusCircle, Search } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -81,6 +81,10 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
   const [error, setError] = useState<string | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  
+  // New state for search filter
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState<string>('');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -119,8 +123,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
     setLoading(true);
     setError(null);
 
-    // Fetch products and check for sales count for each
-    const { data, error } = await supabase
+    let query = supabase
       .from('products')
       .select(`
         id,
@@ -135,6 +138,15 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
         user_id,
         sales(count)
       `);
+      
+    // Apply search filter if present
+    if (appliedSearchTerm) {
+      const search = `%${appliedSearchTerm}%`;
+      // Filter by name OR code
+      query = query.or(`name.ilike.${search},code.ilike.${search}`);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching products:', error);
@@ -149,13 +161,22 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
       setProducts(productsWithSalesStatus);
     }
     setLoading(false);
-  }, [user]);
+  }, [user, appliedSearchTerm]);
 
   useEffect(() => {
     if (!sessionLoading && user && isAdmin) {
       fetchProducts();
     }
   }, [sessionLoading, user, isAdmin, fetchProducts]);
+
+  const handleApplySearch = () => {
+    setAppliedSearchTerm(searchTerm);
+  };
+  
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    setAppliedSearchTerm('');
+  };
 
   const handleEdit = (product: Product) => {
     setSelectedProduct(product);
@@ -244,9 +265,31 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
         <CardDescription className="text-blue-100 dark:text-blue-200">View, edit, or delete your registered products.</CardDescription>
       </CardHeader>
       <CardContent className="p-4">
+        {/* Search Filter Section */}
+        <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
+          <div className="flex-1 min-w-[200px]">
+            <Label htmlFor="productSearch">Search by Name or Code</Label>
+            <Input
+              id="productSearch"
+              placeholder="Enter product name or code"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <Button onClick={handleApplySearch} className="flex items-center gap-2">
+            <Search className="h-4 w-4" /> Apply Filter
+          </Button>
+          <Button variant="outline" onClick={handleClearSearch} className="flex items-center gap-2">
+            Clear Filter
+          </Button>
+        </div>
+        
         <div className="overflow-x-auto">
           {products.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No products found. Add a new product to get started!</p>
+            <p className="text-center text-muted-foreground py-8">
+              {appliedSearchTerm ? `No products found matching "${appliedSearchTerm}".` : 'No products found. Add a new product to get started!'}
+            </p>
           ) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
