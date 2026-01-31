@@ -50,8 +50,7 @@ interface MultiItemOrderFormProps {
   onOrderPlaced: () => void; // New prop
 }
 
-// IMPORTANT: Replace with the actual URL of your deployed Edge Function
-const CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-multi-item-order";
+// Removed: const CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL = "...";
 
 const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }) => {
   const { user, loading: sessionLoading } = useSession(); // Get session loading state
@@ -449,46 +448,161 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     setLoading(true);
 
     try {
-      const payload: any = {
-        dealerId: selectedDealer,
-        userId: user.id,
-        orderItems: orderItems.map(item => ({
+      // 1. Prepare data for insertion
+      const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
+      const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
+      
+      const salesToInsert = [];
+      const stockUpdates = [];
+      
+      for (const item of orderItems) {
+        const product = products.find(p => p.id === item.product_id);
+        if (!product) throw new Error(`Product with ID ${item.product_id} not found.`);
+        
+        const itemTotalPrice = item.quantity * product.dp;
+        
+        salesToInsert.push({
           product_id: item.product_id,
           quantity: item.quantity,
-        })),
-        // --- NEW: Include discount amount ---
-        discountAmount: discountAmount,
-        // --- NEW: Include final order amount explicitly (workaround) ---
-        finalOrderAmount: finalOrderValue,
-        // -----------------------------------
-        // Payment status is always pending_approval since payment is mandatory at order time
-        paymentStatus: 'pending_approval', 
-        paymentDueDate: paymentDueDate, // Keep due date for consistency, although it's irrelevant for paid orders
-      };
-
-      // Payment details are always included now
-      if (isPaidAtOrderTime) {
-        payload.paymentDetails = {
-          // Removed redundant 'amount' field, relying on Edge Function calculation
-          payment_method: paymentMethod,
-          cheque_dd_no: paymentMethod === 'Cheque/DD' ? chequeDdNo : null,
-          cheque_dd_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : null,
-          transaction_id: transactionId || null, // Use transactionId for all methods
-        };
+          total_price: itemTotalPrice,
+        });
+        
+        stockUpdates.push({
+          id: item.product_id,
+          quantitySold: item.quantity,
+        });
       }
 
-      const response = await fetch(CREATE_MULTI_ITEM_ORDER_EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      // 2. Insert the new order
+      const { data: newOrder, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          dealer_id: selectedDealer,
+          user_id: user.id,
+          total_amount: finalOrderAmount,
+          discount_amount: finalDiscountAmount,
+          status: 'completed',
+          payment_status: 'pending_approval',
+          payment_due_date: paymentDueDate,
+        })
+        .select('id, order_number, order_date')
+        .single();
+      
+      if (orderError) throw new Error(`Failed to create order: ${orderError.message}`);
+      if (!newOrder) throw new Error('Order creation failed, no order ID returned.');
 
-      const data = await response.json();
+      // 3. Update dealers.last_billing_date
+      const { error: updateDealerDateError } = await supabase
+        .from('dealers')
+        .update({ last_billing_date: newOrder.order_date })
+        .eq('id', selectedDealer);
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to place order');
+      if (updateDealerDateError) {
+          console.warn('Failed to update dealer last_billing_date:', updateDealerDateError.message);
+      }
+
+      // 4. Insert sales items linked to the new order
+      const salesWithOrderId = salesToInsert.map(sale => ({
+        ...sale,
+        order_id: newOrder.id
+      }));
+      
+      const { error: salesInsertError } = await supabase
+        .from('sales')
+        .insert(salesWithOrderId);
+      
+      if (salesInsertError) throw new Error(`Failed to insert sales items: ${salesInsertError.message}`);
+
+      // 5. Insert payment record (status: pending_approval)
+      let transactionId = null;
+      if (paymentMethod === 'Card' || paymentMethod === 'Bank Transfer' || paymentMethod === 'UPI') transactionId = transactionId;
+      else if (paymentMethod === 'Cash') transactionId = transactionId;
+
+      const paymentData = {
+        order_id: newOrder.id,
+        dealer_id: selectedDealer,
+        amount: finalOrderAmount,
+        payment_method: paymentMethod,
+        payment_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : new Date().toISOString().split('T')[0], // Use cheque date if Cheque/DD, otherwise today
+        status: 'pending_approval',
+        cheque_dd_no: paymentMethod === 'Cheque/DD' ? chequeDdNo : null,
+        cheque_dd_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : null,
+        transaction_id: transactionId,
+        // Note: Other payment details (card, bank, upi) are not strictly needed for the initial insert
+        // but should be handled if the schema requires them. For simplicity, we rely on the transaction ID.
+      };
+      
+      const { error: paymentInsertError } = await supabase
+        .from('payments')
+        .insert(paymentData);
+      
+      if (paymentInsertError) throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
+
+      // 6. Update product stock levels and manage production alerts (Client-side simulation of Edge Function logic)
+      for (const update of stockUpdates) {
+        const product = products.find(p => p.id === update.id);
+        if (!product) continue;
+
+        const previousStock = product.stock;
+        const newStockLevel = previousStock - update.quantitySold;
+
+        // Update stock
+        const { data: updatedProduct, error: stockUpdateError } = await supabase
+          .from('products')
+          .update({ stock: newStockLevel })
+          .eq('id', update.id)
+          .select('id, stock')
+          .single();
+
+        if (stockUpdateError) {
+          console.error(`Failed to update stock for product ${update.id}: ${stockUpdateError.message}`);
+          // Continue, don't throw fatal error here
+        }
+
+        // Manage production alerts
+        if (updatedProduct && updatedProduct.stock < 0) {
+          const newRequiredQuantity = Math.abs(updatedProduct.stock);
+          
+          // Check for existing unresolved alert
+          const { data: existingAlert, error: fetchAlertError } = await supabase
+            .from('production_alerts')
+            .select('id')
+            .eq('product_id', update.id)
+            .eq('resolved', false)
+            .single();
+          
+          if (fetchAlertError && fetchAlertError.code !== 'PGRST116') {
+            console.error(`Error fetching existing alert for product ${update.id}:`, fetchAlertError.message);
+          }
+          
+          const alertData = {
+            product_id: update.id,
+            required_quantity: newRequiredQuantity,
+            created_by: user.id,
+            dealer_id: selectedDealer,
+            resolved: false,
+            created_at: new Date().toISOString(),
+          };
+
+          if (existingAlert) {
+            await supabase.from('production_alerts').update(alertData).eq('id', existingAlert.id);
+          } else {
+            await supabase.from('production_alerts').insert(alertData);
+          }
+        } else if (previousStock < 0 && updatedProduct && updatedProduct.stock >= 0) {
+          // Resolve alerts if stock becomes non-negative
+          await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', update.id).eq('resolved', false);
+        }
+      }
+
+      // 7. Update opening balance if this is the first order
+      const { count: orderCount, error: orderCountError } = await supabase
+        .from('orders')
+        .select('count', { count: 'exact' })
+        .eq('dealer_id', selectedDealer);
+      
+      if (!orderCountError && orderCount === 1 && dealerOpeningBalance > 0) {
+        await supabase.from('dealer_balances').update({ opening_balance: 0 }).eq('dealer_id', selectedDealer);
       }
 
       showSuccess('Order placed successfully!');
@@ -497,21 +611,20 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setSelectedDealer('');
       setOrderItems([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
       setDealerBalance(null);
-      setDiscountAmount(0); // Reset discount
-      // isPaidAtOrderTime is always true, no need to reset
+      setDiscountAmount(0);
       setPaymentMethod('');
-      setPaymentAmount(0); // Reset payment amount
+      setPaymentAmount(0);
       setChequeDdNo('');
       setChequeDdDate('');
       setTransactionId('');
       setPaymentDueDate(null);
       setPendingPayments([]);
       setTotalPendingAmount(0);
-      setPopoverOpenStates({}); // Clear all product popover states
-      setSearchValue(""); // Clear global product search value
-      setDealerSearchValue(""); // Clear dealer search value
+      setPopoverOpenStates({});
+      setSearchValue("");
+      setDealerSearchValue("");
       
-      onOrderPlaced(); // Explicitly call the refresh callback
+      onOrderPlaced();
     } catch (error: any) {
       console.error('Error placing order:', error);
       showError(`Failed to place order: ${error.message}`);
