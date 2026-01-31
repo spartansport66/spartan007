@@ -64,13 +64,8 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
     const search = searchTerm.trim();
     let query;
 
-    // Try searching by order_number (if numeric) or bill_no (if alphanumeric)
     const isNumeric = /^\d+$/.test(search);
-
-    // Note: We must ensure the query only returns orders that have a bill_no set, 
-    // as the gate pass should only handle orders ready for dispatch.
-    // However, since the Admin Dashboard already marks orders as dispatched (which sets bill_no), 
-    // we rely on the Admin process setting the bill_no.
+    const searchNum = isNumeric ? parseInt(search) : null;
 
     const selectFields = `
       id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number,
@@ -79,23 +74,23 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
       sales (quantity, products (name, code))
     `;
 
+    let filterCondition = '';
+    const mandatoryCondition = 'bill_no.not.is.null';
+
     if (isNumeric) {
-      query = supabase
-        .from('orders')
-        .select(selectFields)
-        .eq('order_number', parseInt(search))
-        .not('bill_no', 'is', null) // Only search for orders that have a bill number set
-        .limit(1)
-        .single();
+        // Search by Order Number OR Dispatch Number, AND bill_no must be present
+        filterCondition = `and(${mandatoryCondition},or(order_number.eq.${searchNum},dispatch_number.eq.${searchNum}))`;
     } else {
-      query = supabase
+        // Search by Bill Number, AND bill_no must be present
+        filterCondition = `and(bill_no.eq.${search},${mandatoryCondition})`;
+    }
+    
+    query = supabase
         .from('orders')
         .select(selectFields)
-        .eq('bill_no', search)
-        .not('bill_no', 'is', null) // Only search for orders that have a bill number set
+        .or(filterCondition) // Apply the combined filter
         .limit(1)
         .single();
-    }
 
     try {
       const { data, error } = await query;
@@ -106,7 +101,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
       }
 
       if (!data) {
-        showError(`Order or Bill No. "${search}" not found or Bill No. is missing.`);
+        showError(`Order, Bill No., or Dispatch No. "${search}" not found or Bill No. is missing.`);
         setOrder(null);
         return;
       }
@@ -185,16 +180,16 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
           <Truck className="h-6 w-6" /> Gate Pass / Dispatch Manager
         </CardTitle>
         <CardDescription className="text-green-100 dark:text-green-200">
-          Search for an order by Order Number or Bill Number to authorize material dispatch.
+          Search for an order by Order Number, Bill Number, or Dispatch Number to authorize material dispatch.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-6">
         <div className="flex gap-4 items-end">
           <div className="flex-grow">
-            <Label htmlFor="searchTerm">Order Number or Bill Number</Label>
+            <Label htmlFor="searchTerm">Order Number, Bill Number, or Dispatch Number</Label>
             <Input
               id="searchTerm"
-              placeholder="e.g., 1001 or INV-2024-001"
+              placeholder="e.g., 1001, INV-2024-001, or 1719840000000"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               disabled={loading}
@@ -295,7 +290,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
                 <XCircle className="h-4 w-4" />
                 <AlertTitle>No Order Found</AlertTitle>
                 <AlertDescription>
-                    Could not find an order matching "{searchTerm}". Please check the Order Number or Bill Number.
+                    Could not find an order matching "{searchTerm}". Please check the Order Number, Bill Number, or Dispatch Number.
                 </AlertDescription>
             </Alert>
         )}
