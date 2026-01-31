@@ -28,6 +28,9 @@ const Index = () => {
           if (mustResetPassword && userType === 'sales_person') {
             console.log('Redirecting sales person to force password reset.');
             navigate('/force-password-reset');
+          } else if (userType === 'gate_keeper') {
+            console.log('Redirecting to gate pass dashboard');
+            navigate('/gate-pass-dashboard');
           } else if (isAdmin) {
             console.log('Redirecting to admin dashboard');
             navigate('/admin-dashboard');

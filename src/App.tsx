@@ -20,7 +20,8 @@ import SheetConverterPage from "./pages/SheetConverterPage";
 import ForcePasswordReset from "./pages/ForcePasswordReset";
 import DailyVisitReport from "./pages/DailyVisitReport";
 import StockReceipts from "./pages/StockReceipts";
-import ChangePassword from "./pages/ChangePassword"; // Import new page
+import ChangePassword from "./pages/ChangePassword";
+import GatePassDashboard from "./pages/GatePassDashboard";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -47,7 +48,8 @@ const AppContent = () => {
       <Route path="/force-password-reset" element={<ForcePasswordReset />} />
       <Route path="/daily-visit-report" element={<DailyVisitReport />} />
       <Route path="/stock-receipts" element={<StockReceipts />} />
-      <Route path="/change-password" element={<ChangePassword />} /> {/* New Route */}
+      <Route path="/change-password" element={<ChangePassword />} />
+      <Route path="/gate-pass-dashboard" element={<GatePassDashboard />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>

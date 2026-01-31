@@ -28,7 +28,7 @@ const formSchema = z.object({
   lastName: z.string().min(1, { message: 'Last name is required.' }),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
-  userType: z.enum(['admin', 'sales_person'], { message: 'Please select a user type.' }),
+  userType: z.enum(['admin', 'sales_person', 'gate_keeper'], { message: 'Please select a user type.' }),
 });
 
 const AdminPanel = () => {
@@ -188,6 +188,7 @@ const AdminPanel = () => {
                         <SelectContent>
                           <SelectItem value="sales_person">Sales Person</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="gate_keeper">Gate Keeper</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

@@ -1,0 +1,82 @@
+"use client";
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
+import { useSession } from '@/contexts/SessionContext';
+import { MadeWithDyad } from '@/components/made-with-dyad';
+import { Loader2, LogOut, ArrowLeft, Truck } from 'lucide-react';
+import { showError, showSuccess } from '@/utils/toast';
+import GatePassOrderSearch from '@/components/GatePassOrderSearch';
+
+const GatePassDashboard = () => {
+  const navigate = useNavigate();
+  const { user, loading: sessionLoading, userType } = useSession();
+  const [refreshKey, setRefreshKey] = useState(0); // To force refresh of search component if needed
+
+  useEffect(() => {
+    if (!sessionLoading) {
+      if (!user) {
+        navigate('/login');
+      } else if (userType !== 'gate_keeper') {
+        showError('Access Denied: You must be a Gate Keeper to view this page.');
+        navigate('/');
+      }
+    }
+  }, [sessionLoading, user, userType, navigate]);
+
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.warn('Logout API call failed:', error.message);
+        showError(`Logout failed: ${error.message}. You are being redirected.`);
+      } else {
+        showSuccess('Logged out successfully!');
+      }
+      navigate('/login');
+    } catch (error: any) {
+      console.error('Unexpected error during logout:', error);
+      showError(`An unexpected error occurred during logout: ${error.message}. Redirecting.`);
+      navigate('/login');
+    }
+  };
+  
+  const handleDispatchSuccess = () => {
+    // Optionally refresh the component state if needed, e.g., to clear the search
+    setRefreshKey(prev => prev + 1);
+  };
+
+  if (sessionLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading gate pass dashboard...</p>
+      </div>
+    );
+  }
+
+  if (userType !== 'gate_keeper') {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
+      <div className="w-full max-w-2xl">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-primary flex items-center gap-2">
+            <Truck className="h-6 w-6" /> Gate Pass Dashboard
+          </h1>
+          <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2">
+            <LogOut className="h-4 w-4" /> Logout
+          </Button>
+        </div>
+
+        <GatePassOrderSearch key={refreshKey} onDispatchSuccess={handleDispatchSuccess} />
+      </div>
+      <MadeWithDyad />
+    </div>
+  );
+};
+
+export default GatePassDashboard;
