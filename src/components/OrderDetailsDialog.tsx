@@ -367,7 +367,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     const LOGO_HEIGHT = 10;
     const LOGO_WIDTH = 10; 
     const LOGO_PATH_FIGHTOR = '/logos/fightor_white_logo.png';
-    const LOGO_PATH_SPARTAN = '/logos/Spartan_white-removebg-preview.png'; // UPDATED PATH
+    const LOGO_PATH_SPARTAN = '/logos/Spartan_white-removebg-preview.png'; 
     
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -381,36 +381,37 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     const companyNameDisplay = companyName ? companyName.toUpperCase() : "COMPANY NAME";
     const darkBlue = [30, 58, 138]; // Dark Blue (Indigo-800 equivalent)
 
+    // --- HEADER STRIP LOGIC (Applied to both Gate Pass and Detailed Receipt) ---
+    const stripHeight = 15; 
+    const stripY = margin;
+    const textCenterY = stripY + stripHeight / 2 + 1; 
+    const logoY = stripY + (stripHeight - LOGO_HEIGHT) / 2; 
+    const logoXLeft = margin + 2;
+    const logoXRight = pageWidth - margin - LOGO_WIDTH - 2;
+
+    // Draw dark blue background strip
+    doc.setFillColor(...darkBlue);
+    doc.rect(0, stripY - 2, pageWidth, stripHeight, 'F'); 
+
+    // Add Logos (Left and Right)
+    doc.addImage(LOGO_PATH_FIGHTOR, 'PNG', logoXLeft, logoY, LOGO_WIDTH, LOGO_HEIGHT);
+    doc.addImage(LOGO_PATH_SPARTAN, 'PNG', logoXRight, logoY, LOGO_WIDTH, LOGO_HEIGHT);
+
+    // Company Name Text
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 255, 255); // White text
+    doc.text(companyNameDisplay, pageWidth / 2, textCenterY, { align: 'center' });
+    
+    yPos = stripY + stripHeight + 10; // Start next element below the strip + 10mm space
+    doc.setTextColor(0); // Reset text color to black
+    // --- END HEADER STRIP LOGIC ---
+
+
     // Check if the order is dispatched and we should print a simplified Gate Pass
     if (orderDetails.dispatched) {
         // --- GATE PASS PRINT LOGIC ---
         
-        // --- Company Name Strip ---
-        const stripHeight = 15; // Increased height
-        const stripY = margin;
-        const textCenterY = stripY + stripHeight / 2 + 1; 
-        const logoY = stripY + (stripHeight - LOGO_HEIGHT) / 2; 
-        const logoXLeft = margin + 2;
-        const logoXRight = pageWidth - margin - LOGO_WIDTH - 2;
-
-        // Draw dark blue background strip
-        doc.setFillColor(...darkBlue);
-        doc.rect(0, stripY - 2, pageWidth, stripHeight, 'F'); 
-
-        // Add Logos (Left and Right)
-        doc.addImage(LOGO_PATH_FIGHTOR, 'PNG', logoXLeft, logoY, LOGO_WIDTH, LOGO_HEIGHT);
-        doc.addImage(LOGO_PATH_SPARTAN, 'PNG', logoXRight, logoY, LOGO_WIDTH, LOGO_HEIGHT); // Use PNG type
-
-        // Company Name Text
-        doc.setFontSize(18);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(255, 255, 255); // White text
-        doc.text(companyNameDisplay, pageWidth / 2, textCenterY, { align: 'center' });
-        
-        yPos = stripY + stripHeight + 10; // Start next element below the strip + 10mm space
-        doc.setTextColor(0); // Reset text color to black
-        // --- End Company Name Strip ---
-
         // Gate Pass Title (Big Bold)
         doc.setFontSize(28);
         doc.text("GATE PASS", pageWidth / 2, yPos, { align: 'center' });
@@ -515,33 +516,17 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         return; // Exit the function after printing Gate Pass
     }
 
-    // --- DETAILED ORDER RECEIPT PRINT LOGIC (Fallback for non-dispatched or if needed) ---
+    // --- DETAILED ORDER RECEIPT PRINT LOGIC ---
     
-    // Adjust yPos to accommodate logos (using 15mm center line)
-    yPos = margin + 5; // 15mm center line
-    const logoYDetailed = yPos - LOGO_HEIGHT / 2; // 10mm
-    const logoXLeft = margin + 2;
-    const logoXRight = pageWidth - margin - LOGO_WIDTH - 2;
-
-    // Company Name
-    doc.setFontSize(18);
-    doc.text(companyNameDisplay, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
-    
-    // Add Logos (Left and Right)
-    doc.addImage(LOGO_PATH_FIGHTOR, 'PNG', logoXLeft, logoYDetailed, LOGO_WIDTH, LOGO_HEIGHT);
-    doc.addImage(LOGO_PATH_SPARTAN, 'PNG', logoXRight, logoYDetailed, LOGO_WIDTH, LOGO_HEIGHT);
-
-    yPos += 15; // Increased space below logo/company name
-
     // Report Title
     doc.setFontSize(14);
-    doc.text("Order Details", doc.internal.pageSize.width / 2, yPos, { align: 'center' });
+    doc.text("Order Details", pageWidth / 2, yPos, { align: 'center' });
     yPos += 8;
 
     // Generated Date
     doc.setFontSize(8);
     doc.setTextColor(100);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' });
     yPos += 8;
 
     doc.setTextColor(0); // Reset text color to black
