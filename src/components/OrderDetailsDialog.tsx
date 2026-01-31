@@ -600,17 +600,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     ]);
 
     // Total width available: 190mm
-    // New column widths (Total: 190mm)
+    // Removed fixed column widths to let autoTable calculate optimal widths
     const itemTableColumnStyles = {
-        0: { cellWidth: 15 }, // Code (15)
-        1: { cellWidth: 45 }, // Product Name (45)
-        2: { cellWidth: 15 }, // Size (15)
-        3: { cellWidth: 15 }, // HSN (15)
-        4: { cellWidth: 15, halign: 'right' }, // GST (%) (15)
-        5: { cellWidth: 10, halign: 'right' }, // Quantity (10)
-        6: { cellWidth: 20, halign: 'right' }, // Unit Price (20)
-        7: { cellWidth: 55, halign: 'right' }, // Total Price (55) <-- Increased width
-        // Total: 15 + 45 + 15 + 15 + 15 + 10 + 20 + 55 = 190mm
+        5: { halign: 'right' }, // Quantity
+        6: { halign: 'right' }, // Unit Price
+        7: { halign: 'right' }, // Total Price
     };
 
     autoTable(doc, {
@@ -624,8 +618,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         overflow: 'linebreak'
       },
       headStyles: {
-        fillColor: [30, 58, 138], // Dark blue
-        textColor: [255, 255, 255], // White
+        // Removed fillColor and textColor to use default white background/black text
         fontStyle: 'bold',
         halign: 'center',
       },
@@ -664,8 +657,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             lineWidth: 0.1,
         },
         columnStyles: {
-            0: { cellWidth: 40, halign: 'left', fontStyle: 'normal' }, // Reduced label width
-            1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' }, // Increased value width
+            0: { cellWidth: 40, halign: 'left', fontStyle: 'normal' }, 
+            1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' }, // Increased width to 50mm
         },
         margin: { top: 0, left: summaryTableX, right: margin }, // Align to the right
         didParseCell: (data) => {
