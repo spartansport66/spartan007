@@ -67,6 +67,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
   const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
+  
+  // --- NEW STATE FOR DISCOUNT ---
+  const [discountAmount, setDiscountAmount] = useState<number>(0);
 
   // Payment at order time states - ALWAYS TRUE NOW
   const isPaidAtOrderTime = true;
@@ -243,6 +246,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setPaymentDueDate(null);
         setPaymentAmount(0);
         setDealerOpeningBalance(0);
+        setDiscountAmount(0); // Reset discount
         return;
       }
 
@@ -318,12 +322,14 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
       // Set payment amount to total order value if paid at order time
       if (isPaidAtOrderTime) {
-        setPaymentAmount(parseFloat(calculateTotalOrderValue().toFixed(2)));
+        // Use the final calculated order value here
+        const finalOrderValue = calculateFinalOrderValue();
+        setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
       }
     };
 
     calculateBalanceAndDueDate();
-  }, [selectedDealer, dealers, isPaidAtOrderTime, orderItems, allottedCreditDays]);
+  }, [selectedDealer, dealers, isPaidAtOrderTime, orderItems, allottedCreditDays, discountAmount]); // Added discountAmount dependency
 
   const addOrderItem = () => {
     setOrderItems([...orderItems, { id: Date.now().toString(), product_id: '', quantity: 1 }]);
@@ -354,8 +360,15 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     return product ? item.quantity * product.dp : 0; // Use product.dp
   };
 
+  // --- MODIFIED: Calculate Total Order Value (Pre-Discount) ---
   const calculateTotalOrderValue = () => {
     return orderItems.reduce((total, item) => total + calculateItemTotal(item), 0);
+  };
+  
+  // --- NEW: Calculate Final Order Value (Post-Discount) ---
+  const calculateFinalOrderValue = () => {
+    const preDiscountTotal = calculateTotalOrderValue();
+    return Math.max(0, preDiscountTotal - discountAmount);
   };
 
   // Calculate used credit including opening balance
@@ -364,10 +377,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   // Calculate available credit (credit limit - used credit)
   const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
 
-  const totalOrderValue = calculateTotalOrderValue();
+  const preDiscountTotalOrderValue = calculateTotalOrderValue();
+  const finalOrderValue = calculateFinalOrderValue(); // Use final value for credit check
 
   // Calculate remaining credit after this order
-  const remainingCredit = availableCredit !== null ? availableCredit - totalOrderValue : null;
+  const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
 
   const isPaymentDetailsValid = useMemo(() => {
     if (!isPaidAtOrderTime) return true;
@@ -416,6 +430,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       showError('Order exceeds dealer\'s available credit limit.');
       return;
     }
+    
+    if (discountAmount < 0 || discountAmount > preDiscountTotalOrderValue) {
+        showError('Invalid discount amount.');
+        return;
+    }
 
     // --- CRITICAL VALIDATION CHECK: Payment at order time is mandatory ---
     const isPaidOrderValid = isPaidAtOrderTime && isPaymentDetailsValid;
@@ -436,6 +455,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           product_id: item.product_id,
           quantity: item.quantity,
         })),
+        // --- NEW: Include discount amount ---
+        discountAmount: discountAmount,
+        // -----------------------------------
         // Payment status is always pending_approval since payment is mandatory at order time
         paymentStatus: 'pending_approval', 
         paymentDueDate: paymentDueDate, // Keep due date for consistency, although it's irrelevant for paid orders
@@ -472,6 +494,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setSelectedDealer('');
       setOrderItems([{ id: Date.now().toString(), product_id: '', quantity: 1 }]);
       setDealerBalance(null);
+      setDiscountAmount(0); // Reset discount
       // isPaidAtOrderTime is always true, no need to reset
       setPaymentMethod('');
       setPaymentAmount(0);
@@ -538,7 +561,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       !selectedDealer ||
       (remainingCredit !== null && remainingCredit < 0) ||
       totalPendingAmount > 0 ||
-      (orderItems.some(item => !item.product_id || item.quantity <= 0));
+      (orderItems.some(item => !item.product_id || item.quantity <= 0)) ||
+      discountAmount < 0 ||
+      discountAmount > preDiscountTotalOrderValue;
 
     if (baseChecks) return true;
 
@@ -547,7 +572,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
     // Submission is disabled if the paid path is NOT valid.
     return !isPaidOrderValid;
-  }, [loading, selectedDealer, remainingCredit, totalPendingAmount, orderItems, isPaidAtOrderTime, isPaymentDetailsValid]);
+  }, [loading, selectedDealer, remainingCredit, totalPendingAmount, orderItems, discountAmount, preDiscountTotalOrderValue, isPaidAtOrderTime, isPaymentDetailsValid]);
 
 
   return (
@@ -837,11 +862,38 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           </div>
 
           {orderItems.length > 0 && (
-            <div className="p-4 bg-muted rounded-md">
-              <div className="flex justify-between text-lg font-semibold">
-                <span>Total Order Value:</span>
-                <span>₹{totalOrderValue.toFixed(2)}</span>
+            <div className="p-4 bg-muted rounded-md space-y-2">
+              <div className="flex justify-between text-base font-medium">
+                <span>Subtotal (Pre-Discount):</span>
+                <span>₹{preDiscountTotalOrderValue.toFixed(2)}</span>
               </div>
+              
+              {/* NEW: Discount Input */}
+              <div className="flex justify-between items-center">
+                <Label htmlFor="discountAmount" className="text-base font-medium">Discount (₹)</Label>
+                <Input
+                  id="discountAmount"
+                  type="number"
+                  step="0.01"
+                  value={discountAmount}
+                  onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
+                  className="w-32 text-right"
+                  min="0"
+                  max={preDiscountTotalOrderValue}
+                />
+              </div>
+              {discountAmount > preDiscountTotalOrderValue && (
+                <p className="text-sm text-destructive">Discount cannot exceed subtotal.</p>
+              )}
+              {/* END NEW: Discount Input */}
+              
+              <Separator className="my-2" />
+              
+              <div className="flex justify-between text-lg font-bold">
+                <span>Total Order Value (Final):</span>
+                <span>₹{finalOrderValue.toFixed(2)}</span>
+              </div>
+              
               {selectedDealer && dealerBalance !== null && (
                 <>
                   <Separator className="my-2" />

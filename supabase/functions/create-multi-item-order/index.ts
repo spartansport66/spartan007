@@ -16,6 +16,7 @@ interface Product {
   name: string;
   price: number; // This will now represent DP
   stock: number;
+  dp: number; // Added dp back for clarity
 }
 
 serve(async (req) => {
@@ -24,7 +25,8 @@ serve(async (req) => {
   }
   
   try {
-    const { dealerId, userId, orderItems, paymentStatus, paymentDueDate, paymentDetails } = await req.json();
+    // --- MODIFIED: Receive discountAmount ---
+    const { dealerId, userId, orderItems, paymentStatus, paymentDueDate, paymentDetails, discountAmount } = await req.json();
     
     if (!dealerId || !userId || !orderItems || !Array.isArray(orderItems) || orderItems.length === 0) {
       return new Response(JSON.stringify({ error: 'Missing or invalid order data.' }), {
@@ -56,10 +58,10 @@ serve(async (req) => {
     }
     
     const productMap = new Map(products.map(p => [p.id, { ...p, price: p.dp }])); // Map dp to price for consistency
-    let totalOrderAmount = 0;
+    let preDiscountTotalOrderAmount = 0; // Use pre-discount total for calculation
     const salesToInsert = [];
     
-    // First, calculate total order amount and prepare sales items
+    // First, calculate total order amount (pre-discount) and prepare sales items
     for (const item of orderItems) {
       const product = productMap.get(item.product_id) as Product;
       if (!product) {
@@ -71,7 +73,7 @@ serve(async (req) => {
       }
       
       const itemTotalPrice = item.quantity * product.price;
-      totalOrderAmount += itemTotalPrice;
+      preDiscountTotalOrderAmount += itemTotalPrice;
       
       salesToInsert.push({
         product_id: item.product_id,
@@ -79,6 +81,14 @@ serve(async (req) => {
         total_price: itemTotalPrice,
       });
     }
+    
+    // --- NEW: Calculate Final Order Amount ---
+    const finalDiscountAmount = discountAmount || 0;
+    if (finalDiscountAmount < 0 || finalDiscountAmount > preDiscountTotalOrderAmount) {
+        throw new Error('Invalid discount amount provided.');
+    }
+    const finalOrderAmount = Math.max(0, preDiscountTotalOrderAmount - finalDiscountAmount);
+    // -----------------------------------------
     
     // 2. Fetch dealer credit limit (monthly or general) and current balance
     const { data: dealerData, error: dealerError } = await supabaseAdmin
@@ -115,8 +125,6 @@ serve(async (req) => {
       effectiveCreditLimit = monthlyLimitData.credit_limit;
     }
     
-    // If monthlyLimitData is null (no monthly limit set), effectiveCreditLimit remains the general dealerData.credit_limit
-    
     const { data: totalSpentData, error: totalSpentError } = await supabaseAdmin
       .from('orders')
       .select('total_amount')
@@ -143,8 +151,9 @@ serve(async (req) => {
     const openingBalance = dealerBalanceData?.opening_balance || 0;
     const availableCredit = effectiveCreditLimit - (currentTotalSpent + openingBalance); // Include opening balance in calculation
     
-    if (totalOrderAmount > availableCredit) {
-      throw new Error(`Order exceeds dealer's credit limit. Available: ${availableCredit.toFixed(2)}, Order Total: ${totalOrderAmount.toFixed(2)}`);
+    // --- MODIFIED: Check credit limit against finalOrderAmount ---
+    if (finalOrderAmount > availableCredit) {
+      throw new Error(`Order exceeds dealer's credit limit. Available: ${availableCredit.toFixed(2)}, Order Total: ${finalOrderAmount.toFixed(2)}`);
     }
     
     // 3. Create the new order
@@ -153,7 +162,8 @@ serve(async (req) => {
       .insert({
         dealer_id: dealerId,
         user_id: userId,
-        total_amount: totalOrderAmount,
+        total_amount: finalOrderAmount, // --- MODIFIED: Use finalOrderAmount ---
+        discount_amount: finalDiscountAmount, // --- NEW: Insert discount amount ---
         status: 'completed', // Assuming all orders created via this function are completed
         payment_status: paymentStatus || 'pending', // New: payment status
         payment_due_date: paymentDueDate, // New: payment due date
@@ -201,7 +211,7 @@ serve(async (req) => {
         .from('payments')
         .insert({
           order_id: newOrder.id,
-          amount: totalOrderAmount,
+          amount: finalOrderAmount, // Use final order amount for payment record
           payment_method: paymentDetails.payment_method,
           cheque_dd_no: paymentDetails.cheque_dd_no,
           cheque_dd_date: paymentDetails.cheque_dd_date,
@@ -353,7 +363,7 @@ serve(async (req) => {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Edge Function error:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
