@@ -26,6 +26,7 @@ interface OrderDetail {
   order_number: number; // New auto-incrementing ID
   order_date: string;
   total_amount: number;
+  discount_amount: number; // NEW: Discount amount
   status: string;
   dealer_name: string;
   dealer_address: string;
@@ -71,6 +72,7 @@ interface FetchedOrderData {
   order_number: number; // Added
   order_date: string;
   total_amount: number;
+  discount_amount: number; // NEW: Discount amount
   status: string;
   payment_status: string; // New
   payment_due_date: string | null; // New
@@ -155,6 +157,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
           order_number,
           order_date,
           total_amount,
+          discount_amount,
           status,
           payment_status,
           payment_due_date,
@@ -246,6 +249,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         order_number: orderData.order_number,
         order_date: orderData.order_date,
         total_amount: orderData.total_amount,
+        discount_amount: orderData.discount_amount || 0, // NEW: Discount amount
         status: orderData.status,
         dealer_name: orderData.dealers?.name || 'N/A',
         dealer_address: orderData.dealers?.address || 'N/A',
@@ -490,10 +494,23 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
       yPos = (doc as any).lastAutoTable.finalY + 5;
 
-      // Total Order Amount - Centered
+      // Subtotal (Pre-Discount)
+      const preDiscountTotal = orderDetails.items.reduce((sum, item) => sum + item.total_price, 0);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Subtotal (Pre-Discount): ₹${preDiscountTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
+      yPos += 5;
+
+      // Discount Amount
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Discount Applied: - ₹${orderDetails.discount_amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
+      yPos += 5;
+
+      // Total Order Amount (Final)
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text(`Total Order Amount: ₹${orderDetails.total_amount.toFixed(2)}`, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
+      doc.text(`Total Order Amount (Final): ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
       yPos += 10;
 
       // Payment Details Section
@@ -551,6 +568,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       showError(`Failed to generate order details PDF: ${error.message || 'An unknown error occurred.'}`);
     }
   };
+
+  // Calculate pre-discount total for display
+  const preDiscountTotal = orderDetails?.items.reduce((sum, item) => sum + item.total_price, 0) || 0;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -648,8 +668,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                 </Table>
               </div>
             )}
-            <div className="text-right text-lg font-bold mt-4">
-              Total Order Amount: ₹{orderDetails.total_amount.toFixed(2)}
+            <div className="text-right text-sm font-medium mt-4">
+              Subtotal (Pre-Discount): ₹{preDiscountTotal.toFixed(2)}
+            </div>
+            <div className="text-right text-sm font-medium">
+              Discount Applied: - ₹{orderDetails.discount_amount.toFixed(2)}
+            </div>
+            <div className="text-right text-lg font-bold mt-1">
+              Total Order Amount (Final): ₹{orderDetails.total_amount.toFixed(2)}
             </div>
           </div>
         ) : (
