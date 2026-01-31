@@ -83,7 +83,9 @@ serve(async (req) => {
     }
     
     // --- NEW: Calculate Final Order Amount ---
-    const finalDiscountAmount = discountAmount || 0;
+    // Ensure discountAmount is treated as a number, defaulting to 0 if null/undefined/invalid
+    const finalDiscountAmount = parseFloat(discountAmount) || 0;
+    
     if (finalDiscountAmount < 0 || finalDiscountAmount > preDiscountTotalOrderAmount) {
         throw new Error('Invalid discount amount provided.');
     }
