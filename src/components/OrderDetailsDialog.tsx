@@ -599,8 +599,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       `₹${item.total_price.toFixed(2)}`,
     ]);
 
-    // Total width available: 190mm
-    // Removed fixed column widths to let autoTable calculate optimal widths
+    // Removed fixed column widths for item table to allow auto-sizing
     const itemTableColumnStyles = {
         5: { halign: 'right' }, // Quantity
         6: { halign: 'right' }, // Unit Price
@@ -615,12 +614,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         fontSize: 7,
         cellPadding: 1,
         valign: 'middle',
-        overflow: 'linebreak'
+        overflow: 'linebreak',
+        lineWidth: 0.1, // Keep body borders
       },
       headStyles: {
-        // Removed fillColor and textColor to use default white background/black text
+        fillColor: [255, 255, 255], // Removed dark blue background
+        textColor: [0, 0, 0], // Black text
         fontStyle: 'bold',
         halign: 'center',
+        lineWidth: 0.1, // Keep header borders
       },
       bodyStyles: {
         textColor: [0, 0, 0],
@@ -653,12 +655,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             cellPadding: 1,
             valign: 'middle',
             overflow: 'linebreak',
-            lineColor: [200, 200, 200],
-            lineWidth: 0.1,
+            lineWidth: 0, // Explicitly remove all borders
         },
         columnStyles: {
             0: { cellWidth: 40, halign: 'left', fontStyle: 'normal' }, 
-            1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' }, // Increased width to 50mm
+            1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' }, 
         },
         margin: { top: 0, left: summaryTableX, right: margin }, // Align to the right
         didParseCell: (data) => {
