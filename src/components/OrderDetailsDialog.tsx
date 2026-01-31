@@ -623,8 +623,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         lineWidth: 0.1, // Keep body borders
       },
       headStyles: {
-        fillColor: [255, 255, 255], // White background
-        textColor: [0, 0, 0], // Black text
+        fillColor: darkBlue, // Changed to darkBlue background
+        textColor: [255, 255, 255], // White text
         fontStyle: 'bold',
         halign: 'center',
         lineWidth: 0.1, // Keep header borders
