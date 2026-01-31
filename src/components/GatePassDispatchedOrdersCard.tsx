@@ -180,29 +180,21 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
                     <TableHead className="text-muted-foreground">Bill No.</TableHead>
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground">Gate Pass Time</TableHead>
-                    <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {orders.map((order) => (
                     <TableRow key={order.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
+                      <TableCell 
+                        className="font-medium text-foreground cursor-pointer hover:underline"
+                        onClick={() => handleViewOrderDetails(order.id)}
+                      >
+                        {order.order_number}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
                       <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
                       <TableCell className="text-muted-foreground">{new Date(order.gate_pass_dispatch_time).toLocaleString()}</TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleViewOrderDetails(order.id)}
-                            title="View Order Details"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
