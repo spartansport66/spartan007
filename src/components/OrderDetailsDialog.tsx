@@ -363,35 +363,49 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       return;
     }
 
+    // Define logo constants
+    const LOGO_HEIGHT = 10;
+    const LOGO_WIDTH = 10; 
+    const LOGO_PATH_FIGHTOR = '/logos/fightor_white_logo.png';
+    const LOGO_PATH_SPARTAN = '/logos/spartan_logo_2.png';
+    
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const margin = 10;
+    let yPos = margin;
+    const pageWidth = doc.internal.pageSize.width;
+    const companyNameDisplay = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+    const darkBlue = [30, 58, 138]; // Dark Blue (Indigo-800 equivalent)
+
     // Check if the order is dispatched and we should print a simplified Gate Pass
     if (orderDetails.dispatched) {
         // --- GATE PASS PRINT LOGIC ---
-        const doc = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4'
-        });
-
-        const margin = 10;
-        let yPos = margin;
-        const pageWidth = doc.internal.pageSize.width;
-        const companyNameDisplay = companyName ? companyName.toUpperCase() : "COMPANY NAME";
-        const darkBlue = [30, 58, 138]; // Dark Blue (Indigo-800 equivalent)
-        const lightGray = [240, 240, 240];
-
+        
         // --- Company Name Strip ---
         const stripHeight = 12;
         const stripY = margin;
+        const textCenterY = stripY + stripHeight / 2 + 1; // 16mm
+        const logoY = stripY + (stripHeight - LOGO_HEIGHT) / 2; // 11mm
+        const logoXLeft = margin + 2;
+        const logoXRight = pageWidth - margin - LOGO_WIDTH - 2;
 
         // Draw dark blue background strip
         doc.setFillColor(...darkBlue);
         doc.rect(0, stripY - 2, pageWidth, stripHeight, 'F'); 
 
+        // Add Logos (Left and Right)
+        doc.addImage(LOGO_PATH_FIGHTOR, 'PNG', logoXLeft, logoY, LOGO_WIDTH, LOGO_HEIGHT);
+        doc.addImage(LOGO_PATH_SPARTAN, 'PNG', logoXRight, logoY, LOGO_WIDTH, LOGO_HEIGHT);
+
         // Company Name Text
         doc.setFontSize(18);
         doc.setFont("helvetica", "bold");
         doc.setTextColor(255, 255, 255); // White text
-        doc.text(companyNameDisplay, pageWidth / 2, stripY + stripHeight / 2 + 1, { align: 'center' });
+        doc.text(companyNameDisplay, pageWidth / 2, textCenterY, { align: 'center' });
         
         yPos = stripY + stripHeight + 5; // Start next element below the strip
         doc.setTextColor(0); // Reset text color to black
@@ -505,20 +519,22 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     }
 
     // --- DETAILED ORDER RECEIPT PRINT LOGIC (Fallback for non-dispatched or if needed) ---
-    const doc = new jsPDF({
-      orientation: 'portrait', // Changed to portrait for better fit of details
-      unit: 'mm',
-      format: 'a4'
-    });
-
-    const margin = 10;
-    let yPos = margin;
+    
+    // Adjust yPos to accommodate logos (using 15mm center line)
+    yPos = margin + 5; // 15mm center line
+    const logoYDetailed = yPos - LOGO_HEIGHT / 2; // 10mm
+    const logoXLeft = margin + 2;
+    const logoXRight = pageWidth - margin - LOGO_WIDTH - 2;
 
     // Company Name
-    const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
     doc.setFontSize(18);
-    doc.text(companyNameText, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
-    yPos += 10;
+    doc.text(companyNameDisplay, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
+    
+    // Add Logos (Left and Right)
+    doc.addImage(LOGO_PATH_FIGHTOR, 'PNG', logoXLeft, logoYDetailed, LOGO_WIDTH, LOGO_HEIGHT);
+    doc.addImage(LOGO_PATH_SPARTAN, 'PNG', logoXRight, logoYDetailed, LOGO_WIDTH, LOGO_HEIGHT);
+
+    yPos += 10; // Move down for the next element (Report Title)
 
     // Report Title
     doc.setFontSize(14);
