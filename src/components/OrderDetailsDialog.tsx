@@ -487,7 +487,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             margin: { top: 0, left: margin, right: margin },
             columnStyles: {
                 0: { cellWidth: 30 }, // Code (30)
-                1: { cellWidth: 100 }, // Product Name (50 -> 100)
+                1: { cellWidth: 100 }, // Product Name (100)
                 2: { cellWidth: 30 }, // Size (30)
                 3: { cellWidth: 30, halign: 'right' }, // Quantity (30)
             }
@@ -620,14 +620,16 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       },
       margin: { top: 0, left: margin, right: margin },
       columnStyles: {
+        // Total width is 190mm (210 - 2*10)
         0: { cellWidth: 18 }, // Code (18)
-        1: { cellWidth: 50 }, // Product Name (50)
+        1: { cellWidth: 45 }, // Product Name (45)
         2: { cellWidth: 18 }, // Size (18)
         3: { cellWidth: 18 }, // HSN (18)
         4: { cellWidth: 18, halign: 'right' }, // GST (%) (18)
         5: { cellWidth: 12, halign: 'right' }, // Quantity (12)
         6: { cellWidth: 20, halign: 'right' }, // Unit Price (20)
-        7: { cellWidth: 36, halign: 'right' }, // Total Price (36)
+        7: { cellWidth: 41, halign: 'right' }, // Total Price (41) -> Increased from 36 to 41
+        // Total: 18 + 45 + 18 + 18 + 18 + 12 + 20 + 41 = 190mm
       }
     });
 
