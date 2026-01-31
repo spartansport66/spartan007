@@ -657,10 +657,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             lineWidth: 0.1,
         },
         columnStyles: {
-            0: { cellWidth: 50, halign: 'left', fontStyle: 'normal' },
-            1: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
+            0: { cellWidth: 45, halign: 'left', fontStyle: 'normal' }, // Adjusted width
+            1: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Adjusted width
         },
-        margin: { top: 0, left: pageWidth - margin - 80, right: margin }, // Align to the right (190 - 80 = 110)
+        margin: { top: 0, left: pageWidth - margin - 80, right: margin }, // Total width remains 80
         didParseCell: (data) => {
             // Apply custom font size and style based on the summaryRows definition
             const rowIndex = data.row.index;
