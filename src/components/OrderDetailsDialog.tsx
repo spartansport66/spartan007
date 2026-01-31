@@ -367,7 +367,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     const LOGO_HEIGHT = 10;
     const LOGO_WIDTH = 10; 
     const LOGO_PATH_FIGHTOR = '/logos/fightor_white_logo.png';
-    const LOGO_PATH_SPARTAN = '/logos/spartan_logo_2.png';
+    const LOGO_PATH_SPARTAN = '/logos/spartan_white.jpeg'; // UPDATED PATH
     
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -386,10 +386,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         // --- GATE PASS PRINT LOGIC ---
         
         // --- Company Name Strip ---
-        const stripHeight = 12;
+        const stripHeight = 15; // Increased height
         const stripY = margin;
-        const textCenterY = stripY + stripHeight / 2 + 1; // 16mm
-        const logoY = stripY + (stripHeight - LOGO_HEIGHT) / 2; // 11mm
+        const textCenterY = stripY + stripHeight / 2 + 1; 
+        const logoY = stripY + (stripHeight - LOGO_HEIGHT) / 2; 
         const logoXLeft = margin + 2;
         const logoXRight = pageWidth - margin - LOGO_WIDTH - 2;
 
@@ -399,7 +399,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
         // Add Logos (Left and Right)
         doc.addImage(LOGO_PATH_FIGHTOR, 'PNG', logoXLeft, logoY, LOGO_WIDTH, LOGO_HEIGHT);
-        doc.addImage(LOGO_PATH_SPARTAN, 'PNG', logoXRight, logoY, LOGO_WIDTH, LOGO_HEIGHT);
+        doc.addImage(LOGO_PATH_SPARTAN, 'JPEG', logoXRight, logoY, LOGO_WIDTH, LOGO_HEIGHT); // Use JPEG type
 
         // Company Name Text
         doc.setFontSize(18);
@@ -407,12 +407,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         doc.setTextColor(255, 255, 255); // White text
         doc.text(companyNameDisplay, pageWidth / 2, textCenterY, { align: 'center' });
         
-        yPos = stripY + stripHeight + 5; // Start next element below the strip
+        yPos = stripY + stripHeight + 10; // Start next element below the strip + 10mm space
         doc.setTextColor(0); // Reset text color to black
         // --- End Company Name Strip ---
-
-        // Add 1 line space (5mm)
-        yPos += 5;
 
         // Gate Pass Title (Big Bold)
         doc.setFontSize(28);
@@ -532,9 +529,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     
     // Add Logos (Left and Right)
     doc.addImage(LOGO_PATH_FIGHTOR, 'PNG', logoXLeft, logoYDetailed, LOGO_WIDTH, LOGO_HEIGHT);
-    doc.addImage(LOGO_PATH_SPARTAN, 'PNG', logoXRight, logoYDetailed, LOGO_WIDTH, LOGO_HEIGHT);
+    doc.addImage(LOGO_PATH_SPARTAN, 'JPEG', logoXRight, logoYDetailed, LOGO_WIDTH, LOGO_HEIGHT); // Use JPEG type
 
-    yPos += 10; // Move down for the next element (Report Title)
+    yPos += 15; // Increased space below logo/company name
 
     // Report Title
     doc.setFontSize(14);
