@@ -298,6 +298,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
               <Button 
                 className="w-full bg-blue-600 hover:bg-blue-700 mt-4" 
                 onClick={() => showSuccess(`Order #${order.order_number} is already fully dispatched.`)}
+                disabled={true} // Explicitly disable the button when fully dispatched
               >
                 <CheckCircle className="mr-2 h-4 w-4" /> Fully Dispatched
               </Button>
