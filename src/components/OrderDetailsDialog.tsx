@@ -562,7 +562,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     // Dealer Information (Right Column)
     const rightColX = doc.internal.pageSize.width / 2 + 10;
     let dealerYPos = yPos - (orderDetails.dispatched ? 35 : 20); // Align with order info
-    if (dealerYPos < (margin + 20)) dealerYPos = margin + 20; // Ensure it doesn't go too high
+    if (dealerYPos < (stripY + stripHeight + 10)) dealerYPos = stripY + stripHeight + 10; // Ensure it doesn't overlap header strip
 
     doc.setFont("helvetica", "bold");
     doc.text("Dealer Information:", rightColX, dealerYPos);
@@ -633,24 +633,31 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
     yPos = (doc as any).lastAutoTable.finalY + 5;
 
+    // --- Summary Lines (Adjusted for Right Alignment) ---
+    const summaryX = pageWidth - margin;
+    const summaryWidth = 60; // Define a fixed width for the summary text block
+
     // Subtotal (Pre-Discount)
-    const preDiscountTotal = orderDetails.items.reduce((sum, item) => sum + item.total_price, 0);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text(`Subtotal (Pre-Discount): ₹${preDiscountTotal.toFixed(2)}`, doc.internal.pageSize.width - margin, yPos, { align: 'right' });
+    doc.text(`Subtotal (Pre-Discount):`, summaryX - summaryWidth, yPos, { align: 'left' });
+    doc.text(`₹${preDiscountTotal.toFixed(2)}`, summaryX, yPos, { align: 'right' });
     yPos += 5;
 
     // Discount Amount
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
-    doc.text(`Discount Applied: - ₹${orderDetails.discount_amount.toFixed(2)}`, doc.internal.pageSize.width - margin, yPos, { align: 'right' });
+    doc.text(`Discount Applied:`, summaryX - summaryWidth, yPos, { align: 'left' });
+    doc.text(`- ₹${orderDetails.discount_amount.toFixed(2)}`, summaryX, yPos, { align: 'right' });
     yPos += 5;
 
     // Total Order Amount (Final)
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.text(`Total Order Amount (Final): ₹${orderDetails.total_amount.toFixed(2)}`, doc.internal.pageSize.width - margin, yPos, { align: 'right' });
+    doc.text(`Total Order Amount (Final):`, summaryX - summaryWidth, yPos, { align: 'left' });
+    doc.text(`₹${orderDetails.total_amount.toFixed(2)}`, summaryX, yPos, { align: 'right' });
     yPos += 10;
+    // --- End Summary Lines ---
 
     // Payment Details Section
     if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
