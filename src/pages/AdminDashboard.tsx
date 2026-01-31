@@ -220,10 +220,11 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleDispatchSuccessAndPrint = (dispatchedOrderId: string) => {
+  // RENAMED and MODIFIED: Stop automatic PDF generation
+  const handleDispatchSuccess = (dispatchedOrderId: string) => {
     setSelectedOrderIdForDetails(dispatchedOrderId);
     setIsOrderDetailsDialogOpen(true);
-    setShouldPrintOrderDetails(true);
+    setShouldPrintOrderDetails(false); // Do NOT force print
     setRefreshKey(prev => prev + 1); // Trigger refresh
     fetchDashboardData();
   };
@@ -362,7 +363,7 @@ const AdminDashboard = () => {
       
       {/* 3. Orders to Dispatch / Dispatched Orders */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccessAndPrint} />
+        <OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} />
         <DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} />
       </div>
       

@@ -363,210 +363,328 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       return;
     }
 
-    try {
-      const doc = new jsPDF({
-        orientation: 'portrait', // Changed to portrait for better fit of details
-        unit: 'mm',
-        format: 'a4'
-      });
+    // Check if the order is dispatched and we should print a simplified Gate Pass
+    if (orderDetails.dispatched) {
+        // --- GATE PASS PRINT LOGIC ---
+        const doc = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
 
-      const margin = 10;
-      let yPos = margin;
+        const margin = 10;
+        let yPos = margin;
+        const pageWidth = doc.internal.pageSize.width;
 
-      // Company Name
-      const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
-      doc.setFontSize(18);
-      doc.text(companyNameText, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
-      yPos += 10;
-
-      // Report Title
-      doc.setFontSize(14);
-      doc.text("Order Details", doc.internal.pageSize.width / 2, yPos, { align: 'center' });
-      yPos += 8;
-
-      // Generated Date
-      doc.setFontSize(8);
-      doc.setTextColor(100);
-      doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
-      yPos += 8;
-
-      doc.setTextColor(0); // Reset text color to black
-
-      // Order Information (Left Column)
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text("Order Information:", margin, yPos);
-      doc.setFont("helvetica", "normal");
-      yPos += 5;
-      doc.text(`Order Number: ${orderDetails.order_number}`, margin, yPos);
-      yPos += 5;
-      doc.text(`Order Date: ${formatDate(orderDetails.order_date)}`, margin, yPos);
-      yPos += 5;
-      doc.text(`Order Status: ${orderDetails.status}`, margin, yPos);
-      yPos += 5;
-      doc.text(`Payment Status: ${orderDetails.payment_status.replace(/_/g, ' ').toUpperCase()}`, margin, yPos);
-      yPos += 5;
-      doc.text(`Payment Due Date: ${formatDate(orderDetails.payment_due_date)}`, margin, yPos);
-      yPos += 5;
-      doc.text(`Sales Person: ${orderDetails.sales_person_name}`, margin, yPos);
-      yPos += 5;
-
-      if (orderDetails.dispatched) {
-        doc.text(`Dispatch Number: ${orderDetails.dispatch_number || 'N/A'}`, margin, yPos);
-        yPos += 5;
-        doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, margin, yPos);
-        yPos += 5;
-        doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, margin, yPos);
-        yPos += 5;
-      }
-
-      // Dealer Information (Right Column)
-      const rightColX = doc.internal.pageSize.width / 2 + 10;
-      let dealerYPos = yPos - (orderDetails.dispatched ? 35 : 20); // Align with order info
-      if (dealerYPos < (margin + 20)) dealerYPos = margin + 20; // Ensure it doesn't go too high
-
-      doc.setFont("helvetica", "bold");
-      doc.text("Dealer Information:", rightColX, dealerYPos);
-      doc.setFont("helvetica", "normal");
-      dealerYPos += 5;
-      doc.text(`Dealer Name: ${orderDetails.dealer_name}`, rightColX, dealerYPos);
-      dealerYPos += 5;
-      doc.text(`Address: ${orderDetails.dealer_address}`, rightColX, dealerYPos);
-      dealerYPos += 5;
-      doc.text(`${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}`, rightColX, dealerYPos);
-      dealerYPos += 5;
-      doc.text(`Phone: ${orderDetails.dealer_phone}`, rightColX, dealerYPos);
-      dealerYPos += 5;
-
-      yPos = Math.max(yPos, dealerYPos) + 10; // Ensure next section starts below both columns
-
-      // Order Items Table
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      doc.text("Order Items:", margin, yPos);
-      yPos += 5;
-
-      const tableColumn = [
-        "Code", "Product Name", "Size", "HSN", "GST (%)", "Qty", "Unit Price", "Total Price"
-      ];
-      const tableRows = orderDetails.items.map(item => [
-        item.product_code,
-        item.product_name,
-        item.product_size,
-        item.product_hsn,
-        item.product_gst,
-        item.quantity.toString(),
-        `₹${item.unit_price.toFixed(2)}`,
-        `₹${item.total_price.toFixed(2)}`,
-      ]);
-
-      autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        startY: yPos,
-        styles: {
-          fontSize: 7,
-          cellPadding: 1,
-          valign: 'middle',
-          overflow: 'linebreak'
-        },
-        headStyles: {
-          fillColor: [30, 58, 138], // Dark blue
-          textColor: [255, 255, 255], // White
-          fontStyle: 'bold',
-          halign: 'center',
-        },
-        bodyStyles: {
-          textColor: [0, 0, 0],
-        },
-        margin: { top: 0, left: margin, right: margin },
-        columnStyles: {
-          0: { cellWidth: 18 }, // Code
-          1: { cellWidth: 35 }, // Product Name
-          2: { cellWidth: 18 }, // Size
-          3: { cellWidth: 18 }, // HSN
-          4: { cellWidth: 18, halign: 'right' }, // GST (%)
-          5: { cellWidth: 12, halign: 'right' }, // Quantity
-          6: { cellWidth: 20, halign: 'right' }, // Unit Price
-          7: { cellWidth: 25, halign: 'right' }, // Total Price
-        }
-      });
-
-      yPos = (doc as any).lastAutoTable.finalY + 5;
-
-      // Subtotal (Pre-Discount)
-      const preDiscountTotal = orderDetails.items.reduce((sum, item) => sum + item.total_price, 0);
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Subtotal (Pre-Discount): ₹${preDiscountTotal.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
-      yPos += 5;
-
-      // Discount Amount
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text(`Discount Applied: - ₹${orderDetails.discount_amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
-      yPos += 5;
-
-      // Total Order Amount (Final)
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      doc.text(`Total Order Amount (Final): ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
-      yPos += 10;
-
-      // Payment Details Section
-      if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
-        doc.setFontSize(12);
+        // Company Name
+        doc.setFontSize(24);
         doc.setFont("helvetica", "bold");
-        doc.text("Payment Details:", margin, yPos);
+        const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+        doc.text(companyNameText, pageWidth / 2, yPos, { align: 'center' });
+        yPos += 10;
+
+        // Gate Pass Title
+        doc.setFontSize(20);
+        doc.text("GATE PASS", pageWidth / 2, yPos, { align: 'center' });
+        yPos += 10;
+
+        // Dispatch Number (Big Bold)
+        doc.setFontSize(30);
+        doc.text(`DISPATCH NO: ${orderDetails.dispatch_number || 'N/A'}`, pageWidth / 2, yPos, { align: 'center' });
+        yPos += 15;
+
+        doc.setTextColor(0); // Reset text color to black
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+
+        // Dispatch/Order Info
+        doc.setFont("helvetica", "bold");
+        doc.text("Dispatch & Order Details:", margin, yPos);
         doc.setFont("helvetica", "normal");
         yPos += 5;
+        doc.text(`Order Number: ${orderDetails.order_number}`, margin, yPos);
+        doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, pageWidth / 2 + 10, yPos);
+        yPos += 5;
+        doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, margin, yPos);
+        doc.text(`Order Date: ${formatDate(orderDetails.order_date)}`, pageWidth / 2 + 10, yPos);
+        yPos += 8;
 
-        const paymentDetailsLines = [
-          `Payment Method: ${orderDetails.payment_method || 'N/A'}`,
-          `Amount: ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}`,
-          `Payment Date: ${formatDate(orderDetails.payment_date)}`,
+        // Dealer Information
+        doc.setFont("helvetica", "bold");
+        doc.text("Delivery To:", margin, yPos);
+        doc.setFont("helvetica", "normal");
+        yPos += 5;
+        doc.text(`Dealer Name: ${orderDetails.dealer_name}`, margin, yPos);
+        yPos += 5;
+        doc.text(`Address: ${orderDetails.dealer_address}`, margin, yPos);
+        yPos += 5;
+        doc.text(`${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}`, margin, yPos);
+        yPos += 5;
+        doc.text(`Phone: ${orderDetails.dealer_phone}`, margin, yPos);
+        yPos += 8;
+
+        // Order Items Table
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("Items Included:", margin, yPos);
+        yPos += 5;
+
+        const tableColumn = [
+            "Code", "Product Name", "Size", "Qty", "Total Price"
         ];
+        const tableRows = orderDetails.items.map(item => [
+            item.product_code,
+            item.product_name,
+            item.product_size,
+            item.quantity.toString(),
+            `₹${item.total_price.toFixed(2)}`,
+        ]);
 
-        if (orderDetails.payment_method === 'Cheque/DD') {
-          paymentDetailsLines.push(`Cheque/DD No: ${orderDetails.cheque_dd_no || 'N/A'}`);
-          paymentDetailsLines.push(`Cheque/DD Date: ${formatDate(orderDetails.cheque_dd_date)}`);
-        }
-        if (orderDetails.payment_method === 'Card') {
-          paymentDetailsLines.push(`Card Number: ${orderDetails.card_number ? `**** **** **** ${orderDetails.card_number.slice(-4)}` : 'N/A'}`);
-          paymentDetailsLines.push(`Card Holder: ${orderDetails.card_holder_name || 'N/A'}`);
-          paymentDetailsLines.push(`Expiry Date: ${orderDetails.expiry_date || 'N/A'}`);
-          paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
-        }
-        if (orderDetails.payment_method === 'Bank Transfer') {
-          paymentDetailsLines.push(`Bank Name: ${orderDetails.bank_name || 'N/A'}`);
-          paymentDetailsLines.push(`Account Number: ${orderDetails.account_number ? `****${orderDetails.account_number.slice(-4)}` : 'N/A'}`);
-          paymentDetailsLines.push(`IFSC Code: ${orderDetails.ifsc_code || 'N/A'}`);
-          paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
-        }
-        if (orderDetails.payment_method === 'UPI') {
-          paymentDetailsLines.push(`UPI ID: ${orderDetails.upi_id || 'N/A'}`);
-          paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
-        }
-        if (orderDetails.payment_method === 'Cash') {
-          paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
-        }
-
-        paymentDetailsLines.forEach(line => {
-          if (yPos + 5 > doc.internal.pageSize.height - margin) {
-            doc.addPage();
-            yPos = margin;
-          }
-          doc.text(line, margin, yPos);
-          yPos += 5;
+        autoTable(doc, {
+            head: [tableColumn],
+            body: tableRows,
+            startY: yPos,
+            styles: {
+                fontSize: 9,
+                cellPadding: 2,
+                valign: 'middle',
+                overflow: 'linebreak'
+            },
+            headStyles: {
+                fillColor: [30, 58, 138],
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+                halign: 'center',
+            },
+            margin: { top: 0, left: margin, right: margin },
+            columnStyles: {
+                0: { cellWidth: 25 }, // Code
+                1: { cellWidth: 50 }, // Product Name
+                2: { cellWidth: 25 }, // Size
+                3: { cellWidth: 20, halign: 'right' }, // Quantity
+                4: { cellWidth: 30, halign: 'right' }, // Total Price
+            }
         });
+
+        yPos = (doc as any).lastAutoTable.finalY + 5;
+
+        // Total Order Amount (Final)
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Total Order Amount (Final): ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
+        yPos += 10;
+
+        // Signature lines
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text("Authorized By (Admin)", margin, yPos + 10);
+        doc.text("Received By (Dealer/Transporter)", pageWidth - margin, yPos + 10, { align: 'right' });
+
+        doc.save(`gate_pass_${orderDetails.dispatch_number}.pdf`);
+        showSuccess('Gate Pass PDF generated successfully!');
+        return; // Exit the function after printing Gate Pass
+    }
+
+    // --- DETAILED ORDER RECEIPT PRINT LOGIC (Fallback for non-dispatched or if needed) ---
+    const doc = new jsPDF({
+      orientation: 'portrait', // Changed to portrait for better fit of details
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const margin = 10;
+    let yPos = margin;
+
+    // Company Name
+    const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+    doc.setFontSize(18);
+    doc.text(companyNameText, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
+    yPos += 10;
+
+    // Report Title
+    doc.setFontSize(14);
+    doc.text("Order Details", doc.internal.pageSize.width / 2, yPos, { align: 'center' });
+    yPos += 8;
+
+    // Generated Date
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, yPos, { align: 'center' });
+    yPos += 8;
+
+    doc.setTextColor(0); // Reset text color to black
+
+    // Order Information (Left Column)
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("Order Information:", margin, yPos);
+    doc.setFont("helvetica", "normal");
+    yPos += 5;
+    doc.text(`Order Number: ${orderDetails.order_number}`, margin, yPos);
+    yPos += 5;
+    doc.text(`Order Date: ${formatDate(orderDetails.order_date)}`, margin, yPos);
+    yPos += 5;
+    doc.text(`Order Status: ${orderDetails.status}`, margin, yPos);
+    yPos += 5;
+    doc.text(`Payment Status: ${orderDetails.payment_status.replace(/_/g, ' ').toUpperCase()}`, margin, yPos);
+    yPos += 5;
+    doc.text(`Payment Due Date: ${formatDate(orderDetails.payment_due_date)}`, margin, yPos);
+    yPos += 5;
+    doc.text(`Sales Person: ${orderDetails.sales_person_name}`, margin, yPos);
+    yPos += 5;
+
+    if (orderDetails.dispatched) {
+      doc.text(`Dispatch Number: ${orderDetails.dispatch_number || 'N/A'}`, margin, yPos);
+      yPos += 5;
+      doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, margin, yPos);
+      yPos += 5;
+      doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, margin, yPos);
+      yPos += 5;
+    }
+
+    // Dealer Information (Right Column)
+    const rightColX = doc.internal.pageSize.width / 2 + 10;
+    let dealerYPos = yPos - (orderDetails.dispatched ? 35 : 20); // Align with order info
+    if (dealerYPos < (margin + 20)) dealerYPos = margin + 20; // Ensure it doesn't go too high
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Dealer Information:", rightColX, dealerYPos);
+    doc.setFont("helvetica", "normal");
+    dealerYPos += 5;
+    doc.text(`Dealer Name: ${orderDetails.dealer_name}`, rightColX, dealerYPos);
+    dealerYPos += 5;
+    doc.text(`Address: ${orderDetails.dealer_address}`, rightColX, dealerYPos);
+    dealerYPos += 5;
+    doc.text(`${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}`, rightColX, dealerYPos);
+    dealerYPos += 5;
+    doc.text(`Phone: ${orderDetails.dealer_phone}`, rightColX, dealerYPos);
+    dealerYPos += 5;
+
+    yPos = Math.max(yPos, dealerYPos) + 10; // Ensure next section starts below both columns
+
+    // Order Items Table
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Order Items:", margin, yPos);
+    yPos += 5;
+
+    const tableColumn = [
+      "Code", "Product Name", "Size", "HSN", "GST (%)", "Qty", "Unit Price", "Total Price"
+    ];
+    const tableRows = orderDetails.items.map(item => [
+      item.product_code,
+      item.product_name,
+      item.product_size,
+      item.product_hsn,
+      item.product_gst,
+      item.quantity.toString(),
+      `₹${item.unit_price.toFixed(2)}`,
+      `₹${item.total_price.toFixed(2)}`,
+    ]);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: yPos,
+      styles: {
+        fontSize: 7,
+        cellPadding: 1,
+        valign: 'middle',
+        overflow: 'linebreak'
+      },
+      headStyles: {
+        fillColor: [30, 58, 138], // Dark blue
+        textColor: [255, 255, 255], // White
+        fontStyle: 'bold',
+        halign: 'center',
+      },
+      bodyStyles: {
+        textColor: [0, 0, 0],
+      },
+      margin: { top: 0, left: margin, right: margin },
+      columnStyles: {
+        0: { cellWidth: 18 }, // Code
+        1: { cellWidth: 35 }, // Product Name
+        2: { cellWidth: 18 }, // Size
+        3: { cellWidth: 18 }, // HSN
+        4: { cellWidth: 18, halign: 'right' }, // GST (%)
+        5: { cellWidth: 12, halign: 'right' }, // Quantity
+        6: { cellWidth: 20, halign: 'right' }, // Unit Price
+        7: { cellWidth: 25, halign: 'right' }, // Total Price
+      }
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 5;
+
+    // Subtotal (Pre-Discount)
+    const preDiscountTotal = orderDetails.items.reduce((sum, item) => sum + item.total_price, 0);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Subtotal (Pre-Discount): ₹${preDiscountTotal.toFixed(2)}`, doc.internal.pageSize.width - margin, yPos, { align: 'right' });
+    yPos += 5;
+
+    // Discount Amount
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Discount Applied: - ₹${orderDetails.discount_amount.toFixed(2)}`, doc.internal.pageSize.width - margin, yPos, { align: 'right' });
+    yPos += 5;
+
+    // Total Order Amount (Final)
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Total Order Amount (Final): ₹${orderDetails.total_amount.toFixed(2)}`, doc.internal.pageSize.width - margin, yPos, { align: 'right' });
+    yPos += 10;
+
+    // Payment Details Section
+    if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Payment Details:", margin, yPos);
+      doc.setFont("helvetica", "normal");
+      yPos += 5;
+
+      const paymentDetailsLines = [
+        `Payment Method: ${orderDetails.payment_method || 'N/A'}`,
+        `Amount: ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}`,
+        `Payment Date: ${formatDate(orderDetails.payment_date)}`,
+      ];
+
+      if (orderDetails.payment_method === 'Cheque/DD') {
+        paymentDetailsLines.push(`Cheque/DD No: ${orderDetails.cheque_dd_no || 'N/A'}`);
+        paymentDetailsLines.push(`Cheque/DD Date: ${formatDate(orderDetails.cheque_dd_date)}`);
+      }
+      if (orderDetails.payment_method === 'Card') {
+        paymentDetailsLines.push(`Card Number: ${orderDetails.card_number ? `**** **** **** ${orderDetails.card_number.slice(-4)}` : 'N/A'}`);
+        paymentDetailsLines.push(`Card Holder: ${orderDetails.card_holder_name || 'N/A'}`);
+        paymentDetailsLines.push(`Expiry Date: ${orderDetails.expiry_date || 'N/A'}`);
+        paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
+      }
+      if (orderDetails.payment_method === 'Bank Transfer') {
+        paymentDetailsLines.push(`Bank Name: ${orderDetails.bank_name || 'N/A'}`);
+        paymentDetailsLines.push(`Account Number: ${orderDetails.account_number ? `****${orderDetails.account_number.slice(-4)}` : 'N/A'}`);
+        paymentDetailsLines.push(`IFSC Code: ${orderDetails.ifsc_code || 'N/A'}`);
+        paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
+      }
+      if (orderDetails.payment_method === 'UPI') {
+        paymentDetailsLines.push(`UPI ID: ${orderDetails.upi_id || 'N/A'}`);
+        paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
+      }
+      if (orderDetails.payment_method === 'Cash') {
+        paymentDetailsLines.push(`Transaction ID: ${orderDetails.transaction_id || 'N/A'}`);
       }
 
-      doc.save(`order_${orderDetails.order_number}_details.pdf`);
-      showSuccess('Order details PDF generated successfully!');
-    } catch (error: any) {
-      console.error('Error generating PDF:', error);
-      showError(`Failed to generate order details PDF: ${error.message || 'An unknown error occurred.'}`);
+      paymentDetailsLines.forEach(line => {
+        if (yPos + 5 > doc.internal.pageSize.height - margin) {
+          doc.addPage();
+          yPos = margin;
+        }
+        doc.text(line, margin, yPos);
+        yPos += 5;
+      });
     }
+
+    doc.save(`order_${orderDetails.order_number}_details.pdf`);
+    showSuccess('Order details PDF generated successfully!');
   };
 
   // Calculate pre-discount total for display
@@ -683,7 +801,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         )}
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
           <Button variant="outline" onClick={handlePrint} disabled={!orderDetails || loading}>
-            <Printer className="mr-2 h-4 w-4" /> Print Receipt
+            <Printer className="mr-2 h-4 w-4" /> {orderDetails?.dispatched ? 'Print Gate Pass' : 'Print Receipt'}
           </Button>
           <Button onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
