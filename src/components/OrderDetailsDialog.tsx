@@ -383,29 +383,29 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         doc.text(companyNameText, pageWidth / 2, yPos, { align: 'center' });
         yPos += 10;
 
-        // Gate Pass Title
-        doc.setFontSize(20);
+        // Gate Pass Title (Big Bold)
+        doc.setFontSize(28);
         doc.text("GATE PASS", pageWidth / 2, yPos, { align: 'center' });
-        yPos += 10;
+        yPos += 12;
 
         // Dispatch Number (Big Bold)
-        doc.setFontSize(30);
+        doc.setFontSize(36);
         doc.text(`DISPATCH NO: ${orderDetails.dispatch_number || 'N/A'}`, pageWidth / 2, yPos, { align: 'center' });
-        yPos += 15;
+        yPos += 18;
 
         doc.setTextColor(0); // Reset text color to black
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
 
-        // Dispatch/Order Info
+        // Dispatch/Order Info (Simplified)
         doc.setFont("helvetica", "bold");
         doc.text("Dispatch & Order Details:", margin, yPos);
         doc.setFont("helvetica", "normal");
         yPos += 5;
-        doc.text(`Order Number: ${orderDetails.order_number}`, margin, yPos);
-        doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, pageWidth / 2 + 10, yPos);
+        doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, margin, yPos);
+        doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, pageWidth / 2 + 10, yPos);
         yPos += 5;
-        doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, margin, yPos);
+        doc.text(`Order Number: ${orderDetails.order_number}`, margin, yPos);
         doc.text(`Order Date: ${formatDate(orderDetails.order_date)}`, pageWidth / 2 + 10, yPos);
         yPos += 8;
 
@@ -430,14 +430,13 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         yPos += 5;
 
         const tableColumn = [
-            "Code", "Product Name", "Size", "Qty", "Total Price"
+            "Code", "Product Name", "Size", "Qty"
         ];
         const tableRows = orderDetails.items.map(item => [
             item.product_code,
             item.product_name,
             item.product_size,
             item.quantity.toString(),
-            `₹${item.total_price.toFixed(2)}`,
         ]);
 
         autoTable(doc, {
@@ -445,7 +444,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             body: tableRows,
             startY: yPos,
             styles: {
-                fontSize: 9,
+                fontSize: 10,
                 cellPadding: 2,
                 valign: 'middle',
                 overflow: 'linebreak'
@@ -458,19 +457,18 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             },
             margin: { top: 0, left: margin, right: margin },
             columnStyles: {
-                0: { cellWidth: 25 }, // Code
-                1: { cellWidth: 50 }, // Product Name
-                2: { cellWidth: 25 }, // Size
-                3: { cellWidth: 20, halign: 'right' }, // Quantity
-                4: { cellWidth: 30, halign: 'right' }, // Total Price
+                0: { cellWidth: 30 }, // Code
+                1: { cellWidth: 60 }, // Product Name
+                2: { cellWidth: 30 }, // Size
+                3: { cellWidth: 30, halign: 'right' }, // Quantity
             }
         });
 
         yPos = (doc as any).lastAutoTable.finalY + 5;
 
-        // Total Order Amount (Final)
-        doc.setFontSize(12);
-        doc.setFont("helvetica", "bold");
+        // Total Order Amount (Final) - Included for reference, but less prominent
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
         doc.text(`Total Order Amount (Final): ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
         yPos += 10;
 
