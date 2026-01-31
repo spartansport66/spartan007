@@ -63,8 +63,13 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
     setOrder(null);
 
     const search = searchTerm.trim();
-    const isNumeric = /^\d+$/.test(search);
-    const searchNum = isNumeric ? parseInt(search) : null;
+    const searchNum = parseInt(search);
+
+    if (isNaN(searchNum) || searchNum <= 0) {
+        showError("Please enter a valid Dispatch Number (a positive number).");
+        setLoading(false);
+        return;
+    }
 
     const selectFields = `
       id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number, gate_pass_dispatch_time,
@@ -73,24 +78,13 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
       sales (quantity, products (name, code))
     `;
 
-    let query;
-    if (isNumeric) {
-        // Search ONLY by Dispatch Number if numeric
-        query = supabase
-            .from('orders')
-            .select(selectFields)
-            .eq('dispatch_number', searchNum)
-            .limit(1)
-            .single();
-    } else {
-        // Search ONLY by Bill Number if non-numeric
-        query = supabase
-            .from('orders')
-            .select(selectFields)
-            .eq('bill_no', search)
-            .limit(1)
-            .single();
-    }
+    // Search ONLY by Dispatch Number
+    const query = supabase
+        .from('orders')
+        .select(selectFields)
+        .eq('dispatch_number', searchNum)
+        .limit(1)
+        .single();
     
     const { data, error } = await query;
 
@@ -101,7 +95,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
       }
 
       if (!data) {
-        showError(`Order, Bill No., or Dispatch No. "${search}" not found.`);
+        showError(`Dispatch Number "${search}" not found.`);
         setOrder(null);
         return;
       }
@@ -196,16 +190,17 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
           <Truck className="h-6 w-6" /> Gate Pass / Dispatch Manager
         </CardTitle>
         <CardDescription className="text-green-100 dark:text-green-200">
-          Search for an order by Bill Number or Dispatch Number to authorize material dispatch.
+          Search for an order by Dispatch Number to authorize material dispatch.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-6">
         <div className="flex gap-4 items-end">
           <div className="flex-grow">
-            <Label htmlFor="searchTerm">Bill Number or Dispatch Number</Label>
+            <Label htmlFor="searchTerm">Dispatch Number</Label>
             <Input
               id="searchTerm"
-              placeholder="e.g., INV-2024-001 or 1719840000000"
+              placeholder="e.g., 1719840000000"
+              type="number"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               disabled={loading}
@@ -325,7 +320,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
                 <XCircle className="h-4 w-4" />
                 <AlertTitle>No Order Found</AlertTitle>
                 <AlertDescription>
-                    Could not find an order matching "{searchTerm}". Please check the Bill Number or Dispatch Number.
+                    Could not find an order matching Dispatch Number "{searchTerm}".
                 </AlertDescription>
             </Alert>
         )}
