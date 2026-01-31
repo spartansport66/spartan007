@@ -467,7 +467,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       // Payment details are always included now
       if (isPaidAtOrderTime) {
         payload.paymentDetails = {
-          amount: paymentAmount,
+          // Removed redundant 'amount' field, relying on Edge Function calculation
           payment_method: paymentMethod,
           cheque_dd_no: paymentMethod === 'Cheque/DD' ? chequeDdNo : null,
           cheque_dd_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : null,
