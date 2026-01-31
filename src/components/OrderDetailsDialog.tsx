@@ -31,8 +31,8 @@ interface OrderDetail {
   dealer_name: string;
   dealer_address: string;
   dealer_city: string; // Added
-  dealer_state: string; // Added
-  dealer_country: string; // Added
+  dealer_state: string;
+  dealer_country: string;
   dealer_phone: string;
   sales_person_name: string;
   items: OrderItemDetail[];
@@ -599,11 +599,16 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       `₹${item.total_price.toFixed(2)}`,
     ]);
 
-    // Removed fixed column widths for item table to allow auto-sizing
+    // Updated column styles to center all columns
     const itemTableColumnStyles = {
-        5: { halign: 'right' }, // Quantity
-        6: { halign: 'right' }, // Unit Price
-        7: { halign: 'right' }, // Total Price
+        0: { halign: 'center' }, // Code
+        1: { halign: 'center' }, // Product Name
+        2: { halign: 'center' }, // Size
+        3: { halign: 'center' }, // HSN
+        4: { halign: 'center' }, // GST (%)
+        5: { halign: 'center' }, // Quantity
+        6: { halign: 'center' }, // Unit Price
+        7: { halign: 'center' }, // Total Price
     };
 
     autoTable(doc, {
@@ -618,7 +623,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         lineWidth: 0.1, // Keep body borders
       },
       headStyles: {
-        fillColor: [255, 255, 255], // Removed dark blue background
+        fillColor: [255, 255, 255], // White background
         textColor: [0, 0, 0], // Black text
         fontStyle: 'bold',
         halign: 'center',
