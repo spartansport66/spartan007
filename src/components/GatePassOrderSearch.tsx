@@ -156,20 +156,26 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
 
     setIsDispatching(true);
     try {
+      const dispatchTime = new Date().toISOString();
+      
       // Update the new gate_pass_dispatch_time field
       const { error } = await supabase
         .from('orders')
         .update({
-          gate_pass_dispatch_time: new Date().toISOString(),
+          gate_pass_dispatch_time: dispatchTime,
         })
         .eq('id', order.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase Update Error during Gate Pass Dispatch:', error.message);
+        showError(`Database update failed: ${error.message}`);
+        throw error;
+      }
 
       showSuccess(`Order #${order.order_number} successfully authorized for OUT!`);
       
       // Update local state and notify parent
-      setOrder(prev => prev ? { ...prev, gate_pass_dispatch_time: new Date().toISOString() } : null);
+      setOrder(prev => prev ? { ...prev, gate_pass_dispatch_time: dispatchTime } : null);
       onDispatchSuccess();
 
     } catch (error: any) {
@@ -298,7 +304,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
               <Button 
                 className="w-full bg-blue-600 hover:bg-blue-700 mt-4" 
                 onClick={() => showSuccess(`Order #${order.order_number} is already fully dispatched.`)}
-                disabled={true} // Explicitly disable the button when fully dispatched
+                disabled={true}
               >
                 <CheckCircle className="mr-2 h-4 w-4" /> Fully Dispatched
               </Button>
