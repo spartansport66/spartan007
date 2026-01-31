@@ -942,7 +942,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   step="0.01" // Allow decimal input
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)} // Use parseFloat
-                  className="w-full"
+                  className="w-full bg-muted"
+                  readOnly // Make read-only to enforce matching final order value
                 />
               </div>
 
