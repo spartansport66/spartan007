@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { Separator } from '@/components/ui/separator';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 interface OrderItemDetail {
   product_name: string;
@@ -91,6 +92,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         .from('orders')
         .select(selectFields)
         .eq('bill_no', search)
+        .not('bill_no', 'is', null) // Only search for orders that have a bill number set
         .limit(1)
         .single();
     }
