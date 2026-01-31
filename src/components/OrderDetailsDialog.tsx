@@ -486,10 +486,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             },
             margin: { top: 0, left: margin, right: margin },
             columnStyles: {
-                0: { cellWidth: 30 }, // Code
-                1: { cellWidth: 50 }, // Product Name
-                2: { cellWidth: 30 }, // Size
-                3: { cellWidth: 30, halign: 'right' }, // Quantity
+                0: { cellWidth: 30 }, // Code (30)
+                1: { cellWidth: 100 }, // Product Name (50 -> 100)
+                2: { cellWidth: 30 }, // Size (30)
+                3: { cellWidth: 30, halign: 'right' }, // Quantity (30)
             }
         });
 
@@ -620,14 +620,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       },
       margin: { top: 0, left: margin, right: margin },
       columnStyles: {
-        0: { cellWidth: 18 }, // Code
-        1: { cellWidth: 35 }, // Product Name
-        2: { cellWidth: 18 }, // Size
-        3: { cellWidth: 18 }, // HSN
-        4: { cellWidth: 18, halign: 'right' }, // GST (%)
-        5: { cellWidth: 12, halign: 'right' }, // Quantity
-        6: { cellWidth: 20, halign: 'right' }, // Unit Price
-        7: { cellWidth: 25, halign: 'right' }, // Total Price
+        0: { cellWidth: 18 }, // Code (18)
+        1: { cellWidth: 50 }, // Product Name (50)
+        2: { cellWidth: 18 }, // Size (18)
+        3: { cellWidth: 18 }, // HSN (18)
+        4: { cellWidth: 18, halign: 'right' }, // GST (%) (18)
+        5: { cellWidth: 12, halign: 'right' }, // Quantity (12)
+        6: { cellWidth: 20, halign: 'right' }, // Unit Price (20)
+        7: { cellWidth: 36, halign: 'right' }, // Total Price (36)
       }
     });
 
@@ -636,7 +636,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     // --- Summary Lines (Adjusted for Right Alignment and Spacing) ---
     const summaryRightX = pageWidth - margin;
     const valueX = summaryRightX - 2; // Position for right-aligned values (2mm buffer from edge)
-    const summaryWidth = 80; // Increased width for the block
+    const summaryWidth = 80; // Define a fixed width for the summary text block
     const labelX = summaryRightX - summaryWidth; // Left position for labels
 
     const preDiscountTotal = orderDetails.items.reduce((sum, item) => sum + item.total_price, 0);
