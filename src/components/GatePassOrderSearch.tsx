@@ -65,10 +65,11 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
     const isNumeric = /^\d+$/.test(search);
     const searchNum = isNumeric ? parseInt(search) : null;
 
+    // Use explicit table names for clarity in joins
     const selectFields = `
       id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number,
       dealers (name, address, phone),
-      profiles (first_name, last_name),
+      profiles:user_id (first_name, last_name),
       sales (quantity, products (name, code))
     `;
 
@@ -112,6 +113,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         return;
       }
 
+      // Access profiles data using the explicit alias 'profiles'
       const salesPersonName = `${data.profiles?.first_name || ''} ${data.profiles?.last_name || ''}`.trim() || 'N/A';
 
       const formattedOrder: OrderDetail = {
