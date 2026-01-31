@@ -39,7 +39,8 @@ const SQL_COMMAND = `
 -- Ensure uuid-ossp extension is enabled if not already
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE public.login_logs (
+-- 1. Create login_logs table
+CREATE TABLE IF NOT EXISTS public.login_logs (
     id uuid NOT NULL DEFAULT uuid_generate_v4(),
     user_id uuid NOT NULL,
     login_time timestamp with time zone NOT NULL DEFAULT now(),
@@ -49,17 +50,28 @@ CREATE TABLE public.login_logs (
     CONSTRAINT login_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
--- Table for tracking active usage
-CREATE TABLE public.user_activity_logs (
+-- 2. Create user_activity_logs table
+CREATE TABLE IF NOT EXISTS public.user_activity_logs (
     user_id uuid NOT NULL,
     last_active_at timestamp with time zone NOT NULL DEFAULT now(),
     CONSTRAINT user_activity_logs_pkey PRIMARY KEY (user_id),
     CONSTRAINT user_activity_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
--- Enable RLS for user_activity_logs
+-- 3. Enable RLS for user_activity_logs
 ALTER TABLE public.user_activity_logs ENABLE ROW LEVEL SECURITY;
+
+-- 4. RLS Policies for user_activity_logs (FIXED: Added INSERT policy)
+-- Allow authenticated users to create their own initial activity log entry
+DROP POLICY IF EXISTS "Users can insert their own activity log" ON public.user_activity_logs;
+CREATE POLICY "Users can insert their own activity log" ON public.user_activity_logs FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
+-- Allow authenticated users to update their own activity log
+DROP POLICY IF EXISTS "Users can update their own activity log" ON public.user_activity_logs;
 CREATE POLICY "Users can update their own activity log" ON public.user_activity_logs FOR UPDATE TO authenticated USING (auth.uid() = user_id);
+
+-- Allow Admins and Sales Persons to read all activity logs (for reporting)
+DROP POLICY IF EXISTS "Admins and Sales Persons can read all activity logs" ON public.user_activity_logs;
 CREATE POLICY "Admins and Sales Persons can read all activity logs" ON public.user_activity_logs FOR SELECT TO authenticated USING (TRUE);
 
 -- Note: Client-side logic in src/pages/Login.tsx and src/hooks/useActivityTracker.tsx handles inserts/updates.
