@@ -635,7 +635,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
     yPos = (doc as any).lastAutoTable.finalY + 5;
 
-    // --- Summary Table (Replaced manual drawing) ---
+    // --- Summary Table ---
     const preDiscountTotal = orderDetails.items.reduce((sum, item) => sum + item.total_price, 0);
     
     const summaryRows = [
@@ -657,10 +657,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             lineWidth: 0.1,
         },
         columnStyles: {
-            0: { cellWidth: 45, halign: 'left', fontStyle: 'normal' }, // Adjusted width
-            1: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Adjusted width
+            // Adjusted widths to ensure they fit within the 80mm width (pageWidth - 2*margin = 190mm)
+            0: { cellWidth: 45, halign: 'left', fontStyle: 'normal' }, 
+            1: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, 
         },
-        margin: { top: 0, left: pageWidth - margin - 80, right: margin }, // Total width remains 80
+        margin: { top: 0, left: pageWidth - margin - 80, right: margin }, // Align to the right (190 - 80 = 110)
         didParseCell: (data) => {
             // Apply custom font size and style based on the summaryRows definition
             const rowIndex = data.row.index;
