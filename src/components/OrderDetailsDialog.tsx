@@ -608,9 +608,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         3: { cellWidth: 15 }, // HSN (15)
         4: { cellWidth: 15, halign: 'right' }, // GST (%) (15)
         5: { cellWidth: 10, halign: 'right' }, // Quantity (10)
-        6: { cellWidth: 25, halign: 'right' }, // Unit Price (25)
-        7: { cellWidth: 50, halign: 'right' }, // Total Price (50) <-- Increased width
-        // Total: 15 + 45 + 15 + 15 + 15 + 10 + 25 + 50 = 190mm
+        6: { cellWidth: 20, halign: 'right' }, // Unit Price (20)
+        7: { cellWidth: 55, halign: 'right' }, // Total Price (55) <-- Increased width
+        // Total: 15 + 45 + 15 + 15 + 15 + 10 + 20 + 55 = 190mm
     };
 
     autoTable(doc, {
@@ -647,8 +647,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         ['Total Order Amount (Final):', `₹${orderDetails.total_amount.toFixed(2)}`, 12, 'bold'],
     ];
 
-    // Total width for summary table: 80mm (45mm + 35mm)
-    const summaryTableWidth = 80;
+    // Total width for summary table: 90mm (40mm + 50mm)
+    const summaryTableWidth = 90;
     const summaryTableX = pageWidth - margin - summaryTableWidth;
 
     autoTable(doc, {
@@ -664,8 +664,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             lineWidth: 0.1,
         },
         columnStyles: {
-            0: { cellWidth: 45, halign: 'left', fontStyle: 'normal' }, 
-            1: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Increased width to 35mm
+            0: { cellWidth: 40, halign: 'left', fontStyle: 'normal' }, // Reduced label width
+            1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' }, // Increased value width
         },
         margin: { top: 0, left: summaryTableX, right: margin }, // Align to the right
         didParseCell: (data) => {
