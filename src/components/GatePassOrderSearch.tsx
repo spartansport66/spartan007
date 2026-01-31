@@ -65,7 +65,6 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
     const isNumeric = /^\d+$/.test(search);
     const searchNum = isNumeric ? parseInt(search) : null;
 
-    // Use explicit table names for clarity in joins
     const selectFields = `
       id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number,
       dealers (name, address, phone),
@@ -267,7 +266,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button className="w-full bg-green-600 hover:bg-green-700 mt-4" disabled={isDispatching}>
-                    <Truck className="mr-2 h-4 w-4" /> Authorize Material Out
+                    <Truck className="mr-2 h-4 w-4" /> Authorize OUT
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -280,7 +279,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={handleDispatchOrder} disabled={isDispatching}>
-                      {isDispatching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Confirm Dispatch'}
+                      {isDispatching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Confirm OUT'}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
