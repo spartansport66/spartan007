@@ -155,6 +155,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
       // Generate a unique dispatch number (simple timestamp + random suffix)
       const dispatchNumber = Date.now() + Math.floor(Math.random() * 1000);
 
+      // This updates the database to confirm material is OUT
       const { error } = await supabase
         .from('orders')
         .update({
@@ -266,14 +267,14 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button className="w-full bg-green-600 hover:bg-green-700 mt-4" disabled={isDispatching}>
-                    <Truck className="mr-2 h-4 w-4" /> Authorize OUT
+                    <Truck className="mr-2 h-4 w-4" /> OUT
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Confirm Dispatch Authorization</AlertDialogTitle>
+                    <AlertDialogTitle>Confirm Material OUT</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Are you sure you want to authorize the dispatch of Order #{order.order_number}? This action cannot be undone and will mark the material as OUT.
+                      Are you sure you want to authorize the material OUT for Order #{order.order_number}? This action cannot be undone and will mark the material as dispatched from the factory gate.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
