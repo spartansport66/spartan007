@@ -375,13 +375,25 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         const margin = 10;
         let yPos = margin;
         const pageWidth = doc.internal.pageSize.width;
+        const companyNameDisplay = "SPARTAN SPORTS CORPORATION";
 
-        // Company Name
-        doc.setFontSize(24);
+        // --- Company Name Strip ---
+        const stripHeight = 10;
+        const stripY = margin;
+
+        // Draw blue background strip (e.g., RGB 30, 58, 138 - dark blue)
+        doc.setFillColor(30, 58, 138);
+        doc.rect(0, stripY - 2, pageWidth, stripHeight, 'F'); 
+
+        // Company Name Text
+        doc.setFontSize(18);
         doc.setFont("helvetica", "bold");
-        const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
-        doc.text(companyNameText, pageWidth / 2, yPos, { align: 'center' });
-        yPos += 10;
+        doc.setTextColor(255, 255, 255); // White text
+        doc.text(companyNameDisplay, pageWidth / 2, stripY + stripHeight / 2 + 1, { align: 'center' });
+        
+        yPos = stripY + stripHeight + 5; // Start next element below the strip
+        doc.setTextColor(0); // Reset text color to black
+        // --- End Company Name Strip ---
 
         // Gate Pass Title (Big Bold)
         doc.setFontSize(28);
@@ -402,10 +414,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         doc.text("Dispatch & Order Details:", margin, yPos);
         doc.setFont("helvetica", "normal");
         yPos += 5;
-        doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, margin, yPos);
-        doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, pageWidth / 2 + 10, yPos);
-        yPos += 5;
         doc.text(`Order Number: ${orderDetails.order_number}`, margin, yPos);
+        doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, pageWidth / 2 + 10, yPos);
+        yPos += 5;
+        doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, margin, yPos);
         doc.text(`Order Date: ${formatDate(orderDetails.order_date)}`, pageWidth / 2 + 10, yPos);
         yPos += 8;
 
@@ -458,7 +470,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             margin: { top: 0, left: margin, right: margin },
             columnStyles: {
                 0: { cellWidth: 30 }, // Code
-                1: { cellWidth: 60 }, // Product Name
+                1: { cellWidth: 50 }, // Product Name
                 2: { cellWidth: 30 }, // Size
                 3: { cellWidth: 30, halign: 'right' }, // Quantity
             }
