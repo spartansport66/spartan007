@@ -62,8 +62,6 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
     setOrder(null);
 
     const search = searchTerm.trim();
-    let query;
-
     const isNumeric = /^\d+$/.test(search);
     const searchNum = isNumeric ? parseInt(search) : null;
 
@@ -74,34 +72,39 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
       sales (quantity, products (name, code))
     `;
 
+    // Build the filter condition to search across all three fields
     let filterCondition = '';
-    const mandatoryCondition = 'bill_no.not.is.null';
-
     if (isNumeric) {
-        // Search by Order Number OR Dispatch Number, AND bill_no must be present
-        filterCondition = `and(${mandatoryCondition},or(order_number.eq.${searchNum},dispatch_number.eq.${searchNum}))`;
+        // Search by Order Number OR Dispatch Number
+        filterCondition = `or(order_number.eq.${searchNum},dispatch_number.eq.${searchNum})`;
     } else {
-        // Search by Bill Number, AND bill_no must be present
-        filterCondition = `and(bill_no.eq.${search},${mandatoryCondition})`;
+        // Search by Bill Number
+        filterCondition = `bill_no.eq.${search}`;
     }
     
-    query = supabase
+    // Query the database using the combined filter
+    const { data, error } = await supabase
         .from('orders')
         .select(selectFields)
-        .or(filterCondition) // Apply the combined filter
+        .or(filterCondition)
         .limit(1)
         .single();
 
     try {
-      const { data, error } = await query;
-
       if (error && error.code !== 'PGRST116') { // PGRST116 means "no rows found"
         console.error('Supabase Query Error:', error.message);
         throw error;
       }
 
       if (!data) {
-        showError(`Order, Bill No., or Dispatch No. "${search}" not found or Bill No. is missing.`);
+        showError(`Order, Bill No., or Dispatch No. "${search}" not found.`);
+        setOrder(null);
+        return;
+      }
+      
+      // Check mandatory condition: Bill Number must be present for dispatch
+      if (!data.bill_no) {
+        showError(`Order #${data.order_number} found, but Bill Number is missing. It must be processed by the Admin first.`);
         setOrder(null);
         return;
       }
