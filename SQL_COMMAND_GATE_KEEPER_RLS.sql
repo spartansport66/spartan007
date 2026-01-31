@@ -1,8 +1,6 @@
--- Ensure uuid-ossp extension is enabled if not already
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1. Create a function to check if the current user is a gate_keeper
--- This function is necessary because RLS policies cannot directly query the 'profiles' table for user_type.
 CREATE OR REPLACE FUNCTION is_gate_keeper()
 RETURNS boolean
 LANGUAGE sql
@@ -17,8 +15,7 @@ AS $$
 $$;
 
 -- 2. Create the RLS policy on the orders table
--- This policy allows authenticated users (Gate Keepers) to update orders
--- ONLY if they are a gate_keeper AND the order is already marked as dispatched (dispatched = TRUE AND bill_no IS NOT NULL).
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Gate Keepers can authorize final dispatch" ON public.orders;
 CREATE POLICY "Gate Keepers can authorize final dispatch"
   ON public.orders
