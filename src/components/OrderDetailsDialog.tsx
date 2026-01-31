@@ -393,69 +393,54 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         doc.setTextColor(255, 255, 255); // White text
         doc.text(companyNameDisplay, pageWidth / 2, stripY + stripHeight / 2 + 1, { align: 'center' });
         
-        yPos = stripY + stripHeight + 5; 
+        yPos = stripY + stripHeight + 5; // Start next element below the strip
         doc.setTextColor(0); // Reset text color to black
         // --- End Company Name Strip ---
 
-        // --- Main Title Section ---
-        doc.setFontSize(32);
-        doc.setFont("helvetica", "bold");
-        doc.text("GATE PASS", pageWidth / 2, yPos, { align: 'center' });
-        yPos += 15;
+        // Add 1 line space (5mm)
+        yPos += 5;
 
-        // Dispatch Number Section (Highlighted)
-        doc.setFillColor(...lightGray);
-        doc.rect(margin, yPos - 5, pageWidth - 2 * margin, 15, 'F');
-        doc.setFontSize(40);
-        doc.setTextColor(30, 58, 138); // Dark Blue text
-        doc.text(`DISPATCH NO: ${orderDetails.dispatch_number || 'N/A'}`, pageWidth / 2, yPos + 5, { align: 'center' });
-        yPos += 15;
+        // Gate Pass Title (Big Bold)
+        doc.setFontSize(28);
+        doc.text("GATE PASS", pageWidth / 2, yPos, { align: 'center' });
+        yPos += 12;
+
+        // Dispatch Number (Big Bold)
+        doc.setFontSize(36);
+        doc.text(`DISPATCH NO: ${orderDetails.dispatch_number || 'N/A'}`, pageWidth / 2, yPos, { align: 'center' });
+        yPos += 18;
+
         doc.setTextColor(0); // Reset text color to black
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        // --- End Main Title Section ---
 
-        // --- Details Section ---
-        const detailMargin = 5;
-        const col1X = margin;
-        const col2X = pageWidth / 2 + detailMargin;
-        
-        yPos += 5;
-        
-        // Dealer Information (Left Column)
-        doc.setFontSize(12);
+        // Dispatch/Order Info (Simplified)
         doc.setFont("helvetica", "bold");
-        doc.text("Delivery To:", col1X, yPos);
-        doc.setFontSize(10);
+        doc.text("Dispatch & Order Details:", margin, yPos);
         doc.setFont("helvetica", "normal");
         yPos += 5;
-        doc.text(`Dealer Name: ${orderDetails.dealer_name}`, col1X, yPos);
-        yPos += 4;
-        doc.text(`Address: ${orderDetails.dealer_address}`, col1X, yPos);
-        yPos += 4;
-        doc.text(`${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}`, col1X, yPos);
-        yPos += 4;
-        doc.text(`Phone: ${orderDetails.dealer_phone}`, col1X, yPos);
-        
-        // Dispatch/Order Info (Right Column)
-        let rightYPos = yPos - 17; // Align with Delivery To title
-        doc.setFontSize(12);
+        doc.text(`Order Number: ${orderDetails.order_number}`, margin, yPos);
+        doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, pageWidth / 2 + 10, yPos);
+        yPos += 5;
+        doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, margin, yPos);
+        doc.text(`Order Date: ${formatDate(orderDetails.order_date)}`, pageWidth / 2 + 10, yPos);
+        yPos += 8;
+
+        // Dealer Information
         doc.setFont("helvetica", "bold");
-        doc.text("Dispatch & Order Details:", col2X, rightYPos);
-        doc.setFontSize(10);
+        doc.text("Delivery To:", margin, yPos);
         doc.setFont("helvetica", "normal");
-        rightYPos += 5;
-        doc.text(`Bill Number: ${orderDetails.bill_no || 'N/A'}`, col2X, rightYPos);
-        rightYPos += 4;
-        doc.text(`Dispatch Date: ${formatDate(orderDetails.dispatch_date)}`, col2X, rightYPos);
-        rightYPos += 4;
-        doc.text(`Order Number: ${orderDetails.order_number}`, col2X, rightYPos);
-        rightYPos += 4;
-        doc.text(`Order Date: ${formatDate(orderDetails.order_date)}`, col2X, rightYPos);
-        
-        yPos = Math.max(yPos, rightYPos) + 10; // Ensure next section starts below both columns
-        
-        // --- Items Table ---
+        yPos += 5;
+        doc.text(`Dealer Name: ${orderDetails.dealer_name}`, margin, yPos);
+        yPos += 5;
+        doc.text(`Address: ${orderDetails.dealer_address}`, margin, yPos);
+        yPos += 5;
+        doc.text(`${orderDetails.dealer_city}, ${orderDetails.dealer_state}, ${orderDetails.dealer_country}`, margin, yPos);
+        yPos += 5;
+        doc.text(`Phone: ${orderDetails.dealer_phone}`, margin, yPos);
+        yPos += 8;
+
+        // Order Items Table
         doc.setFontSize(12);
         doc.setFont("helvetica", "bold");
         doc.text("Items Included:", margin, yPos);
@@ -490,30 +475,26 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             margin: { top: 0, left: margin, right: margin },
             columnStyles: {
                 0: { cellWidth: 30 }, // Code
-                1: { cellWidth: 60 }, // Product Name
+                1: { cellWidth: 50 }, // Product Name
                 2: { cellWidth: 30 }, // Size
                 3: { cellWidth: 30, halign: 'right' }, // Quantity
             }
         });
 
-        yPos = (doc as any).lastAutoTable.finalY + 15;
+        yPos = (doc as any).lastAutoTable.finalY + 5;
 
-        // --- Footer / Signature Section ---
+        // Total Order Amount (Final) - Included for reference, but less prominent
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        
-        // Draw lines for signatures
-        doc.line(margin, yPos, margin + 50, yPos);
-        doc.line(pageWidth - margin - 50, yPos, pageWidth - margin, yPos);
-        
-        yPos += 5;
-        doc.text("Authorized By (Admin)", margin, yPos);
-        doc.text("Received By (Dealer/Transporter)", pageWidth - margin, yPos, { align: 'right' });
-        
+        doc.text(`Total Order Amount (Final): ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
         yPos += 10;
-        doc.setFontSize(8);
-        doc.text(`Printed: ${new Date().toLocaleString()}`, margin, yPos);
-        
+
+        // Signature lines
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text("Authorized By (Admin)", margin, yPos + 10);
+        doc.text("Received By (Dealer/Transporter)", pageWidth - margin, yPos + 10, { align: 'right' });
+
         doc.save(`gate_pass_${orderDetails.dispatch_number}.pdf`);
         showSuccess('Gate Pass PDF generated successfully!');
         return; // Exit the function after printing Gate Pass
