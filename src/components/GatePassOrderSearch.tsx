@@ -28,9 +28,10 @@ interface OrderDetail {
   dealer_address: string;
   dealer_phone: string;
   sales_person_name: string;
-  dispatched: boolean;
+  dispatched: boolean; // Admin dispatch status
+  gate_pass_dispatch_time: string | null; // NEW: Gate Keeper's final dispatch time
   bill_no: string | null;
-  dispatch_date: string | null;
+  dispatch_date: string | null; // Admin dispatch date
   dispatch_number: number | null;
   items: OrderItemDetail[];
 }
@@ -66,7 +67,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
     const searchNum = isNumeric ? parseInt(search) : null;
 
     const selectFields = `
-      id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number,
+      id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number, gate_pass_dispatch_time,
       dealers (name, address, phone),
       profiles:user_id (first_name, last_name),
       sales (quantity, products (name, code))
@@ -112,7 +113,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         return;
       }
       
-      console.log("DEBUG: Raw sales data received:", data.sales); // ADDED LOG
+      console.log("DEBUG: Raw sales data received:", data.sales);
 
       // Access profiles data using the explicit alias 'profiles'
       const salesPersonName = `${data.profiles?.first_name || ''} ${data.profiles?.last_name || ''}`.trim() || 'N/A';
@@ -127,6 +128,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         dealer_phone: data.dealers?.phone || 'N/A',
         sales_person_name: salesPersonName,
         dispatched: data.dispatched,
+        gate_pass_dispatch_time: data.gate_pass_dispatch_time, // NEW
         bill_no: data.bill_no,
         dispatch_date: data.dispatch_date,
         dispatch_number: data.dispatch_number,
@@ -150,37 +152,36 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
   }, [searchTerm]);
 
   const handleDispatchOrder = async () => {
-    if (!order || order.dispatched) return;
+    if (!order || order.gate_pass_dispatch_time) return; // Check new field
 
     setIsDispatching(true);
     try {
-      // Generate a unique dispatch number (simple timestamp + random suffix)
-      const dispatchNumber = Date.now() + Math.floor(Math.random() * 1000);
-
+      // Update the new gate_pass_dispatch_time field
       const { error } = await supabase
         .from('orders')
         .update({
-          dispatched: true,
-          dispatch_date: new Date().toISOString(),
-          dispatch_number: dispatchNumber,
+          gate_pass_dispatch_time: new Date().toISOString(),
         })
         .eq('id', order.id);
 
       if (error) throw error;
 
-      showSuccess(`Order #${order.order_number} successfully dispatched! Dispatch No: ${dispatchNumber}`);
+      showSuccess(`Order #${order.order_number} successfully authorized for OUT!`);
       
       // Update local state and notify parent
-      setOrder(prev => prev ? { ...prev, dispatched: true, dispatch_date: new Date().toISOString(), dispatch_number: dispatchNumber } : null);
+      setOrder(prev => prev ? { ...prev, gate_pass_dispatch_time: new Date().toISOString() } : null);
       onDispatchSuccess();
 
     } catch (error: any) {
       console.error('Error dispatching order:', error.message);
-      showError(`Failed to dispatch order: ${error.message}`);
+      showError(`Failed to authorize dispatch: ${error.message}`);
     } finally {
       setIsDispatching(false);
     }
   };
+  
+  const isFullyDispatched = order?.gate_pass_dispatch_time !== null;
+  const isReadyForGatePass = order?.dispatched === true && order?.bill_no !== null && !isFullyDispatched;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -213,8 +214,8 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
           <div className="space-y-4 p-4 border rounded-md">
             <h3 className="text-xl font-bold flex items-center gap-2">
               Order #{order.order_number}
-              <span className={`text-sm font-medium px-3 py-1 rounded-full ${order.dispatched ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                {order.dispatched ? 'DISPATCHED' : 'AWAITING DISPATCH'}
+              <span className={`text-sm font-medium px-3 py-1 rounded-full ${isFullyDispatched ? 'bg-green-100 text-green-700' : order.dispatched ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                {isFullyDispatched ? 'DISPATCHED (GATE PASS)' : order.dispatched ? 'ADMIN DISPATCHED' : 'AWAITING ADMIN DISPATCH'}
               </span>
             </h3>
             
@@ -231,11 +232,10 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
                 <p><span className="font-semibold">Order Date:</span> {formatDate(order.order_date)}</p>
                 <p><span className="font-semibold">Total Amount:</span> ₹{order.total_amount.toFixed(2)}</p>
                 <p><span className="font-semibold">Bill No:</span> {order.bill_no || 'N/A'}</p>
-                {order.dispatched && (
-                  <>
-                    <p><span className="font-semibold">Dispatch No:</span> {order.dispatch_number}</p>
-                    <p><span className="font-semibold">Dispatch Date:</span> {formatDate(order.dispatch_date!)}</p>
-                  </>
+                <p><span className="font-semibold">Admin Dispatch No:</span> {order.dispatch_number || 'N/A'}</p>
+                <p><span className="font-semibold">Admin Dispatch Date:</span> {formatDate(order.dispatch_date)}</p>
+                {isFullyDispatched && (
+                  <p><span className="font-semibold text-green-600">Gate Pass Time:</span> {new Date(order.gate_pass_dispatch_time!).toLocaleString()}</p>
                 )}
               </div>
             </div>
@@ -272,35 +272,43 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
               </Table>
             </div>
 
-            {!order.dispatched ? (
+            {isReadyForGatePass ? (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button className="w-full bg-green-600 hover:bg-green-700 mt-4" disabled={isDispatching}>
-                    <Truck className="mr-2 h-4 w-4" /> OUT
+                    <Truck className="mr-2 h-4 w-4" /> Authorize Final OUT
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Confirm Material OUT</AlertDialogTitle>
+                    <AlertDialogTitle>Confirm Final Material OUT</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Are you sure you want to authorize the dispatch of Order #{order.order_number}? This action cannot be undone and will mark the material as dispatched from the factory gate.
+                      Are you sure you want to authorize the final physical dispatch of Order #{order.order_number}? This action will record the current time as the Gate Pass Dispatch Time.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={handleDispatchOrder} disabled={isDispatching}>
-                      {isDispatching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Confirm OUT'}
+                      {isDispatching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Confirm Final OUT'}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-            ) : (
+            ) : isFullyDispatched ? (
               <Button 
                 className="w-full bg-blue-600 hover:bg-blue-700 mt-4" 
-                onClick={() => showSuccess(`Order #${order.order_number} is already authorized and dispatched.`)}
+                onClick={() => showSuccess(`Order #${order.order_number} is already fully dispatched.`)}
               >
-                <CheckCircle className="mr-2 h-4 w-4" /> Authorized to OUT
+                <CheckCircle className="mr-2 h-4 w-4" /> Fully Dispatched
               </Button>
+            ) : (
+              <Alert variant="destructive" className="mt-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Not Ready for Gate Pass</AlertTitle>
+                <AlertDescription>
+                  This order is awaiting initial dispatch/billing from the Admin.
+                </AlertDescription>
+              </Alert>
             )}
           </div>
         )}
