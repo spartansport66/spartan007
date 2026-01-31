@@ -66,27 +66,30 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
     // Try searching by order_number (if numeric) or bill_no (if alphanumeric)
     const isNumeric = /^\d+$/.test(search);
 
+    // Note: We must ensure the query only returns orders that have a bill_no set, 
+    // as the gate pass should only handle orders ready for dispatch.
+    // However, since the Admin Dashboard already marks orders as dispatched (which sets bill_no), 
+    // we rely on the Admin process setting the bill_no.
+
+    const selectFields = `
+      id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number,
+      dealers (name, address, phone),
+      profiles (first_name, last_name),
+      sales (quantity, products (name, code))
+    `;
+
     if (isNumeric) {
       query = supabase
         .from('orders')
-        .select(`
-          id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number,
-          dealers (name, address, phone),
-          profiles (first_name, last_name),
-          sales (quantity, products (name, code))
-        `)
+        .select(selectFields)
         .eq('order_number', parseInt(search))
+        .not('bill_no', 'is', null) // Only search for orders that have a bill number set
         .limit(1)
         .single();
     } else {
       query = supabase
         .from('orders')
-        .select(`
-          id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number,
-          dealers (name, address, phone),
-          profiles (first_name, last_name),
-          sales (quantity, products (name, code))
-        `)
+        .select(selectFields)
         .eq('bill_no', search)
         .limit(1)
         .single();
@@ -96,11 +99,12 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
       const { data, error } = await query;
 
       if (error && error.code !== 'PGRST116') { // PGRST116 means "no rows found"
+        console.error('Supabase Query Error:', error.message);
         throw error;
       }
 
       if (!data) {
-        showError(`Order or Bill No. "${search}" not found.`);
+        showError(`Order or Bill No. "${search}" not found or Bill No. is missing.`);
         setOrder(null);
         return;
       }
