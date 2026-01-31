@@ -25,8 +25,8 @@ serve(async (req) => {
   }
   
   try {
-    // --- MODIFIED: Receive discountAmount ---
-    const { dealerId, userId, orderItems, paymentStatus, paymentDueDate, paymentDetails, discountAmount } = await req.json();
+    // --- MODIFIED: Receive finalOrderAmount explicitly ---
+    const { dealerId, userId, orderItems, paymentStatus, paymentDueDate, paymentDetails, discountAmount, finalOrderAmount: clientFinalOrderAmount } = await req.json();
     
     if (!dealerId || !userId || !orderItems || !Array.isArray(orderItems) || orderItems.length === 0) {
       return new Response(JSON.stringify({ error: 'Missing or invalid order data.' }), {
@@ -82,14 +82,21 @@ serve(async (req) => {
       });
     }
     
-    // --- NEW: Calculate Final Order Amount ---
-    // Ensure discountAmount is treated as a number, defaulting to 0 if null/undefined/invalid
+    // --- Calculate Final Order Amount (Server-side check) ---
     const finalDiscountAmount = parseFloat(discountAmount) || 0;
     
     if (finalDiscountAmount < 0 || finalDiscountAmount > preDiscountTotalOrderAmount) {
         throw new Error('Invalid discount amount provided.');
     }
-    const finalOrderAmount = Math.max(0, preDiscountTotalOrderAmount - finalDiscountAmount);
+    
+    // Use the client-provided final amount for insertion if available, otherwise calculate it
+    const finalOrderAmount = (clientFinalOrderAmount !== undefined && clientFinalOrderAmount !== null) 
+        ? parseFloat(clientFinalOrderAmount) 
+        : Math.max(0, preDiscountTotalOrderAmount - finalDiscountAmount);
+    
+    if (finalOrderAmount < 0) {
+        throw new Error('Calculated final order amount is negative.');
+    }
     // -----------------------------------------
     
     // 2. Fetch dealer credit limit (monthly or general) and current balance

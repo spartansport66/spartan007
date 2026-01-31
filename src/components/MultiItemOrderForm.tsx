@@ -458,6 +458,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         })),
         // --- NEW: Include discount amount ---
         discountAmount: discountAmount,
+        // --- NEW: Include final order amount explicitly (workaround) ---
+        finalOrderAmount: finalOrderValue,
         // -----------------------------------
         // Payment status is always pending_approval since payment is mandatory at order time
         paymentStatus: 'pending_approval', 
