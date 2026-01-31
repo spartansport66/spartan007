@@ -103,6 +103,34 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   // Payment methods options
   const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
 
+  // Calculate Total Order Value (Pre-Discount)
+  const calculateItemTotal = (item: OrderItem) => {
+    const product = products.find(p => p.id === item.product_id);
+    return product ? item.quantity * product.dp : 0; // Use product.dp
+  };
+  
+  const calculateTotalOrderValue = () => {
+    return orderItems.reduce((total, item) => total + calculateItemTotal(item), 0);
+  };
+  
+  // Calculate Final Order Value (Post-Discount)
+  const calculateFinalOrderValue = () => {
+    const preDiscountTotal = calculateTotalOrderValue();
+    return Math.max(0, preDiscountTotal - discountAmount);
+  };
+
+  const preDiscountTotalOrderValue = calculateTotalOrderValue();
+  const finalOrderValue = calculateFinalOrderValue(); // Use final value for credit check
+
+  // --- FIX: Synchronize paymentAmount with finalOrderValue ---
+  useEffect(() => {
+    if (isPaidAtOrderTime) {
+      // Set payment amount to the final discounted order value
+      setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
+    }
+  }, [finalOrderValue, isPaidAtOrderTime]);
+  // --- END FIX ---
+
   // Fetch dealers and products
   useEffect(() => {
     const fetchData = async () => {
@@ -244,7 +272,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setDealerCreditLimit(0);
         setAllottedCreditDays(0);
         setPaymentDueDate(null);
-        setPaymentAmount(0);
         setDealerOpeningBalance(0);
         setDiscountAmount(0); // Reset discount
         return;
@@ -319,17 +346,19 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setDealerBalance(null);
       }
       // --- END FIX ---
-
-      // Set payment amount to total order value if paid at order time
-      if (isPaidAtOrderTime) {
-        // Use the final calculated order value here
-        const finalOrderValue = calculateFinalOrderValue();
-        setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
-      }
     };
 
     calculateBalanceAndDueDate();
-  }, [selectedDealer, dealers, isPaidAtOrderTime, orderItems, allottedCreditDays, discountAmount]); // Added discountAmount dependency
+  }, [selectedDealer, dealers, allottedCreditDays]);
+
+  // Calculate used credit including opening balance
+  const usedCredit = dealerBalance !== null ? dealerBalance + dealerOpeningBalance : null;
+
+  // Calculate available credit (credit limit - used credit)
+  const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
+
+  // Calculate remaining credit after this order
+  const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
 
   const addOrderItem = () => {
     setOrderItems([...orderItems, { id: Date.now().toString(), product_id: '', quantity: 1 }]);
@@ -354,34 +383,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       item.id === id ? { ...item, [field]: value } : item
     ));
   };
-
-  const calculateItemTotal = (item: OrderItem) => {
-    const product = products.find(p => p.id === item.product_id);
-    return product ? item.quantity * product.dp : 0; // Use product.dp
-  };
-
-  // --- MODIFIED: Calculate Total Order Value (Pre-Discount) ---
-  const calculateTotalOrderValue = () => {
-    return orderItems.reduce((total, item) => total + calculateItemTotal(item), 0);
-  };
-  
-  // --- NEW: Calculate Final Order Value (Post-Discount) ---
-  const calculateFinalOrderValue = () => {
-    const preDiscountTotal = calculateTotalOrderValue();
-    return Math.max(0, preDiscountTotal - discountAmount);
-  };
-
-  // Calculate used credit including opening balance
-  const usedCredit = dealerBalance !== null ? dealerBalance + dealerOpeningBalance : null;
-
-  // Calculate available credit (credit limit - used credit)
-  const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
-
-  const preDiscountTotalOrderValue = calculateTotalOrderValue();
-  const finalOrderValue = calculateFinalOrderValue(); // Use final value for credit check
-
-  // Calculate remaining credit after this order
-  const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
 
   const isPaymentDetailsValid = useMemo(() => {
     if (!isPaidAtOrderTime) return true;
@@ -497,7 +498,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setDiscountAmount(0); // Reset discount
       // isPaidAtOrderTime is always true, no need to reset
       setPaymentMethod('');
-      setPaymentAmount(0);
+      setPaymentAmount(0); // Reset payment amount
       setChequeDdNo('');
       setChequeDdDate('');
       setTransactionId('');
