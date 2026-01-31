@@ -111,6 +111,8 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         setOrder(null);
         return;
       }
+      
+      console.log("DEBUG: Raw sales data received:", data.sales); // ADDED LOG
 
       // Access profiles data using the explicit alias 'profiles'
       const salesPersonName = `${data.profiles?.first_name || ''} ${data.profiles?.last_name || ''}`.trim() || 'N/A';
@@ -148,12 +150,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
   }, [searchTerm]);
 
   const handleDispatchOrder = async () => {
-    if (!order) return;
-
-    if (order.dispatched) {
-        showSuccess(`Order #${order.order_number} is already authorized and dispatched.`);
-        return;
-    }
+    if (!order || order.dispatched) return;
 
     setIsDispatching(true);
     try {
@@ -256,13 +253,21 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {order.items.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{item.product_code}</TableCell>
-                      <TableCell>{item.product_name}</TableCell>
-                      <TableCell className="text-right">{item.quantity}</TableCell>
+                  {order.items.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground">
+                        No items found for this order.
+                      </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    order.items.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{item.product_code}</TableCell>
+                        <TableCell>{item.product_name}</TableCell>
+                        <TableCell className="text-right">{item.quantity}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
