@@ -633,29 +633,33 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
     yPos = (doc as any).lastAutoTable.finalY + 5;
 
-    // --- Summary Lines (Adjusted for Right Alignment) ---
-    const summaryX = pageWidth - margin;
-    const summaryWidth = 60; // Define a fixed width for the summary text block
+    // --- Summary Lines (Adjusted for Right Alignment and Spacing) ---
+    const summaryRightX = pageWidth - margin;
+    const valueX = summaryRightX - 2; // Position for right-aligned values (2mm buffer from edge)
+    const summaryWidth = 80; // Increased width for the block
+    const labelX = summaryRightX - summaryWidth; // Left position for labels
+
+    const preDiscountTotal = orderDetails.items.reduce((sum, item) => sum + item.total_price, 0);
 
     // Subtotal (Pre-Discount)
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text(`Subtotal (Pre-Discount):`, summaryX - summaryWidth, yPos, { align: 'left' });
-    doc.text(`₹${preDiscountTotal.toFixed(2)}`, summaryX, yPos, { align: 'right' });
+    doc.text(`Subtotal (Pre-Discount):`, labelX, yPos, { align: 'left' });
+    doc.text(`₹${preDiscountTotal.toFixed(2)}`, valueX, yPos, { align: 'right' });
     yPos += 5;
 
     // Discount Amount
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
-    doc.text(`Discount Applied:`, summaryX - summaryWidth, yPos, { align: 'left' });
-    doc.text(`- ₹${orderDetails.discount_amount.toFixed(2)}`, summaryX, yPos, { align: 'right' });
+    doc.text(`Discount Applied:`, labelX, yPos, { align: 'left' });
+    doc.text(`- ₹${orderDetails.discount_amount.toFixed(2)}`, valueX, yPos, { align: 'right' });
     yPos += 5;
 
     // Total Order Amount (Final)
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.text(`Total Order Amount (Final):`, summaryX - summaryWidth, yPos, { align: 'left' });
-    doc.text(`₹${orderDetails.total_amount.toFixed(2)}`, summaryX, yPos, { align: 'right' });
+    doc.text(`Total Order Amount (Final):`, labelX, yPos, { align: 'left' });
+    doc.text(`₹${orderDetails.total_amount.toFixed(2)}`, valueX, yPos, { align: 'right' });
     yPos += 10;
     // --- End Summary Lines ---
 
