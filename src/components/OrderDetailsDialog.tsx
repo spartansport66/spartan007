@@ -481,20 +481,24 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             }
         });
 
-        yPos = (doc as any).lastAutoTable.finalY + 5;
-
-        // Total Order Amount (Final) - Included for reference, but less prominent
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-        doc.text(`Total Order Amount (Final): ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
-        yPos += 10;
+        yPos = (doc as any).lastAutoTable.finalY + 15; // Increased space before signatures
 
         // Signature lines
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        doc.text("Authorized By (Admin)", margin, yPos + 10);
-        doc.text("Received By (Dealer/Transporter)", pageWidth - margin, yPos + 10, { align: 'right' });
-
+        
+        // Draw lines for signatures
+        doc.line(margin, yPos, margin + 50, yPos);
+        doc.line(pageWidth - margin - 50, yPos, pageWidth - margin, yPos);
+        
+        yPos += 5;
+        doc.text("Authorized By (Admin)", margin, yPos);
+        doc.text("Received By (Dealer/Transporter)", pageWidth - margin, yPos, { align: 'right' });
+        
+        yPos += 10;
+        doc.setFontSize(8);
+        doc.text(`Printed: ${new Date().toLocaleString()}`, margin, yPos);
+        
         doc.save(`gate_pass_${orderDetails.dispatch_number}.pdf`);
         showSuccess('Gate Pass PDF generated successfully!');
         return; // Exit the function after printing Gate Pass
