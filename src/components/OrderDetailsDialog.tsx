@@ -595,8 +595,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       item.product_hsn,
       item.product_gst,
       item.quantity.toString(),
-      `₹${item.unit_price.toFixed(2)}`,
-      `₹${item.total_price.toFixed(2)}`,
+      `Rs. ${item.unit_price.toFixed(2)}`, // Changed to Rs.
+      `Rs. ${item.total_price.toFixed(2)}`, // Changed to Rs.
     ]);
 
     // Updated column styles to center all columns
@@ -642,9 +642,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     const preDiscountTotal = orderDetails.items.reduce((sum, item) => sum + item.total_price, 0);
     
     const summaryRows = [
-        ['Subtotal (Pre-Discount):', `₹${preDiscountTotal.toFixed(2)}`, 10, 'normal'],
-        ['Discount Applied:', `- ₹${orderDetails.discount_amount.toFixed(2)}`, 10, 'bold'],
-        ['Total Order Amount (Final):', `₹${orderDetails.total_amount.toFixed(2)}`, 12, 'bold'],
+        ['Subtotal (Pre-Discount):', `Rs. ${preDiscountTotal.toFixed(2)}`, 10, 'normal'], // Changed to Rs.
+        ['Discount Applied:', `- Rs. ${orderDetails.discount_amount.toFixed(2)}`, 10, 'bold'], // Changed to Rs.
+        ['Total Order Amount (Final):', `Rs. ${orderDetails.total_amount.toFixed(2)}`, 12, 'bold'], // Changed to Rs.
     ];
 
     // Total width for summary table: 90mm (40mm + 50mm)
@@ -697,7 +697,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
       const paymentDetailsLines = [
         `Payment Method: ${orderDetails.payment_method || 'N/A'}`,
-        `Amount: ₹${orderDetails.payment_amount?.toFixed(2) || 'N/A'}`,
+        `Amount: Rs. ${orderDetails.payment_amount?.toFixed(2) || 'N/A'}`,
         `Payment Date: ${formatDate(orderDetails.payment_date)}`,
       ];
 
