@@ -599,6 +599,20 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       `₹${item.total_price.toFixed(2)}`,
     ]);
 
+    // Total width available: 190mm
+    // New column widths (Total: 190mm)
+    const itemTableColumnStyles = {
+        0: { cellWidth: 15 }, // Code (15)
+        1: { cellWidth: 45 }, // Product Name (45)
+        2: { cellWidth: 15 }, // Size (15)
+        3: { cellWidth: 15 }, // HSN (15)
+        4: { cellWidth: 15, halign: 'right' }, // GST (%) (15)
+        5: { cellWidth: 10, halign: 'right' }, // Quantity (10)
+        6: { cellWidth: 25, halign: 'right' }, // Unit Price (25)
+        7: { cellWidth: 50, halign: 'right' }, // Total Price (50) <-- Increased width
+        // Total: 15 + 45 + 15 + 15 + 15 + 10 + 25 + 50 = 190mm
+    };
+
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
@@ -619,18 +633,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         textColor: [0, 0, 0],
       },
       margin: { top: 0, left: margin, right: margin },
-      columnStyles: {
-        // Total width is 190mm (210 - 2*10)
-        0: { cellWidth: 18 }, // Code (18)
-        1: { cellWidth: 45 }, // Product Name (45)
-        2: { cellWidth: 18 }, // Size (18)
-        3: { cellWidth: 18 }, // HSN (18)
-        4: { cellWidth: 18, halign: 'right' }, // GST (%) (18)
-        5: { cellWidth: 12, halign: 'right' }, // Quantity (12)
-        6: { cellWidth: 20, halign: 'right' }, // Unit Price (20)
-        7: { cellWidth: 41, halign: 'right' }, // Total Price (41)
-        // Total: 18 + 45 + 18 + 18 + 18 + 12 + 20 + 41 = 190mm
-      }
+      columnStyles: itemTableColumnStyles
     });
 
     yPos = (doc as any).lastAutoTable.finalY + 5;
@@ -643,6 +646,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         ['Discount Applied:', `- ₹${orderDetails.discount_amount.toFixed(2)}`, 10, 'bold'],
         ['Total Order Amount (Final):', `₹${orderDetails.total_amount.toFixed(2)}`, 12, 'bold'],
     ];
+
+    // Total width for summary table: 80mm (45mm + 35mm)
+    const summaryTableWidth = 80;
+    const summaryTableX = pageWidth - margin - summaryTableWidth;
 
     autoTable(doc, {
         body: summaryRows.map(row => [row[0], row[1]]),
@@ -657,11 +664,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             lineWidth: 0.1,
         },
         columnStyles: {
-            // Adjusted widths to ensure they fit within the 80mm width (pageWidth - 2*margin = 190mm)
             0: { cellWidth: 45, halign: 'left', fontStyle: 'normal' }, 
-            1: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, 
+            1: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Increased width to 35mm
         },
-        margin: { top: 0, left: pageWidth - margin - 80, right: margin }, // Align to the right (190 - 80 = 110)
+        margin: { top: 0, left: summaryTableX, right: margin }, // Align to the right
         didParseCell: (data) => {
             // Apply custom font size and style based on the summaryRows definition
             const rowIndex = data.row.index;
