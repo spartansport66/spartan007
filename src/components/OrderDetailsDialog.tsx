@@ -628,42 +628,58 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         4: { cellWidth: 18, halign: 'right' }, // GST (%) (18)
         5: { cellWidth: 12, halign: 'right' }, // Quantity (12)
         6: { cellWidth: 20, halign: 'right' }, // Unit Price (20)
-        7: { cellWidth: 41, halign: 'right' }, // Total Price (41) -> Increased from 36 to 41
+        7: { cellWidth: 41, halign: 'right' }, // Total Price (41)
         // Total: 18 + 45 + 18 + 18 + 18 + 12 + 20 + 41 = 190mm
       }
     });
 
     yPos = (doc as any).lastAutoTable.finalY + 5;
 
-    // --- Summary Lines (Adjusted for Right Alignment and Spacing) ---
-    const summaryRightX = pageWidth - margin;
-    const valueX = summaryRightX - 2; // Position for right-aligned values (2mm buffer from edge)
-    const summaryWidth = 80; // Define a fixed width for the summary text block
-    const labelX = summaryRightX - summaryWidth; // Left position for labels
-
+    // --- Summary Table (Replaced manual drawing) ---
     const preDiscountTotal = orderDetails.items.reduce((sum, item) => sum + item.total_price, 0);
+    
+    const summaryRows = [
+        ['Subtotal (Pre-Discount):', `₹${preDiscountTotal.toFixed(2)}`, 10, 'normal'],
+        ['Discount Applied:', `- ₹${orderDetails.discount_amount.toFixed(2)}`, 10, 'bold'],
+        ['Total Order Amount (Final):', `₹${orderDetails.total_amount.toFixed(2)}`, 12, 'bold'],
+    ];
 
-    // Subtotal (Pre-Discount)
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Subtotal (Pre-Discount):`, labelX, yPos, { align: 'left' });
-    doc.text(`₹${preDiscountTotal.toFixed(2)}`, valueX, yPos, { align: 'right' });
-    yPos += 5;
+    autoTable(doc, {
+        body: summaryRows.map(row => [row[0], row[1]]),
+        startY: yPos,
+        theme: 'plain',
+        styles: {
+            fontSize: 10,
+            cellPadding: 1,
+            valign: 'middle',
+            overflow: 'linebreak',
+            lineColor: [200, 200, 200],
+            lineWidth: 0.1,
+        },
+        columnStyles: {
+            0: { cellWidth: 50, halign: 'left', fontStyle: 'normal' },
+            1: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
+        },
+        margin: { top: 0, left: pageWidth - margin - 80, right: margin }, // Align to the right (190 - 80 = 110)
+        didParseCell: (data) => {
+            // Apply custom font size and style based on the summaryRows definition
+            const rowIndex = data.row.index;
+            if (rowIndex < summaryRows.length) {
+                const rowData = summaryRows[rowIndex];
+                data.cell.styles.fontSize = rowData[2] as number;
+                data.cell.styles.fontStyle = rowData[3] as string;
+                
+                // Add a top border for the final total row
+                if (rowIndex === summaryRows.length - 1) {
+                    data.cell.styles.lineWidth = { top: 0.5 };
+                    data.cell.styles.lineColor = { top: [0, 0, 0] };
+                }
+            }
+        },
+    });
 
-    // Discount Amount
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.text(`Discount Applied:`, labelX, yPos, { align: 'left' });
-    doc.text(`- ₹${orderDetails.discount_amount.toFixed(2)}`, valueX, yPos, { align: 'right' });
-    yPos += 5;
-
-    // Total Order Amount (Final)
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text(`Total Order Amount (Final):`, labelX, yPos, { align: 'left' });
-    doc.text(`₹${orderDetails.total_amount.toFixed(2)}`, valueX, yPos, { align: 'right' });
-    yPos += 10;
-    // --- End Summary Lines ---
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+    // --- End Summary Table ---
 
     // Payment Details Section
     if (orderDetails.payment_status === 'paid' || orderDetails.payment_status === 'pending_approval') {
