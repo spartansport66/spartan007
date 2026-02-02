@@ -20,36 +20,34 @@ const AdminTotalSales = () => {
       const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString();
       const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
 
-      // Helper to calculate post-discount total from a set of orders
-      const calculatePostDiscountTotal = (orders: { total_amount: number | null; discount_amount: number | null; }[]) => {
+      // Helper to calculate total from a set of orders using only total_amount
+      const calculateTotal = (orders: { total_amount: number | null; }[]) => {
         return (orders || []).reduce((sum, order) => {
-          const preDiscountTotal = order.total_amount || 0;
-          const discount = order.discount_amount || 0;
-          return sum + (preDiscountTotal - discount);
+          return sum + (order.total_amount || 0);
         }, 0);
       };
 
       // Fetch current month's sales
       const { data: currentMonthData, error: currentMonthError } = await supabase
         .from('orders')
-        .select('total_amount, discount_amount')
+        .select('total_amount')
         .gte('created_at', currentMonthStart);
 
       if (currentMonthError) throw new Error(`Failed to fetch current month sales: ${currentMonthError.message}`);
       
-      const currentMonthTotal = calculatePostDiscountTotal(currentMonthData);
+      const currentMonthTotal = calculateTotal(currentMonthData);
       setMonthlySales(currentMonthTotal);
 
       // Fetch last month's sales
       const { data: lastMonthData, error: lastMonthError } = await supabase
         .from('orders')
-        .select('total_amount, discount_amount')
+        .select('total_amount')
         .gte('created_at', lastMonthStart)
         .lte('created_at', lastMonthEnd);
 
       if (lastMonthError) throw new Error(`Failed to fetch last month sales: ${lastMonthError.message}`);
 
-      const lastMonthTotal = calculatePostDiscountTotal(lastMonthData);
+      const lastMonthTotal = calculateTotal(lastMonthData);
 
       // Calculate percentage change
       if (lastMonthTotal > 0) {
