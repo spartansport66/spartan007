@@ -119,7 +119,7 @@ const AdminDashboard = () => {
       console.error('Error fetching last active time:', error.message);
       setLastActiveTime('Error fetching time');
     }
-  }, []);
+  }, [user]);
 
   const fetchDashboardData = useCallback(async () => {
     if (!user) return;
@@ -408,30 +408,6 @@ const AdminDashboard = () => {
       </div>
 
       {/* 6. Quick Actions Card */}
-      <div className="grid grid-cols-1">
-        <Card className="bg-card text-card-foreground shadow-lg">
-          <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Quick Actions</CardTitle>
-            <CardDescription className="text-indigo-100 dark:text-indigo-200">
-              Access key administrative functions quickly.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 space-y-3">
-            <Button onClick={() => navigate('/manage-users')} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-              <UserCog className="h-4 w-4 mr-2" /> Manage Users
-            </Button>
-            <Button onClick={() => navigate('/manage-dealers')} className="w-full bg-green-600 hover:bg-green-700 text-white">
-              <Building className="h-4 w-4 mr-2" /> Manage Dealers
-            </Button>
-            <Button onClick={() => navigate('/product-management-console')} className="w-full bg-purple-600 hover:bg-purple-700 text-white">
-              <Boxes className="h-4 w-4 mr-2" /> Manage Inventory
-            </Button>
-            <Button onClick={() => setIsCompanyInfoDialogOpen(true)} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white">
-              <Info className="h-4 w-4 mr-2" /> Company Info
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
       
       <MadeWithDyad />
       
