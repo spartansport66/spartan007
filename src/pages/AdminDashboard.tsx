@@ -379,39 +379,9 @@ const AdminDashboard = () => {
         <DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} />
       </div>
       
-      {/* 4. Production Alerts / Performance Overview */}
+      {/* 4. Production Alerts / Sales Trend Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <ProductionAlertsCard key={`production-alerts-${refreshKey}`} />
-        {/* Placeholder for Sales Person Performance (Removed) */}
-        <Card className="bg-card text-card-foreground shadow-lg h-[350px]">
-          <CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Sales Person Performance</CardTitle>
-            <CardDescription className="text-pink-100 dark:text-pink-200">
-              View combined performance metrics.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4">
-            <Button 
-              onClick={() => { /* Re-implement navigation to the new report if needed */ }} 
-              className="w-full bg-pink-600 hover:bg-pink-700 text-white"
-              disabled
-            >
-              View Performance Report (Removed)
-            </Button>
-            <p className="text-sm text-muted-foreground mt-2 text-center">
-              This card was removed. Use the Reports menu for Sales Person Performance.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} />
-        <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
-      </div>
-
-      {/* 6. Monthly Sales Trend Chart (RE-ADDED) and Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <Card className="bg-card text-card-foreground shadow-lg h-[350px]"> {/* Fixed height for smaller size */}
           <CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4">
             <CardTitle className="text-xl font-semibold">Monthly Sales Trend</CardTitle>
@@ -429,9 +399,17 @@ const AdminDashboard = () => {
             )}
           </CardContent>
         </Card>
-        
-        {/* Quick Actions Card */}
-        <Card className="bg-card text-card-foreground shadow-lg h-[350px]">
+      </div>
+      
+      {/* 5. Payment Overview / Pending Payments */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} />
+        <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
+      </div>
+
+      {/* 6. Quick Actions Card */}
+      <div className="grid grid-cols-1">
+        <Card className="bg-card text-card-foreground shadow-lg">
           <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
             <CardTitle className="text-xl font-semibold">Quick Actions</CardTitle>
             <CardDescription className="text-indigo-100 dark:text-indigo-200">
