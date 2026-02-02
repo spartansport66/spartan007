@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
-import { DollarSign, Package, LogOut, Loader2, Building, Boxes, Lock, CalendarIcon } from 'lucide-react';
+import { DollarSign, Package, LogOut, Loader2, Building, Boxes, Lock, CalendarIcon, Factory } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import MonthlyBarChart from '@/components/MonthlyBarChart';
 import SalesPersonMonthlySalesChart from '@/components/SalesPersonMonthlySalesChart'; // Re-used for single person view
@@ -382,6 +382,21 @@ const ManagerDashboard = () => {
           </DropdownMenu>
         </div>
       </div>
+      
+      {/* NEW: Purchase Dashboard Link */}
+      <Card className="bg-purple-100 dark:bg-purple-900/50 border-purple-300 dark:border-purple-700 shadow-lg mb-6">
+        <CardContent className="p-4 flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-purple-800 dark:text-purple-200 flex items-center gap-2">
+            <Factory className="h-5 w-5" /> Raw Material Purchasing
+          </h3>
+          <Button 
+            onClick={() => navigate('/purchase-dashboard')} 
+            className="bg-purple-600 hover:bg-purple-700 text-white"
+          >
+            Go to Purchase Dashboard
+          </Button>
+        </CardContent>
+      </Card>
       
       {/* 1. Sales Overview (4 cards) */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">

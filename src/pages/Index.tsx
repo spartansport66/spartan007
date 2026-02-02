@@ -36,7 +36,7 @@ const Index = () => {
             navigate('/product-dashboard');
           } else if (userType === 'manager') {
             console.log('Redirecting to manager dashboard');
-            navigate('/manager-dashboard');
+            navigate('/manager-dashboard'); // Keep Manager Dashboard as primary
           } else if (userType === 'super_admin') {
             console.log('Redirecting to super admin dashboard');
             navigate('/super-admin-dashboard');

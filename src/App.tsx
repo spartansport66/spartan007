@@ -25,6 +25,7 @@ import GatePassDashboard from "./pages/GatePassDashboard";
 import ProductDashboard from "./pages/ProductDashboard";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import ManagerDashboard from "./pages/ManagerDashboard";
+import PurchaseDashboard from "./pages/PurchaseDashboard"; // NEW IMPORT
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -42,6 +43,7 @@ const AppContent = () => {
       <Route path="/product-dashboard" element={<ProductDashboard />} />
       <Route path="/super-admin-dashboard" element={<SuperAdminDashboard />} />
       <Route path="/manager-dashboard" element={<ManagerDashboard />} />
+      <Route path="/purchase-dashboard" element={<PurchaseDashboard />} /> {/* NEW ROUTE */}
       <Route path="/add-dealer" element={<AddDealer />} />
       <Route path="/manage-dealers" element={<ManageDealers />} />
       <Route path="/add-product" element={<AddProduct />} />
