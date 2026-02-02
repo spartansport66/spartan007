@@ -24,25 +24,21 @@ const SalesPersonPerformanceCard = () => {
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
       const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
 
-      // --- START DIAGNOSTIC LOGGING ---
-      console.log('[Performance Card] Fetching data for user ID:', user.id);
-      // --- END DIAGNOSTIC LOGGING ---
-
-      // 1. Fetch sales target for the current user
+      // 1. Fetch sales target for the current user.
+      // Removed .single() to prevent 406 error if multiple targets exist.
       const { data: targetData, error: targetError } = await supabase
         .from('sales_targets')
         .select('target_amount')
-        .eq('sales_person_id', user.id)
-        .single();
+        .eq('sales_person_id', user.id);
 
-      // --- START DIAGNOSTIC LOGGING ---
-      console.log('[Performance Card] Sales Target Query Result:', { targetData, targetError });
-      // --- END DIAGNOSTIC LOGGING ---
-
-      if (targetError && targetError.code !== 'PGRST116') { // Ignore 'no rows found' error
+      if (targetError) {
+        // We no longer need to check for 'PGRST116' because we aren't using .single()
         throw new Error(`Failed to fetch sales target: ${targetError.message}`);
       }
-      setSalesTarget(targetData?.target_amount || 0);
+      
+      // Safely get the target from the first result, or default to 0.
+      const firstTarget = targetData?.[0]?.target_amount || 0;
+      setSalesTarget(firstTarget);
 
       // 2. Fetch total achieved sales (post-discount) for the current month
       const { data: ordersData, error: ordersError } = await supabase
@@ -116,7 +112,7 @@ const SalesPersonPerformanceCard = () => {
               <Progress value={progressPercentage} className="w-full h-3" />
               <p className="text-sm text-right text-muted-foreground mt-1">
                 {progressPercentage.toFixed(2)}% of target achieved
-              </p>
+              p>
             </div>
           </div>
         )}
