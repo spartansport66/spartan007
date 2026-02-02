@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import { Loader2, Target, TrendingUp } from 'lucide-react';
+import { Loader2, Target, TrendingUp, Hourglass } from 'lucide-react';
 import { formatCurrency } from '@/utils/formatters';
 import { showError } from '@/utils/toast';
 
@@ -24,11 +24,11 @@ const SalesPersonPerformanceCard = () => {
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
       const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
 
-      // 1. Fetch sales target for the current user
+      // 1. Fetch sales target for the current user (Restored to original query)
       const { data: targetData, error: targetError } = await supabase
         .from('sales_targets')
         .select('target_amount')
-        .eq('sales_person_id', user.id) // Corrected column name from 'user_id'
+        .eq('user_id', user.id) // Reverted back to 'user_id'
         .single();
 
       if (targetError && targetError.code !== 'PGRST116') { // Ignore 'no rows found' error
@@ -37,15 +37,13 @@ const SalesPersonPerformanceCard = () => {
       setSalesTarget(targetData?.target_amount || 0);
 
       // 2. Fetch total achieved sales (post-discount) for the current month
-      // This now queries the 'orders' table to sum the final 'total_amount'
-      let ordersQuery = supabase
+      // This is the one change requested by the user.
+      const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('total_amount')
         .eq('user_id', user.id)
         .gte('order_date', firstDayOfMonth)
         .lte('order_date', lastDayOfMonth);
-
-      const { data: ordersData, error: ordersError } = await ordersQuery;
 
       if (ordersError) {
         throw new Error(`Failed to fetch achieved sales: ${ordersError.message}`);
@@ -70,6 +68,7 @@ const SalesPersonPerformanceCard = () => {
   }, [fetchPerformanceData]);
 
   const progressPercentage = salesTarget > 0 ? (achievedSales / salesTarget) * 100 : 0;
+  const pendingTarget = Math.max(0, salesTarget - achievedSales);
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
@@ -81,7 +80,7 @@ const SalesPersonPerformanceCard = () => {
       </CardHeader>
       <CardContent className="p-4">
         {loading ? (
-          <div className="flex items-center justify-center h-32">
+          <div className="flex items-center justify-center h-40">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
@@ -99,6 +98,13 @@ const SalesPersonPerformanceCard = () => {
                 <span>Achieved Sales:</span>
               </div>
               <span className="font-bold text-green-600 dark:text-green-400">{formatCurrency(achievedSales)}</span>
+            </div>
+            <div className="flex justify-between items-center text-lg">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Hourglass className="h-5 w-5" />
+                <span>Pending Target:</span>
+              </div>
+              <span className="font-bold text-orange-500 dark:text-orange-400">{formatCurrency(pendingTarget)}</span>
             </div>
             <div>
               <Progress value={progressPercentage} className="w-full h-3" />
