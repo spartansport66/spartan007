@@ -5,11 +5,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Truck, Search, CalendarDays } from 'lucide-react';
+import { Loader2, Eye, Truck, Search, CalendarDays, Edit } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import DispatchOrderDialog from '@/components/DispatchOrderDialog';
+import EditOrderDialog from '@/components/EditOrderDialog';
 import { Label } from '@/components/ui/label';
 
 interface OrderToDispatch {
@@ -43,6 +44,10 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
   const [isDispatchDialogOpen, setIsDispatchDialogOpen] = useState(false);
   const [selectedOrderIdForDispatch, setSelectedOrderIdForDispatch] = useState<string | null>(null);
+  
+  // NEW EDIT STATE
+  const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false);
+  const [selectedOrderIdForEdit, setSelectedOrderIdForEdit] = useState<string | null>(null);
 
   // Format date as dd/mm/yyyy
   const formatDate = (dateString: string) => {
@@ -133,6 +138,17 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
   const handleDispatchOrder = (orderId: string) => {
     setSelectedOrderIdForDispatch(orderId);
     setIsDispatchDialogOpen(true);
+  };
+  
+  // NEW HANDLER
+  const handleEditOrder = (orderId: string) => {
+    setSelectedOrderIdForEdit(orderId);
+    setIsEditOrderDialogOpen(true);
+  };
+  
+  // NEW HANDLER
+  const handleOrderUpdated = () => {
+    fetchOrdersAndDealers(); // Refresh the list
   };
 
   const handleClearFilters = () => {
@@ -233,6 +249,15 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+                          {/* NEW EDIT BUTTON */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditOrder(order.id)}
+                            title="Edit Order"
+                          >
+                            <Edit className="h-4 w-4 text-orange-600" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -261,6 +286,13 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         isOpen={isDispatchDialogOpen}
         onOpenChange={setIsDispatchDialogOpen}
         onDispatchSuccess={onDispatchSuccess}
+      />
+      {/* NEW EDIT DIALOG */}
+      <EditOrderDialog
+        orderId={selectedOrderIdForEdit}
+        isOpen={isEditOrderDialogOpen}
+        onOpenChange={setIsEditOrderDialogOpen}
+        onOrderUpdated={handleOrderUpdated}
       />
     </Card>
   );

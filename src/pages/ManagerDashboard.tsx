@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
-import { DollarSign, Package, LogOut, Loader2, Building, Boxes, Lock, CalendarIcon, Factory } from 'lucide-react';
+import { DollarSign, Package, LogOut, Loader2, Building, Boxes, Lock, CalendarIcon } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import MonthlyBarChart from '@/components/MonthlyBarChart';
 import SalesPersonMonthlySalesChart from '@/components/SalesPersonMonthlySalesChart'; // Re-used for single person view
@@ -89,9 +89,9 @@ const ManagerDashboard = () => {
     try {
       let query = supabase
         .from('sales')
-        .select('total_price, sale_date, orders(user_id)')
-        .eq('orders.user_id', salesPersonId); // Filter by specific sales person ID
-
+        .select('total_price, sale_date, orders(user_id)'); // Ensure orders(user_id) is selected
+      
+      // Apply filters based on date range
       if (startDateISO) {
         query = query.gte('sale_date', startDateISO);
       }
@@ -106,7 +106,7 @@ const ManagerDashboard = () => {
       // --- Single Person View ---
       const salesByMonth: { [key: string]: number } = {};
       (salesData || []).forEach(sale => {
-        // DEFENSIVE CHECK: Ensure the sale is attributed to the selected sales person.
+        // Filter sales belonging to the selected sales person
         if (sale.orders?.user_id !== salesPersonId) {
           return;
         }
@@ -382,21 +382,6 @@ const ManagerDashboard = () => {
           </DropdownMenu>
         </div>
       </div>
-      
-      {/* NEW: Purchase Dashboard Link */}
-      <Card className="bg-purple-100 dark:bg-purple-900/50 border-purple-300 dark:border-purple-700 shadow-lg mb-6">
-        <CardContent className="p-4 flex justify-between items-center">
-          <h3 className="text-lg font-semibold text-purple-800 dark:text-purple-200 flex items-center gap-2">
-            <Factory className="h-5 w-5" /> Raw Material Purchasing
-          </h3>
-          <Button 
-            onClick={() => navigate('/purchase-dashboard')} 
-            className="bg-purple-600 hover:bg-purple-700 text-white"
-          >
-            Go to Purchase Dashboard
-          </Button>
-        </CardContent>
-      </Card>
       
       {/* 1. Sales Overview (4 cards) */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
