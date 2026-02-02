@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Building, PlusCircle, Loader2, Search, Eye, FileText, Lock } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, Search, Eye, FileText, Lock, Edit } from 'lucide-react';
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
@@ -23,6 +23,7 @@ import SalesPersonDealerReport from '@/components/reports/SalesPersonDealerRepor
 import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsReport';
 import DailyVisitProgressCard from '@/components/DailyVisitProgressCard';
 import SalesPersonFollowupsCard from '@/components/SalesPersonFollowupsCard'; // New Import
+import EditOrderDialog from '@/components/EditOrderDialog'; // NEW IMPORT
 
 interface Product {
   id: string;
@@ -53,6 +54,7 @@ interface OrderDisplay {
   dealer_name: string;
   payment_status: string;
   items: OrderItemDisplay[];
+  dispatched: boolean; // Added dispatched status
 }
 
 // Format date as dd/mm/yyyy
@@ -91,6 +93,10 @@ const Dashboard = () => {
 
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
+  
+  // NEW EDIT STATE
+  const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false);
+  const [selectedOrderIdForEdit, setSelectedOrderIdForEdit] = useState<string | null>(null);
 
   // New states for salesperson reports
   const [isSalesPersonSalesReportOpen, setIsSalesPersonSalesReportOpen] = useState(false);
@@ -156,6 +162,7 @@ const Dashboard = () => {
         order_date,
         total_amount,
         payment_status,
+        dispatched,
         dealers (name),
         sales (
           quantity,
@@ -193,6 +200,7 @@ const Dashboard = () => {
         total_amount: order.total_amount,
         dealer_name: order.dealers?.name || 'N/A',
         payment_status: order.payment_status,
+        dispatched: order.dispatched, // Include dispatched status
         items: (order.sales || []).map((sale: any) => ({
           product_id: sale.products?.id || '',
           product_name: sale.products?.name || 'N/A',
@@ -279,6 +287,19 @@ const Dashboard = () => {
   const handleViewOrderDetails = (orderId: string) => {
     setSelectedOrderIdForDetails(orderId);
     setIsOrderDetailsDialogOpen(true);
+  };
+  
+  // NEW HANDLER
+  const handleEditOrder = (orderId: string) => {
+    setSelectedOrderIdForEdit(orderId);
+    setIsEditOrderDialogOpen(true);
+  };
+  
+  // NEW HANDLER
+  const handleOrderUpdated = () => {
+    // Close edit dialog and refresh data
+    setIsEditOrderDialogOpen(false);
+    handleRefreshData();
   };
 
   if (sessionLoading || loadingData) {
@@ -445,14 +466,27 @@ const Dashboard = () => {
                         <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                         <TableCell className="text-muted-foreground">{order.payment_status || 'N/A'}</TableCell>
                         <TableCell className="text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleViewOrderDetails(order.id)}
-                            title="View Order Details"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
+                          <div className="flex justify-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleViewOrderDetails(order.id)}
+                              title="View Order Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {/* NEW EDIT BUTTON - Only allow editing if not yet dispatched */}
+                            {!order.dispatched && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditOrder(order.id)}
+                                title="Edit Order"
+                              >
+                                <Edit className="h-4 w-4 text-orange-600" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -469,6 +503,13 @@ const Dashboard = () => {
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}
         onOpenChange={setIsOrderDetailsDialogOpen}
+      />
+      {/* NEW EDIT ORDER DIALOG */}
+      <EditOrderDialog
+        orderId={selectedOrderIdForEdit}
+        isOpen={isEditOrderDialogOpen}
+        onOpenChange={setIsEditOrderDialogOpen}
+        onOrderUpdated={handleOrderUpdated}
       />
       {/* Salesperson Reports Dialogs */}
       <SalesPersonSalesReport
