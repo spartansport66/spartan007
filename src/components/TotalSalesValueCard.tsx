@@ -14,18 +14,21 @@ const TotalSalesValueCard = () => {
   const fetchTotalSales = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch all orders and select the 'total_amount' column.
-      // This column represents the final sale value after discounts.
+      // Fetch subtotal and discount for all orders to calculate the true post-discount value.
       const { data, error } = await supabase
         .from('orders')
-        .select('total_amount');
+        .select('subtotal, discount');
 
       if (error) {
         throw new Error(`Failed to fetch total sales: ${error.message}`);
       }
 
-      // Sum the post-discount 'total_amount' for all orders.
-      const calculatedTotal = (data || []).reduce((sum, order) => sum + (order.total_amount || 0), 0);
+      // Calculate the total by subtracting the discount from the subtotal for each order.
+      const calculatedTotal = (data || []).reduce((sum, order) => {
+        const subtotal = order.subtotal || 0;
+        const discount = order.discount || 0;
+        return sum + (subtotal - discount);
+      }, 0);
       setTotalSales(calculatedTotal);
 
     } catch (error: any) {
