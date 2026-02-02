@@ -112,7 +112,7 @@ const SalesPersonPerformanceCard = () => {
               <Progress value={progressPercentage} className="w-full h-3" />
               <p className="text-sm text-right text-muted-foreground mt-1">
                 {progressPercentage.toFixed(2)}% of target achieved
-              p>
+              </p>
             </div>
           </div>
         )}
