@@ -217,12 +217,13 @@ const AdminDashboard = () => {
     try {
       const { error } = await supabase.auth.signOut();
       
-      if (error) {
-        console.warn('Logout API call failed, but proceeding with client-side logout as session might be invalid:', error.message);
+      if (error && error.message !== 'Auth session missing!') {
+        console.warn('Logout API call failed:', error.message);
         showError(`Logout failed: ${error.message}. You are being redirected.`);
       } else {
         showSuccess('Logged out successfully!');
       }
+      // Always navigate to login to clear client-side state
       navigate('/login');
     } catch (error: any) {
       console.error('Unexpected error during logout:', error);
@@ -352,7 +353,7 @@ const AdminDashboard = () => {
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md h-full">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-4 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg">
+            <CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 p-4 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg`}>
               <CardTitle className="text-base font-medium text-white">{item.title}</CardTitle>
               {item.icon}
             </CardHeader>

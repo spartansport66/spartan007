@@ -26,12 +26,14 @@ const ProductDashboard = () => {
   const handleLogout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
-      if (error) {
+      
+      if (error && error.message !== 'Auth session missing!') {
         console.warn('Logout API call failed:', error.message);
         showError(`Logout failed: ${error.message}. You are being redirected.`);
       } else {
         showSuccess('Logged out successfully!');
       }
+      // Always navigate to login to clear client-side state
       navigate('/login');
     } catch (error: any) {
       console.error('Unexpected error during logout:', error);
