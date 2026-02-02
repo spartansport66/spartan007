@@ -12,6 +12,10 @@ import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import OrdersAwaitingDispatchReportDialog from '@/components/reports/OrdersAwaitingDispatchReportDialog';
 import DispatchedOrdersReportDialog from '@/components/reports/DispatchedOrdersReportDialog';
@@ -379,32 +383,12 @@ const AdminDashboard = () => {
         <DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} />
       </div>
       
-      {/* 4. Production Alerts / Performance Overview */}
+      {/* 4. Production Alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <ProductionAlertsCard key={`production-alerts-${refreshKey}`} />
-        {/* Placeholder for Sales Person Performance (Removed) */}
-        <Card className="bg-card text-card-foreground shadow-lg h-[350px]">
-          <CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Sales Person Performance</CardTitle>
-            <CardDescription className="text-pink-100 dark:text-pink-200">
-              View combined performance metrics.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4">
-            <Button 
-              onClick={() => { /* Re-implement navigation to the new report if needed */ }} 
-              className="w-full bg-pink-600 hover:bg-pink-700 text-white"
-              disabled
-            >
-              View Performance Report (Removed)
-            </Button>
-            <p className="text-sm text-muted-foreground mt-2 text-center">
-              This card was removed. Use the Reports menu for Sales Person Performance.
-            </p>
-          </CardContent>
-        </Card>
       </div>
       
+      {/* 5. Payment Overview / Pending Approvals */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} />
         <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
