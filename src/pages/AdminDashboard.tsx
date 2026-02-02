@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, BadgePercent } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
@@ -70,8 +70,7 @@ const AdminDashboard = () => {
   const [paymentsReportInitialToDate, setPaymentsReportInitialToDate] = useState<string>('');
   const [paymentsReportDialogKey, setPaymentsReportDialogKey] = useState(0);
 
-  const [totalSalesValue, setTotalSalesValue] = useState<number>(0); // Gross Sales
-  const [achievedSalesValue, setAchievedSalesValue] = useState<number>(0); // Net Sales
+  const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [productsCount, setProductsCount] = useState<number>(0);
@@ -141,22 +140,24 @@ const AdminDashboard = () => {
         setActiveDealersCount(dealersCount || 0);
       }
 
-      // Fetch orders data for sales metrics (more efficient)
-      const { data: ordersMetrics, error: ordersMetricsError, count: ordersCount } = await supabase
+      // Fetch orders count
+      const { count: ordersCount, error: ordersError } = await supabase
         .from('orders')
-        .select('total_amount, discount_amount', { count: 'exact' });
-
-      if (ordersMetricsError) {
-        console.error('Error fetching orders metrics:', ordersMetricsError.message);
-        setTotalSalesValue(0); // Gross
-        setAchievedSalesValue(0); // Achieved
-        setTotalOrders(0);
-      } else {
-        const totalAchieved = (ordersMetrics || []).reduce((sum, order) => sum + order.total_amount, 0);
-        const totalDiscount = (ordersMetrics || []).reduce((sum, order) => sum + (order.discount_amount || 0), 0);
-        setTotalSalesValue(totalAchieved + totalDiscount); // Gross Sales
-        setAchievedSalesValue(totalAchieved); // Achieved Sales
+        .select('*', { count: 'exact', head: true });
+      if (!ordersError) {
         setTotalOrders(ordersCount || 0);
+      }
+
+      // Fetch total sales value
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select('total_price');
+      if (salesError) {
+        console.error('Error fetching total sales value:', salesError.message);
+        setTotalSalesValue(0);
+      } else {
+        const total = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
+        setTotalSalesValue(total);
       }
 
       // Fetch monthly sales data for the chart
@@ -272,18 +273,11 @@ const AdminDashboard = () => {
 
   const salesOverview = [
     {
-      title: "Gross Sales Value",
+      title: "Total Sales Value",
       value: `₹${totalSalesValue.toFixed(2)}`,
-      change: "Before discount",
+      change: "+20.1% from last month",
       icon: <DollarSign className="h-4 w-4 text-white" />,
       valueColor: "text-blue-800 dark:text-blue-200"
-    },
-    {
-      title: "Achieved Sales",
-      value: `₹${achievedSalesValue.toFixed(2)}`,
-      change: "After discount",
-      icon: <BadgePercent className="h-4 w-4 text-white" />,
-      valueColor: "text-green-800 dark:text-green-200"
     },
     {
       title: "Total Orders",
@@ -355,11 +349,11 @@ const AdminDashboard = () => {
         </Sheet>
       </div>
       
-      {/* 1. Sales Overview (5 cards) */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-6">
+      {/* 1. Sales Overview (4 cards) */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md h-full">
-            <CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 p-4 ${item.title === 'Achieved Sales' ? 'bg-green-500 dark:bg-green-700' : 'bg-blue-500 dark:bg-blue-700'} text-white rounded-t-lg`}>
+            <CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 p-4 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg`}>
               <CardTitle className="text-base font-medium text-white">{item.title}</CardTitle>
               {item.icon}
             </CardHeader>
