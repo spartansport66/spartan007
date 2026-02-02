@@ -24,12 +24,20 @@ const SalesPersonPerformanceCard = () => {
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
       const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
 
-      // 1. Fetch sales target for the current user (Corrected column name)
+      // --- START DIAGNOSTIC LOGGING ---
+      console.log('[Performance Card] Fetching data for user ID:', user.id);
+      // --- END DIAGNOSTIC LOGGING ---
+
+      // 1. Fetch sales target for the current user
       const { data: targetData, error: targetError } = await supabase
         .from('sales_targets')
         .select('target_amount')
-        .eq('sales_person_id', user.id) // Corrected column name from 'user_id'
+        .eq('sales_person_id', user.id)
         .single();
+
+      // --- START DIAGNOSTIC LOGGING ---
+      console.log('[Performance Card] Sales Target Query Result:', { targetData, targetError });
+      // --- END DIAGNOSTIC LOGGING ---
 
       if (targetError && targetError.code !== 'PGRST116') { // Ignore 'no rows found' error
         throw new Error(`Failed to fetch sales target: ${targetError.message}`);
@@ -48,7 +56,6 @@ const SalesPersonPerformanceCard = () => {
         throw new Error(`Failed to fetch achieved sales: ${ordersError.message}`);
       }
 
-      // Sum the post-discount total_amount from each order
       const totalAchievedSales = (ordersData || []).reduce((sum, order) => sum + order.total_amount, 0);
       setAchievedSales(totalAchievedSales);
 
