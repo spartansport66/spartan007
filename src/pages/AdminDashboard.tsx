@@ -123,7 +123,7 @@ const AdminDashboard = () => {
       console.error('Error fetching last active time:', error.message);
       setLastActiveTime('Error fetching time');
     }
-  }, [user]);
+  }, []);
 
   const fetchDashboardData = useCallback(async () => {
     if (!user) return;
@@ -368,11 +368,11 @@ const AdminDashboard = () => {
         ))}
       </div>
       
-      {/* 2. Sales Person Reports (NEW SECTION) */}
+      {/* 2. Sales Reporting Tools (Restored and Prominent) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <Card className="bg-card text-card-foreground shadow-lg h-full lg:col-span-3">
           <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Sales Person Reports</CardTitle>
+            <CardTitle className="text-xl font-semibold">Sales Reporting Tools</CardTitle>
             <CardDescription className="text-teal-100 dark:text-teal-200">
               Detailed reports on sales person activity, performance, and dealer accounts.
             </CardDescription>
