@@ -28,7 +28,7 @@ const SalesPersonPerformanceCard = () => {
       const { data: targetData, error: targetError } = await supabase
         .from('sales_targets')
         .select('target_amount')
-        .eq('user_id', user.id)
+        .eq('sales_person_id', user.id) // Corrected column name from 'user_id'
         .single();
 
       if (targetError && targetError.code !== 'PGRST116') { // Ignore 'no rows found' error
