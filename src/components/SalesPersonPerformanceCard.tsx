@@ -24,11 +24,11 @@ const SalesPersonPerformanceCard = () => {
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
       const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
 
-      // 1. Fetch sales target for the current user (Restored to original query)
+      // 1. Fetch sales target for the current user (Corrected column name)
       const { data: targetData, error: targetError } = await supabase
         .from('sales_targets')
         .select('target_amount')
-        .eq('user_id', user.id) // Reverted back to 'user_id'
+        .eq('sales_person_id', user.id) // Corrected column name from 'user_id'
         .single();
 
       if (targetError && targetError.code !== 'PGRST116') { // Ignore 'no rows found' error
@@ -37,7 +37,6 @@ const SalesPersonPerformanceCard = () => {
       setSalesTarget(targetData?.target_amount || 0);
 
       // 2. Fetch total achieved sales (post-discount) for the current month
-      // This is the one change requested by the user.
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('total_amount')
