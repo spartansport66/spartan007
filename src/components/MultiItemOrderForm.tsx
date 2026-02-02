@@ -360,9 +360,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
 
   const addOrderItem = () => {
-    setOrderItems([...orderItems, { id: Date.now().toString(), product_id: '', quantity: 1 }]);
+    const newId = Date.now().toString();
+    setOrderItems([{ id: newId, product_id: '', quantity: 1 }, ...orderItems]);
     // When adding a new item, ensure its popover is closed initially
-    setPopoverOpenStates(prev => ({ ...prev, [Date.now().toString()]: false }));
+    setPopoverOpenStates(prev => ({ ...prev, [newId]: false }));
   };
 
   const removeOrderItem = (id: string) => {
