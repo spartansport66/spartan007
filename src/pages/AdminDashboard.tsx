@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, MapPin, Clock, ListChecks } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, MapPin, Clock } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
@@ -377,24 +377,47 @@ const AdminDashboard = () => {
         <AdminTotalPendingOrdersCard key={`admin-pending-orders-${refreshKey}`} onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} />
       </div>
       
-      {/* 3. Orders to Dispatch / Dispatched Orders */}
+      {/* 3. Sales Person Reports (MOVED HERE) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <Card className="bg-card text-card-foreground shadow-lg h-full lg:col-span-3">
+          <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold">Sales Person Reports</CardTitle>
+            <CardDescription className="text-teal-100 dark:text-teal-200">
+              Detailed reports on sales person activity, performance, and dealer accounts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Button onClick={() => setIsSalesPersonVisitReportOpen(true)} className="w-full bg-teal-600 hover:bg-teal-700 text-white">
+              <MapPin className="h-4 w-4 mr-2" /> Visit Report
+            </Button>
+            <Button onClick={() => setIsSalesPersonTodayFollowupsReportOpen(true)} className="w-full bg-teal-600 hover:bg-teal-700 text-white">
+              <Clock className="h-4 w-4 mr-2" /> Today's Follow-ups Report
+            </Button>
+            <Button onClick={() => setIsSalesPersonAccountStatementReportOpen(true)} className="w-full bg-teal-600 hover:bg-teal-700 text-white">
+              <Scale className="h-4 w-4 mr-2" /> Account Statement Report
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 4. Orders to Dispatch / Dispatched Orders */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} />
         <DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} />
       </div>
       
-      {/* 4. Production Alerts */}
+      {/* 5. Production Alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <ProductionAlertsCard key={`production-alerts-${refreshKey}`} />
       </div>
       
-      {/* 5. Payment Overview / Pending Approvals */}
+      {/* 6. Payment Overview / Pending Approvals */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} />
         <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
       </div>
 
-      {/* 6. Monthly Sales Trend Chart and Quick Actions */}
+      {/* 7. Monthly Sales Trend Chart and Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <Card className="bg-card text-card-foreground shadow-lg h-[350px]"> {/* Fixed height for smaller size */}
           <CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4">
@@ -434,29 +457,6 @@ const AdminDashboard = () => {
             </Button>
             <Button onClick={() => setIsCompanyInfoDialogOpen(true)} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white">
               <Info className="h-4 w-4 mr-2" /> Company Info
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-      
-      {/* 7. Sales Person Reports (New Section) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <Card className="bg-card text-card-foreground shadow-lg h-full lg:col-span-3">
-          <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Sales Person Reports</CardTitle>
-            <CardDescription className="text-teal-100 dark:text-teal-200">
-              Detailed reports on sales person activity, performance, and dealer accounts.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Button onClick={() => setIsSalesPersonVisitReportOpen(true)} className="w-full bg-teal-600 hover:bg-teal-700 text-white">
-              <MapPin className="h-4 w-4 mr-2" /> Visit Report
-            </Button>
-            <Button onClick={() => setIsSalesPersonTodayFollowupsReportOpen(true)} className="w-full bg-teal-600 hover:bg-teal-700 text-white">
-              <Clock className="h-4 w-4 mr-2" /> Today's Follow-ups Report
-            </Button>
-            <Button onClick={() => setIsSalesPersonAccountStatementReportOpen(true)} className="w-full bg-teal-600 hover:bg-teal-700 text-white">
-              <Scale className="h-4 w-4 mr-2" /> Account Statement Report
             </Button>
           </CardContent>
         </Card>
