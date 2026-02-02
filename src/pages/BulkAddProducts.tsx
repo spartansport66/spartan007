@@ -1,0 +1,193 @@
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { MadeWithDyad } from '@/components/made-with-dyad';
+import { ArrowLeft, Upload, Loader2 } from 'lucide-react';
+import { showError, showSuccess } from '@/utils/toast';
+import { useSession } from '@/contexts/SessionContext';
+import * as z from 'zod';
+import ExcelUpload from '@/components/ExcelUpload'; // Import the generic ExcelUpload component
+
+// IMPORTANT: Replace with the actual URL of your deployed Edge Function
+const BULK_ADD_PRODUCTS_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/bulk-add-products";
+
+// Zod schema for product validation
+const productSchema = z.object({
+  code: z.string().min(1, { message: 'Product Code is required.' }).trim(), // Added .trim()
+  name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }).trim(), // Added .trim()
+  description: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  size: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  hsn: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  gst: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  dp: z.preprocess(
+    (val) => {
+      if (typeof val === 'string') {
+        const trimmedVal = val.trim();
+        if (trimmedVal === '') return undefined;
+        const num = parseFloat(trimmedVal);
+        return isNaN(num) ? trimmedVal : num; // Pass number if valid, else original string for Zod to error on
+      }
+      return val;
+    },
+    z.coerce.number()
+      .min(0, { message: 'Dealer Price cannot be negative.' }) // Apply min before transform
+      .transform(val => Math.round(val)) // Round to nearest integer first
+      .default(0) // Default to 0
+  ),
+  stock: z.preprocess(
+    (val) => {
+      if (typeof val === 'string') {
+        const trimmedVal = val.trim();
+        if (trimmedVal === '') return undefined;
+        const num = parseFloat(trimmedVal);
+        return isNaN(num) ? trimmedVal : num; // Pass number if valid, else original string for Zod to error on
+      }
+      return val;
+    },
+    z.coerce.number()
+      .min(0, { message: 'Stock cannot be negative.' }) // Apply min before transform
+      .transform(val => Math.round(val)) // Round to nearest integer first
+      .default(0) // Default to 0
+  ),
+});
+
+// Define display headers for the ExcelUpload component
+const productDisplayHeaders = [
+  { key: 'code', label: 'Product Code' },
+  { key: 'name', label: 'Product Name' },
+  { key: 'description', label: 'Description' },
+  { key: 'size', label: 'Size' },
+  { key: 'hsn', label: 'HSN' },
+  { key: 'gst', label: 'GST (%)' },
+  { key: 'dp', label: 'Dealer Price (DP)' },
+  { key: 'stock', label: 'Stock' },
+];
+
+// Sample data for the ExcelUpload component
+const productSampleData = [
+  {
+    "Product Code": 'P001',
+    "Product Name": 'Laptop Pro X',
+    "Description": 'High-performance laptop for professionals.',
+    "Size": '15 inch',
+    "HSN": '8471',
+    "GST (%)": "18", 
+    "Dealer Price (DP)": 1000, // Changed to integer
+    "Stock": 50
+  },
+  {
+    "Product Code": 'P002',
+    "Product Name": 'Wireless Mouse',
+    "Description": 'Ergonomic wireless mouse.',
+    "Size": 'Small',
+    "HSN": '8471',
+    "GST (%)": "Exempt", 
+    "Dealer Price (DP)": 15, // Changed to integer
+    "Stock": 200
+  }
+];
+
+const BulkAddProducts = () => {
+  const navigate = useNavigate();
+  const { user, loading: sessionLoading, userType } = useSession();
+  const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
+  const [loadingUpload, setLoadingUpload] = useState(false); // Renamed to avoid conflict with ExcelUpload's internal loading
+
+  useEffect(() => {
+    if (!sessionLoading && !user) {
+      navigate('/login');
+    } else if (!sessionLoading && user && !isAuthorized) {
+      showError('Access Denied: Only authorized personnel can bulk add products.');
+      navigate('/dashboard');
+    }
+  }, [sessionLoading, user, isAuthorized, navigate]);
+
+  const handleBulkUpload = async (productsToUpload: z.infer<typeof productSchema>[]) => {
+    if (!user) {
+      showError('User not authenticated. Please log in again.');
+      return;
+    }
+    
+    setLoadingUpload(true);
+    
+    try {
+      const response = await fetch(BULK_ADD_PRODUCTS_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          products: productsToUpload.map(p => ({
+            name: p.name,
+            description: p.description,
+            stock: p.stock,
+            user_id: user.id,
+            code: p.code,
+            size: p.size,
+            hsn: p.hsn,
+            gst: p.gst,
+            dp: p.dp,
+          }))
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload products');
+      }
+      
+      showSuccess(data.message);
+      navigate(userType === 'admin' ? '/product-management-console' : '/product-dashboard'); // Navigate after successful bulk upload
+    } catch (error: any) {
+      console.error('Error uploading products:', error);
+      showError(`Failed to upload products: ${error.message}`);
+    } finally {
+      setLoadingUpload(false);
+    }
+  };
+
+  if (sessionLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading bulk add products page...</p>
+      </div>
+    );
+  }
+
+  if (!isAuthorized) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
+      <div className="w-full max-w-4xl">
+        <Button 
+          variant="outline" 
+          onClick={() => navigate(userType === 'admin' ? '/product-management-console' : '/product-dashboard')} 
+          className="mb-6 flex items-center gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Product Console
+        </Button>
+
+        <ExcelUpload
+          onUpload={handleBulkUpload}
+          sampleData={productSampleData}
+          sampleFileName="sample_products.xlsx"
+          uploadButtonText="Upload Products"
+          displayHeaders={productDisplayHeaders}
+          validationSchema={productSchema}
+          // Exclude 'MRP' from mapping
+          excludedSourceHeaders={['MRP']}
+        />
+      </div>
+      <MadeWithDyad />
+    </div>
+  );
+};
+
+export default BulkAddProducts;
