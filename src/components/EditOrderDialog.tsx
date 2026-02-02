@@ -151,11 +151,14 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const updateOrderItem = (id: string, field: keyof OrderItem, value: string | number) => {
     setOrderItems(prevItems => prevItems.map(item => {
       if (item.id === id) {
-        const updatedItem = { ...item, [field]: typeof value === 'string' ? parseFloat(value) || 0 : value };
-        // Recalculate total_price immediately if quantity or product_id changes
+        const updatedItem = { ...item, [field]: value };
+        
+        // Recalculate total_price if quantity or product_id changes
         if (field === 'quantity' || field === 'product_id') {
           const product = products.find(p => p.id === updatedItem.product_id);
-          updatedItem.total_price = product ? updatedItem.quantity * product.dp : 0;
+          // Ensure quantity is treated as a number for calculation
+          const quantity = typeof updatedItem.quantity === 'string' ? parseInt(updatedItem.quantity) || 0 : updatedItem.quantity;
+          updatedItem.total_price = product ? quantity * product.dp : 0;
         }
         return updatedItem;
       }
