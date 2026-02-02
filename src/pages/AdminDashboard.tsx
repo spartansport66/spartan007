@@ -38,6 +38,7 @@ import { updateAllDealerCreditDays } from '@/utils/supabase-actions';
 import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
 import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
 import AdminTotalPendingOrdersCard from '@/components/AdminTotalPendingOrdersCard';
+import SalesPersonPerformanceAdminCard from '@/components/SalesPersonPerformanceAdminCard'; // NEW IMPORT
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -379,26 +380,10 @@ const AdminDashboard = () => {
         <DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} />
       </div>
       
-      {/* 4. Production Alerts / Sales Trend Chart */}
+      {/* 4. Production Alerts / Sales Person Performance Card */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <ProductionAlertsCard key={`production-alerts-${refreshKey}`} />
-        <Card className="bg-card text-card-foreground shadow-lg h-[350px]"> {/* Fixed height for smaller size */}
-          <CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Monthly Sales Trend</CardTitle>
-            <CardDescription className="text-pink-100 dark:text-pink-200">
-              Sales performance over the last 12 months.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 h-[280px]"> {/* Fixed height for chart area */}
-            {loadingData ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : (
-              <SalesChart data={monthlySalesData} />
-            )}
-          </CardContent>
-        </Card>
+        <SalesPersonPerformanceAdminCard key={`sales-person-performance-${refreshKey}`} />
       </div>
       
       {/* 5. Payment Overview / Pending Payments */}
@@ -407,7 +392,7 @@ const AdminDashboard = () => {
         <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
       </div>
 
-      {/* 6. Quick Actions Card */}
+      {/* 6. Quick Actions Card (Removed) */}
       
       <MadeWithDyad />
       
