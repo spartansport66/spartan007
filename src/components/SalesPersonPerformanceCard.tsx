@@ -48,17 +48,19 @@ const SalesPersonPerformanceCard: React.FC = () => {
       const startOfMonth = new Date(Date.UTC(currentYear, currentMonth, 1)).toISOString();
       const endOfMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0, 23, 59, 59, 999)).toISOString();
 
-      const { data: salesData, error: salesError } = await supabase
-        .from('sales')
-        .select('total_price, orders(user_id)')
-        .eq('orders.user_id', user.id)
-        .gte('sale_date', startOfMonth)
-        .lte('sale_date', endOfMonth);
+      const { data: ordersData, error: salesError } = await supabase
+        .from('orders')
+        .select('sales(total_price)')
+        .eq('user_id', user.id)
+        .gte('order_date', startOfMonth)
+        .lte('order_date', endOfMonth);
 
       if (salesError) {
         throw new Error(`Failed to fetch achieved sales: ${salesError.message}`);
       }
-      const currentAchievedSales = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
+      const currentAchievedSales = (ordersData || [])
+        .flatMap(order => order.sales)
+        .reduce((sum, sale) => sum + sale.total_price, 0);
       setAchievedSales(currentAchievedSales);
 
       setPendingSales(currentTarget - currentAchievedSales);
@@ -107,6 +109,7 @@ const SalesPersonPerformanceCard: React.FC = () => {
             payment_status,
             payments(amount, status)
           `)
+          .eq('user_id', user.id) // Ensure we only get orders created by this sales person
           .in('dealer_id', dealerIds);
 
         if (transactionsError) {
