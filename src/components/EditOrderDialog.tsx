@@ -151,14 +151,24 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const updateOrderItem = (id: string, field: keyof OrderItem, value: string | number) => {
     setOrderItems(prevItems => prevItems.map(item => {
       if (item.id === id) {
-        const updatedItem = { ...item, [field]: value };
+        let updatedItem = { ...item };
         
-        // Recalculate total_price if quantity or product_id changes
+        if (field === 'quantity') {
+          // Ensure quantity is stored as a number (integer)
+          updatedItem.quantity = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : value);
+        } else if (field === 'product_id') {
+          // Ensure product_id is stored as a string (UUID)
+          updatedItem.product_id = String(value);
+        } else {
+          // For other fields (like total_price, which is calculated), assign directly
+          updatedItem = { ...item, [field]: value };
+        }
+
+        // Recalculate total_price if quantity or product_id changed
         if (field === 'quantity' || field === 'product_id') {
           const product = products.find(p => p.id === updatedItem.product_id);
-          // Ensure quantity is treated as a number for calculation
-          const quantity = typeof updatedItem.quantity === 'string' ? parseInt(updatedItem.quantity) || 0 : updatedItem.quantity;
-          updatedItem.total_price = product ? quantity * product.dp : 0;
+          // Use the now guaranteed number type for quantity
+          updatedItem.total_price = product ? updatedItem.quantity * product.dp : 0;
         }
         return updatedItem;
       }
@@ -207,7 +217,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         .update({
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
-          updated_at: new Date().toISOString(),
+          // Removed updated_at: new Date().toISOString(), to avoid schema cache error
         })
         .eq('id', orderData.id);
 
