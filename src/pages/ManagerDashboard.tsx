@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
-import { DollarSign, Package, LogOut, Loader2, Building, Boxes, Lock, CalendarIcon } from 'lucide-react';
+import { DollarSign, Package, LogOut, Loader2, Building, Boxes, Lock, CalendarIcon, BadgePercent } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import MonthlyBarChart from '@/components/MonthlyBarChart';
 import SalesPersonMonthlySalesChart from '@/components/SalesPersonMonthlySalesChart'; // Re-used for single person view
@@ -40,7 +40,8 @@ const ManagerDashboard = () => {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   // State for Dashboard Metrics
-  const [totalSalesValue, setTotalSalesValue] = useState<number>(0);
+  const [totalSalesValue, setTotalSalesValue] = useState<number>(0); // Gross Sales
+  const [achievedSalesValue, setAchievedSalesValue] = useState<number>(0); // Net Sales
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [productsCount, setProductsCount] = useState<number>(0);
@@ -159,35 +160,42 @@ const ManagerDashboard = () => {
         setActiveDealersCount(dealersCount || 0);
       }
 
-      // 3. Fetch total sales value and orders (Filtered by date)
-      let salesQuery = supabase
-        .from('sales')
-        .select('total_price, sale_date, orders(dealer_id)');
-      
+      // 3. Fetch total sales value and orders (Filtered by date) from ORDERS table
+      let ordersQuery = supabase
+        .from('orders')
+        .select('total_amount, discount_amount, order_date', { count: 'exact' });
+
       if (startDateISO) {
-        salesQuery = salesQuery.gte('sale_date', startDateISO);
+        ordersQuery = ordersQuery.gte('order_date', startDateISO);
       }
       if (endDateISO) {
-        salesQuery = salesQuery.lte('sale_date', endDateISO);
+        ordersQuery = ordersQuery.lte('order_date', endDateISO);
       }
 
-      const { data: salesData, error: salesError } = await salesQuery;
-      
-      if (salesError) {
-        console.error('[ManagerDashboard] Error fetching sales data:', salesError.message);
-        setTotalSalesValue(0);
+      const { data: ordersData, error: ordersError, count: ordersCount } = await ordersQuery;
+
+      if (ordersError) {
+        console.error('[ManagerDashboard] Error fetching orders data:', ordersError.message);
+        setTotalSalesValue(0); // Gross
+        setAchievedSalesValue(0); // Achieved
         setTotalOrders(0);
+        setMonthlySalesData([]);
       } else {
-        const total = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
-        setTotalSalesValue(total);
-        setTotalOrders(salesData?.length || 0);
+        const totalAchieved = (ordersData || []).reduce((sum, order) => sum + order.total_amount, 0);
+        const totalDiscount = (ordersData || []).reduce((sum, order) => sum + (order.discount_amount || 0), 0);
+        
+        setTotalSalesValue(totalAchieved + totalDiscount); // Gross Sales
+        setAchievedSalesValue(totalAchieved); // Achieved Sales
+        setTotalOrders(ordersCount || 0);
 
         // 4. Monthly Sales Data for Company Chart (Filtered by date)
         const salesByMonth: { [key: string]: number } = {};
-        (salesData || []).forEach(sale => {
-          const date = new Date(sale.sale_date);
+        (ordersData || []).forEach(order => {
+          const date = new Date(order.order_date);
           const monthYear = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
-          salesByMonth[monthYear] = (salesByMonth[monthYear] || 0) + sale.total_price;
+          // Using Gross Sales for the chart
+          const grossAmount = order.total_amount + (order.discount_amount || 0);
+          salesByMonth[monthYear] = (salesByMonth[monthYear] || 0) + grossAmount;
         });
 
         const formattedMonthlySales = Object.keys(salesByMonth).map(month => ({
@@ -269,17 +277,25 @@ const ManagerDashboard = () => {
 
   const salesOverview = [
     {
-      title: "Total Sales Value",
+      title: "Gross Sales Value",
       value: formatCurrency(totalSalesValue),
-      change: "Sales in selected period",
+      change: "Sales before discount",
       icon: <DollarSign className="h-4 w-4 text-white" />,
       colorClass: "bg-green-500 dark:bg-green-700",
       valueColor: "text-green-800 dark:text-green-200"
     },
     {
+      title: "Achieved Sales",
+      value: formatCurrency(achievedSalesValue),
+      change: "Sales after discount",
+      icon: <BadgePercent className="h-4 w-4 text-white" />,
+      colorClass: "bg-blue-500 dark:bg-blue-700",
+      valueColor: "text-blue-800 dark:text-blue-200"
+    },
+    {
       title: "Total Orders",
       value: totalOrders.toString(),
-      change: "Orders placed in selected period",
+      change: "Orders in selected period",
       icon: <Package className="h-4 w-4 text-white" />,
       colorClass: "bg-green-500 dark:bg-green-700",
       valueColor: "text-green-800 dark:text-green-200"
@@ -384,8 +400,8 @@ const ManagerDashboard = () => {
         </div>
       </div>
       
-      {/* 1. Sales Overview (4 cards) */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
+      {/* 1. Sales Overview (5 cards) */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 mb-6">
         {salesOverview.map((item, index) => (
           <Card key={index} className="bg-card text-card-foreground shadow-md h-full">
             <CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 p-4 ${item.colorClass} text-white rounded-t-lg`}>
