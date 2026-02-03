@@ -28,16 +28,15 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       const endOfUTCTodayISO = getEndOfUTCDayISO();
 
       // --- 1. Fetch Total Pending Amount (Correct Calculation) ---
-      const { data: companyInfo, error: companyInfoError } = await supabase
-        .from('company_info')
-        .select('opening_balance_amount') // Corrected column name
-        .limit(1)
-        .single();
-      
-      if (companyInfoError && companyInfoError.code !== 'PGRST116') {
-        throw companyInfoError;
+      // Fetch the sum of all opening balances from the dealer_balances table.
+      const { data: allDealerBalances, error: dealerBalancesError } = await supabase
+        .from('dealer_balances')
+        .select('opening_balance');
+
+      if (dealerBalancesError) {
+        throw dealerBalancesError;
       }
-      const openingBalance = companyInfo?.opening_balance_amount || 0; // Corrected property access
+      const openingBalance = (allDealerBalances || []).reduce((sum, balance) => sum + (balance.opening_balance || 0), 0);
 
       const { data: allOrders, error: allOrdersError } = await supabase
         .from('orders')
