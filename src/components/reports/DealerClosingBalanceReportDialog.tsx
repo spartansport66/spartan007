@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, Scale, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown, ChevronsUpDown, DollarSign, AlertTriangle, Eye } from 'lucide-react';
+import { Loader2, Search, Printer, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown, ChevronsUpDown, DollarSign, AlertTriangle, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -523,7 +523,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       doc.setFontSize(22);
       doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
       doc.setFontSize(18);
-      doc.text("Dealer Closing Balance Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
+      doc.text("Dealer Net Balance Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
       doc.setFontSize(10);
       doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
@@ -543,7 +543,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       }
 
       // Updated column header for PDF
-      const tableColumn = ["Dealer Name", "Total Sales (₹)", "Total Payments (₹)", "Closing Balance (₹)", "Last Billing Date", "Days Since Last Bill", "Phone"];
+      const tableColumn = ["Dealer Name", "Total Sales (₹)", "Total Received (₹)", "Net Balance (₹)", "Last Billing Date", "Days Since Last Bill", "Phone"];
       const tableRows = sortedDealers.map(dealer => [
         dealer.name,
         dealer.totalSales.toFixed(2),
@@ -554,7 +554,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         dealer.phone || 'N/A',
       ]);
 
-      const totalClosingBalance = sortedDealers.reduce((sum, dealer) => sum + dealer.closing_balance, 0);
+      const totalNetBalance = sortedDealers.reduce((sum, dealer) => sum + dealer.closing_balance, 0);
       const totalSales = sortedDealers.reduce((sum, dealer) => sum + dealer.totalSales, 0);
       const totalPaymentsReceived = sortedDealers.reduce((sum, dealer) => sum + dealer.totalPaymentsReceived, 0);
 
@@ -566,7 +566,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             { content: 'Totals', styles: { halign: 'right', fontStyle: 'bold' }, colSpan: 1 },
             `₹${totalSales.toFixed(2)}`,
             `₹${totalPaymentsReceived.toFixed(2)}`,
-            `₹${totalClosingBalance.toFixed(2)}`,
+            `₹${totalNetBalance.toFixed(2)}`,
             '',
             '',
             '',
@@ -597,16 +597,16 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         columnStyles: {
           0: { cellWidth: 40 }, // Dealer Name
           1: { cellWidth: 25, halign: 'right' }, // Total Sales
-          2: { cellWidth: 25, halign: 'right' }, // Total Payments
-          3: { cellWidth: 25, halign: 'right' }, // Closing Balance
+          2: { cellWidth: 25, halign: 'right' }, // Total Received
+          3: { cellWidth: 25, halign: 'right' }, // Net Balance
           4: { cellWidth: 25, halign: 'center' }, // Last Billing Date
           5: { cellWidth: 25, halign: 'center' }, // Days Since Last Bill
           6: { cellWidth: 25, halign: 'center' }, // Phone
         }
       });
 
-      doc.save('dealer_closing_balance_report.pdf');
-      showSuccess('Dealer closing balance report generated successfully!');
+      doc.save('dealer_net_balance_report.pdf');
+      showSuccess('Dealer net balance report generated successfully!');
     } catch (error: any) {
       console.error('Error generating PDF:', error);
       showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`);
@@ -622,7 +622,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-primary">Dealer Closing Balance Report</DialogTitle>
+            <DialogTitle className="text-2xl font-bold text-primary">Dealer Net Balance Report</DialogTitle>
             <DialogDescription>
               View and manage dealers with outstanding closing balances (Opening Balance + Total Sales - Total Payments).
             </DialogDescription>
@@ -709,13 +709,13 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                         </div>
                       </TableHead>
                       <TableHead className="text-muted-foreground font-bold text-right">Total Sales (₹)</TableHead>
-                      <TableHead className="text-muted-foreground font-bold text-right">Total Payments (₹)</TableHead>
+                      <TableHead className="text-muted-foreground font-bold text-right">Total Received (₹)</TableHead>
                       <TableHead 
                         className="text-muted-foreground font-bold text-right cursor-pointer hover:bg-muted/70"
                         onClick={() => handleSort('closing_balance')}
                       >
                         <div className="flex items-center justify-end">
-                          Closing Balance (₹)
+                          Net Balance (₹)
                           {sortKey === 'closing_balance' ? (
                             sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
                           ) : (
