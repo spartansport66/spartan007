@@ -4,12 +4,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from '@/integrations/supabase/client';
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
-import { Loader2 } from 'lucide-react';
+import { 
+  Loader2, 
+  IndianRupee, 
+  CheckCircle, 
+  Hourglass, 
+  CalendarCheck, 
+  CalendarClock 
+} from 'lucide-react';
 
-const StatCard = ({ title, value, description, isLoading }: { title: string, value: string, description: string, isLoading: boolean }) => (
+const StatCard = ({ title, value, description, icon: Icon, isLoading }: { title: string, value: string, description: string, icon: React.ElementType, isLoading: boolean }) => (
   <Card>
     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
       <CardTitle className="text-sm font-medium">{title}</CardTitle>
+      <Icon className="h-4 w-4 text-muted-foreground" />
     </CardHeader>
     <CardContent>
       {isLoading ? (
@@ -103,11 +111,11 @@ const PaymentOverviewCard = () => {
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-      <StatCard title="Total Pending" value={formatCurrency(totalPending)} description="Total Orders - Total Received" isLoading={loading} />
-      <StatCard title="Total Received" value={formatCurrency(totalReceived)} description="All approved payments" isLoading={loading} />
-      <StatCard title="Pending for Approval" value={formatCurrency(pendingApproval)} description="All payments not yet approved" isLoading={loading} />
-      <StatCard title="Today Received" value={formatCurrency(todayReceived)} description="Payments approved today" isLoading={loading} />
-      <StatCard title="Today Pending Approval" value={formatCurrency(todayPendingApproval)} description="Payments submitted today" isLoading={loading} />
+      <StatCard title="Total Pending" value={formatCurrency(totalPending)} description="Total Orders - Total Received" icon={IndianRupee} isLoading={loading} />
+      <StatCard title="Total Received" value={formatCurrency(totalReceived)} description="All approved payments" icon={CheckCircle} isLoading={loading} />
+      <StatCard title="Pending for Approval" value={formatCurrency(pendingApproval)} description="All payments not yet approved" icon={Hourglass} isLoading={loading} />
+      <StatCard title="Today Received" value={formatCurrency(todayReceived)} description="Payments approved today" icon={CalendarCheck} isLoading={loading} />
+      <StatCard title="Today Pending Approval" value={formatCurrency(todayPendingApproval)} description="Payments submitted today" icon={CalendarClock} isLoading={loading} />
     </div>
   );
 };
