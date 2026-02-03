@@ -20,6 +20,11 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
   const [totalPendingApprovalAmount, setTotalPendingApprovalAmount] = useState<number>(0);
   const [todayReceivedAmount, setTodayReceivedAmount] = useState<number>(0);
   const [todayPendingApprovalAmount, setTodayPendingApprovalAmount] = useState<number>(0);
+  
+  // New states for individual components
+  const [totalOpeningBalance, setTotalOpeningBalance] = useState<number>(0);
+  const [totalOrderValue, setTotalOrderValue] = useState<number>(0);
+  const [totalPaymentsReceived, setTotalPaymentsReceived] = useState<number>(0);
 
   const fetchOverviewData = useCallback(async () => {
     setLoading(true);
@@ -27,7 +32,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO();
 
-      // --- 1. Fetch Total Pending Amount (Opening Balance + Total Orders - Total Payments Received) ---
+      // --- 1. Fetch Total Pending Amount Components ---
       
       // 1a. Fetch the sum of all opening balances from the dealer_balances table.
       const { data: allDealerBalances, error: dealerBalancesError } = await supabase
@@ -38,6 +43,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
         throw dealerBalancesError;
       }
       const openingBalance = (allDealerBalances || []).reduce((sum, balance) => sum + (balance.opening_balance || 0), 0);
+      setTotalOpeningBalance(openingBalance);
 
       // 1b. Fetch the sum of all order values (total_amount) from the orders table.
       const { data: allOrders, error: allOrdersError } = await supabase
@@ -48,6 +54,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
         throw allOrdersError;
       }
       const totalOrdersValue = (allOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
+      setTotalOrderValue(totalOrdersValue);
 
       // 1c. Fetch the sum of all completed payments (amount) from the payments table.
       const { data: allPayments, error: allPaymentsError } = await supabase
@@ -59,6 +66,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
         throw allPaymentsError;
       }
       const totalPaymentsValue = (allPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+      setTotalPaymentsReceived(totalPaymentsValue);
 
       // Final Calculation: Total Pending = OB + Orders - Payments
       const calculatedTotalPending = openingBalance + totalOrdersValue - totalPaymentsValue;
@@ -67,7 +75,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       // --- 2. Fetch Other Metrics (as before) ---
       
       // Total Received (All time completed payments)
-      const calculatedTotalReceived = totalPaymentsValue; // Reusing the value from step 1c
+      const calculatedTotalReceived = totalPaymentsValue;
       setTotalReceivedAmount(calculatedTotalReceived);
 
       // Total Pending for Approval
@@ -109,6 +117,9 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       setTotalPendingApprovalAmount(0);
       setTodayReceivedAmount(0);
       setTodayPendingApprovalAmount(0);
+      setTotalOpeningBalance(0);
+      setTotalOrderValue(0);
+      setTotalPaymentsReceived(0);
     } finally {
       setLoading(false);
     }
@@ -134,17 +145,52 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
           </div>
         ) : (
           <div className="space-y-4">
+            
+            {/* New: Total Opening Balance */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-red-600" />
-                <span className="text-muted-foreground">Total Pending:</span>
+                <DollarSign className="h-5 w-5 text-gray-600" />
+                <span className="text-muted-foreground">Total Opening Balance:</span>
               </div>
-              <span className="text-lg font-bold text-red-600">₹{totalPendingAmount.toFixed(2)}</span>
+              <span className="text-lg font-bold text-gray-600">₹{totalOpeningBalance.toFixed(2)}</span>
             </div>
+            
+            {/* New: Total Order Value */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-blue-600" />
+                <span className="text-muted-foreground">Total Order Value:</span>
+              </div>
+              <span className="text-lg font-bold text-blue-600">₹{totalOrderValue.toFixed(2)}</span>
+            </div>
+            
+            {/* New: Total Payments Received */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-green-600" />
-                <span className="text-muted-foreground">Total Received:</span>
+                <span className="text-muted-foreground">Total Payments Received:</span>
+              </div>
+              <span className="text-lg font-bold text-green-600">₹{totalPaymentsReceived.toFixed(2)}</span>
+            </div>
+            
+            <Separator />
+            
+            {/* Final Total Pending */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <span className="text-muted-foreground font-bold">NET PENDING (Ledger):</span>
+              </div>
+              <span className="text-xl font-bold text-red-600">₹{totalPendingAmount.toFixed(2)}</span>
+            </div>
+            
+            <Separator />
+            
+            {/* Existing Metrics */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <span className="text-muted-foreground">Total Received (All Time):</span>
               </div>
               <span className="text-lg font-bold text-green-600">₹{totalReceivedAmount.toFixed(2)}</span>
             </div>
