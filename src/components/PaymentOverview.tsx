@@ -32,7 +32,6 @@ const PaymentOverview = () => {
 
   const fetchTotals = useCallback(async () => {
     setLoading(true);
-    console.log("[DIAGNOSTIC] Starting to fetch totals...");
     try {
       const today = new Date();
       const startOfToday = getStartOfUTCDayISO(today);
@@ -65,18 +64,14 @@ const PaymentOverview = () => {
         .select('total_amount');
 
       if (allOrdersError) throw allOrdersError;
-      console.log("[DIAGNOSTIC] All Orders Data:", allOrdersData);
       const totalOrderValue = (allOrdersData || []).reduce((sum, o) => sum + (o.total_amount || 0), 0);
-      console.log("[DIAGNOSTIC] Calculated Total Order Value:", totalOrderValue);
 
       const { data: allPaymentsData, error: allPaymentsError } = await supabase
         .from('payments')
         .select('amount');
       
       if (allPaymentsError) throw allPaymentsError;
-      console.log("[DIAGNOSTIC] All Payments Data:", allPaymentsData);
       const totalReceivedValue = (allPaymentsData || []).reduce((sum, p) => sum + (p.amount || 0), 0);
-      console.log("[DIAGNOSTIC] Calculated Total Received Value:", totalReceivedValue);
 
       const { data: companyInfo, error: companyInfoError } = await supabase
         .from('company_info')
@@ -85,19 +80,15 @@ const PaymentOverview = () => {
         .single();
 
       if (companyInfoError && companyInfoError.code !== 'PGRST116') throw companyInfoError; // PGRST116 means no rows found, which is ok.
-      console.log("[DIAGNOSTIC] Company Info Data:", companyInfo);
       const openingBalance = companyInfo?.opening_balance || 0;
-      console.log("[DIAGNOSTIC] Opening Balance:", openingBalance);
 
       const finalPending = openingBalance + totalOrderValue - totalReceivedValue;
-      console.log(`[DIAGNOSTIC] Final Calculation: ${openingBalance} (Balance) + ${totalOrderValue} (Orders) - ${totalReceivedValue} (Received) = ${finalPending}`);
       setLifetimePending(finalPending);
 
     } catch (error: any) {
-      console.error("[DIAGNOSTIC] Error fetching payment overview:", error.message);
+      console.error("Error fetching payment overview:", error.message);
     } finally {
       setLoading(false);
-      console.log("[DIAGNOSTIC] Finished fetching totals.");
     }
   }, []);
 
