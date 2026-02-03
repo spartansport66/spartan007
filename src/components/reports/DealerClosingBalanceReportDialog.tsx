@@ -62,7 +62,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const [loading, setLoading] = useState(true);
   const [filterDealerName, setFilterDealerName] = useState<string>('');
   const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
-  const [filterOverduePeriod, setFilterOverduePeriod] = useState<'all' | 'less_than_60' | 'more_than_60'>('all');
+  
+  // New state for the two overdue filters
+  const [filterOpeningBalanceOverduePeriod, setFilterOpeningBalanceOverduePeriod] = useState<'all' | 'less_than_60' | 'more_than_60'>('all');
+  const [filterDispatchOverduePeriod, setFilterDispatchOverduePeriod] = useState<'all' | 'less_than_60' | 'more_than_60'>('all');
+  
   const [allSalesPersons, setAllSalesPersons] = useState<FilterOption[]>([]);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
@@ -151,21 +155,37 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         totalPaymentsReceived: d.total_payments_received,
       }));
       
-      // Filter by overdue period (applied to the full dataset)
-      const filteredByOverdue = formattedDealers.filter(dealer => {
-        if (filterOverduePeriod === 'all') return true;
-        
-        // Only apply overdue filter if the dealer has a positive balance
-        if (dealer.closing_balance <= 0) return false;
-        
-        const days = dealer.daysSinceLastDispatch;
-        if (days === null) return false;
-        if (filterOverduePeriod === 'less_than_60') return days <= OVERDUE_THRESHOLD_DAYS;
-        if (filterOverduePeriod === 'more_than_60') return days > OVERDUE_THRESHOLD_DAYS;
-        return true;
+      // Combined Filtering Logic for Overdue Periods
+      const anyOverdueFilterActive = filterOpeningBalanceOverduePeriod !== 'all' || filterDispatchOverduePeriod !== 'all';
+
+      const filteredDealers = formattedDealers.filter(dealer => {
+          // If any overdue filter is active, the dealer must have a positive closing balance.
+          if (anyOverdueFilterActive && dealer.closing_balance <= 0) {
+              return false;
+          }
+
+          // --- Opening Balance Filter Check ---
+          if (filterOpeningBalanceOverduePeriod !== 'all') {
+              const days = dealer.opening_balance_due_days;
+              if (days === null) return false; // Must have a due date to be filtered
+              
+              if (filterOpeningBalanceOverduePeriod === 'less_than_60' && days > OVERDUE_THRESHOLD_DAYS) return false;
+              if (filterOpeningBalanceOverduePeriod === 'more_than_60' && days <= OVERDUE_THRESHOLD_DAYS) return false;
+          }
+
+          // --- Dispatch Filter Check ---
+          if (filterDispatchOverduePeriod !== 'all') {
+              const days = dealer.daysSinceLastDispatch;
+              if (days === null) return false; // Must have a dispatch date to be filtered
+              
+              if (filterDispatchOverduePeriod === 'less_than_60' && days > OVERDUE_THRESHOLD_DAYS) return false;
+              if (filterDispatchOverduePeriod === 'more_than_60' && days <= OVERDUE_THRESHOLD_DAYS) return false;
+          }
+
+          return true;
       });
 
-      setDealers(filteredByOverdue);
+      setDealers(filteredDealers);
     } catch (error: any) {
       console.error('Error in fetchClosingBalances:', error.message);
       showError('An unexpected error occurred while fetching dealer data.');
@@ -173,7 +193,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     } finally {
       setLoading(false);
     }
-  }, [filterDealerName, filterSalesPersonId, filterOverduePeriod]);
+  }, [filterDealerName, filterSalesPersonId, filterOpeningBalanceOverduePeriod, filterDispatchOverduePeriod]);
 
   useEffect(() => {
     if (isOpen) {
@@ -242,7 +262,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const handleClearFilters = () => {
     setFilterDealerName('');
     setFilterSalesPersonId('');
-    setFilterOverduePeriod('all');
+    setFilterOpeningBalanceOverduePeriod('all');
+    setFilterDispatchOverduePeriod('all');
   };
 
   const handleResetSentStatus = () => {
@@ -389,8 +410,10 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         const salesPersonLabel = allSalesPersons.find(sp => sp.value === filterSalesPersonId)?.label;
         if (salesPersonLabel) filterDetails.push(`Sales Person: ${salesPersonLabel}`);
       }
-      if (filterOverduePeriod === 'less_than_60') filterDetails.push(`Overdue Period: <= ${OVERDUE_THRESHOLD_DAYS} Days`);
-      if (filterOverduePeriod === 'more_than_60') filterDetails.push(`Overdue Period: > ${OVERDUE_THRESHOLD_DAYS} Days`);
+      if (filterOpeningBalanceOverduePeriod === 'less_than_60') filterDetails.push(`Op. Bal. Overdue: <= ${OVERDUE_THRESHOLD_DAYS} Days`);
+      if (filterOpeningBalanceOverduePeriod === 'more_than_60') filterDetails.push(`Op. Bal. Overdue: > ${OVERDUE_THRESHOLD_DAYS} Days`);
+      if (filterDispatchOverduePeriod === 'less_than_60') filterDetails.push(`Dispatch Overdue: <= ${OVERDUE_THRESHOLD_DAYS} Days`);
+      if (filterDispatchOverduePeriod === 'more_than_60') filterDetails.push(`Dispatch Overdue: > ${OVERDUE_THRESHOLD_DAYS} Days`);
       if (filterDetails.length > 0) { doc.setFontSize(9); doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' }); }
       
       const tableColumn = ["Dealer Name", "Op. Bal (₹)", "Op. Due Date", "Op. Due Days", "Total Sales (₹)", "Total Rcvd (₹)", "Net Bal (₹)", "Last Dispatch", "Days Since Dispatch", "Phone"];
@@ -447,7 +470,39 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
             <div className="flex-1 min-w-[180px]"><Label htmlFor="filterDealerName">Dealer Name</Label><Input id="filterDealerName" placeholder="Filter by dealer name" value={filterDealerName} onChange={(e) => setFilterDealerName(e.target.value)} className="w-full" /></div>
             <div className="flex-1 min-w-[180px]"><Label htmlFor="filterSalesPerson">Sales Person</Label><Select value={filterSalesPersonId || "all"} onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}><SelectTrigger id="filterSalesPerson" className="w-full"><SelectValue placeholder="All Sales Persons" /></SelectTrigger><SelectContent><SelectItem value="all">All Sales Persons</SelectItem>{allSalesPersons.map(sp => (<SelectItem key={sp.value} value={sp.value}>{sp.label}</SelectItem>))}</SelectContent></Select></div>
-            <div className="flex-1 min-w-[180px]"><Label htmlFor="filterOverduePeriod">Overdue Period (Dispatch)</Label><Select value={filterOverduePeriod} onValueChange={(value) => setFilterOverduePeriod(value as typeof filterOverduePeriod)}><SelectTrigger id="filterOverduePeriod" className="w-full"><SelectValue placeholder="All Balances" /></SelectTrigger><SelectContent><SelectItem value="all">All Positive Balances</SelectItem><SelectItem value="less_than_60">Less than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem><SelectItem value="more_than_60">More than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem></SelectContent></Select></div>
+            
+            {/* NEW FILTER: Overdue Period (Opening Balance) */}
+            <div className="flex-1 min-w-[180px]">
+              <Label htmlFor="filterOpeningBalanceOverduePeriod">Overdue Period (Opening Balance)</Label>
+              <Select 
+                value={filterOpeningBalanceOverduePeriod} 
+                onValueChange={(value) => setFilterOpeningBalanceOverduePeriod(value as typeof filterOpeningBalanceOverduePeriod)}
+              >
+                <SelectTrigger id="filterOpeningBalanceOverduePeriod" className="w-full"><SelectValue placeholder="All Balances" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Balances</SelectItem>
+                  <SelectItem value="less_than_60">Less than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem>
+                  <SelectItem value="more_than_60">More than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* EXISTING FILTER: Overdue Period (Dispatch) - Renamed state */}
+            <div className="flex-1 min-w-[180px]">
+              <Label htmlFor="filterDispatchOverduePeriod">Overdue Period (Dispatch)</Label>
+              <Select 
+                value={filterDispatchOverduePeriod} 
+                onValueChange={(value) => setFilterDispatchOverduePeriod(value as typeof filterDispatchOverduePeriod)}
+              >
+                <SelectTrigger id="filterDispatchOverduePeriod" className="w-full"><SelectValue placeholder="All Balances" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Balances</SelectItem>
+                  <SelectItem value="less_than_60">Less than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem>
+                  <SelectItem value="more_than_60">More than {OVERDUE_THRESHOLD_DAYS} Days Due</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
             <Button onClick={fetchClosingBalances} className="flex items-center gap-2 bg-primary hover:bg-primary/90"><Search className="h-4 w-4" /> Apply Filter</Button>
             <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">Clear Filters</Button>
           </div>
