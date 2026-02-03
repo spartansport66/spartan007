@@ -125,6 +125,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         label: `${sp.first_name} ${sp.last_name || ''}`.trim(),
       })));
 
+      // RPC call now only takes 2 arguments (no limit/offset)
       const { data: reportData, error: rpcError } = await supabase
         .rpc('get_dealer_balance_report', {
           p_sales_person_id: filterSalesPersonId || null,
@@ -148,10 +149,15 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         daysSinceLastDispatch: calculateDaysDifference(d.last_dispatch_date),
         totalSales: d.total_sales,
         totalPaymentsReceived: d.total_payments_received,
-      })).filter(d => d.closing_balance > 0);
+      }));
       
+      // Filter by overdue period (applied to the full dataset)
       const filteredByOverdue = formattedDealers.filter(dealer => {
         if (filterOverduePeriod === 'all') return true;
+        
+        // Only apply overdue filter if the dealer has a positive balance
+        if (dealer.closing_balance <= 0) return false;
+        
         const days = dealer.daysSinceLastDispatch;
         if (days === null) return false;
         if (filterOverduePeriod === 'less_than_60') return days <= OVERDUE_THRESHOLD_DAYS;
