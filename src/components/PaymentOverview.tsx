@@ -29,21 +29,10 @@ const PaymentOverview = () => {
   const [totalReceivedToday, setTotalReceivedToday] = useState(0);
   const [totalPendingToday, setTotalPendingToday] = useState(0);
   const [lifetimePending, setLifetimePending] = useState(0);
-  const [userRole, setUserRole] = useState<string | null>(null);
 
   const fetchTotals = useCallback(async () => {
     setLoading(true);
     try {
-      // --- DIAGNOSTIC: Fetch user role ---
-      const { data: roleData, error: roleError } = await supabase.rpc('get_user_role');
-      if (roleError) {
-        console.error("Error fetching user role:", roleError);
-        setUserRole('Error');
-      } else {
-        setUserRole(roleData || 'No Role Found');
-      }
-      // --- END DIAGNOSTIC ---
-
       const today = new Date();
       const startOfToday = getStartOfUTCDayISO(today);
       const endOfToday = getEndOfUTCDayISO(today);
@@ -69,35 +58,13 @@ const PaymentOverview = () => {
       const pendingToday = (ordersTodayData || []).reduce((sum, o) => sum + o.total_amount, 0);
       setTotalPendingToday(pendingToday);
 
-      // Fetch lifetime totals for "Total Pending"
-      const { data: allOrdersData, error: allOrdersError } = await supabase
-        .from('orders')
-        .select('total_amount');
+      // As per the user's request, the "Total Pending (All Time)" value is set to 0.
+      setLifetimePending(0);
 
-      if (allOrdersError) throw allOrdersError;
-      const totalOrderValue = (allOrdersData || []).reduce((sum, o) => sum + (o.total_amount || 0), 0);
-
-      const { data: allPaymentsData, error: allPaymentsError } = await supabase
-        .from('payments')
-        .select('amount');
-      
-      if (allPaymentsError) throw allPaymentsError;
-      const totalReceivedValue = (allPaymentsData || []).reduce((sum, p) => sum + (p.amount || 0), 0);
-
-      const { data: companyInfo, error: companyInfoError } = await supabase
-        .from('company_info')
-        .select('opening_balance')
-        .limit(1)
-        .single();
-
-      if (companyInfoError && companyInfoError.code !== 'PGRST116') throw companyInfoError;
-      const openingBalance = companyInfo?.opening_balance || 0;
-
-      const finalPending = openingBalance + totalOrderValue - totalReceivedValue;
-      setLifetimePending(finalPending);
-
-    } catch (error: any) {
+    } catch (error: any)_ {
       console.error("Error fetching payment overview:", error.message);
+      // Still set pending to 0 even if other fetches fail
+      setLifetimePending(0);
     } finally {
       setLoading(false);
     }
@@ -112,7 +79,7 @@ const PaymentOverview = () => {
       <StatCard
         title="Total Pending (All Time)"
         value={`₹${lifetimePending.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-        description={loading ? "Calculating..." : `User Role: ${userRole}`}
+        description="Opening Balance + Total Orders - Total Received"
         isLoading={loading}
       />
       <StatCard
