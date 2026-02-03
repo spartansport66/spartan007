@@ -1,7 +1,10 @@
--- Drop the old function to modify its signature and add pagination parameters
+-- Drop the old function signature (without pagination) to resolve ambiguity
 DROP FUNCTION IF EXISTS get_dealer_balance_report(UUID, TEXT);
 
--- Recreate the function with pagination and total count support
+-- Drop the new function signature as well to ensure a clean re-creation
+DROP FUNCTION IF EXISTS get_dealer_balance_report(UUID, TEXT, INT, INT);
+
+-- Recreate the function with the correct signature including pagination and total count
 CREATE OR REPLACE FUNCTION get_dealer_balance_report(
     p_sales_person_id UUID DEFAULT NULL,
     p_dealer_name_filter TEXT DEFAULT NULL,
