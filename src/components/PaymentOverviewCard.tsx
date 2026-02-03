@@ -23,66 +23,92 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
 
   const fetchOverviewData = useCallback(async () => {
     setLoading(true);
+    console.log("DEBUG: --- Starting fetchOverviewData ---");
     try {
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO();
 
-      // 1. Total Pending Amount (from orders table, payment_status = 'pending')
-      const { data: pendingOrders, error: pendingOrdersError } = await supabase
+      // --- 1. Fetch Total Pending Amount (Correct Calculation) ---
+      console.log("DEBUG: Querying for Opening Balance from company_info...");
+      const { data: companyInfo, error: companyInfoError } = await supabase
+        .from('company_info')
+        .select('opening_balance')
+        .limit(1)
+        .single();
+      
+      console.log("DEBUG: Raw company_info data:", companyInfo);
+      if (companyInfoError && companyInfoError.code !== 'PGRST116') {
+        console.error("DEBUG: Error fetching company_info:", companyInfoError.message);
+        throw companyInfoError;
+      }
+      const openingBalance = companyInfo?.opening_balance || 0;
+      console.log("DEBUG: Calculated Opening Balance:", openingBalance);
+
+      console.log("DEBUG: Querying for Total Value of ALL Orders...");
+      const { data: allOrders, error: allOrdersError } = await supabase
         .from('orders')
-        .select('total_amount')
-        .eq('payment_status', 'pending');
+        .select('total_amount');
+      
+      console.log("DEBUG: Raw allOrders data:", allOrders);
+      if (allOrdersError) {
+        console.error("DEBUG: Error fetching all orders:", allOrdersError.message);
+        throw allOrdersError;
+      }
+      const totalOrdersValue = (allOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
+      console.log("DEBUG: Calculated Total Orders Value:", totalOrdersValue);
 
-      if (pendingOrdersError) throw pendingOrdersError;
-
-      const calculatedTotalPending = (pendingOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
-      setTotalPendingAmount(calculatedTotalPending);
-
-      // 2. Total Received Amount (from payments table, status = 'completed')
-      const { data: receivedPayments, error: receivedPaymentsError } = await supabase
+      console.log("DEBUG: Querying for Total Value of ALL COMPLETED Payments...");
+      const { data: allPayments, error: allPaymentsError } = await supabase
         .from('payments')
         .select('amount')
         .eq('status', 'completed');
 
-      if (receivedPaymentsError) throw receivedPaymentsError;
+      console.log("DEBUG: Raw allPayments data:", allPayments);
+      if (allPaymentsError) {
+        console.error("DEBUG: Error fetching all payments:", allPaymentsError.message);
+        throw allPaymentsError;
+      }
+      const totalPaymentsValue = (allPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+      console.log("DEBUG: Calculated Total Payments Value:", totalPaymentsValue);
 
+      const calculatedTotalPending = openingBalance + totalOrdersValue - totalPaymentsValue;
+      console.log(`DEBUG: Final Total Pending Calculation: ${openingBalance} (OB) + ${totalOrdersValue} (Orders) - ${totalPaymentsValue} (Payments) = ${calculatedTotalPending}`);
+      setTotalPendingAmount(calculatedTotalPending);
+
+      // --- 2. Fetch Other Metrics (as before) ---
+      const { data: receivedPayments, error: receivedPaymentsError } = await supabase
+        .from('payments')
+        .select('amount')
+        .eq('status', 'completed');
+      if (receivedPaymentsError) throw receivedPaymentsError;
       const calculatedTotalReceived = (receivedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       setTotalReceivedAmount(calculatedTotalReceived);
 
-      // 3. Total Pending for Approval Amount (from payments table, status = 'pending_approval')
       const { data: pendingApprovalPayments, error: pendingApprovalPaymentsError } = await supabase
         .from('payments')
         .select('amount')
         .eq('status', 'pending_approval');
-
       if (pendingApprovalPaymentsError) throw pendingApprovalPaymentsError;
-
       const calculatedTotalPendingApproval = (pendingApprovalPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       setTotalPendingApprovalAmount(calculatedTotalPendingApproval);
 
-      // 4. Today Received Amount (from payments table, status = 'completed', approved_at is today)
       const { data: todayReceived, error: todayReceivedError } = await supabase
         .from('payments')
         .select('amount')
         .eq('status', 'completed')
         .gte('approved_at', startOfUTCTodayISO)
         .lte('approved_at', endOfUTCTodayISO);
-
       if (todayReceivedError) throw todayReceivedError;
-
       const calculatedTodayReceived = (todayReceived || []).reduce((sum, payment) => sum + payment.amount, 0);
       setTodayReceivedAmount(calculatedTodayReceived);
 
-      // 5. Today Pending for Approval Amount (from payments table, status = 'pending_approval', payment_date is today)
       const { data: todayPendingApproval, error: todayPendingApprovalError } = await supabase
         .from('payments')
         .select('amount')
         .eq('status', 'pending_approval')
         .gte('payment_date', startOfUTCTodayISO)
         .lte('payment_date', endOfUTCTodayISO);
-
       if (todayPendingApprovalError) throw todayPendingApprovalError;
-
       const calculatedTodayPendingApproval = (todayPendingApproval || []).reduce((sum, payment) => sum + payment.amount, 0);
       setTodayPendingApprovalAmount(calculatedTodayPendingApproval);
 
@@ -95,6 +121,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       setTodayReceivedAmount(0);
       setTodayPendingApprovalAmount(0);
     } finally {
+      console.log("DEBUG: --- Finished fetchOverviewData ---");
       setLoading(false);
     }
   }, []);
