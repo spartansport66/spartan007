@@ -45,7 +45,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   const [companyName, setCompanyName] = useState<string | null>(null);
   
   const today = new Date().toISOString().split('T')[0];
-  const [filterFromDate, setFilterFromDate] = useState<string>(today);
+  const [filterFromDate, setFilterFromDate] = useState<string>(''); // Default to empty to show all till 'To' date
   const [filterToDate, setFilterToDate] = useState<string>(today);
 
   // Dialog states
@@ -74,18 +74,22 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   const fetchPaymentActivities = useCallback(async () => {
     setLoading(true);
     try {
-      const startOfFromDate = getStartOfUTCDayISO(new Date(filterFromDate));
       const endOfToDate = getEndOfUTCDayISO(new Date(filterToDate));
 
-      // 1. Fetch orders with payment_status = 'pending' and payment_due_date is in the selected range
-      const { data: ordersDue, error: ordersDueError } = await supabase
+      // 1. Fetch orders with payment_status = 'pending'
+      let ordersDueQuery = supabase
         .from('orders')
         .select(`id, order_number, total_amount, payment_due_date, dealer_id, dealers (name, phone)`)
         .eq('payment_status', 'pending')
-        .gte('payment_due_date', startOfFromDate)
         .lte('payment_due_date', endOfToDate)
         .order('payment_due_date', { ascending: true });
 
+      if (filterFromDate) {
+        const startOfFromDate = getStartOfUTCDayISO(new Date(filterFromDate));
+        ordersDueQuery = ordersDueQuery.gte('payment_due_date', startOfFromDate);
+      }
+
+      const { data: ordersDue, error: ordersDueError } = await ordersDueQuery;
       if (ordersDueError) throw ordersDueError;
 
       const formattedOrdersDue: PendingPaymentItem[] = (ordersDue || []).map((order: any) => ({
@@ -105,15 +109,20 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         dealer_id: order.dealer_id,
       }));
 
-      // 2. Fetch payments with status = 'pending_approval' and payment_date is in the selected range
-      const { data: paymentsPending, error: paymentsPendingError } = await supabase
+      // 2. Fetch payments with status = 'pending_approval'
+      let paymentsPendingQuery = supabase
         .from('payments')
         .select(`id, order_id, dealer_id, amount, payment_method, payment_date, cheque_dd_date, status, orders (order_number, payment_status, payment_due_date, dealer_id, dealers (name, phone)), dealers (name, phone)`)
         .eq('status', 'pending_approval')
-        .gte('payment_date', startOfFromDate)
         .lte('payment_date', endOfToDate)
         .order('payment_date', { ascending: true });
 
+      if (filterFromDate) {
+        const startOfFromDate = getStartOfUTCDayISO(new Date(filterFromDate));
+        paymentsPendingQuery = paymentsPendingQuery.gte('payment_date', startOfFromDate);
+      }
+      
+      const { data: paymentsPending, error: paymentsPendingError } = await paymentsPendingQuery;
       if (paymentsPendingError) throw paymentsPendingError;
 
       const formattedPaymentsPending: PendingPaymentItem[] = (paymentsPending || []).map((payment: any) => {
@@ -258,9 +267,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       doc.text("Due Payments Report", doc.internal.pageSize.width / 2, 22, { align: 'center' });
       doc.setFontSize(10);
       doc.setTextColor(100);
-      const fromDate = new Date(filterFromDate).toLocaleDateString();
-      const toDate = new Date(filterToDate).toLocaleDateString();
-      doc.text(`Date Range: ${fromDate} to ${toDate}`, doc.internal.pageSize.width / 2, 28, { align: 'center' });
+      const fromDateText = filterFromDate ? new Date(filterFromDate).toLocaleDateString() : 'Beginning';
+      const toDateText = new Date(filterToDate).toLocaleDateString();
+      doc.text(`Date Range: ${fromDateText} to ${toDateText}`, doc.internal.pageSize.width / 2, 28, { align: 'center' });
 
       const tableColumn = ["Order No.", "Dealer Name", "Amount", "Status", "Due/Payment Date"];
       const tableRows = payments.map(p => {
@@ -291,7 +300,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         }
       });
 
-      doc.save(`due_payments_report_${fromDate}_to_${toDate}.pdf`);
+      const safeFromDate = fromDateText.replace(/\//g, '-');
+      const safeToDate = toDateText.replace(/\//g, '-');
+      doc.save(`due_payments_report_${safeFromDate}_to_${safeToDate}.pdf`);
       showSuccess("Report generated successfully!");
     } catch (error: any) {
       showError(`Failed to generate PDF: ${error.message}`);
@@ -330,7 +341,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
           </div>
         </div>
         <CardDescription className="text-indigo-100 dark:text-indigo-200">
-          Orders due and payments pending approval for the selected date range.
+          {filterFromDate
+            ? 'Orders due and payments pending approval for the selected date range.'
+            : 'Orders due and payments pending approval up to the selected date.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4">
@@ -341,7 +354,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
               <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading payments...</p>
             </div>
           ) : payments.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No payments due for the selected date range.</p>
+            <p className="text-center text-muted-foreground py-8">No payments due for the selected dates.</p>
           ) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
