@@ -27,8 +27,9 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       const startOfUTCTodayISO = getStartOfUTCDayISO();
       const endOfUTCTodayISO = getEndOfUTCDayISO();
 
-      // --- 1. Fetch Total Pending Amount (Correct Calculation) ---
-      // Fetch the sum of all opening balances from the dealer_balances table.
+      // --- 1. Fetch Total Pending Amount (Opening Balance + Total Orders - Total Payments Received) ---
+      
+      // 1a. Fetch the sum of all opening balances from the dealer_balances table.
       const { data: allDealerBalances, error: dealerBalancesError } = await supabase
         .from('dealer_balances')
         .select('opening_balance');
@@ -38,6 +39,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       }
       const openingBalance = (allDealerBalances || []).reduce((sum, balance) => sum + (balance.opening_balance || 0), 0);
 
+      // 1b. Fetch the sum of all order values (total_amount) from the orders table.
       const { data: allOrders, error: allOrdersError } = await supabase
         .from('orders')
         .select('total_amount');
@@ -47,6 +49,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       }
       const totalOrdersValue = (allOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
 
+      // 1c. Fetch the sum of all completed payments (amount) from the payments table.
       const { data: allPayments, error: allPaymentsError } = await supabase
         .from('payments')
         .select('amount')
@@ -57,18 +60,17 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       }
       const totalPaymentsValue = (allPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
 
+      // Final Calculation: Total Pending = OB + Orders - Payments
       const calculatedTotalPending = openingBalance + totalOrdersValue - totalPaymentsValue;
       setTotalPendingAmount(calculatedTotalPending);
 
       // --- 2. Fetch Other Metrics (as before) ---
-      const { data: receivedPayments, error: receivedPaymentsError } = await supabase
-        .from('payments')
-        .select('amount')
-        .eq('status', 'completed');
-      if (receivedPaymentsError) throw receivedPaymentsError;
-      const calculatedTotalReceived = (receivedPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+      
+      // Total Received (All time completed payments)
+      const calculatedTotalReceived = totalPaymentsValue; // Reusing the value from step 1c
       setTotalReceivedAmount(calculatedTotalReceived);
 
+      // Total Pending for Approval
       const { data: pendingApprovalPayments, error: pendingApprovalPaymentsError } = await supabase
         .from('payments')
         .select('amount')
@@ -77,6 +79,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       const calculatedTotalPendingApproval = (pendingApprovalPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       setTotalPendingApprovalAmount(calculatedTotalPendingApproval);
 
+      // Today Received (Approved today)
       const { data: todayReceived, error: todayReceivedError } = await supabase
         .from('payments')
         .select('amount')
@@ -87,6 +90,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       const calculatedTodayReceived = (todayReceived || []).reduce((sum, payment) => sum + payment.amount, 0);
       setTodayReceivedAmount(calculatedTodayReceived);
 
+      // Today Pending for Approval (Submitted today)
       const { data: todayPendingApproval, error: todayPendingApprovalError } = await supabase
         .from('payments')
         .select('amount')
