@@ -7,12 +7,22 @@ import { useSession } from '@/contexts/SessionContext';
 import { LogOut, Loader2, UserCog } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
+import PaymentOverviewCard from '@/components/PaymentOverviewCard'; // New Import
+import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog'; // New Import
 
 const ManagerDashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, userType } = useSession();
-  const [loadingData, setLoadingData] = useState(false); // Set to false as we are not fetching data
+  const [loadingData, setLoadingData] = useState(false);
   
+  // State required for PaymentOverviewCard and its associated report dialog
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isPaymentsReportOpen, setIsPaymentsReportOpen] = useState(false);
+  const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
+  const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
+  const [paymentsReportInitialToDate, setPaymentsReportInitialToDate] = useState<string>('');
+  const [paymentsReportDialogKey, setPaymentsReportDialogKey] = useState(0);
+
   // Function to handle logout
   const handleLogout = async () => {
     try {
@@ -26,6 +36,15 @@ const ManagerDashboard = () => {
     } catch (error: any) {
       showError(`An unexpected error occurred during logout: ${error.message}. Redirecting.`);
     }
+  };
+
+  // Handler to open the payments report dialog
+  const handleViewPaymentsReport = () => {
+    setPaymentsReportInitialStatus('all');
+    setPaymentsReportInitialFromDate('');
+    setPaymentsReportInitialToDate('');
+    setPaymentsReportDialogKey(prev => prev + 1);
+    setIsPaymentsReportOpen(true);
   };
 
   // Authentication and Redirection Logic
@@ -65,17 +84,34 @@ const ManagerDashboard = () => {
         </Button>
       </div>
 
-      {/* Empty Placeholder Content */}
-      <div className="flex flex-col items-center justify-center h-[60vh] border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-8">
-        <h2 className="text-2xl font-semibold text-gray-600 dark:text-gray-400 mb-4">
-          Dashboard Under Construction
-        </h2>
-        <p className="text-lg text-muted-foreground text-center">
-          This area is reserved for manager-specific reports and actions.
-        </p>
+      {/* Dashboard Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <PaymentOverviewCard 
+          key={`payment-overview-${refreshKey}`} 
+          onViewReport={handleViewPaymentsReport} 
+        />
+        {/* Placeholder for other manager cards */}
+        <div className="flex flex-col items-center justify-center h-full min-h-[200px] border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-8">
+          <h2 className="text-xl font-semibold text-gray-600 dark:text-gray-400 mb-2">
+            More Manager Tools Coming Soon
+          </h2>
+          <p className="text-sm text-muted-foreground text-center">
+            This space is reserved for manager-specific reports and actions.
+          </p>
+        </div>
       </div>
 
       <MadeWithDyad />
+
+      {/* Dialogs */}
+      <PaymentsReportDialog 
+        key={paymentsReportDialogKey} 
+        isOpen={isPaymentsReportOpen} 
+        onOpenChange={setIsPaymentsReportOpen} 
+        initialFilterStatus={paymentsReportInitialStatus} 
+        initialFilterFromDate={paymentsReportInitialFromDate} 
+        initialFilterToDate={paymentsReportInitialToDate} 
+      />
     </div>
   );
 };
