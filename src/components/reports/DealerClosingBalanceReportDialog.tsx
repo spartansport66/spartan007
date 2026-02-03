@@ -119,7 +119,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
   const fetchClosingBalances = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch sales persons for filter
+      // 1. Fetch sales persons for filter (this can stay client-side)
       const { data: salesPersonsData, error: salesPersonsError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name')
@@ -132,94 +132,35 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         label: `${sp.first_name} ${sp.last_name || ''}`.trim(),
       })));
 
-      // 2. Fetch dealers based on filters
-      let dealerQuery;
-      if (filterSalesPersonId) {
-        const { data: assignedDealers, error: assignedDealersError } = await supabase
-          .from('dealer_sales_persons')
-          .select('dealers(*)')
-          .eq('sales_person_id', filterSalesPersonId);
-        if (assignedDealersError) throw assignedDealersError;
-        dealerQuery = (assignedDealers || []).map((ad: any) => ad.dealers);
-      } else {
-        const { data, error } = await supabase.from('dealers').select('*');
-        if (error) throw error;
-        dealerQuery = data || [];
-      }
-      if (filterDealerName) {
-        dealerQuery = dealerQuery.filter(d => d.name.toLowerCase().includes(filterDealerName.toLowerCase()));
-      }
-      const dealerIds = dealerQuery.map(d => d.id);
+      // 2. Call the new RPC function to get pre-calculated balances
+      const { data: reportData, error: rpcError } = await supabase
+        .rpc('get_dealer_balance_report', {
+          p_sales_person_id: filterSalesPersonId || null,
+          p_dealer_name_filter: filterDealerName || null,
+        });
 
-      if (dealerIds.length === 0) {
-        setDealers([]);
-        setLoading(false);
-        return;
+      if (rpcError) {
+        console.error('Error calling get_dealer_balance_report RPC:', rpcError);
+        throw rpcError;
       }
 
-      // 3. Fetch all necessary data points for the filtered dealers
-      const { data: dealerBalancesData, error: balancesError } = await supabase
-        .from('dealer_balances')
-        .select('dealer_id, opening_balance')
-        .in('dealer_id', dealerIds);
-      if (balancesError) throw balancesError;
-      const openingBalanceMap = new Map(dealerBalancesData.map(b => [b.dealer_id, b.opening_balance || 0]));
-
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
-        .select('dealer_id, total_amount, order_date')
-        .in('dealer_id', dealerIds);
-      if (ordersError) throw ordersError;
-      
-      const { data: paymentsData, error: paymentsError } = await supabase
-        .from('payments')
-        .select('dealer_id, amount')
-        .eq('status', 'completed')
-        .in('dealer_id', dealerIds);
-      if (paymentsError) throw paymentsError;
-
-      // 4. Process and aggregate data
-      const totalSalesMap = new Map<string, number>();
-      const latestOrderDateMap = new Map<string, string>();
-      ordersData.forEach(order => {
-        if (order.dealer_id) {
-          totalSalesMap.set(order.dealer_id, (totalSalesMap.get(order.dealer_id) || 0) + order.total_amount);
-          const currentLatest = latestOrderDateMap.get(order.dealer_id);
-          if (!currentLatest || new Date(order.order_date) > new Date(currentLatest)) {
-            latestOrderDateMap.set(order.dealer_id, order.order_date);
-          }
-        }
-      });
-
-      const totalPaymentsMap = new Map<string, number>();
-      paymentsData.forEach(payment => {
-        if (payment.dealer_id) {
-          totalPaymentsMap.set(payment.dealer_id, (totalPaymentsMap.get(payment.dealer_id) || 0) + payment.amount);
-        }
-      });
-
-      const formattedDealers: DealerClosingBalance[] = dealerQuery.map((d: any) => {
-        const openingBalance = openingBalanceMap.get(d.id) || 0;
-        const totalSales = totalSalesMap.get(d.id) || 0;
-        const totalPaymentsReceived = totalPaymentsMap.get(d.id) || 0;
-        const closingBalance = openingBalance + totalSales - totalPaymentsReceived;
-        const latestOrderDate = latestOrderDateMap.get(d.id) || null;
-        const referenceDate = latestOrderDate || d.last_billing_date || d.created_at;
-        const daysSinceLastBill = calculateDaysSinceLastBill(referenceDate);
-        
+      // 3. Format the data returned from the function
+      const formattedDealers: DealerClosingBalance[] = (reportData || []).map((d: any) => {
+        const daysSinceLastBill = calculateDaysSinceLastBill(d.last_billing_date);
         return {
           id: d.id,
           name: d.name,
           phone: d.phone || '',
-          opening_balance: openingBalance,
-          closing_balance: closingBalance,
-          last_billing_date: referenceDate,
+          opening_balance: d.opening_balance,
+          closing_balance: d.closing_balance,
+          last_billing_date: d.last_billing_date,
           daysSinceLastBill: daysSinceLastBill,
-          totalSales: totalSales,
-          totalPaymentsReceived: totalPaymentsReceived,
+          totalSales: d.total_sales,
+          totalPaymentsReceived: d.total_payments_received,
         };
-      }).filter(d => d.closing_balance > 0);
+      }).filter(d => d.closing_balance > 0); // Only show dealers with a positive balance
       
+      // 4. Apply client-side filters (like overdue period)
       const filteredByOverdue = formattedDealers.filter(dealer => {
         if (filterOverduePeriod === 'all') return true;
         const days = dealer.daysSinceLastBill;
@@ -233,6 +174,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     } catch (error: any) {
       console.error('Error in fetchClosingBalances:', error.message);
       showError('An unexpected error occurred while fetching dealer data.');
+      setDealers([]);
     } finally {
       setLoading(false);
     }
