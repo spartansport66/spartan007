@@ -132,13 +132,20 @@ const AdminDashboard = () => {
       const { count: ordersCount, error: ordersError } = await supabase.from('orders').select('*', { count: 'exact', head: true });
       if (!ordersError) setTotalOrders(ordersCount || 0);
 
-      const { data: salesData, error: salesError } = await supabase.from('sales').select('total_price');
-      if (salesError) {
+      // --- UPDATED: Use RPC for Total Sales Value ---
+      const { data: salesRpcData, error: salesRpcError } = await supabase
+        .rpc('get_net_sales_value')
+        .single();
+        
+      if (salesRpcError) {
+        console.error('Error fetching total sales via RPC:', salesRpcError);
         setTotalSalesValue(0);
       } else {
-        const total = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
-        setTotalSalesValue(total);
+        // The RPC returns a single row with a column named 'net_sales_value'
+        const netSalesValue = salesRpcData?.net_sales_value || 0;
+        setTotalSalesValue(netSalesValue);
       }
+      // --- END UPDATED SECTION ---
 
       const { data: monthlySalesRaw, error: monthlySalesError } = await supabase.from('sales').select('sale_date, total_price').order('sale_date', { ascending: true });
       if (!monthlySalesError && monthlySalesRaw && monthlySalesRaw.length > 0) {
@@ -222,10 +229,10 @@ const AdminDashboard = () => {
   if (userType !== 'admin') return null;
 
   const salesOverview = [
-    { title: "Total Sales Value", value: `₹${totalSalesValue.toFixed(2)}`, change: "+20.1% from last month", icon: <DollarSign className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
-    { title: "Total Orders", value: totalOrders.toString(), change: "+180.1% from last month", icon: <Package className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
-    { title: "Active Dealers", value: activeDealersCount.toString(), change: "+19% from last month", icon: <Building className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
-    { title: "Total Products", value: productsCount.toString(), change: "Overall", icon: <Boxes className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
+    { title: "Total Sales Value", value: `₹${totalSalesValue.toFixed(2)}`, change: "Net revenue (All Time)", icon: <DollarSign className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
+    { title: "Total Orders", value: totalOrders.toString(), change: "Total orders placed", icon: <Package className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
+    { title: "Active Dealers", value: activeDealersCount.toString(), change: "Total registered dealers", icon: <Building className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
+    { title: "Total Products", value: productsCount.toString(), change: "Total unique products", icon: <Boxes className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
   ];
 
   return (
