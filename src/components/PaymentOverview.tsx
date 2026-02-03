@@ -82,7 +82,8 @@ const PaymentOverview = () => {
       if (companyInfoError && companyInfoError.code !== 'PGRST116') throw companyInfoError;
       const openingBalance = companyInfo?.opening_balance || 0;
 
-      setLifetimePending(openingBalance + totalOrderValue - totalReceivedValue);
+      const finalPending = openingBalance + totalOrderValue - totalReceivedValue;
+      setLifetimePending(finalPending);
 
     } catch (error) {
       console.error("Error fetching payment overview:", error);
