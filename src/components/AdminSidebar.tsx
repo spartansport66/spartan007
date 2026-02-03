@@ -135,6 +135,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
               Sales Detail Report
             </DropdownMenuItem>
           </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsPaymentsReportOpen(true)}>
+              Payments Report
+            </DropdownMenuItem>
+          </SheetClose>
           <DropdownMenuSeparator />
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => { /* Re-implement navigation to the new report if needed */ }}>

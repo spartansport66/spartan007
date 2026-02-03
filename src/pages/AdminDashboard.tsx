@@ -63,7 +63,7 @@ const AdminDashboard = () => {
   const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [lastActiveTime, setLastActiveTime] = useState<string | null>(null); // New state for debugging
+  const [lastActiveTime, setLastActiveTime] = useState<string | null>(null);
 
   const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
   const [paymentsReportInitialFromDate, setPaymentsReportInitialFromDate] = useState<string>('');
@@ -75,7 +75,6 @@ const AdminDashboard = () => {
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [productsCount, setProductsCount] = useState<number>(0);
   
-  // Initialize with mock data to ensure the chart is never empty
   const [monthlySalesData, setMonthlySalesData] = useState<{ month: string; sales: number }[]>(() => {
     const currentYear = new Date().getFullYear();
     return [
@@ -119,78 +118,41 @@ const AdminDashboard = () => {
       console.error('Error fetching last active time:', error.message);
       setLastActiveTime('Error fetching time');
     }
-  }, [user]);
+  }, []);
 
   const fetchDashboardData = useCallback(async () => {
     if (!user) return;
     try {
-      // Fetch products count
-      const { count: productsCount, error: productsError } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true });
-      if (!productsError) {
-        setProductsCount(productsCount || 0);
-      }
+      const { count: productsCount, error: productsError } = await supabase.from('products').select('*', { count: 'exact', head: true });
+      if (!productsError) setProductsCount(productsCount || 0);
 
-      // Fetch dealers count
-      const { count: dealersCount, error: dealersError } = await supabase
-        .from('dealers')
-        .select('*', { count: 'exact', head: true });
-      if (!dealersError) {
-        setActiveDealersCount(dealersCount || 0);
-      }
+      const { count: dealersCount, error: dealersError } = await supabase.from('dealers').select('*', { count: 'exact', head: true });
+      if (!dealersError) setActiveDealersCount(dealersCount || 0);
 
-      // Fetch orders count
-      const { count: ordersCount, error: ordersError } = await supabase
-        .from('orders')
-        .select('*', { count: 'exact', head: true });
-      if (!ordersError) {
-        setTotalOrders(ordersCount || 0);
-      }
+      const { count: ordersCount, error: ordersError } = await supabase.from('orders').select('*', { count: 'exact', head: true });
+      if (!ordersError) setTotalOrders(ordersCount || 0);
 
-      // Fetch total sales value
-      const { data: salesData, error: salesError } = await supabase
-        .from('sales')
-        .select('total_price');
+      const { data: salesData, error: salesError } = await supabase.from('sales').select('total_price');
       if (salesError) {
-        console.error('Error fetching total sales value:', salesError.message);
         setTotalSalesValue(0);
       } else {
         const total = (salesData || []).reduce((sum, sale) => sum + sale.total_price, 0);
         setTotalSalesValue(total);
       }
 
-      // Fetch monthly sales data for the chart
-      const { data: monthlySalesRaw, error: monthlySalesError } = await supabase
-        .from('sales')
-        .select('sale_date, total_price')
-        .order('sale_date', { ascending: true });
-
-      if (monthlySalesError) {
-        console.error('Error fetching monthly sales data:', monthlySalesError.message);
-        // If error, the initial mock data is preserved.
-      } else if (monthlySalesRaw && monthlySalesRaw.length > 0) {
+      const { data: monthlySalesRaw, error: monthlySalesError } = await supabase.from('sales').select('sale_date, total_price').order('sale_date', { ascending: true });
+      if (!monthlySalesError && monthlySalesRaw && monthlySalesRaw.length > 0) {
         const salesByMonth: { [key: string]: number } = {};
         (monthlySalesRaw || []).forEach(sale => {
           const date = new Date(sale.sale_date);
-          // Use short month name and year for clarity
           const monthYear = `${date.toLocaleString('default', { month: 'short' })} ${date.getFullYear()}`;
           salesByMonth[monthYear] = (salesByMonth[monthYear] || 0) + sale.total_price;
         });
-
-        const formattedMonthlySales = Object.keys(salesByMonth).map(month => ({
-          month,
-          sales: salesByMonth[month],
-        }));
-        
-        // Overwrite mock data with real data
+        const formattedMonthlySales = Object.keys(salesByMonth).map(month => ({ month, sales: salesByMonth[month] }));
         setMonthlySalesData(formattedMonthlySales);
       }
-      // If no real data is found, the initial state (mock data) is preserved.
       
-      // Fetch last active time for debugging
       fetchLastActiveTime(user.id);
-
     } catch (error: any) {
       console.error('AdminDashboard: Error fetching dashboard data:', error);
     } finally {
@@ -206,7 +168,6 @@ const AdminDashboard = () => {
         showError('Access Denied: Only administrators can view this page.');
         navigate('/dashboard');
       } else {
-        // Removed automatic update logic here
         fetchDashboardData();
         fetchCompanyInfo();
       }
@@ -216,28 +177,22 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
-      
       if (error && error.message !== 'Auth session missing!') {
-        console.warn('Logout API call failed:', error.message);
         showError(`Logout failed: ${error.message}. You are being redirected.`);
       } else {
         showSuccess('Logged out successfully!');
       }
-      // Always navigate to login to clear client-side state
       navigate('/login');
     } catch (error: any) {
-      console.error('Unexpected error during logout:', error);
       showError(`An unexpected error occurred during logout: ${error.message}. Redirecting.`);
-      navigate('/login');
     }
   };
 
-  // RENAMED and MODIFIED: Stop automatic PDF generation
   const handleDispatchSuccess = (dispatchedOrderId: string) => {
     setSelectedOrderIdForDetails(dispatchedOrderId);
     setIsOrderDetailsDialogOpen(true);
-    setShouldPrintOrderDetails(false); // Do NOT force print
-    setRefreshKey(prev => prev + 1); // Trigger refresh
+    setShouldPrintOrderDetails(false);
+    setRefreshKey(prev => prev + 1);
     fetchDashboardData();
   };
 
@@ -259,230 +214,49 @@ const AdminDashboard = () => {
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="ml-2 text-lg text-gray-700 dark:text-gray-300 mb-4">Loading admin dashboard...</p>
-        <Button onClick={handleLogout} variant="destructive" className="flex items-center gap-2">
-          <LogOut className="h-4 w-4" />
-          Force Logout
-        </Button>
+        <Button onClick={handleLogout} variant="destructive" className="flex items-center gap-2"><LogOut className="h-4 w-4" />Force Logout</Button>
       </div>
     );
   }
 
-  if (userType !== 'admin') {
-    return null;
-  }
+  if (userType !== 'admin') return null;
 
   const salesOverview = [
-    {
-      title: "Total Sales Value",
-      value: `₹${totalSalesValue.toFixed(2)}`,
-      change: "+20.1% from last month",
-      icon: <DollarSign className="h-4 w-4 text-white" />,
-      valueColor: "text-blue-800 dark:text-blue-200"
-    },
-    {
-      title: "Total Orders",
-      value: totalOrders.toString(),
-      change: "+180.1% from last month",
-      icon: <Package className="h-4 w-4 text-white" />,
-      valueColor: "text-blue-800 dark:text-blue-200"
-    },
-    {
-      title: "Active Dealers",
-      value: activeDealersCount.toString(),
-      change: "+19% from last month",
-      icon: <Building className="h-4 w-4 text-white" />,
-      valueColor: "text-blue-800 dark:text-blue-200"
-    },
-    {
-      title: "Total Products",
-      value: productsCount.toString(),
-      change: "Overall",
-      icon: <Boxes className="h-4 w-4 text-white" />,
-      valueColor: "text-blue-800 dark:text-blue-200"
-    },
+    { title: "Total Sales Value", value: `₹${totalSalesValue.toFixed(2)}`, change: "+20.1% from last month", icon: <DollarSign className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
+    { title: "Total Orders", value: totalOrders.toString(), change: "+180.1% from last month", icon: <Package className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
+    { title: "Active Dealers", value: activeDealersCount.toString(), change: "+19% from last month", icon: <Building className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
+    { title: "Total Products", value: productsCount.toString(), change: "Overall", icon: <Boxes className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
   ];
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex justify-between items-center mb-6">
-        <div className="text-left">
-          {companyName && (
-            <h2 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">
-              {companyName}
-            </h2>
-          )}
-          {/* Debugging info for Last Active Time */}
-          <p className="text-xs text-muted-foreground mt-1">
-            Last Active: {lastActiveTime ? new Date(lastActiveTime).toLocaleString() : 'N/A'}
-          </p>
-        </div>
+        <div className="text-left">{companyName && (<h2 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">{companyName}</h2>)}<p className="text-xs text-muted-foreground mt-1">Last Active: {lastActiveTime ? new Date(lastActiveTime).toLocaleString() : 'N/A'}</p></div>
         <h1 className="text-center text-3xl sm:text-4xl font-bold text-primary">Admin Dashboard</h1>
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400">
-              <Menu className="h-5 w-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="right" className="w-[250px] sm:w-[300px]">
-            <SheetHeader>
-              <SheetTitle>Admin Navigation</SheetTitle>
-            </SheetHeader>
-            <AdminSidebar 
-              handleLogout={handleLogout}
-              setIsOrdersAwaitingDispatchReportOpen={setIsOrdersAwaitingDispatchReportOpen}
-              setIsDispatchedOrdersReportOpen={setIsDispatchedOrdersReportOpen}
-              setIsDealerReportOpen={setIsDealerReportOpen}
-              setIsPaymentsReportOpen={setIsPaymentsReportOpen}
-              setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen}
-              setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen}
-              setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen}
-              setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen}
-              setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen}
-              setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen}
-              setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen}
-              setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen}
-              setIsLoginLogReportOpen={setIsLoginLogReportOpen}
-              setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen}
-              setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen}
-            />
-          </SheetContent>
-        </Sheet>
+        <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400"><Menu className="h-5 w-5" /></Button></SheetTrigger><SheetContent side="right" className="w-[250px] sm:w-[300px]"><SheetHeader><SheetTitle>Admin Navigation</SheetTitle></SheetHeader><AdminSidebar handleLogout={handleLogout} setIsOrdersAwaitingDispatchReportOpen={setIsOrdersAwaitingDispatchReportOpen} setIsDispatchedOrdersReportOpen={setIsDispatchedOrdersReportOpen} setIsDealerReportOpen={setIsDealerReportOpen} setIsPaymentsReportOpen={setIsPaymentsReportOpen} setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen} setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen} setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen} setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen} setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen} setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen} setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen} setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen} setIsLoginLogReportOpen={setIsLoginLogReportOpen} setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen} setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen} /></SheetContent></Sheet>
       </div>
-      
-      {/* 1. Sales Overview (4 cards) */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
-        {salesOverview.map((item, index) => (
-          <Card key={index} className="bg-card text-card-foreground shadow-md h-full">
-            <CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 p-4 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg`}>
-              <CardTitle className="text-base font-medium text-white">{item.title}</CardTitle>
-              {item.icon}
-            </CardHeader>
-            <CardContent className="p-4 pt-0">
-              <div className={`text-3xl font-bold ${item.valueColor}`}>{item.value}</div>
-              <p className="text-xs text-muted-foreground mt-1">{item.change}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      
-   
-      
-      {/* 2. Sales Person Lead Management Section (MOVED HERE) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <AdminTodayFollowupsCard key={`admin-followups-${refreshKey}`} onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} />
-        <AdminTodayVisitsCard key={`admin-visits-${refreshKey}`} onViewReport={() => setIsSalesPersonVisitReportOpen(true)} />
-        <AdminTotalPendingOrdersCard key={`admin-pending-orders-${refreshKey}`} onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} />
-      </div>
-      
-      {/* 3. Orders to Dispatch / Dispatched Orders */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} />
-        <DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} />
-      </div>
-      
-      {/* 4. Production Alerts / Sales Trend Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <ProductionAlertsCard key={`production-alerts-${refreshKey}`} />
-        <Card className="bg-card text-card-foreground shadow-lg h-[350px]"> {/* Fixed height for smaller size */}
-          <CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Monthly Sales Trend</CardTitle>
-            <CardDescription className="text-pink-100 dark:text-pink-200">
-              Sales performance over the last 12 months.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 h-[280px]"> {/* Fixed height for chart area */}
-            {loadingData ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : (
-              <SalesChart data={monthlySalesData} />
-            )}
-          </CardContent>
-        </Card>
-      </div>
-      
-      {/* 5. Payment Overview / Pending Payments */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} />
-        <AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
-      </div>
-
-      {/* 6. Quick Actions Card */}
-      
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">{salesOverview.map((item, index) => (<Card key={index} className="bg-card text-card-foreground shadow-md h-full"><CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 p-4 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg`}><CardTitle className="text-base font-medium text-white">{item.title}</CardTitle>{item.icon}</CardHeader><CardContent className="p-4 pt-0"><div className={`text-3xl font-bold ${item.valueColor}`}>{item.value}</div><p className="text-xs text-muted-foreground mt-1">{item.change}</p></CardContent></Card>))}</div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"><AdminTodayFollowupsCard key={`admin-followups-${refreshKey}`} onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} /><AdminTodayVisitsCard key={`admin-visits-${refreshKey}`} onViewReport={() => setIsSalesPersonVisitReportOpen(true)} /><AdminTotalPendingOrdersCard key={`admin-pending-orders-${refreshKey}`} onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} /></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} /><DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} /></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><ProductionAlertsCard key={`production-alerts-${refreshKey}`} /><Card className="bg-card text-card-foreground shadow-lg h-[350px]"><CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4"><CardTitle className="text-xl font-semibold">Monthly Sales Trend</CardTitle><CardDescription className="text-pink-100 dark:text-pink-200">Sales performance over the last 12 months.</CardDescription></CardHeader><CardContent className="p-4 h-[280px]">{loadingData ? (<div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>) : (<SalesChart data={monthlySalesData} />)}</CardContent></Card></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} /><AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} /></div>
       <MadeWithDyad />
-      
-      <OrderDetailsDialog 
-        orderId={selectedOrderIdForDetails} 
-        isOpen={isOrderDetailsDialogOpen} 
-        onOpenChange={setIsOrderDetailsDialogOpen} 
-        shouldPrintOnLoad={shouldPrintOrderDetails} 
-      />
-      <OrdersAwaitingDispatchReportDialog 
-        isOpen={isOrdersAwaitingDispatchReportOpen} 
-        onOpenChange={setIsOrdersAwaitingDispatchReportOpen} 
-      />
-      <DispatchedOrdersReportDialog 
-        isOpen={isDispatchedOrdersReportOpen} 
-        onOpenChange={setIsDispatchedOrdersReportOpen} 
-      />
-      <DealerReportDialog 
-        isOpen={isDealerReportOpen} 
-        onOpenChange={setIsDealerReportOpen} 
-      />
-      <PaymentsReportDialog 
-        key={paymentsReportDialogKey}
-        isOpen={isPaymentsReportOpen} 
-        onOpenChange={setIsPaymentsReportOpen} 
-        initialFilterStatus={paymentsReportInitialStatus}
-        initialFilterFromDate={paymentsReportInitialFromDate}
-        initialFilterToDate={paymentsReportInitialToDate}
-      />
-      <SalesReportsDialog 
-        isOpen={isSalesReportsDialogOpen} 
-        onOpenChange={setIsSalesReportsDialogOpen} 
-      />
-      <OrderSummaryReportDialog
-        isOpen={isOrderSummaryReportOpen}
-        onOpenChange={setIsOrderSummaryReportOpen}
-      />
-      <CompanyInfoDialog 
-        isOpen={isCompanyInfoDialogOpen} 
-        onOpenChange={setIsCompanyInfoDialogOpen} 
-        onCompanyInfoUpdated={fetchCompanyInfo} 
-      />
-      <DealerLedgerReportDialog 
-        isOpen={isDealerLedgerReportOpen} 
-        onOpenChange={setIsDealerLedgerReportOpen} 
-      />
-      <OpeningBalanceReportDialog
-        isOpen={isOpeningBalanceReportOpen}
-        onOpenChange={setIsOpeningBalanceReportOpen}
-      />
-      <DealerOverdueBalanceReportDialog
-        isOpen={isDealerOverdueBalanceReportOpen}
-        onOpenChange={setIsDealerOverdueBalanceReportOpen}
-      />
-      <DealerClosingBalanceReportDialog
-        isOpen={isDealerClosingBalanceReportOpen}
-        onOpenChange={setIsDealerClosingBalanceReportOpen}
-      />
-      <SalesPersonVisitReportDialog
-        isOpen={isSalesPersonVisitReportOpen}
-        onOpenChange={setIsSalesPersonVisitReportOpen}
-      />
-      <SalesPersonTodayFollowupsReportDialog
-        isOpen={isSalesPersonTodayFollowupsReportOpen}
-        onOpenChange={setIsSalesPersonTodayFollowupsReportOpen}
-      />
-      <LoginLogReportDialog
-        isOpen={isLoginLogReportOpen}
-        onOpenChange={setIsLoginLogReportOpen}
-      />
-      <SalesPersonAccountStatementReportDialog
-        isOpen={isSalesPersonAccountStatementReportOpen}
-        onOpenChange={setIsSalesPersonAccountStatementReportOpen}
-      />
+      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} shouldPrintOnLoad={shouldPrintOrderDetails} />
+      <OrdersAwaitingDispatchReportDialog isOpen={isOrdersAwaitingDispatchReportOpen} onOpenChange={setIsOrdersAwaitingDispatchReportOpen} />
+      <DispatchedOrdersReportDialog isOpen={isDispatchedOrdersReportOpen} onOpenChange={setIsDispatchedOrdersReportOpen} />
+      <DealerReportDialog isOpen={isDealerReportOpen} onOpenChange={setIsDealerReportOpen} />
+      <PaymentsReportDialog key={paymentsReportDialogKey} isOpen={isPaymentsReportOpen} onOpenChange={setIsPaymentsReportOpen} initialFilterStatus={paymentsReportInitialStatus} initialFilterFromDate={paymentsReportInitialFromDate} initialFilterToDate={paymentsReportInitialToDate} />
+      <SalesReportsDialog isOpen={isSalesReportsDialogOpen} onOpenChange={setIsSalesReportsDialogOpen} />
+      <OrderSummaryReportDialog isOpen={isOrderSummaryReportOpen} onOpenChange={setIsOrderSummaryReportOpen} />
+      <CompanyInfoDialog isOpen={isCompanyInfoDialogOpen} onOpenChange={setIsCompanyInfoDialogOpen} onCompanyInfoUpdated={fetchCompanyInfo} />
+      <DealerLedgerReportDialog isOpen={isDealerLedgerReportOpen} onOpenChange={setIsDealerLedgerReportOpen} />
+      <OpeningBalanceReportDialog isOpen={isOpeningBalanceReportOpen} onOpenChange={setIsOpeningBalanceReportOpen} />
+      <DealerOverdueBalanceReportDialog isOpen={isDealerOverdueBalanceReportOpen} onOpenChange={setIsDealerOverdueBalanceReportOpen} />
+      <DealerClosingBalanceReportDialog isOpen={isDealerClosingBalanceReportOpen} onOpenChange={setIsDealerClosingBalanceReportOpen} />
+      <SalesPersonVisitReportDialog isOpen={isSalesPersonVisitReportOpen} onOpenChange={setIsSalesPersonVisitReportOpen} />
+      <SalesPersonTodayFollowupsReportDialog isOpen={isSalesPersonTodayFollowupsReportOpen} onOpenChange={setIsSalesPersonTodayFollowupsReportOpen} />
+      <LoginLogReportDialog isOpen={isLoginLogReportOpen} onOpenChange={setIsLoginLogReportOpen} />
+      <SalesPersonAccountStatementReportDialog isOpen={isSalesPersonAccountStatementReportOpen} onOpenChange={setIsSalesPersonAccountStatementReportOpen} />
     </div>
   );
 };
