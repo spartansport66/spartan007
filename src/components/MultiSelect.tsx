@@ -11,6 +11,7 @@ import {
   CommandGroup,
   CommandInput,
   CommandItem,
+  CommandList, // Import CommandList
 } from "@/components/ui/command";
 import {
   Popover,
@@ -26,6 +27,7 @@ interface MultiSelectProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  maxHeightClass?: string; // New prop for max height class
 }
 
 const MultiSelect: React.FC<MultiSelectProps> = ({
@@ -35,6 +37,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
   placeholder = "Select items...",
   className,
   disabled = false,
+  maxHeightClass = "max-h-[300px]", // Default max height
 }) => {
   const [open, setOpen] = React.useState(false);
 
@@ -91,22 +94,24 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
           <CommandInput placeholder="Search items..." />
           <CommandEmpty>No item found.</CommandEmpty>
           <CommandGroup>
-            {options.map((option) => (
-              <CommandItem
-                key={option.value}
-                value={option.label}
-                onSelect={() => handleSelect(option.value)}
-                className="cursor-pointer"
-              >
-                <Check
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    value.includes(option.value) ? "opacity-100" : "opacity-0"
-                  )}
-                />
-                {option.label}
-              </CommandItem>
-            ))}
+            <CommandList className={cn("overflow-y-auto", maxHeightClass)}>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.label}
+                  onSelect={() => handleSelect(option.value)}
+                  className="cursor-pointer"
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value.includes(option.value) ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {option.label}
+                </CommandItem>
+              ))}
+            </CommandList>
           </CommandGroup>
         </Command>
       </PopoverContent>

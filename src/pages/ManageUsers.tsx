@@ -689,6 +689,7 @@ const ManageUsers = () => {
                               value={field.value || []} 
                               onChange={field.onChange} 
                               placeholder="Select dealers to assign" 
+                              maxHeightClass="max-h-[200px]" // Apply max height here
                             />
                           </FormControl>
                           <FormMessage />
