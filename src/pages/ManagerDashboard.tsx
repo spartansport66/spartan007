@@ -76,7 +76,7 @@ const ManagerDashboard = () => {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl sm:text-4xl font-bold text-primary flex items-center gap-2">
           <UserCog className="h-8 w-8" />
-          Manager Dashboard
+          Admin Dashboard
         </h1>
         <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2">
           <LogOut className="h-4 w-4" />
