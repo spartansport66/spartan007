@@ -377,6 +377,11 @@ const ManageUsers = () => {
     }
   };
 
+  const handleSelectAllDealers = () => {
+    const allIds = allDealers.map(dealer => dealer.id);
+    editForm.setValue('assignedDealerIds', allIds, { shouldValidate: true });
+  };
+
   const dealerOptions = allDealers.map(dealer => ({
     value: dealer.id,
     label: dealer.name,
@@ -682,14 +687,25 @@ const ManageUsers = () => {
                       name="assignedDealerIds"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Assigned Dealers</FormLabel>
+                          <div className="flex justify-between items-center">
+                            <FormLabel>Assigned Dealers</FormLabel>
+                            <Button 
+                              type="button" 
+                              variant="link" 
+                              size="sm" 
+                              onClick={handleSelectAllDealers}
+                              className="p-0 h-auto text-sm"
+                            >
+                              Select All
+                            </Button>
+                          </div>
                           <FormControl>
                             <MultiSelect 
                               options={dealerOptions} 
                               value={field.value || []} 
                               onChange={field.onChange} 
                               placeholder="Select dealers to assign" 
-                              maxHeightClass="max-h-[200px]" // Apply max height here
+                              maxHeightClass="max-h-[200px]" 
                             />
                           </FormControl>
                           <FormMessage />
