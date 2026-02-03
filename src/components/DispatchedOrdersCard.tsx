@@ -17,7 +17,7 @@ interface DispatchedOrder {
   order_date: string;
   total_amount: number;
   dealer_name: string;
-  dispatch_date: string;
+  gate_pass_dispatch_time: string;
   dispatch_number: number;
   bill_no: string;
 }
@@ -83,37 +83,29 @@ const DispatchedOrdersCard: React.FC = () => {
           order_number,
           order_date,
           total_amount,
-          dispatch_date,
+          gate_pass_dispatch_time,
           dispatch_number,
           bill_no,
           dealers (id, name)
         `)
-        .eq('dispatched', true) // Always filter for dispatched orders
-        .order('dispatch_date', { ascending: false });
-
-      const activeFilters: string[] = [];
+        .not('gate_pass_dispatch_time', 'is', null) // Filter for orders dispatched by gatekeeper
+        .order('gate_pass_dispatch_time', { ascending: false });
 
       if (filterOrderNumber) {
         const orderNum = parseInt(filterOrderNumber);
         if (!isNaN(orderNum)) {
-          activeFilters.push(`order_number.eq.${orderNum}`);
+          query = query.eq('order_number', orderNum);
         }
       }
 
       if (filterDealerId) {
-        activeFilters.push(`dealer_id.eq.${filterDealerId}`);
+        query = query.eq('dealer_id', filterDealerId);
       }
 
       if (filterDispatchDate) {
         const startOfDay = `${filterDispatchDate}T00:00:00.000Z`;
         const endOfDay = `${filterDispatchDate}T23:59:59.999Z`;
-        // The date range itself is an AND condition, but it's OR'd with other top-level filters
-        activeFilters.push(`and(dispatch_date.gte.${startOfDay},dispatch_date.lte.${endOfDay})`);
-      }
-
-      if (activeFilters.length > 0) {
-        // Combine all active filters with OR logic
-        query = query.or(activeFilters.join(','));
+        query = query.gte('gate_pass_dispatch_time', startOfDay).lte('gate_pass_dispatch_time', endOfDay);
       }
 
       const { data: ordersData, error: ordersError } = await query;
@@ -129,7 +121,7 @@ const DispatchedOrdersCard: React.FC = () => {
           order_date: order.order_date,
           total_amount: order.total_amount,
           dealer_name: order.dealers?.name || 'N/A',
-          dispatch_date: order.dispatch_date,
+          gate_pass_dispatch_time: order.gate_pass_dispatch_time,
           dispatch_number: order.dispatch_number,
           bill_no: order.bill_no,
         }));
@@ -242,7 +234,7 @@ const DispatchedOrdersCard: React.FC = () => {
                       <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
                       <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{formatDate(order.dispatch_date)}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(order.gate_pass_dispatch_time)}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex justify-center gap-2">
