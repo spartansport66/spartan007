@@ -1,8 +1,9 @@
--- Drop existing function signatures to ensure a clean recreation
+-- Drop any and all previously existing function signatures to prevent conflicts.
 DROP FUNCTION IF EXISTS get_dealer_balance_report(UUID, TEXT);
 DROP FUNCTION IF EXISTS get_dealer_balance_report(UUID, TEXT, INT, INT);
 
--- Recreate the function with the correct column names for the dealers table
+-- Create the function from a clean slate with the CORRECT column names.
+-- This version uses `initial_balance` and `initial_balance_due_date` from the `dealers` table.
 CREATE OR REPLACE FUNCTION get_dealer_balance_report(
     p_sales_person_id UUID DEFAULT NULL,
     p_dealer_name_filter TEXT DEFAULT NULL,
@@ -28,13 +29,13 @@ BEGIN
             d.id,
             d.name,
             d.phone,
-            -- Corrected: Use initial_balance instead of opening_balance
+            -- CORRECTED: Using `d.initial_balance` from the `dealers` table.
             COALESCE(d.initial_balance, 0) AS opening_balance,
-            -- Corrected: Use initial_balance_due_date instead of opening_balance_due_date
+            -- CORRECTED: Using `d.initial_balance_due_date` from the `dealers` table.
             d.initial_balance_due_date AS opening_balance_due_date,
             COALESCE(sales.total_sales, 0) AS total_sales,
             COALESCE(payments.total_payments_received, 0) AS total_payments_received,
-            -- Corrected: Use initial_balance in the closing balance calculation
+            -- CORRECTED: Using `d.initial_balance` in the calculation.
             (COALESCE(d.initial_balance, 0) + COALESCE(sales.total_sales, 0) - COALESCE(payments.total_payments_received, 0)) AS closing_balance,
             last_dispatch.last_dispatch_date
         FROM
