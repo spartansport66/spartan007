@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { LogOut, Boxes, Package, FileUp, PlusCircle, Loader2, Menu, Lock } from 'lucide-react';
+import { LogOut, Boxes, Package, FileUp, PlusCircle, Loader2, Menu, Lock, ShoppingCart } from 'lucide-react';
 import LowStockProductsCard from '@/components/LowStockProductsCard';
 import ProductTableManager from '@/components/ProductTableManager';
 import { useSession } from '@/contexts/SessionContext';
@@ -74,6 +74,12 @@ const ProductDashboard = () => {
               <SheetTitle>Navigation</SheetTitle>
             </SheetHeader>
             <div className="flex flex-col space-y-2 p-4">
+              <Button
+                onClick={() => navigate('/purchase-dashboard')}
+                className="w-full justify-start gap-2 bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                <ShoppingCart className="h-4 w-4" /> Manage Purchases
+              </Button>
               <Button
                 onClick={() => navigate('/add-product')}
                 className="w-full justify-start gap-2 bg-background text-foreground hover:bg-accent hover:text-accent-foreground"

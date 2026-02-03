@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle, XCircle, Eye, Calendar, DollarSign, Clock, AlertCircle, MessageCircle } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Eye, Calendar, DollarSign, Clock, AlertCircle, MessageCircle, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -14,6 +14,8 @@ import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 import { approveRejectPayment } from '@/utils/supabase-actions';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 interface PendingPaymentItem {
   type: 'order_due' | 'payment_pending_approval';
@@ -63,8 +65,8 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       if (error && error.code !== 'PGRST116') throw error;
       setCompanyName(data?.company_name || null);
     } catch (error: any) {
-      console.error('Error fetching company info for WhatsApp message:', error.message);
-      showError('Failed to load company information for WhatsApp message.');
+      console.error('Error fetching company info:', error.message);
+      showError('Failed to load company information.');
       setCompanyName(null);
     }
   }, []);
@@ -242,6 +244,60 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
     showSuccess('WhatsApp message drafted. Please check the new tab.');
   };
 
+  const handlePrint = () => {
+    if (payments.length === 0) {
+      showError("No data to print.");
+      return;
+    }
+    try {
+      const doc = new jsPDF();
+      const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+      doc.setFontSize(18);
+      doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
+      doc.setFontSize(14);
+      doc.text("Due Payments Report", doc.internal.pageSize.width / 2, 22, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      const fromDate = new Date(filterFromDate).toLocaleDateString();
+      const toDate = new Date(filterToDate).toLocaleDateString();
+      doc.text(`Date Range: ${fromDate} to ${toDate}`, doc.internal.pageSize.width / 2, 28, { align: 'center' });
+
+      const tableColumn = ["Order No.", "Dealer Name", "Amount", "Status", "Due/Payment Date"];
+      const tableRows = payments.map(p => {
+        const displayStatus = (p.payment_status ?? 'unknown').replace('_', ' ');
+        const displayDate = p.payment_date ? new Date(p.payment_date).toLocaleDateString() :
+                            p.payment_due_date ? new Date(p.payment_due_date).toLocaleDateString() : 'N/A';
+        return [
+          p.order_number === 0 ? 'General Balance' : `#${p.order_number}`,
+          p.dealer_name,
+          `₹${p.amount.toFixed(2)}`,
+          displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1),
+          displayDate
+        ];
+      });
+
+      const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        foot: [[{ content: 'Total', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalAmount.toFixed(2)}`, '', '']],
+        startY: 35,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [22, 163, 74], textColor: [255, 255, 255], fontStyle: 'bold' },
+        footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        columnStyles: {
+          2: { halign: 'right' }
+        }
+      });
+
+      doc.save(`due_payments_report_${fromDate}_to_${toDate}.pdf`);
+      showSuccess("Report generated successfully!");
+    } catch (error: any) {
+      showError(`Failed to generate PDF: ${error.message}`);
+    }
+  };
+
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
@@ -268,6 +324,9 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
                 className="w-auto bg-indigo-400 text-white border-indigo-300"
               />
             </div>
+            <Button onClick={handlePrint} variant="outline" size="icon" className="bg-white text-indigo-600 hover:bg-indigo-100" title="Print Report">
+              <Printer className="h-4 w-4" />
+            </Button>
           </div>
         </div>
         <CardDescription className="text-indigo-100 dark:text-indigo-200">
