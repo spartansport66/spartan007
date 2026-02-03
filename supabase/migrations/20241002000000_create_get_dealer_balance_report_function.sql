@@ -1,3 +1,7 @@
+-- Drop the old function first to allow for changing the return signature
+DROP FUNCTION IF EXISTS get_dealer_balance_report(UUID, TEXT);
+
+-- Recreate the function with the new return columns
 CREATE OR REPLACE FUNCTION get_dealer_balance_report(
     p_sales_person_id UUID DEFAULT NULL,
     p_dealer_name_filter TEXT DEFAULT NULL
@@ -32,16 +36,18 @@ BEGIN
             d.name,
             d.phone,
             d.opening_balance_due_date, -- Added
-            COALESCE(db.opening_balance, 0) AS opening_balance,
-            COALESCE(SUM(o.total_amount), 0) AS total_sales
+            COALESCE(d.opening_balance, 0) AS opening_balance -- Corrected to pull from dealers table directly
         FROM
             dealers d
-        LEFT JOIN
-            dealer_balances db ON d.id = db.dealer_id
-        LEFT JOIN
-            orders o ON d.id = o.dealer_id
+    ),
+    dealer_orders AS (
+        SELECT
+            o.dealer_id,
+            COALESCE(SUM(o.total_amount), 0) AS total_sales
+        FROM
+            orders o
         GROUP BY
-            d.id, d.name, d.phone, d.opening_balance_due_date, db.opening_balance
+            o.dealer_id
     ),
     dealer_payments AS (
         SELECT
@@ -60,12 +66,14 @@ BEGIN
         ds.phone,
         ds.opening_balance,
         ds.opening_balance_due_date, -- Added
-        ds.total_sales,
+        COALESCE(do.total_sales, 0) as total_sales,
         COALESCE(dp.total_payments_received, 0) AS total_payments_received,
-        (ds.opening_balance + ds.total_sales - COALESCE(dp.total_payments_received, 0)) AS closing_balance,
+        (ds.opening_balance + COALESCE(do.total_sales, 0) - COALESCE(dp.total_payments_received, 0)) AS closing_balance,
         lod.max_dispatch_date AS last_dispatch_date -- Changed
     FROM
         dealer_sales ds
+    LEFT JOIN
+        dealer_orders do ON ds.id = do.dealer_id
     LEFT JOIN
         dealer_payments dp ON ds.id = dp.dealer_id
     LEFT JOIN
