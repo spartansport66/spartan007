@@ -41,7 +41,10 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   const [loading, setLoading] = useState(true);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
-  const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  
+  const today = new Date().toISOString().split('T')[0];
+  const [filterFromDate, setFilterFromDate] = useState<string>(today);
+  const [filterToDate, setFilterToDate] = useState<string>(today);
 
   // Dialog states
   const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
@@ -69,16 +72,16 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   const fetchPaymentActivities = useCallback(async () => {
     setLoading(true);
     try {
-      const startOfDay = getStartOfUTCDayISO(new Date(filterDate));
-      const endOfDay = getEndOfUTCDayISO(new Date(filterDate));
+      const startOfFromDate = getStartOfUTCDayISO(new Date(filterFromDate));
+      const endOfToDate = getEndOfUTCDayISO(new Date(filterToDate));
 
-      // 1. Fetch orders with payment_status = 'pending' and payment_due_date is on the selected day
+      // 1. Fetch orders with payment_status = 'pending' and payment_due_date is in the selected range
       const { data: ordersDue, error: ordersDueError } = await supabase
         .from('orders')
         .select(`id, order_number, total_amount, payment_due_date, dealer_id, dealers (name, phone)`)
         .eq('payment_status', 'pending')
-        .gte('payment_due_date', startOfDay)
-        .lte('payment_due_date', endOfDay)
+        .gte('payment_due_date', startOfFromDate)
+        .lte('payment_due_date', endOfToDate)
         .order('payment_due_date', { ascending: true });
 
       if (ordersDueError) throw ordersDueError;
@@ -100,13 +103,13 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         dealer_id: order.dealer_id,
       }));
 
-      // 2. Fetch payments with status = 'pending_approval' and payment_date (effective due date) is on the selected day
+      // 2. Fetch payments with status = 'pending_approval' and payment_date is in the selected range
       const { data: paymentsPending, error: paymentsPendingError } = await supabase
         .from('payments')
         .select(`id, order_id, dealer_id, amount, payment_method, payment_date, cheque_dd_date, status, orders (order_number, payment_status, payment_due_date, dealer_id, dealers (name, phone)), dealers (name, phone)`)
         .eq('status', 'pending_approval')
-        .gte('payment_date', startOfDay)
-        .lte('payment_date', endOfDay)
+        .gte('payment_date', startOfFromDate)
+        .lte('payment_date', endOfToDate)
         .order('payment_date', { ascending: true });
 
       if (paymentsPendingError) throw paymentsPendingError;
@@ -145,7 +148,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
     } finally {
       setLoading(false);
     }
-  }, [filterDate]);
+  }, [filterFromDate, filterToDate]);
 
   useEffect(() => {
     fetchCompanyInfo();
@@ -244,19 +247,31 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
         <div className="flex justify-between items-center">
           <CardTitle className="text-xl font-semibold">Due Payments</CardTitle>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="due-date-filter" className="text-white">Date:</Label>
-            <Input
-              id="due-date-filter"
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="w-auto bg-indigo-400 text-white border-indigo-300"
-            />
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="from-date-filter" className="text-white">From:</Label>
+              <Input
+                id="from-date-filter"
+                type="date"
+                value={filterFromDate}
+                onChange={(e) => setFilterFromDate(e.target.value)}
+                className="w-auto bg-indigo-400 text-white border-indigo-300"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="to-date-filter" className="text-white">To:</Label>
+              <Input
+                id="to-date-filter"
+                type="date"
+                value={filterToDate}
+                onChange={(e) => setFilterToDate(e.target.value)}
+                className="w-auto bg-indigo-400 text-white border-indigo-300"
+              />
+            </div>
           </div>
         </div>
         <CardDescription className="text-indigo-100 dark:text-indigo-200">
-          Orders due and payments pending approval for the selected date.
+          Orders due and payments pending approval for the selected date range.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4">
@@ -267,7 +282,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
               <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading payments...</p>
             </div>
           ) : payments.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No payments due for the selected date.</p>
+            <p className="text-center text-muted-foreground py-8">No payments due for the selected date range.</p>
           ) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
