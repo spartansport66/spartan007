@@ -45,7 +45,7 @@ const PaymentOverview = () => {
         .lte('payment_date', endOfToday);
 
       if (receivedTodayError) throw receivedTodayError;
-      const receivedToday = receivedTodayData.reduce((sum, p) => sum + p.amount, 0);
+      const receivedToday = (receivedTodayData || []).reduce((sum, p) => sum + p.amount, 0);
       setTotalReceivedToday(receivedToday);
 
       const { data: ordersTodayData, error: ordersTodayError } = await supabase
@@ -55,7 +55,7 @@ const PaymentOverview = () => {
         .lte('order_date', endOfToday);
       
       if (ordersTodayError) throw ordersTodayError;
-      const pendingToday = ordersTodayData.reduce((sum, o) => sum + o.total_amount, 0);
+      const pendingToday = (ordersTodayData || []).reduce((sum, o) => sum + o.total_amount, 0);
       setTotalPendingToday(pendingToday);
 
       // Fetch lifetime totals for "Total Pending"
@@ -64,14 +64,14 @@ const PaymentOverview = () => {
         .select('total_amount');
 
       if (allOrdersError) throw allOrdersError;
-      const totalOrderValue = allOrdersData.reduce((sum, o) => sum + o.total_amount, 0);
+      const totalOrderValue = (allOrdersData || []).reduce((sum, o) => sum + (o.total_amount || 0), 0);
 
       const { data: allPaymentsData, error: allPaymentsError } = await supabase
         .from('payments')
         .select('amount');
       
       if (allPaymentsError) throw allPaymentsError;
-      const totalReceivedValue = allPaymentsData.reduce((sum, p) => sum + p.amount, 0);
+      const totalReceivedValue = (allPaymentsData || []).reduce((sum, p) => sum + (p.amount || 0), 0);
 
       const { data: companyInfo, error: companyInfoError } = await supabase
         .from('company_info')
@@ -85,8 +85,8 @@ const PaymentOverview = () => {
       const finalPending = openingBalance + totalOrderValue - totalReceivedValue;
       setLifetimePending(finalPending);
 
-    } catch (error) {
-      console.error("Error fetching payment overview:", error);
+    } catch (error: any) {
+      console.error("Error fetching payment overview:", error.message);
     } finally {
       setLoading(false);
     }

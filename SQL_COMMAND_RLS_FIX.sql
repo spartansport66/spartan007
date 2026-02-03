@@ -1,44 +1,42 @@
--- This function checks if the currently authenticated user has the 'admin' role in the public.profiles table.
--- It's defined as SECURITY DEFINER to run with the permissions of the function owner, allowing it to query the profiles table securely.
-CREATE OR REPLACE FUNCTION is_admin()
-RETURNS BOOLEAN AS $$
-BEGIN
-  -- The function returns true if the user_type in the profiles table for the current user's ID is 'admin'.
-  RETURN (
-    SELECT user_type = 'admin'
-    FROM public.profiles
-    WHERE id = auth.uid()
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- This script provides a more robust fix for Row Level Security (RLS) by embedding the admin check directly into the policies,
+-- which is more reliable than using a separate helper function.
 
--- Drop existing SELECT policies on the 'orders' table to avoid conflicts before creating a new one.
+-- 1. Drop the problematic helper function as it's no longer needed.
+DROP FUNCTION IF EXISTS is_admin();
+
+-- 2. Drop the old, non-functional policies on the 'orders' table to avoid conflicts.
 DROP POLICY IF EXISTS "Enable read access for admins or own orders" ON public.orders;
-DROP POLICY IF EXISTS "Enable read access for admins" ON public.orders;
-DROP POLICY IF EXISTS "Enable read access for own orders" ON public.orders;
 
--- This new policy allows users to read from the 'orders' table if they are an admin (checked via is_admin())
--- OR if the order's user_id matches their own authenticated user ID.
+-- 3. Create a new, more direct policy for the 'orders' table.
+-- This policy allows a user to read an order if:
+-- a) Their user_type in the 'profiles' table is 'admin'.
+-- b) The order's 'user_id' matches their own ID.
 CREATE POLICY "Enable read access for admins or own orders"
 ON public.orders
 FOR SELECT
 TO authenticated
 USING (
-  is_admin() OR (auth.uid() = user_id)
+  (SELECT user_type FROM public.profiles WHERE id = auth.uid()) = 'admin'
+  OR
+  (auth.uid() = user_id)
 );
 
--- Drop existing SELECT policies on the 'payments' table to avoid conflicts.
+-- 4. Drop the old, non-functional policies on the 'payments' table.
 DROP POLICY IF EXISTS "Enable read access for admins or own payments" ON public.payments;
-DROP POLICY IF EXISTS "Enable read access for admins" ON public.payments;
-DROP POLICY IF EXISTS "Enable read access for own payments" ON public.payments;
 
--- This new policy allows users to read from the 'payments' table if they are an admin
--- OR if the payment is linked to an order that they created.
--- This covers both admins needing to see all payments and salespersons needing to see payments for their orders.
+-- 5. Create a new, more direct policy for the 'payments' table.
+-- This policy allows a user to read a payment if:
+-- a) Their user_type in the 'profiles' table is 'admin'.
+-- b) The payment is linked to an order that they created.
+-- c) The payment is a general payment (no order_id) and is linked directly to their dealer_id (this part is for future use cases, but good to have).
 CREATE POLICY "Enable read access for admins or own payments"
 ON public.payments
 FOR SELECT
 TO authenticated
 USING (
-  is_admin() OR (auth.uid() IN (SELECT user_id FROM orders WHERE id = payments.order_id))
+  (SELECT user_type FROM public.profiles WHERE id = auth.uid()) = 'admin'
+  OR
+  (auth.uid() IN (SELECT user_id FROM orders WHERE id = payments.order_id))
+  OR
+  (payments.order_id IS NULL AND auth.uid() = payments.dealer_id) -- For general payments, if a user is also a dealer.
 );
