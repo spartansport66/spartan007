@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 import { Loader2 } from 'lucide-react';
 
-const StatCard = ({ title, value, isLoading }: { title: string, value: string, isLoading: boolean }) => (
+const StatCard = ({ title, value, description, isLoading }: { title: string, value: string, description: string, isLoading: boolean }) => (
   <Card>
     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
       <CardTitle className="text-sm font-medium">{title}</CardTitle>
@@ -15,7 +15,10 @@ const StatCard = ({ title, value, isLoading }: { title: string, value: string, i
       {isLoading ? (
         <Loader2 className="h-6 w-6 animate-spin" />
       ) : (
-        <div className="text-2xl font-bold">{value}</div>
+        <>
+          <div className="text-2xl font-bold">{value}</div>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </>
       )}
     </CardContent>
   </Card>
@@ -100,11 +103,11 @@ const PaymentOverviewCard = () => {
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-      <StatCard title="Total Pending" value={formatCurrency(totalPending)} isLoading={loading} />
-      <StatCard title="Total Received" value={formatCurrency(totalReceived)} isLoading={loading} />
-      <StatCard title="Pending for Approval" value={formatCurrency(pendingApproval)} isLoading={loading} />
-      <StatCard title="Today Received" value={formatCurrency(todayReceived)} isLoading={loading} />
-      <StatCard title="Today Pending Approval" value={formatCurrency(todayPendingApproval)} isLoading={loading} />
+      <StatCard title="Total Pending" value={formatCurrency(totalPending)} description="Total Orders - Total Received" isLoading={loading} />
+      <StatCard title="Total Received" value={formatCurrency(totalReceived)} description="All approved payments" isLoading={loading} />
+      <StatCard title="Pending for Approval" value={formatCurrency(pendingApproval)} description="All payments not yet approved" isLoading={loading} />
+      <StatCard title="Today Received" value={formatCurrency(todayReceived)} description="Payments approved today" isLoading={loading} />
+      <StatCard title="Today Pending Approval" value={formatCurrency(todayPendingApproval)} description="Payments submitted today" isLoading={loading} />
     </div>
   );
 };
