@@ -11,7 +11,7 @@ import {
   CommandGroup,
   CommandInput,
   CommandItem,
-  CommandList, // Import CommandList
+  CommandList,
 } from "@/components/ui/command";
 import {
   Popover,
@@ -27,7 +27,7 @@ interface MultiSelectProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
-  maxHeightClass?: string; // New prop for max height class
+  maxHeightClass?: string; // Prop for max height of the dropdown list
 }
 
 const MultiSelect: React.FC<MultiSelectProps> = ({
@@ -37,7 +37,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
   placeholder = "Select items...",
   className,
   disabled = false,
-  maxHeightClass = "max-h-[300px]", // Default max height
+  maxHeightClass = "max-h-[300px]", // Default max height for the dropdown list
 }) => {
   const [open, setOpen] = React.useState(false);
 
@@ -55,14 +55,15 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between", className)}
+          className={cn("w-full justify-between h-auto min-h-[40px] py-2", className)} // Added h-auto and min-h-[40px] for better sizing
           disabled={disabled}
         >
           {/* Ensure only one root element is passed inside the Button */}
-          <span className="flex items-center justify-between w-full">
-            <div className="flex flex-wrap gap-1">
+          <span className="flex items-start justify-between w-full">
+            {/* Container for selected badges with max height and scrolling */}
+            <div className="flex flex-wrap gap-1 max-h-[100px] overflow-y-auto pr-2"> 
               {value.length === 0 ? (
-                <span className="text-muted-foreground">{placeholder}</span>
+                <span className="text-muted-foreground pt-1">{placeholder}</span>
               ) : (
                 value.map((itemValue) => { // Use itemValue to avoid conflict with prop 'value'
                   const option = options.find((opt) => opt.value === itemValue);
@@ -85,7 +86,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                 })
               )}
             </div>
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50 self-center" />
           </span>
         </Button>
       </PopoverTrigger>
