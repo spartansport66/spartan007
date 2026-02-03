@@ -2,8 +2,8 @@
 DROP FUNCTION IF EXISTS get_dealer_balance_report(UUID, TEXT);
 DROP FUNCTION IF EXISTS get_dealer_balance_report(UUID, TEXT, INT, INT);
 
--- Create the function from a clean slate with the CORRECT column names.
--- This version uses `initial_balance` and `initial_balance_due_date` from the `dealers` table.
+-- Create the function from a clean slate with the CORRECT table join.
+-- This version joins with `dealer_balances` to get the opening balance information.
 CREATE OR REPLACE FUNCTION get_dealer_balance_report(
     p_sales_person_id UUID DEFAULT NULL,
     p_dealer_name_filter TEXT DEFAULT NULL,
@@ -29,17 +29,19 @@ BEGIN
             d.id,
             d.name,
             d.phone,
-            -- CORRECTED: Using `d.initial_balance` from the `dealers` table.
-            COALESCE(d.initial_balance, 0) AS opening_balance,
-            -- CORRECTED: Using `d.initial_balance_due_date` from the `dealers` table.
-            d.initial_balance_due_date AS opening_balance_due_date,
+            -- CORRECTED: Fetching `opening_balance` from the `dealer_balances` table.
+            COALESCE(db.opening_balance, 0) AS opening_balance,
+            -- CORRECTED: Fetching `opening_balance_due_date` from the `dealer_balances` table.
+            db.opening_balance_due_date,
             COALESCE(sales.total_sales, 0) AS total_sales,
             COALESCE(payments.total_payments_received, 0) AS total_payments_received,
-            -- CORRECTED: Using `d.initial_balance` in the calculation.
-            (COALESCE(d.initial_balance, 0) + COALESCE(sales.total_sales, 0) - COALESCE(payments.total_payments_received, 0)) AS closing_balance,
+            -- CORRECTED: Using the correct opening balance in the calculation.
+            (COALESCE(db.opening_balance, 0) + COALESCE(sales.total_sales, 0) - COALESCE(payments.total_payments_received, 0)) AS closing_balance,
             last_dispatch.last_dispatch_date
         FROM
             dealers d
+        -- CORRECTED: Joining with `dealer_balances` to get the opening balance.
+        LEFT JOIN dealer_balances db ON d.id = db.dealer_id
         LEFT JOIN (
             SELECT o.dealer_id, SUM(o.total_amount) AS total_sales
             FROM orders o
