@@ -1,8 +1,7 @@
 -- Drop the old function first to allow for changing the return signature.
--- This is crucial because the return type has changed.
 DROP FUNCTION IF EXISTS get_dealer_balance_report(UUID, TEXT);
 
--- Recreate the function with the new return columns and an optimized query
+-- Recreate the function with a corrected and optimized query
 CREATE OR REPLACE FUNCTION get_dealer_balance_report(
     p_sales_person_id UUID DEFAULT NULL,
     p_dealer_name_filter TEXT DEFAULT NULL
