@@ -23,7 +23,7 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
   
   // New states for individual components
   const [totalOpeningBalance, setTotalOpeningBalance] = useState<number>(0);
-  const [totalOrderValue, setTotalOrderValue] = useState<number>(0);
+  const [totalOrderValue, setTotalOrderValue] = useState<number>(0); // This will now be NET Order Value
   const [totalPaymentsReceived, setTotalPaymentsReceived] = useState<number>(0);
 
   const fetchOverviewData = useCallback(async () => {
@@ -45,16 +45,18 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       const openingBalance = (allDealerBalances || []).reduce((sum, balance) => sum + (balance.opening_balance || 0), 0);
       setTotalOpeningBalance(openingBalance);
 
-      // 1b. Fetch the sum of all order values (total_amount) from the orders table.
+      // 1b. Fetch the sum of all order values (total_amount) and discount_amount from the orders table.
+      // This calculates the NET ORDER VALUE (Total Amount - Total Discount)
       const { data: allOrders, error: allOrdersError } = await supabase
         .from('orders')
-        .select('total_amount');
+        .select('total_amount, discount_amount'); // Select both fields
       
       if (allOrdersError) {
         throw allOrdersError;
       }
-      const totalOrdersValue = (allOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
-      setTotalOrderValue(totalOrdersValue);
+      // Calculate Net Order Value: SUM(total_amount - discount_amount)
+      const netTotalOrdersValue = (allOrders || []).reduce((sum, order) => sum + (order.total_amount - (order.discount_amount || 0)), 0);
+      setTotalOrderValue(netTotalOrdersValue); // Set this as the NET Order Value
 
       // 1c. Fetch the sum of all completed payments (amount) from the payments table.
       const { data: allPayments, error: allPaymentsError } = await supabase
@@ -68,8 +70,8 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
       const totalPaymentsValue = (allPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
       setTotalPaymentsReceived(totalPaymentsValue);
 
-      // Final Calculation: Total Pending = OB + Orders - Payments
-      const calculatedTotalPending = openingBalance + totalOrdersValue - totalPaymentsValue;
+      // Final Calculation: Total Pending = OB + Net Orders - Payments
+      const calculatedTotalPending = openingBalance + netTotalOrdersValue - totalPaymentsValue;
       setTotalPendingAmount(calculatedTotalPending);
 
       // --- 2. Fetch Other Metrics (as before) ---
@@ -155,11 +157,11 @@ const PaymentOverviewCard: React.FC<PaymentOverviewCardProps> = ({ onViewReport 
               <span className="text-lg font-bold text-gray-600">₹{totalOpeningBalance.toFixed(2)}</span>
             </div>
             
-            {/* New: Total Order Value */}
+            {/* New: Total Order Value (Net) */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-blue-600" />
-                <span className="text-muted-foreground">Total Order Value:</span>
+                <span className="text-muted-foreground">Total Net Order Value:</span>
               </div>
               <span className="text-lg font-bold text-blue-600">₹{totalOrderValue.toFixed(2)}</span>
             </div>
