@@ -101,8 +101,8 @@ const PaymentVoucherDialog: React.FC<PaymentVoucherDialogProps> = ({ isOpen, onO
       // Reset allocations for the new dealer/orders
       setAllocations({});
     } catch (error: any) {
-      console.error('Error fetching outstanding orders:', error.message);
-      showError('Failed to load outstanding orders.');
+      console.error('Error fetching outstanding orders:', error.message, error); // Added error object logging
+      showError('Failed to load outstanding orders. Check console for details.'); // Updated user message
       setOutstandingOrders([]);
     } finally {
       setLoading(false);
