@@ -10,16 +10,7 @@ BEGIN
 END
 $$;
 
--- 3. DATA CLEANUP: Populate missing dealer_id using order_id before setting NOT NULL constraint.
--- This assumes any payment with a NULL dealer_id must have an order_id linked to a dealer.
-UPDATE public.payments p
-SET dealer_id = o.dealer_id
-FROM public.orders o
-WHERE p.order_id IS NOT NULL
-  AND p.dealer_id IS NULL
-  AND p.order_id = o.id;
-
--- Now ensure dealer_id is NOT NULL in payments table
+-- 3. Ensure dealer_id is NOT NULL in payments table (since every payment must be linked to a dealer)
 ALTER TABLE public.payments ALTER COLUMN dealer_id SET NOT NULL;
 
 -- 4. Create payment_allocations table
@@ -64,4 +55,6 @@ CREATE POLICY "Sales persons can read allocations for their dealers" ON public.p
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 
 -- 7. Update RLS policies on payments table to allow general payments (dealer_id is now mandatory)
--- Note: Assuming existing policies are sufficient, but ensure they cover the new schema.
+-- Note: Existing RLS policies on payments might need review, but we ensure the basic ones are covered.
+-- Assuming existing policies allow admins/sales_persons to manage payments for their dealers/orders.
+-- If you have specific RLS, ensure it accommodates the new dealer_id NOT NULL constraint.
