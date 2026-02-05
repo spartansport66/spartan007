@@ -241,6 +241,22 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
   const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
 
+  const updateItemQuantity = (id: string, newQuantity: number) => {
+    const quantity = Math.max(1, newQuantity); // Ensure quantity is at least 1
+    setOrderItems(prevItems => prevItems.map(item => {
+      if (item.id === id) {
+        const product = products.find(p => p.id === item.product_id);
+        const unit_dp = product?.dp || 0;
+        return {
+          ...item,
+          quantity: quantity,
+          total_price: quantity * unit_dp,
+        };
+      }
+      return item;
+    }));
+  };
+
   const addOrderItem = () => {
     if (!newItemProductId || newItemQuantity <= 0) {
       showError("Please select a product and enter a valid quantity.");
@@ -512,7 +528,15 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                     {orderItems.map(item => (
                       <TableRow key={item.id}>
                         <TableCell>{item.product_name} ({item.product_code})</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => updateItemQuantity(item.id, parseInt(e.target.value) || 1)}
+                            min="1"
+                            className="w-16 h-8 text-center"
+                          />
+                        </TableCell>
                         <TableCell>₹{item.unit_dp.toFixed(2)}</TableCell>
                         <TableCell className="text-right">₹{item.total_price.toFixed(2)}</TableCell>
                         <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
