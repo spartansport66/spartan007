@@ -376,7 +376,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <Label htmlFor="code" className="text-right">
                   Code
                 </Label>
-                <Input id="code" {...form.register('code')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                <Input id="code" {...form.register('code')} className="col-span-3" />
                 {form.formState.errors.code && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.code.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -397,35 +397,35 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <Label htmlFor="size" className="text-right">
                   Size
                 </Label>
-                <Input id="size" {...form.register('size')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                <Input id="size" {...form.register('size')} className="col-span-3" />
                 {form.formState.errors.size && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.size.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="hsn" className="text-right">
                   HSN
                 </Label>
-                <Input id="hsn" {...form.register('hsn')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                <Input id="hsn" {...form.register('hsn')} className="col-span-3" />
                 {form.formState.errors.hsn && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.hsn.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="gst" className="text-right">
                   GST (%)
                 </Label>
-                <Input id="gst" {...form.register('gst')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                <Input id="gst" {...form.register('gst')} className="col-span-3" />
                 {form.formState.errors.gst && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.gst.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="dp" className="text-right">
                   Dealer Price (DP)
                 </Label>
-                <Input id="dp" type="number" {...form.register('dp')} className="col-span-3" disabled={selectedProduct.has_sales} /> {/* Changed type to number, removed step */}
+                <Input id="dp" type="number" {...form.register('dp')} className="col-span-3" />
                 {form.formState.errors.dp && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.dp.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="stock" className="text-right">
                   Stock
                 </Label>
-                <Input id="stock" type="number" {...form.register('stock')} className="col-span-3" /> {/* Stock is always editable */}
+                <Input id="stock" type="number" {...form.register('stock')} className="col-span-3" />
                 {form.formState.errors.stock && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.stock.message}</p>}
               </div>
               <DialogFooter>
