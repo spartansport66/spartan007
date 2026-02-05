@@ -1,17 +1,20 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, DollarSign, Package } from 'lucide-react';
+import { Loader2, Search, Printer, DollarSign, Package, Check, ChevronsUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 interface TransactionReportData {
   payment_id: string;
@@ -34,12 +37,31 @@ interface DealerTransactionReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// New interfaces for Supabase query results (kept minimal for this component)
+interface FetchedPayment {
+  id: string;
+  amount: number;
+  payment_date: string;
+  payment_method: string;
+  transaction_id: string | null;
+  order_id: string | null;
+  dealer_id: string | null;
+  orders: {
+    dealer_id: string;
+    order_number: number;
+  } | null;
+}
+
 const DealerTransactionReportDialog: React.FC<DealerTransactionReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const [transactions, setTransactions] = useState<TransactionReportData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<FilterOption[]>([]);
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [companyName, setCompanyName] = useState<string | null>(null);
+
+  // States for searchable select
+  const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
+  const [dealerSearchValue, setDealerSearchValue] = useState("");
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -135,12 +157,9 @@ const DealerTransactionReportDialog: React.FC<DealerTransactionReportDialogProps
     }
   }, [isOpen, fetchCompanyInfo, fetchDealers]);
 
-  useEffect(() => {
-    fetchTransactionData();
-  }, [fetchTransactionData]);
-
   const handleClearFilters = () => {
     setFilterDealerId('');
+    setDealerSearchValue('');
   };
 
   const handlePrint = () => {
@@ -183,6 +202,16 @@ const DealerTransactionReportDialog: React.FC<DealerTransactionReportDialogProps
       showSuccess('Dealer Transaction Report generated successfully!');
     } catch (error: any) { showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`); }
   };
+  
+  const filteredDealers = useMemo(() => {
+    if (!dealerSearchValue) return allDealers;
+    const lowerCaseSearchValue = dealerSearchValue.toLowerCase();
+    return allDealers.filter(dealer => dealer.label.toLowerCase().includes(lowerCaseSearchValue));
+  }, [allDealers, dealerSearchValue]);
+
+  const selectedDealerLabel = filterDealerId
+    ? allDealers.find((dealer) => dealer.value === filterDealerId)?.label
+    : "Select a dealer...";
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -197,16 +226,53 @@ const DealerTransactionReportDialog: React.FC<DealerTransactionReportDialogProps
         <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
           <div className="flex-1 min-w-[180px]">
             <Label htmlFor="filterDealer">Select Dealer</Label>
-            <Select value={filterDealerId} onValueChange={setFilterDealerId} disabled={loading}>
-              <SelectTrigger id="filterDealer" className="w-full">
-                <SelectValue placeholder="Select a dealer" />
-              </SelectTrigger>
-              <SelectContent>
-                {allDealers.map(dealer => (
-                  <SelectItem key={dealer.value} value={dealer.value}>{dealer.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={isDealerPopoverOpen}
+                  className="w-full justify-between"
+                  disabled={loading}
+                >
+                  {selectedDealerLabel}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                <Command>
+                  <CommandInput
+                    placeholder="Search dealer..."
+                    value={dealerSearchValue}
+                    onValueChange={setDealerSearchValue}
+                  />
+                  <CommandList className="max-h-[300px] overflow-y-auto">
+                    <CommandEmpty>No dealer found.</CommandEmpty>
+                    <CommandGroup>
+                      {filteredDealers.map((dealer) => (
+                        <CommandItem
+                          key={dealer.value}
+                          value={dealer.label}
+                          onSelect={() => {
+                            setFilterDealerId(dealer.value);
+                            setIsDealerPopoverOpen(false);
+                            setDealerSearchValue("");
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              filterDealerId === dealer.value ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          {dealer.label}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
           <Button onClick={fetchTransactionData} disabled={loading || !filterDealerId} className="flex items-center gap-2 bg-primary hover:bg-primary/90">
             <Search className="h-4 w-4" /> Load Transactions
