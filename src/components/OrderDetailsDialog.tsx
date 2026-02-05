@@ -150,7 +150,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   const fetchOrderDetails = useCallback(async (id: string) => {
     setLoading(true);
     try {
-      // 1. Fetch Order Details (without nested payments)
+      // 1. Fetch Order Details (CLEAN QUERY - NO NESTED PAYMENTS)
       const { data: orderRaw, error: orderError } = await supabase
         .from('orders')
         .select(`
@@ -188,7 +188,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         return;
       }
 
-      // 2. Fetch Payments associated with this order
+      // 2. Fetch Payments associated with this order (SEPARATE QUERY)
       const { data: paymentsData, error: paymentsError } = await supabase
         .from('payments')
         .select(`
