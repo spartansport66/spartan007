@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, PlusCircle } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
@@ -22,7 +22,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/co
 import AdminSidebar from '@/components/AdminSidebar';
 import SalesReportsDialog from '@/components/reports/SalesReportsDialog';
 import ProductionAlertsCard from '@/components/ProductionAlertsCard';
-import AllPendingPaymentsCard from '@/components/AllPendingPaymentsCard';
+import PaymentsPendingApprovalCard from '@/components/PaymentsPendingApprovalCard'; // UPDATED IMPORT
 import PaymentOverviewCard from '@/components/PaymentOverviewCard';
 import DealerLedgerReportDialog from '@/components/reports/DealerLedgerReportDialog';
 import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog';
@@ -38,6 +38,7 @@ import { updateAllDealerCreditDays } from '@/utils/supabase-actions';
 import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
 import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
 import AdminTotalPendingOrdersCard from '@/components/AdminTotalPendingOrdersCard';
+import AdminDealerPaymentForm from '@/components/AdminDealerPaymentForm';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -61,6 +62,7 @@ const AdminDashboard = () => {
   const [isLoginLogReportOpen, setIsLoginLogReportOpen] = useState(false);
   const [isSalesPersonAccountStatementReportOpen, setIsSalesPersonAccountStatementReportOpen] = useState(false);
   const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false);
+  const [isAdminDealerPaymentFormOpen, setIsAdminDealerPaymentFormOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastActiveTime, setLastActiveTime] = useState<string | null>(null);
@@ -215,6 +217,15 @@ const AdminDashboard = () => {
     setPaymentsReportDialogKey(prev => prev + 1);
     setIsPaymentsReportOpen(true);
   };
+  
+  const handleRecordPayment = () => {
+    setIsAdminDealerPaymentFormOpen(true);
+  };
+  
+  const handlePaymentRecorded = () => {
+    setIsAdminDealerPaymentFormOpen(false);
+    handlePaymentAction(); // Refresh all payment related cards
+  };
 
   if (sessionLoading || loadingData) {
     return (
@@ -246,7 +257,21 @@ const AdminDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"><AdminTodayFollowupsCard key={`admin-followups-${refreshKey}`} onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} /><AdminTodayVisitsCard key={`admin-visits-${refreshKey}`} onViewReport={() => setIsSalesPersonVisitReportOpen(true)} /><AdminTotalPendingOrdersCard key={`admin-pending-orders-${refreshKey}`} onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} /></div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} /><DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} /></div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><ProductionAlertsCard key={`production-alerts-${refreshKey}`} /><Card className="bg-card text-card-foreground shadow-lg h-[350px]"><CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4"><CardTitle className="text-xl font-semibold">Monthly Sales Trend</CardTitle><CardDescription className="text-pink-100 dark:text-pink-200">Sales performance over the last 12 months.</CardDescription></CardHeader><CardContent className="p-4 h-[280px]">{loadingData ? (<div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>) : (<SalesChart data={monthlySalesData} />)}</CardContent></Card></div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} /><AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} /></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} />
+        <Card className="bg-card text-card-foreground shadow-lg h-full">
+          <CardHeader className="bg-indigo-500 dark:bg-indigo-700 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold">Payment Actions</CardTitle>
+            <CardDescription className="text-indigo-100 dark:text-indigo-200">Manage pending payments and record new ones.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 space-y-4">
+            <Button onClick={handleRecordPayment} className="w-full bg-green-600 hover:bg-green-700 text-white">
+              <PlusCircle className="mr-2 h-4 w-4" /> Record New Dealer Payment
+            </Button>
+            <PaymentsPendingApprovalCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} />
+          </CardContent>
+        </Card>
+      </div>
       <MadeWithDyad />
       <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} shouldPrintOnLoad={shouldPrintOrderDetails} />
       <OrdersAwaitingDispatchReportDialog isOpen={isOrdersAwaitingDispatchReportOpen} onOpenChange={setIsOrdersAwaitingDispatchReportOpen} />
@@ -264,6 +289,7 @@ const AdminDashboard = () => {
       <SalesPersonTodayFollowupsReportDialog isOpen={isSalesPersonTodayFollowupsReportOpen} onOpenChange={setIsSalesPersonTodayFollowupsReportOpen} />
       <LoginLogReportDialog isOpen={isLoginLogReportOpen} onOpenChange={setIsLoginLogReportOpen} />
       <SalesPersonAccountStatementReportDialog isOpen={isSalesPersonAccountStatementReportOpen} onOpenChange={setIsSalesPersonAccountStatementReportOpen} />
+      <AdminDealerPaymentForm isOpen={isAdminDealerPaymentFormOpen} onOpenChange={setIsAdminDealerPaymentFormOpen} onPaymentRecorded={handlePaymentRecorded} />
     </div>
   );
 };
