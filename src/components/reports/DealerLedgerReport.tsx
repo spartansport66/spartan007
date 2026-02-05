@@ -20,7 +20,6 @@ import {
   CommandGroup,
   CommandInput,
   CommandItem,
-  CommandList,
 } from "@/components/ui/command";
 
 interface Dealer {
@@ -162,37 +161,31 @@ const DealerLedgerReport: React.FC = () => {
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent 
-                  className="w-[--radix-popover-trigger-width] p-0"
-                  // Prevents the popover from stealing focus from the input inside
-                  onOpenAutoFocus={(e) => e.preventDefault()}
-                >
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
                   <Command>
                     <CommandInput placeholder="Search dealer..." />
-                    <CommandList>
-                      <CommandEmpty>No dealer found.</CommandEmpty>
-                      <CommandGroup>
-                        {dealers.map((dealer) => (
-                          <CommandItem
-                            key={dealer.id}
-                            value={dealer.name || ''}
-                            onSelect={(currentValue) => {
-                              const selected = dealers.find(d => (d.name || '').toLowerCase() === currentValue.toLowerCase());
-                              setSelectedDealerId(selected ? selected.id : "");
-                              setOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedDealerId === dealer.id ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            {dealer.name || 'Unnamed Dealer'}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
+                    <CommandEmpty>No dealer found.</CommandEmpty>
+                    <CommandGroup>
+                      {dealers.map((dealer) => (
+                        <CommandItem
+                          key={dealer.id}
+                          value={dealer.name}
+                          onSelect={(currentValue) => {
+                            const selected = dealers.find(d => d.name.toLowerCase() === currentValue.toLowerCase());
+                            setSelectedDealerId(selected ? selected.id : "");
+                            setOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              selectedDealerId === dealer.id ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          {dealer.name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
                   </Command>
                 </PopoverContent>
               </Popover>
