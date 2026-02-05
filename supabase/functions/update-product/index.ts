@@ -32,17 +32,56 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const updateData: { name?: string; description?: string; stock?: number; code?: string; size?: string; hsn?: string; gst?: string; dp?: number } = {};
+    // Check if the product has any associated sales
+    const { count: salesCount, error: salesCountError } = await supabaseAdmin
+      .from('sales')
+      .select('id', { count: 'exact', head: true })
+      .eq('product_id', productId);
 
-    // Always allow all fields to be updated
-    if (name !== undefined) updateData.name = name;
-    if (description !== undefined) updateData.description = description;
-    if (stock !== undefined) updateData.stock = parseInt(stock);
-    if (code !== undefined) updateData.code = code;
-    if (size !== undefined) updateData.size = size;
-    if (hsn !== undefined) updateData.hsn = hsn;
-    if (gst !== undefined) updateData.gst = gst;
-    if (dp !== undefined) updateData.dp = parseInt(dp);
+    if (salesCountError) {
+      throw new Error(`Failed to check product sales: ${salesCountError.message}`);
+    }
+
+    const hasSales = (salesCount || 0) > 0;
+
+    const updateData: { name?: string; description?: string; stock?: number; code?: string; size?: string; hsn?: string; gst?: string; dp?: number } = {};
+    let attemptedRestrictedUpdate = false;
+
+    if (hasSales) {
+      // If product has sales, only allow stock, code, size, hsn, gst, dp to be updated
+      if (stock !== undefined) updateData.stock = parseInt(stock);
+      if (code !== undefined) updateData.code = code;
+      if (size !== undefined) updateData.size = size;
+      if (hsn !== undefined) updateData.hsn = hsn;
+      if (gst !== undefined) updateData.gst = gst;
+      if (dp !== undefined) updateData.dp = parseInt(dp);
+
+      // Check if other fields (name, description) were attempted to be updated
+      if (name !== undefined && name !== null) attemptedRestrictedUpdate = true;
+      if (description !== undefined && description !== null) attemptedRestrictedUpdate = true;
+
+      if (attemptedRestrictedUpdate && Object.keys(updateData).length === 0) {
+        // If only restricted fields were attempted and no allowed fields were provided, reject
+        return new Response(JSON.stringify({ error: 'Product with associated sales can only have its stock, code, size, HSN, GST, and Dealer Price updated. Name and description cannot be changed.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } else if (attemptedRestrictedUpdate && Object.keys(updateData).length > 0) {
+        // If allowed fields were updated, but restricted fields were also attempted, warn but proceed with allowed updates
+        console.warn(`Attempted to update restricted fields for product ${productId} with sales. Only allowed fields will be updated.`);
+      }
+
+    } else {
+      // If no sales, allow all fields to be updated
+      if (name !== undefined) updateData.name = name;
+      if (description !== undefined) updateData.description = description;
+      if (stock !== undefined) updateData.stock = parseInt(stock);
+      if (code !== undefined) updateData.code = code;
+      if (size !== undefined) updateData.size = size;
+      if (hsn !== undefined) updateData.hsn = hsn;
+      if (gst !== undefined) updateData.gst = gst;
+      if (dp !== undefined) updateData.dp = parseInt(dp);
+    }
 
     if (Object.keys(updateData).length === 0) {
       return new Response(JSON.stringify({ message: 'No valid fields provided for update.' }), {

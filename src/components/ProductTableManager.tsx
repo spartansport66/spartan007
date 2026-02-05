@@ -383,14 +383,14 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <Label htmlFor="name" className="text-right">
                   Name
                 </Label>
-                <Input id="name" {...form.register('name')} className="col-span-3" />
+                <Input id="name" {...form.register('name')} className="col-span-3" disabled={selectedProduct.has_sales} />
                 {form.formState.errors.name && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.name.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="description" className="text-right">
                   Description
                 </Label>
-                <Textarea id="description" {...form.register('description')} className="col-span-3" />
+                <Textarea id="description" {...form.register('description')} className="col-span-3" disabled={selectedProduct.has_sales} />
                 {form.formState.errors.description && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.description.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
