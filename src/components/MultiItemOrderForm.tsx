@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -236,25 +237,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     calculateBalanceAndDueDate();
   }, [selectedDealer, dealers]);
 
-  const filteredDealers = useMemo(() => {
-    if (!dealerSearchValue) return dealers;
-    const lowerCaseSearchValue = dealerSearchValue.toLowerCase();
-    return dealers.filter(dealer =>
-      dealer.name.toLowerCase().includes(lowerCaseSearchValue)
-    );
-  }, [dealers, dealerSearchValue]);
-
-  const filteredProducts = useMemo(() => {
-    if (!productSearchValue) return products;
-    const lowerCaseSearchValue = productSearchValue.toLowerCase();
-    const searchWords = lowerCaseSearchValue.split(' ').filter(word => word.length > 0);
-    return products.filter(product => {
-      const productName = product.name.toLowerCase();
-      const productCode = product.code.toLowerCase();
-      return searchWords.some(word => productName.includes(word) || productCode.includes(word));
-    });
-  }, [products, productSearchValue]);
-
   const usedCredit = dealerBalance !== null ? dealerBalance + dealerOpeningBalance : null;
   const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
   const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
@@ -411,6 +393,23 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     }
   };
 
+  const filteredProducts = useMemo(() => {
+    if (!productSearchValue) return products;
+    const lowerCaseSearchValue = productSearchValue.toLowerCase();
+    const searchWords = lowerCaseSearchValue.split(' ').filter(word => word.length > 0);
+    return products.filter(product => {
+      const productName = product.name.toLowerCase();
+      const productCode = product.code.toLowerCase();
+      return searchWords.some(word => productName.includes(word) || productCode.includes(word));
+    });
+  }, [products, productSearchValue]);
+
+  const filteredDealers = useMemo(() => {
+    if (!dealerSearchValue) return dealers;
+    const lowerCaseSearchValue = dealerSearchValue.toLowerCase();
+    return dealers.filter(dealer => dealer.name.toLowerCase().includes(lowerCaseSearchValue));
+  }, [dealers, dealerSearchValue]);
+
   const disableAddItem = selectedDealer && availableCredit !== null && availableCredit <= 0;
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
   const calculatedPaymentStatus = isPaidAtOrderTime ? 'Pending Approval' : 'Pending';
@@ -446,8 +445,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                     {filteredDealers.length === 0 ? <CommandEmpty>No dealer found.</CommandEmpty> : (
                       <CommandGroup>
                         {filteredDealers.map((dealer) => (
-                          <CommandItem key={dealer.id} value={dealer.name} onSelect={() => {
-                            setSelectedDealer(dealer.id);
+                          <CommandItem key={dealer.id} value={dealer.name} onSelect={(currentValue) => {
+                            const selected = dealers.find(d => d.name.toLowerCase() === currentValue.toLowerCase());
+                            setSelectedDealer(selected?.id === selectedDealer ? '' : selected?.id || '');
                             setIsDealerPopoverOpen(false);
                             setDealerSearchValue("");
                           }}>
@@ -469,7 +469,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           <div className="space-y-4">
             <Label>Order Items</Label>
             <div className="p-4 border rounded-md bg-muted/50">
+              {/* Responsive layout for adding new item */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                {/* Product Selection (Full width on mobile, 2/3 on desktop) */}
                 <div className="col-span-1 md:col-span-2">
                   <Label>Product</Label>
                   <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
@@ -503,6 +505,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   </Popover>
                 </div>
                 
+                {/* Quantity and Add Button (Full width on mobile, 1/3 on desktop) */}
                 <div className="col-span-1 md:col-span-1 grid grid-cols-2 md:grid-cols-[2fr_1fr] gap-2">
                   <div>
                     <Label>Quantity</Label>
