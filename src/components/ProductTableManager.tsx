@@ -61,13 +61,9 @@ const formSchema = z.object({
   hsn: z.string().optional(),
   gst: z.string().optional(), // Changed to string
   dp: z.preprocess(
-    (val) => Number(String(val).trim()), // Ensure value is a number
-    z.number({ invalid_type_error: 'Dealer Price must be a number.' })
+    (val) => Number(val),
+    z.number().int({ message: 'Dealer Price must be a whole number.' }) // Changed to integer
       .min(0, { message: 'Dealer Price cannot be negative.' })
-      .refine((val) => {
-        const decimalPart = String(val).split('.')[1];
-        return !decimalPart || decimalPart.length <= 2;
-      }, { message: 'Dealer Price can have at most two decimal places.' })
   ),
   stock: z.preprocess(
     (val) => Number(val),
@@ -422,7 +418,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <Label htmlFor="dp" className="text-right">
                   Dealer Price (DP)
                 </Label>
-                <Input id="dp" type="number" step="0.01" {...form.register('dp')} className="col-span-3" />
+                <Input id="dp" type="number" {...form.register('dp')} className="col-span-3" />
                 {form.formState.errors.dp && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.dp.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
