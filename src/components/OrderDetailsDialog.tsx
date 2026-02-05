@@ -175,7 +175,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             state,
             country
           ),
-          payments (
+          payments!inner (
             amount,
             payment_method,
             cheque_dd_no,
@@ -193,9 +193,51 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
           )
         `)
         .eq('id', id)
+        .eq('payments.order_id', id) // Explicitly filter payments by order_id
         .single() as { data: FetchedOrderData | null; error: any }; // Explicitly type data
 
-      if (orderError) throw orderError;
+      if (orderError) {
+        // If the error is due to no payments found, we still want the order details
+        if (orderError.code === 'PGRST116' && orderError.details?.includes('payments')) {
+             // Re-run query without payments join if no payments found
+             const { data: orderDataNoPayments, error: orderErrorNoPayments } = await supabase
+                .from('orders')
+                .select(`
+                  id,
+                  order_number,
+                  order_date,
+                  total_amount,
+                  discount_amount,
+                  status,
+                  payment_status,
+                  payment_due_date,
+                  user_id,
+                  bill_no,
+                  dispatch_date,
+                  dispatch_number,
+                  dispatched,
+                  dealers (
+                    id,
+                    name,
+                    address,
+                    phone,
+                    city,
+                    state,
+                    country
+                  )
+                `)
+                .eq('id', id)
+                .single() as { data: FetchedOrderData | null; error: any };
+            
+            if (orderErrorNoPayments) throw orderErrorNoPayments;
+            
+            // Use the data without payments
+            orderData = orderDataNoPayments;
+            orderData.payments = null; // Ensure payments is null
+        } else {
+            throw orderError;
+        }
+      }
 
       if (!orderData) {
         showError('Order not found.');
