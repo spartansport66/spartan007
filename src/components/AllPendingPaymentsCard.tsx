@@ -4,8 +4,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, CheckCircle, XCircle, Eye, Calendar, DollarSign, Clock, AlertCircle, MessageCircle, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
@@ -15,10 +13,9 @@ import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 import { approveRejectPayment } from '@/utils/supabase-actions';
 import { Label } from '@/components/ui/label';
-import { Input as InputShadcn } from '@/components/ui/input'; // Renamed Input to InputShadcn to avoid conflict with local Input
+import { Input } from '@/components/ui/input';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
-import RecordDealerPaymentDialog from '@/components/RecordDealerPaymentDialog'; // NEW IMPORT
 
 interface PendingPaymentItem {
   type: 'order_due' | 'payment_pending_approval';
@@ -55,9 +52,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
   const [selectedPaymentIdForDetails, setSelectedPaymentIdForDetails] = useState<string | null>(null);
 
-  // We will use the new RecordDealerPaymentDialog for adding payments
-  const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false);
-  const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false); // Keep for existing UpdatePaymentDialog if needed, but prefer RecordDealerPaymentDialog for new entries
+  const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
   const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PendingPaymentItem | null>(null);
 
   const fetchCompanyInfo = useCallback(async () => {
@@ -228,17 +223,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
   };
 
   const handleAddPaymentDetails = (order: PendingPaymentItem) => {
-    // Use the new RecordDealerPaymentDialog for adding payments
-    // Since this is an order_due item, we can't use the general RecordDealerPaymentDialog
-    // which is designed for general payments. We must use the existing UpdatePaymentDialog
-    // which is designed to link a payment to a specific order ID.
-    setSelectedOrderForPaymentUpdate({
-      id: order.id,
-      order_number: order.order_number,
-      total_amount: order.amount,
-      dealer_name: order.dealer_name,
-      payment_due_date: order.payment_due_date,
-    });
+    setSelectedOrderForPaymentUpdate(order);
     setIsUpdatePaymentDialogOpen(true);
   };
 
@@ -332,7 +317,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Label htmlFor="from-date-filter" className="text-white">From:</Label>
-              <InputShadcn
+              <Input
                 id="from-date-filter"
                 type="date"
                 value={filterFromDate}
@@ -342,7 +327,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
             </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="to-date-filter" className="text-white">To:</Label>
-              <InputShadcn
+              <Input
                 id="to-date-filter"
                 type="date"
                 value={filterToDate}
@@ -394,7 +379,12 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
                         <TableCell className="font-medium text-foreground">{payment.order_number === 0 ? 'General Balance' : `#${payment.order_number}`}</TableCell>
                         <TableCell className="text-muted-foreground">{payment.dealer_name}</TableCell>
                         <TableCell className="text-muted-foreground text-right">₹{payment.amount.toFixed(2)}</TableCell>
-                        <TableCell><div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(displayStatus, payment.payment_due_date)}`}>{getStatusIcon(displayStatus, payment.payment_due_date)}<span className="capitalize">{(displayStatus).replace('_', ' ')}</span></div></TableCell>
+                        <TableCell>
+                          <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold w-fit ${getStatusColor(displayStatus, payment.payment_due_date)}`}>
+                            {getStatusIcon(displayStatus, payment.payment_due_date)}
+                            <span className="capitalize">{(displayStatus).replace('_', ' ')}</span>
+                          </div>
+                        </TableCell>
                         <TableCell className={isOverdue(payment.payment_due_date, payment.payment_status) ? "text-destructive font-semibold" : "text-muted-foreground"}>{displayDate}</TableCell>
                         <TableCell className="text-center">
                           <div className="flex justify-center gap-2">
@@ -452,7 +442,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         </div>
       </CardContent>
       {selectedPaymentIdForDetails && (<PaymentDetailsDialog paymentId={selectedPaymentIdForDetails} isOpen={isPaymentDetailsDialogOpen} onOpenChange={setIsPaymentDetailsDialogOpen} />)}
-      {selectedOrderForPaymentUpdate && (<UpdatePaymentDialog orderToUpdate={{id: selectedOrderForPaymentUpdate.order_id || selectedOrderForPaymentUpdate.dealer_id, order_number: selectedOrderForPaymentUpdate.order_number, total_amount: selectedOrderForPaymentUpdate.amount, dealer_name: selectedOrderForPaymentUpdate.dealer_name, payment_due_date: selectedOrderForPaymentUpdate.payment_due_date}} isOpen={isUpdatePaymentDialogOpen} onOpenChange={setIsUpdatePaymentDialogOpen} onPaymentUpdated={handlePaymentUpdated} />)}
+      {selectedOrderForPaymentUpdate && (<UpdatePaymentDialog orderToUpdate={{id: selectedOrderForPaymentUpdate.order_id || selectedOrderForPaymentUpdate.dealer_id, order_number: selectedOrderForPaymentUpdate.order_number, total_amount: selectedOrderForPaymentUpdate.amount, dealer_name: selectedOrderForPaymentUpdate.dealer_name, payment_due_date: selectedOrderForPaymentUpdate.payment_due_date,}} isOpen={isUpdatePaymentDialogOpen} onOpenChange={setIsUpdatePaymentDialogOpen} onPaymentUpdated={handlePaymentUpdated} />)}
     </Card>
   );
 };

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, MessageCircle, AlertCircle } from 'lucide-react';
+import { Loader2, Search, Printer, MessageCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -27,12 +27,11 @@ interface LedgerEntry {
   debit: number; // Amount owed by dealer (e.g., for orders)
   credit: number; // Amount paid by dealer
   balance: number; // Running balance
-  type: 'opening_balance' | 'order' | 'payment' | 'advance'; // Added 'advance'
+  type: 'opening_balance' | 'order' | 'payment';
   refId?: string; // Order ID or Payment ID
-  order_number?: number;
-  payment_due_date?: string | null;
-  payment_status?: string;
-  days_overdue?: number | null; // New: Days overdue
+  order_number?: number; // New: For WhatsApp action
+  payment_due_date?: string | null; // New: For WhatsApp action
+  payment_status?: string; // New: To check if payment is still pending
 }
 
 interface FilterOption {
@@ -53,16 +52,19 @@ const editBalanceFormSchema = z.object({
 });
 
 // New interfaces for Supabase query results
+interface PrevPayment {
+  amount: number;
+  orders: { dealer_id: string } | null;
+}
+
 interface FetchedPayment {
   id: string;
   amount: number;
   payment_date: string;
   payment_method: string;
   transaction_id: string | null;
-  order_id: string | null;
-  dealer_id: string | null;
-  status: string;
-  cheque_dd_date: string | null;
+  order_id: string | null; // Now nullable
+  dealer_id: string | null; // New
   orders: {
     dealer_id: string;
     order_number: number;
@@ -78,8 +80,15 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
   const [companyName, setCompanyName] = useState<string | null>(null);
-  const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null);
-  const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null);
+  const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null); // New state for dealer phone
+  const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null); // New state for dealer name
+
+  const editForm = useForm<z.infer<typeof editBalanceFormSchema>>({
+    resolver: zodResolver(editBalanceFormSchema),
+    defaultValues: {
+      openingBalance: 0,
+    },
+  });
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -98,21 +107,9 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     }
   }, []);
 
-  const calculateDaysOverdue = (dueDate: string | null): number | null => {
-    if (!dueDate) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(dueDate);
-    due.setHours(0, 0, 0, 0);
-
-    if (due >= today) return 0;
-
-    const diffTime = today.getTime() - due.getTime();
-    return Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  };
-
   const fetchLedgerData = useCallback(async () => {
     if (!filterDealerId) {
+      console.log("[DealerLedgerReportDialog] No dealer selected, clearing transactions.");
       setTransactions([]);
       setSelectedDealerPhone(null);
       setSelectedDealerName(null);
@@ -120,6 +117,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       return;
     }
     if (!user?.id) {
+      console.error("[DealerLedgerReportDialog] User not authenticated, cannot fetch ledger data.");
       showError("User not authenticated. Please log in again.");
       setTransactions([]);
       setLoading(false);
@@ -132,166 +130,153 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       const fromDateISO = filterFromDate ? `${filterFromDate}T00:00:00.000Z` : null;
       const toDateISO = filterToDate ? `${filterToDate}T23:59:59.999Z` : null;
 
-      // Fetch dealer details (name, phone, credit days)
+      // Fetch dealer details (name and phone)
       const { data: dealerDetails, error: dealerDetailsError } = await supabase
         .from('dealers')
-        .select('name, phone, allotted_credit_days')
+        .select('name, phone')
         .eq('id', dealerId)
         .single();
 
       if (dealerDetailsError) throw dealerDetailsError;
       setSelectedDealerPhone(dealerDetails?.phone || null);
       setSelectedDealerName(dealerDetails?.name || null);
-      const allottedCreditDays = dealerDetails?.allotted_credit_days || 0;
 
-      // 1. Get Opening Balance
+      // 1. Get initial balance (opening balance + all transactions before fromDate)
+      let initialBalance = 0;
       const { data: dealerBalanceData, error: balanceError } = await supabase
         .from('dealer_balances')
         .select('opening_balance')
         .eq('dealer_id', dealerId)
         .single();
 
-      if (balanceError && balanceError.code !== 'PGRST116') throw balanceError;
-      const rawOpeningBalance = dealerBalanceData?.opening_balance || 0;
+      if (balanceError && balanceError.code !== 'PGRST116') {
+        console.error("[DealerLedgerReportDialog] Error fetching dealer_balances:", balanceError.message);
+        throw balanceError;
+      }
+      initialBalance = dealerBalanceData?.opening_balance || 0;
+
+      // Calculate balance from orders/payments before the filterFromDate
+      if (fromDateISO) {
+        // Orders before fromDate
+        const { data: prevOrders, error: prevOrdersError } = await supabase
+          .from('orders')
+          .select('total_amount')
+          .eq('dealer_id', dealerId)
+          .lte('order_date', fromDateISO)
+          .in('payment_status', ['pending', 'pending_approval', 'paid']);
+
+        if (prevOrdersError) throw prevOrdersError;
+        const prevOrdersTotal = (prevOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
+
+        // Payments before fromDate (both order payments and general payments)
+        const { data: prevPayments, error: prevPaymentsError } = await supabase
+          .from('payments')
+          .select(`amount`)
+          .or(`order_id.eq.${dealerId},dealer_id.eq.${dealerId}`) // Filter by order_id or new dealer_id column
+          .lte('payment_date', fromDateISO)
+          .eq('status', 'completed');
+
+        if (prevPaymentsError) throw prevPaymentsError;
+        const prevPaymentsTotal = (prevPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+
+        initialBalance = initialBalance + prevOrdersTotal - prevPaymentsTotal;
+      }
 
       const ledgerEntries: LedgerEntry[] = [];
-      let initialBalance = rawOpeningBalance;
 
-      // 2. Fetch all orders and payments for the dealer
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
-        .select('id, order_number, order_date, total_amount, payment_status, dispatch_date, bill_no')
-        .eq('dealer_id', dealerId)
-        .order('order_date', { ascending: true });
-      if (ordersError) throw ordersError;
-
-      const { data: paymentsData, error: paymentsError } = await supabase
-        .from('payments')
-        .select(`id, amount, payment_date, payment_method, status, order_id, cheque_dd_date`)
-        .eq('dealer_id', dealerId)
-        .order('payment_date', { ascending: true });
-      if (paymentsError) throw paymentsError;
-
-      // --- Combine and Process Transactions ---
-      const allTransactions: { date: string; type: 'order' | 'payment'; data: any }[] = [];
-
-      // Process Orders (Debits)
-      (ordersData || []).forEach(order => {
-        const orderDate = order.dispatch_date || order.order_date; // Use dispatch date if available
-        const dueDate = new Date(orderDate);
-        dueDate.setDate(dueDate.getDate() + allottedCreditDays);
-        const dueDateISO = dueDate.toISOString().split('T')[0];
-        
-        const daysOverdue = order.payment_status === 'pending' ? calculateDaysOverdue(dueDateISO) : null;
-
-        allTransactions.push({
-          date: orderDate.split('T')[0],
-          type: 'order',
-          data: {
-            ...order,
-            payment_due_date: dueDateISO,
-            days_overdue: daysOverdue,
-          }
-        });
-      });
-
-      // Process Payments (Credits)
-      (paymentsData || []).forEach(payment => {
-        allTransactions.push({
-          date: payment.payment_date.split('T')[0],
-          type: 'payment',
-          data: payment,
-        });
-      });
-
-      // Sort all transactions chronologically
-      allTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      // --- Calculate Initial Balance (before filterFromDate) ---
-      if (fromDateISO) {
-        const filterDate = new Date(fromDateISO).getTime();
-        const transactionsBeforeFilter = allTransactions.filter(t => new Date(t.date).getTime() < filterDate);
-
-        transactionsBeforeFilter.forEach(t => {
-          if (t.type === 'order') {
-            initialBalance += t.data.total_amount;
-          } else if (t.type === 'payment' && t.data.status === 'completed') {
-            initialBalance -= t.data.amount;
-          }
+      // Add opening balance entry if it's the start of the report or if there's an actual opening balance
+      if (!fromDateISO || initialBalance !== 0) {
+        ledgerEntries.push({
+          date: filterFromDate || new Date().toISOString().split('T')[0],
+          description: 'Opening Balance',
+          debit: 0,
+          credit: 0,
+          balance: initialBalance,
+          type: 'opening_balance',
         });
       }
 
-      // Add Opening Balance Entry
-      ledgerEntries.push({
-        date: filterFromDate || new Date().toISOString().split('T')[0],
-        description: `Opening Balance (as of ${filterFromDate || 'Start'})`,
-        debit: 0,
-        credit: 0,
-        balance: initialBalance,
-        type: 'opening_balance',
+      // 2. Fetch orders within the date range
+      let ordersQuery = supabase
+        .from('orders')
+        .select('id, order_number, order_date, total_amount, payment_status, payment_due_date') // Fetch payment_status
+        .eq('dealer_id', dealerId)
+        .in('payment_status', ['pending', 'pending_approval', 'paid']);
+
+      if (fromDateISO) ordersQuery = ordersQuery.gte('order_date', fromDateISO);
+      if (toDateISO) ordersQuery = ordersQuery.lte('order_date', toDateISO);
+
+      const { data: ordersData, error: ordersError } = await ordersQuery;
+      if (ordersError) throw ordersError;
+
+      (ordersData || []).forEach(order => {
+        ledgerEntries.push({
+          date: order.order_date.split('T')[0],
+          description: `Order #${order.order_number} (${order.payment_status.replace('_', ' ')})`,
+          debit: order.total_amount,
+          credit: 0,
+          balance: 0, // Will be calculated later
+          type: 'order',
+          refId: order.id,
+          order_number: order.order_number, // Store order number
+          payment_due_date: order.payment_due_date, // Store due date
+          payment_status: order.payment_status, // Store payment status
+        });
       });
 
+      // 3. Fetch payments within the date range (both order payments and general payments)
+      let paymentsQuery = supabase
+        .from('payments')
+        .select(`
+          id,
+          amount,
+          payment_date,
+          payment_method,
+          transaction_id,
+          order_id,
+          orders(order_number)
+        `)
+        .eq('dealer_id', dealerId) // Use the new dealer_id column
+        .eq('status', 'completed');
+
+      if (fromDateISO) paymentsQuery = paymentsQuery.gte('payment_date', fromDateISO);
+      if (toDateISO) paymentsQuery = paymentsQuery.lte('payment_date', toDateISO);
+
+      const { data: paymentsData, error: paymentsError } = await paymentsQuery as { data: FetchedPayment[] | null; error: any };
+      if (paymentsError) throw paymentsError;
+
+      (paymentsData || []).forEach(payment => {
+        const isGeneralPayment = !payment.order_id;
+        const orderNumber = isGeneralPayment ? 'General' : payment.orders?.order_number || 'N/A';
+        const transactionDetail = payment.transaction_id ? ` (Txn: ${payment.transaction_id})` : '';
+        
+        ledgerEntries.push({
+          date: payment.payment_date.split('T')[0],
+          description: `Payment for ${isGeneralPayment ? 'General Balance' : `Order #${orderNumber}`} (${payment.payment_method})${transactionDetail}`,
+          debit: 0,
+          credit: payment.amount,
+          balance: 0, // Will be calculated later
+          type: 'payment',
+          refId: payment.id,
+        });
+      });
+
+      // Sort all entries by date
+      ledgerEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Calculate running balance
+      const finalLedger: LedgerEntry[] = [];
       let currentBalance = initialBalance;
-
-      // --- Process Transactions within the Date Range ---
-      const transactionsInPeriod = allTransactions.filter(t => {
-        const transactionDate = new Date(t.date).getTime();
-        const isAfterFrom = fromDateISO ? transactionDate >= new Date(fromDateISO).getTime() : true;
-        const isBeforeTo = toDateISO ? transactionDate <= new Date(toDateISO).getTime() : true;
-        return isAfterFrom && isBeforeTo;
-      });
-
-      transactionsInPeriod.forEach(t => {
-        if (t.type === 'order') {
-          const order = t.data;
-          currentBalance += order.total_amount;
-          ledgerEntries.push({
-            date: t.date,
-            description: `Order #${order.order_number} (Bill: ${order.bill_no || 'N/A'})`,
-            debit: order.total_amount,
-            credit: 0,
-            balance: currentBalance,
-            type: 'order',
-            refId: order.id,
-            order_number: order.order_number,
-            payment_status: order.payment_status,
-            payment_due_date: order.payment_due_date,
-            days_overdue: order.days_overdue,
-          });
-        } else if (t.type === 'payment') {
-          const payment = t.data;
-          const statusText = payment.status === 'completed' ? 'Cleared' : payment.status === 'pending_approval' ? 'Pending Approval' : 'Advance';
-          
-          // Only completed payments affect the running balance (credit)
-          if (payment.status === 'completed') {
-            currentBalance -= payment.amount;
-          }
-          
-          ledgerEntries.push({
-            date: t.date,
-            description: `Payment - ${statusText} (${payment.payment_method})`,
-            debit: 0,
-            credit: payment.amount,
-            balance: currentBalance,
-            type: payment.status === 'completed' ? 'payment' : 'advance', // Use 'advance' type for pending/pending_approval payments for display clarity
-            refId: payment.id,
-            payment_status: payment.status,
-          });
+      ledgerEntries.forEach(entry => {
+        if (entry.type === 'opening_balance') {
+          finalLedger.push(entry);
+        } else {
+          currentBalance = currentBalance + entry.debit - entry.credit;
+          finalLedger.push({ ...entry, balance: currentBalance });
         }
       });
 
-      // Final sort by date (including the opening balance entry)
-      ledgerEntries.sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        if (dateA !== dateB) return dateA - dateB;
-        // Ensure opening balance is always first on the same date
-        if (a.type === 'opening_balance') return -1;
-        if (b.type === 'opening_balance') return 1;
-        return 0;
-      });
-
-      setTransactions(ledgerEntries);
+      setTransactions(finalLedger);
     } catch (error: any) {
       console.error('[DealerLedgerReportDialog] Error fetching dealer ledger data:', error.message);
       showError(`Failed to load dealer ledger: ${error.message}`);
@@ -303,12 +288,14 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
   useEffect(() => {
     if (isOpen) {
+      // Fetch all dealers for the filter dropdown
       const fetchAllDealers = async () => {
         const { data, error } = await supabase
           .from('dealers')
           .select('id, name')
           .order('name', { ascending: true });
         if (error) {
+          console.error('[DealerLedgerReportDialog] Error fetching all dealers:', error.message);
           showError('Failed to load dealers for filter.');
           setAllDealers([]);
         } else {
@@ -317,7 +304,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       };
       fetchAllDealers();
       fetchCompanyInfo();
-      fetchLedgerData();
+      fetchLedgerData(); // Initial fetch
     }
   }, [isOpen, fetchLedgerData, fetchCompanyInfo]);
 
@@ -328,20 +315,36 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   };
 
   const handleSendOrderWhatsApp = (orderNumber: number, amountDue: number, dueDate: string | null) => {
-    if (!selectedDealerPhone) { showError('Dealer phone number is not available.'); return; }
-    if (!companyName) { showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.'); return; }
+    if (!selectedDealerPhone) {
+      showError('Dealer phone number is not available.');
+      return;
+    }
+    if (!companyName) {
+      showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
+      return;
+    }
     const dealerName = selectedDealerName || 'Dealer';
     const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
     const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
     const encodedMessage = encodeURIComponent(message);
+    // Open WhatsApp Web in a new tab
     window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
     showSuccess('WhatsApp message drafted. Please check the new tab.');
   };
 
   const handleSendBalanceWhatsApp = (balance: number) => {
-    if (!selectedDealerPhone) { showError('Dealer phone number is not available.'); return; }
-    if (!companyName) { showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.'); return; }
-    if (balance <= 0) { showError('Current balance is zero or negative. No reminder needed.'); return; }
+    if (!selectedDealerPhone) {
+      showError('Dealer phone number is not available.');
+      return;
+    }
+    if (!companyName) {
+      showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
+      return;
+    }
+    if (balance <= 0) {
+      showError('Current balance is zero or negative. No reminder needed.');
+      return;
+    }
 
     const dealerName = selectedDealerName || 'Dealer';
     const formattedBalance = balance.toFixed(2);
@@ -349,38 +352,65 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that your current outstanding balance is *₹${formattedBalance}*. Please clear your balance as soon as possible.\n\nThank you!`;
     const encodedMessage = encodeURIComponent(message);
     
+    // Open WhatsApp Web in a new tab
     window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
     showSuccess('WhatsApp balance reminder drafted. Please check the new tab.');
   };
 
   const handlePrint = () => {
     try {
-      const doc = new jsPDF({ orientation: 'landscape' });
+      const doc = new jsPDF({
+        orientation: 'landscape'
+      });
+
       const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
-      doc.setFontSize(22); doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
-      doc.setFontSize(18); doc.text("Dealer Ledger Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
-      doc.setFontSize(10); doc.setTextColor(100); doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
+      doc.setFontSize(22);
+      doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
+      doc.setFontSize(18);
+      doc.text("Dealer Ledger Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
+
       const dealerNameForPdf = allDealers.find(d => d.value === filterDealerId)?.label || 'N/A';
       doc.text(`Dealer: ${dealerNameForPdf}`, 14, 40);
       doc.text(`Period: ${filterFromDate || 'Start'} to ${filterToDate || 'End'}`, 14, 45);
 
-      const tableColumn = ["Date", "Description", "Debit (₹)", "Credit (₹)", "Balance (₹)", "Due Days"];
+      const tableColumn = ["Date", "Description", "Debit (₹)", "Credit (₹)", "Balance (₹)"];
       const tableRows = transactions.map(entry => [
         entry.date,
         entry.description,
         entry.debit.toFixed(2),
         entry.credit.toFixed(2),
         entry.balance.toFixed(2),
-        entry.days_overdue !== null ? entry.days_overdue.toString() : 'N/A',
       ]);
 
       autoTable(doc, {
-        head: [tableColumn], body: tableRows, startY: 55, styles: { fontSize: 8, cellPadding: 2, valign: 'middle', overflow: 'linebreak' },
-        headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
-        bodyStyles: { textColor: [0, 0, 0] },
+        head: [tableColumn],
+        body: tableRows,
+        startY: 55,
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+          valign: 'middle',
+          overflow: 'linebreak'
+        },
+        headStyles: {
+          fillColor: [30, 58, 138], // Dark blue (similar to indigo-800)
+          textColor: [255, 255, 255], // White
+          fontStyle: 'bold',
+          halign: 'center',
+        },
+        bodyStyles: {
+          textColor: [0, 0, 0],
+        },
         margin: { top: 10, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 25, halign: 'center' }, 1: { cellWidth: 90 }, 2: { cellWidth: 30, halign: 'right' }, 3: { cellWidth: 30, halign: 'right' }, 4: { cellWidth: 30, halign: 'right' }, 5: { cellWidth: 20, halign: 'center' },
+          0: { cellWidth: 25, halign: 'center' }, // Date
+          1: { cellWidth: 100 }, // Description
+          2: { cellWidth: 30, halign: 'right' }, // Debit
+          3: { cellWidth: 30, halign: 'right' }, // Credit
+          4: { cellWidth: 30, halign: 'right' }, // Balance
         }
       });
 
@@ -462,34 +492,25 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                     <TableHead className="text-muted-foreground font-bold text-right">Debit (₹)</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Credit (₹)</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-right">Balance (₹)</TableHead>
-                    <TableHead className="text-muted-foreground font-bold text-center">Due Days</TableHead>
                     <TableHead className="text-muted-foreground font-bold text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {transactions.map((entry, index) => {
-                    const isPendingOrder = entry.type === 'order' && entry.payment_status === 'pending';
-                    const isOverdue = entry.type === 'order' && entry.days_overdue && entry.days_overdue > 0;
+                    // Condition to enable the WhatsApp button for pending orders
+                    const isPendingOrder = entry.type === 'order' && 
+                                           (entry.payment_status === 'pending' || entry.payment_status === 'pending_approval');
+
+                    // Condition to enable the general balance reminder button
                     const isBalancePositive = entry.balance > 0;
 
                     return (
-                      <TableRow key={index} className={isOverdue ? "bg-red-50/50 hover:bg-red-100/50" : "hover:bg-accent/50"}>
+                      <TableRow key={index} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">{entry.date}</TableCell>
                         <TableCell className="text-foreground">{entry.description}</TableCell>
                         <TableCell className="text-foreground text-right">{entry.debit.toFixed(2)}</TableCell>
                         <TableCell className="text-foreground text-right">{entry.credit.toFixed(2)}</TableCell>
                         <TableCell className="text-foreground text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
-                        <TableCell className="text-center">
-                          {isOverdue ? (
-                            <div className="flex items-center justify-center gap-1 text-red-600 font-semibold">
-                              <AlertCircle className="h-4 w-4" /> {entry.days_overdue}
-                            </div>
-                          ) : entry.type === 'order' && entry.days_overdue !== null ? (
-                            entry.days_overdue
-                          ) : (
-                            'N/A'
-                          )}
-                        </TableCell>
                         <TableCell className="text-center">
                           <div className="flex justify-center gap-2">
                             {/* 1. Specific Pending Order Reminder */}

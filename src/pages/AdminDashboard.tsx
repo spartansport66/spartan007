@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, PlusCircle } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
@@ -38,7 +38,6 @@ import { updateAllDealerCreditDays } from '@/utils/supabase-actions';
 import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
 import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
 import AdminTotalPendingOrdersCard from '@/components/AdminTotalPendingOrdersCard';
-import RecordDealerPaymentDialog from '@/components/RecordDealerPaymentDialog'; // NEW IMPORT
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -62,7 +61,6 @@ const AdminDashboard = () => {
   const [isLoginLogReportOpen, setIsLoginLogReportOpen] = useState(false);
   const [isSalesPersonAccountStatementReportOpen, setIsSalesPersonAccountStatementReportOpen] = useState(false);
   const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false);
-  const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false); // NEW STATE
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastActiveTime, setLastActiveTime] = useState<string | null>(null);
@@ -217,10 +215,6 @@ const AdminDashboard = () => {
     setPaymentsReportDialogKey(prev => prev + 1);
     setIsPaymentsReportOpen(true);
   };
-  
-  const handleRecordPayment = () => {
-    setIsRecordPaymentDialogOpen(true);
-  };
 
   if (sessionLoading || loadingData) {
     return (
@@ -244,12 +238,7 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
       <div className="flex justify-between items-center mb-6">
-        <div className="text-left flex items-center gap-4">
-          {companyName && (<h2 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">{companyName}</h2>)}
-          <Button onClick={handleRecordPayment} className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2">
-            <PlusCircle className="h-4 w-4" /> Record Payment
-          </Button>
-        </div>
+        <div className="text-left">{companyName && (<h2 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">{companyName}</h2>)}<p className="text-xs text-muted-foreground mt-1">Last Active: {lastActiveTime ? new Date(lastActiveTime).toLocaleString() : 'N/A'}</p></div>
         <h1 className="text-center text-3xl sm:text-4xl font-bold text-primary">Admin Dashboard</h1>
         <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400"><Menu className="h-5 w-5" /></Button></SheetTrigger><SheetContent side="right" className="w-[250px] sm:w-[300px]"><SheetHeader><SheetTitle>Admin Navigation</SheetTitle></SheetHeader><AdminSidebar handleLogout={handleLogout} setIsOrdersAwaitingDispatchReportOpen={setIsOrdersAwaitingDispatchReportOpen} setIsDispatchedOrdersReportOpen={setIsDispatchedOrdersReportOpen} setIsDealerReportOpen={setIsDealerReportOpen} setIsPaymentsReportOpen={setIsPaymentsReportOpen} setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen} setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen} setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen} setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen} setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen} setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen} setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen} setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen} setIsLoginLogReportOpen={setIsLoginLogReportOpen} setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen} setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen} /></SheetContent></Sheet>
       </div>
@@ -275,7 +264,6 @@ const AdminDashboard = () => {
       <SalesPersonTodayFollowupsReportDialog isOpen={isSalesPersonTodayFollowupsReportOpen} onOpenChange={setIsSalesPersonTodayFollowupsReportOpen} />
       <LoginLogReportDialog isOpen={isLoginLogReportOpen} onOpenChange={setIsLoginLogReportOpen} />
       <SalesPersonAccountStatementReportDialog isOpen={isSalesPersonAccountStatementReportOpen} onOpenChange={setIsSalesPersonAccountStatementReportOpen} />
-      <RecordDealerPaymentDialog isOpen={isRecordPaymentDialogOpen} onOpenChange={setIsRecordPaymentDialogOpen} onPaymentRecorded={handlePaymentAction} /> {/* NEW DIALOG */}
     </div>
   );
 };
