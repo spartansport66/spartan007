@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from 'react-router-dom';
-import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale, MapPin, Clock, ListChecks, ShoppingCart } from 'lucide-react';
+import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale, MapPin, Clock, ListChecks, ShoppingCart, ReceiptText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AdminSidebarProps {
@@ -25,6 +25,7 @@ interface AdminSidebarProps {
   setIsLoginLogReportOpen: (isOpen: boolean) => void;
   setIsSalesPersonAccountStatementReportOpen: (isOpen: boolean) => void;
   setIsOrderSummaryReportOpen: (isOpen: boolean) => void;
+  setIsDealerTransactionReportOpen: (isOpen: boolean) => void; // NEW PROP
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -44,6 +45,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsLoginLogReportOpen,
   setIsSalesPersonAccountStatementReportOpen,
   setIsOrderSummaryReportOpen,
+  setIsDealerTransactionReportOpen, // NEW PROP
 }) => {
   const navigate = useNavigate();
 
@@ -174,6 +176,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDealerClosingBalanceReportOpen(true)}>
               Closing Balance Report
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsDealerTransactionReportOpen(true)} className="font-semibold">
+              <ReceiptText className="h-4 w-4 mr-2" /> Dealer Transactions
             </DropdownMenuItem>
           </SheetClose>
           <DropdownMenuSeparator />
