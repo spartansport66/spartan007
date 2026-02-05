@@ -58,7 +58,7 @@ interface MultiItemOrderFormProps {
 }
 
 const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }) => {
-  const { user, sessionLoading } = useSession();
+  const { user, session, sessionLoading } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedDealer, setSelectedDealer] = useState<string>('');
@@ -114,16 +114,13 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      if (!user) {
+      if (!user || !session) {
         setDealers([]);
         setProducts([]);
         setLoading(false);
         return;
       }
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) throw new Error("Not authenticated");
-
         const response = await fetch(GET_SALES_PERSON_DATA_URL, {
           method: 'POST',
           headers: {
@@ -156,7 +153,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     } else if (sessionLoading) {
       setLoading(true);
     }
-  }, [user, sessionLoading]);
+  }, [user, session, sessionLoading]);
 
   useEffect(() => {
     const checkPendingPayments = async () => {
