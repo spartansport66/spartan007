@@ -36,7 +36,6 @@ const DealerLedgerReport = () => {
   const [loadingLedger, setLoadingLedger] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // State for the searchable combobox
   const [comboboxOpen, setComboboxOpen] = useState(false);
 
   const reportRef = useRef<HTMLDivElement>(null);
@@ -82,7 +81,6 @@ const DealerLedgerReport = () => {
       setError('Could not load the ledger for the selected dealer.');
       setLedgerEntries([]);
     } else {
-      // Calculate running balance
       let currentBalance = 0;
       const formattedData = (data || []).map((entry: LedgerEntry) => {
         const debit = entry.debit || 0;
