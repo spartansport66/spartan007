@@ -90,23 +90,22 @@ interface FetchedOrderData {
   dispatch_date: string | null; // New
   dispatch_number: number | null; // New
   dispatched: boolean; // New
-}
-
-interface FetchedPaymentDetail {
-  amount: number;
-  payment_method: string;
-  cheque_dd_no: string | null;
-  cheque_dd_date: string | null;
-  card_number: string | null;
-  card_holder_name: string | null;
-  expiry_date: string | null;
-  cvv: string | null;
-  bank_name: string | null;
-  account_number: string | null;
-  ifsc_code: string | null;
-  upi_id: string | null;
-  transaction_id: string | null;
-  payment_date: string | null;
+  payments: {
+    amount: number;
+    payment_method: string;
+    cheque_dd_no: string | null;
+    cheque_dd_date: string | null;
+    card_number: string | null;
+    card_holder_name: string | null;
+    expiry_date: string | null;
+    cvv: string | null;
+    bank_name: string | null;
+    account_number: string | null;
+    ifsc_code: string | null;
+    upi_id: string | null;
+    transaction_id: string | null;
+    payment_date: string | null;
+  }[] | null; // New
 }
 
 // Format date as dd/mm/yyyy
@@ -150,8 +149,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   const fetchOrderDetails = useCallback(async (id: string) => {
     setLoading(true);
     try {
-      // 1. Fetch Order Details (CLEAN QUERY - NO NESTED PAYMENTS)
-      const { data: orderRaw, error: orderError } = await supabase
+      // Fetch order details, dealer info, and user_id for sales person
+      const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .select(`
           id,
@@ -175,56 +174,42 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             city,
             state,
             country
+          ),
+          payments (
+            amount,
+            payment_method,
+            cheque_dd_no,
+            cheque_dd_date,
+            card_number,
+            card_holder_name,
+            expiry_date,
+            cvv,
+            bank_name,
+            account_number,
+            ifsc_code,
+            upi_id,
+            transaction_id,
+            payment_date
           )
         `)
         .eq('id', id)
-        .single() as { data: FetchedOrderData | null; error: any };
+        .single() as { data: FetchedOrderData | null; error: any }; // Explicitly type data
 
       if (orderError) throw orderError;
 
-      if (!orderRaw) {
+      if (!orderData) {
         showError('Order not found.');
         setOrderDetails(null);
         return;
       }
 
-      // 2. Fetch Payments associated with this order (SEPARATE QUERY)
-      const { data: paymentsData, error: paymentsError } = await supabase
-        .from('payments')
-        .select(`
-          amount,
-          payment_method,
-          cheque_dd_no,
-          cheque_dd_date,
-          card_number,
-          card_holder_name,
-          expiry_date,
-          cvv,
-          bank_name,
-          account_number,
-          ifsc_code,
-          upi_id,
-          transaction_id,
-          payment_date
-        `)
-        .eq('order_id', id) // Explicitly filter by order_id
-        .limit(1); // Assuming only one payment record per order
-
-      if (paymentsError) {
-        console.error('Error fetching payments:', paymentsError.message);
-        // Do not throw, just log and proceed with null payment info
-      }
-      
-      const paymentInfo: FetchedPaymentDetail | null = paymentsData && paymentsData.length > 0 ? paymentsData[0] : null;
-
-
-      // 3. Fetch sales person name
+      // Fetch sales person name
       let salesPersonName = 'N/A';
-      if (orderRaw.user_id) {
+      if (orderData.user_id) {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('first_name, last_name')
-          .eq('id', orderRaw.user_id)
+          .eq('id', orderData.user_id)
           .single();
 
         if (profileError) {
@@ -234,7 +219,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         }
       }
 
-      // 4. Fetch order items, including new product details
+      // Fetch order items, including new product details
       const { data: salesItems, error: salesError } = await supabase
         .from('sales')
         .select(`
@@ -257,27 +242,29 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         product_gst: item.products?.gst || 'N/A', // New
       }));
 
+      const paymentInfo = orderData.payments && orderData.payments.length > 0 ? orderData.payments[0] : null;
+
       setOrderDetails({
-        id: orderRaw.id,
-        order_number: orderRaw.order_number,
-        order_date: orderRaw.order_date,
-        total_amount: orderRaw.total_amount,
-        discount_amount: orderRaw.discount_amount || 0, // NEW: Discount amount
-        status: orderRaw.status,
-        dealer_name: orderRaw.dealers?.name || 'N/A',
-        dealer_address: orderRaw.dealers?.address || 'N/A',
-        dealer_city: orderRaw.dealers?.city || 'N/A', // Added
-        dealer_state: orderRaw.dealers?.state || 'N/A', // Added
-        dealer_country: orderRaw.dealers?.country || 'N/A', // Added
-        dealer_phone: orderRaw.dealers?.phone || 'N/A',
+        id: orderData.id,
+        order_number: orderData.order_number,
+        order_date: orderData.order_date,
+        total_amount: orderData.total_amount,
+        discount_amount: orderData.discount_amount || 0, // NEW: Discount amount
+        status: orderData.status,
+        dealer_name: orderData.dealers?.name || 'N/A',
+        dealer_address: orderData.dealers?.address || 'N/A',
+        dealer_city: orderData.dealers?.city || 'N/A', // Added
+        dealer_state: orderData.dealers?.state || 'N/A', // Added
+        dealer_country: orderData.dealers?.country || 'N/A', // Added
+        dealer_phone: orderData.dealers?.phone || 'N/A',
         sales_person_name: salesPersonName,
         items: items,
-        bill_no: orderRaw.bill_no, // New
-        dispatch_date: orderRaw.dispatch_date, // New
-        dispatch_number: orderRaw.dispatch_number, // New
-        dispatched: orderRaw.dispatched, // New
-        payment_status: orderRaw.payment_status, // New
-        payment_due_date: orderRaw.payment_due_date, // New
+        bill_no: orderData.bill_no, // New
+        dispatch_date: orderData.dispatch_date, // New
+        dispatch_number: orderData.dispatch_number, // New
+        dispatched: orderData.dispatched, // New
+        payment_status: orderData.payment_status, // New
+        payment_due_date: orderData.payment_due_date, // New
         payment_method: paymentInfo?.payment_method || null, // New
         payment_amount: paymentInfo?.amount || null, // New
         cheque_dd_no: paymentInfo?.cheque_dd_no || null, // New

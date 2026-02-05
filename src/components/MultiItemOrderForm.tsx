@@ -241,22 +241,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
   const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
 
-  const updateOrderItemQuantity = (id: string, newQuantity: number) => {
-    setOrderItems(prevItems => prevItems.map(item => {
-      if (item.id === id) {
-        const product = products.find(p => p.id === item.product_id);
-        const unit_dp = product?.dp || 0;
-        const quantity = Math.max(1, newQuantity); // Ensure quantity is at least 1
-        return {
-          ...item,
-          quantity: quantity,
-          total_price: quantity * unit_dp,
-        };
-      }
-      return item;
-    }));
-  };
-
   const addOrderItem = () => {
     if (!newItemProductId || newItemQuantity <= 0) {
       showError("Please select a product and enter a valid quantity.");
@@ -523,20 +507,12 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             {orderItems.length > 0 && (
               <div className="max-h-[250px] overflow-y-auto border rounded-md">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Product</TableHead><TableHead className="w-[100px]">Qty</TableHead><TableHead>Unit DP</TableHead><TableHead className="text-right">Total</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Qty</TableHead><TableHead>Unit DP</TableHead><TableHead className="text-right">Total</TableHead><TableHead></TableHead></TableRow></TableHeader>
                   <TableBody>
                     {orderItems.map(item => (
                       <TableRow key={item.id}>
                         <TableCell>{item.product_name} ({item.product_code})</TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateOrderItemQuantity(item.id, parseInt(e.target.value) || 1)}
-                            min="1"
-                            className="w-full text-center p-1 h-8"
-                          />
-                        </TableCell>
+                        <TableCell>{item.quantity}</TableCell>
                         <TableCell>₹{item.unit_dp.toFixed(2)}</TableCell>
                         <TableCell className="text-right">₹{item.total_price.toFixed(2)}</TableCell>
                         <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
