@@ -61,8 +61,8 @@ const formSchema = z.object({
   hsn: z.string().optional(),
   gst: z.string().optional(), // Changed to string
   dp: z.preprocess(
-    (val) => Number(val),
-    z.number().int({ message: 'Dealer Price must be a whole number.' }) // Changed to integer
+    (val) => Number(val), // Convert input to number
+    z.number()
       .min(0, { message: 'Dealer Price cannot be negative.' })
   ),
   stock: z.preprocess(
@@ -319,7 +319,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                       <TableCell className="text-muted-foreground">{product.size || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{product.hsn || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{product.gst || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">₹{product.dp}</TableCell>
+                      <TableCell className="text-muted-foreground">₹{product.dp.toFixed(2)}</TableCell>
                       <TableCell className="text-muted-foreground">{product.stock}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
@@ -418,7 +418,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <Label htmlFor="dp" className="text-right">
                   Dealer Price (DP)
                 </Label>
-                <Input id="dp" type="number" {...form.register('dp')} className="col-span-3" />
+                <Input id="dp" type="number" step="0.01" {...form.register('dp')} className="col-span-3" />
                 {form.formState.errors.dp && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.dp.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
