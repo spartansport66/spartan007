@@ -169,7 +169,7 @@ const DealerLedgerReport = () => {
           {selectedDealerId && (
             <div className="text-center my-4 hidden print:block">
               <h1 className="text-2xl font-bold">Ledger for {selectedDealerName}</h1>
-              <p>Date: {new Date().toLocaleDateDateString()}</p>
+              <p>Date: {new Date().toLocaleDateString()}</p>
             </div>
           )}
           
