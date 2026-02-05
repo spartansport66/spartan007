@@ -12,13 +12,11 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // This is needed if you're planning to invoke your function from a browser.
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // 1. Create Supabase client with Auth context of the user that called the function.
     const supabaseClient = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -27,12 +25,10 @@ serve(async (req) => {
       { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     );
 
-    // 2. Get the user from the session.
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError) throw userError;
     if (!user) throw new Error("User not authenticated.");
 
-    // 3. Create a Supabase client with the service role key to bypass RLS.
     const supabaseAdmin = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -40,7 +36,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 4. Fetch assigned dealers for the authenticated user.
     const { data: assignedDealersData, error: assignedDealersError } = await supabaseAdmin
       .from('dealer_sales_persons')
       .select(`dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))`)
@@ -53,20 +48,17 @@ serve(async (req) => {
     }));
     formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
 
-    // 5. Fetch all products.
     const { data: productsData, error: productsError } = await supabaseAdmin
       .from('products')
       .select('id, code, name, dp, stock');
     if (productsError) throw productsError;
 
-    // 6. Return the data.
     return new Response(JSON.stringify({ dealers: formattedDealers, products: productsData || [] }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    console.error('Edge Function error:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

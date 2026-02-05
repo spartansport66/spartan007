@@ -36,7 +36,7 @@ serve(async (req) => {
       code: product.code,
       size: product.size || null,
       hsn: product.hsn || null,
-      gst: product.gst || null, // Handled as text
+      gst: product.gst || null,
       dp: parseInt(product.dp),
     }));
 
@@ -46,7 +46,6 @@ serve(async (req) => {
       .select();
 
     if (error) {
-      console.error('Error during bulk product insert:', error.message);
       return new Response(JSON.stringify({ error: error.message }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -59,7 +58,6 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Edge Function error:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -17,12 +17,10 @@ serve(async (req) => {
   }
 
   try {
-    const { dealerIds, message, comboOfferId, sentByUserId, messageType } = await req.json(); // Added messageType
-
-    console.log("[send-whatsapp-message] Received request:", { dealerIds, message, comboOfferId, sentByUserId, messageType });
+    const { dealerIds, message, comboOfferId, sentByUserId, messageType } = await req.json();
 
     if (!dealerIds || !Array.isArray(dealerIds) || dealerIds.length === 0 || !message || !sentByUserId) {
-      return new Response(JSON.stringify({ error: 'Missing or invalid dealer IDs, message, or sender user ID.' }), {
+      return new Response(JSON.stringify({ error: 'Missing or invalid parameters.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -39,59 +37,26 @@ serve(async (req) => {
       .from('dealers')
       .select('id, name, phone')
       .in('id', dealerIds);
+    if (dealersError) throw new Error(`Failed to fetch dealer phone numbers: ${dealersError.message}`);
 
-    if (dealersError) {
-      throw new Error(`Failed to fetch dealer phone numbers: ${dealersError.message}`);
-    }
+    const logsToInsert = dealers.map(dealer => ({
+      combo_offer_id: comboOfferId || null,
+      dealer_id: dealer.id,
+      message_content: message,
+      sent_by: sentByUserId,
+      message_type: messageType || 'unknown',
+    }));
 
-    const messagesSent: { dealerId: string; dealerName: string; phone: string; status: string; error?: string }[] = [];
-    const logsToInsert: { combo_offer_id: string | null; dealer_id: string; message_content: string; sent_by: string; message_type: string }[] = []; // Added message_type
-
-    for (const dealer of dealers) {
-      if (dealer.phone) {
-        messagesSent.push({
-          dealerId: dealer.id,
-          dealerName: dealer.name,
-          phone: dealer.phone,
-          status: 'success',
-        });
-        logsToInsert.push({
-          combo_offer_id: comboOfferId || null, // Allow null for balance due messages
-          dealer_id: dealer.id,
-          message_content: message,
-          sent_by: sentByUserId,
-          message_type: messageType || 'unknown', // Log the message type
-        });
-      } else {
-        messagesSent.push({
-          dealerId: dealer.id,
-          dealerName: dealer.name,
-          phone: 'N/A',
-          status: 'failed',
-          error: 'Phone number not available for this dealer.',
-        });
-      }
-    }
-
-    // Insert logs into the database
     if (logsToInsert.length > 0) {
-      const { error: logError } = await supabaseAdmin
-        .from('whatsapp_sent_logs')
-        .insert(logsToInsert);
-
-      if (logError) {
-        console.error('[send-whatsapp-message] Error inserting WhatsApp sent logs:', logError.message);
-        // Continue to return message results even if logging fails
-      }
+      const { error: logError } = await supabaseAdmin.from('whatsapp_sent_logs').insert(logsToInsert);
+      if (logError) console.error('Error inserting WhatsApp sent logs:', logError.message);
     }
 
-    return new Response(JSON.stringify({ message: 'WhatsApp messages prepared.', results: messagesSent }), {
+    return new Response(JSON.stringify({ message: 'WhatsApp messages prepared.' }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-
   } catch (error) {
-    console.error('[send-whatsapp-message] Edge Function error:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
