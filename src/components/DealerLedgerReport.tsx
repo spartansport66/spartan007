@@ -6,7 +6,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
-import { Loader2, Search, Printer, ChevronsUpDown, Check } from 'lucide-react';
+import { Loader2, Printer, ChevronsUpDown, Check } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -169,7 +169,7 @@ const DealerLedgerReport = () => {
           {selectedDealerId && (
             <div className="text-center my-4 hidden print:block">
               <h1 className="text-2xl font-bold">Ledger for {selectedDealerName}</h1>
-              <p>Date: {new Date().toLocaleDateString()}</p>
+              <p>Date: {new Date().toLocaleDateDateString()}</p>
             </div>
           )}
           
