@@ -25,28 +25,24 @@ const Index = () => {
       if (session) {
         // Only redirect if userType has been determined (is not null)
         if (userType !== null) { 
+          let redirectPath = '/dashboard'; // Default fallback for sales_person or unknown role
+
           if (mustResetPassword && userType === 'sales_person') {
-            console.log('Redirecting sales person to force password reset.');
-            navigate('/force-password-reset');
+            redirectPath = '/force-password-reset';
           } else if (userType === 'gate_keeper') {
-            console.log('Redirecting to gate pass dashboard');
-            navigate('/gate-pass-dashboard');
+            redirectPath = '/gate-pass-dashboard';
           } else if (userType === 'inventory_manager') {
-            console.log('Redirecting to product dashboard');
-            navigate('/product-dashboard');
+            redirectPath = '/product-dashboard';
           } else if (userType === 'manager') {
-            console.log('Redirecting to manager dashboard');
-            navigate('/manager-dashboard'); // Keep Manager Dashboard as primary
+            redirectPath = '/manager-dashboard';
           } else if (userType === 'super_admin') {
-            console.log('Redirecting to super admin dashboard');
-            navigate('/super-admin-dashboard');
+            redirectPath = '/super-admin-dashboard';
           } else if (isAdmin) {
-            console.log('Redirecting to admin dashboard');
-            navigate('/admin-dashboard');
-          } else {
-            console.log('Redirecting to user dashboard');
-            navigate('/dashboard');
+            redirectPath = '/admin-dashboard';
           }
+          
+          console.log(`Redirecting to ${redirectPath}`);
+          navigate(redirectPath);
         }
       } else {
         console.log('Redirecting to login');
