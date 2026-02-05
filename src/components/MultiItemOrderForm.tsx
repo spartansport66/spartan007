@@ -18,6 +18,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
+const GET_SALES_PERSON_DATA_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/get-sales-person-data";
+
 interface Product {
   id: string;
   code: string;
@@ -56,7 +58,7 @@ interface MultiItemOrderFormProps {
 }
 
 const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }) => {
-  const { user, loading: sessionLoading } = useSession();
+  const { user, sessionLoading } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedDealer, setSelectedDealer] = useState<string>('');
@@ -119,23 +121,26 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         return;
       }
       try {
-        const { data: assignedDealersData, error: assignedDealersError } = await supabase
-          .from('dealer_sales_persons')
-          .select(`dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))`)
-          .eq('sales_person_id', user.id);
-        if (assignedDealersError) throw assignedDealersError;
-        let formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => ({
-          ...item.dealers,
-          opening_balance: item.dealers.dealer_balances?.opening_balance || 0
-        }));
-        formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
-        setDealers(formattedDealers);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("Not authenticated");
 
-        const { data: productsData, error: productsError } = await supabase
-          .from('products')
-          .select('id, code, name, dp, stock');
-        if (productsError) throw productsError;
-        setProducts(productsData || []);
+        const response = await fetch(GET_SALES_PERSON_DATA_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch data from Edge Function.');
+        }
+
+        const { dealers, products } = await response.json();
+        
+        setDealers(dealers || []);
+        setProducts(products || []);
       } catch (error: any) {
         showError(`Failed to load data: ${error.message}`);
       } finally {

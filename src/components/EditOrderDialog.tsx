@@ -14,6 +14,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
+const GET_ALL_PRODUCTS_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/get-all-products";
+
 interface Product {
   id: string;
   code: string;
@@ -91,14 +93,25 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       setOrderItems(fetchedItems);
       setDiscountAmount(orderRaw.discount_amount || 0);
 
-      // 2. Fetch all products
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
-        .select('id, code, name, dp, stock')
-        .order('name', { ascending: true });
+      // 2. Fetch all products using Edge Function
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
 
-      if (productsError) throw productsError;
-      setProducts(productsData || []);
+      const productsResponse = await fetch(GET_ALL_PRODUCTS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!productsResponse.ok) {
+        const errorData = await productsResponse.json();
+        throw new Error(errorData.error || 'Failed to fetch products from Edge Function.');
+      }
+
+      const { products } = await productsResponse.json();
+      setProducts(products || []);
 
     } catch (error: any) {
       console.error('Error fetching order details for edit:', error.message);
