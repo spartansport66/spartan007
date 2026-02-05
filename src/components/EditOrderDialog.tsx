@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
@@ -154,20 +153,15 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         let updatedItem = { ...item };
         
         if (field === 'quantity') {
-          // Ensure quantity is stored as a number (integer)
           updatedItem.quantity = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : value);
         } else if (field === 'product_id') {
-          // Ensure product_id is stored as a string (UUID)
           updatedItem.product_id = String(value);
         } else {
-          // For other fields (like total_price, which is calculated), assign directly
           updatedItem = { ...item, [field]: value };
         }
 
-        // Recalculate total_price if quantity or product_id changed
         if (field === 'quantity' || field === 'product_id') {
           const product = products.find(p => p.id === updatedItem.product_id);
-          // Use the now guaranteed number type for quantity
           updatedItem.total_price = product ? updatedItem.quantity * product.dp : 0;
         }
         return updatedItem;
@@ -207,25 +201,19 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     setIsSubmitting(true);
 
     try {
-      // 1. Calculate final amounts
       const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
       const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
 
-      // 2. Update the main order record
       const { error: orderUpdateError } = await supabase
         .from('orders')
         .update({
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
-          // Removed updated_at: new Date().toISOString(), to avoid schema cache error
         })
         .eq('id', orderData.id);
 
       if (orderUpdateError) throw new Error(`Failed to update order: ${orderUpdateError.message}`);
 
-      // 3. Manage sales items (delete existing, insert new)
-      
-      // A. Delete existing sales items for this order
       const { error: deleteSalesError } = await supabase
         .from('sales')
         .delete()
@@ -233,7 +221,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         
       if (deleteSalesError) throw new Error(`Failed to delete old sales items: ${deleteSalesError.message}`);
 
-      // B. Prepare new sales items
       const salesToInsert = [];
       
       for (const item of orderItems) {
@@ -241,11 +228,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           order_id: orderData.id,
           product_id: item.product_id,
           quantity: item.quantity,
-          total_price: item.total_price, // Use the calculated total price
+          total_price: item.total_price,
         });
       }
 
-      // C. Insert new sales items
       const { error: salesInsertError } = await supabase
         .from('sales')
         .insert(salesToInsert);
@@ -300,7 +286,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         </DialogHeader>
         
         <div className="space-y-6 py-4">
-          {/* Order Items Section */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <Label className="text-lg font-semibold">Order Items</Label>
@@ -432,7 +417,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
             })}
           </div>
 
-          {/* Summary and Discount */}
           <div className="p-4 bg-muted rounded-md space-y-2">
             <div className="flex justify-between text-base font-medium">
               <span>Subtotal (Pre-Discount):</span>
