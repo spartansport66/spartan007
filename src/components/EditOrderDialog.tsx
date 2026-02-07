@@ -15,7 +15,7 @@ interface Product {
   id: string;
   name: string;
   stock: number;
-  price: number;
+  dp: number;
 }
 
 interface OrderItem {
@@ -23,8 +23,8 @@ interface OrderItem {
   product_id: string;
   product_name: string;
   quantity: number;
-  price: number;
-  amount: number;
+  price: number; // This is unit price (DP)
+  amount: number; // This is total price (quantity * price)
 }
 
 interface OrderData {
@@ -85,12 +85,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       };
       setOrderData(fetchedOrderData);
 
-      // Fetch the associated order items
+      // Fetch the associated sales items
       const { data: itemsResult, error: itemsError } = await supabase
-        .from('order_items')
+        .from('sales')
         .select(`
-          id, quantity, price,
-          products (id, name)
+          id, quantity, total_price,
+          products (id, name, dp)
         `)
         .eq('order_id', id);
 
@@ -103,8 +103,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         product_id: item.products.id,
         product_name: item.products.name,
         quantity: item.quantity,
-        price: item.price,
-        amount: item.quantity * item.price,
+        price: item.products.dp, // Unit price is dp from products table
+        amount: item.total_price, // Total price is already calculated in sales table
       }));
       setItems(fetchedItems);
 
@@ -122,7 +122,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('id, name, stock, price')
+        .select('id, name, stock, dp')
         .order('name', { ascending: true });
       if (error) throw error;
       setProducts(data || []);
@@ -176,8 +176,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       product_id: product.id,
       product_name: product.name,
       quantity: quantity,
-      price: product.price,
-      amount: quantity * product.price,
+      price: product.dp,
+      amount: quantity * product.dp,
     };
     const newItems = [...items, newItem];
     setItems(newItems);
@@ -206,8 +206,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     }
     setSaving(true);
     try {
-      // This is a complex transaction. We should use a server-side function for this.
-      // For now, we'll update the tables directly, but this is not ideal for production.
       const { error: updateError } = await supabase.rpc('update_order_and_items', {
         p_order_id: orderId,
         p_order_data: {
@@ -217,10 +215,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           dispatch_number: orderData.dispatch_number,
           bill_no: orderData.bill_no,
         },
-        p_order_items: items.map(({ product_id, quantity, price }) => ({
+        p_order_items: items.map(({ product_id, quantity, amount }) => ({
           product_id,
           quantity,
-          price,
+          total_price: amount,
         })),
       });
 
