@@ -1,14 +1,20 @@
 CREATE OR REPLACE FUNCTION update_order_and_items(
-    p_order_data jsonb,
-    p_order_id uuid,
-    p_order_items jsonb
+    p_payload jsonb
 )
 RETURNS void AS $$
 DECLARE
+    p_order_id uuid;
+    p_order_data jsonb;
+    p_order_items jsonb;
     item jsonb;
     original_item record;
     stock_change int;
 BEGIN
+    -- Extract data from the payload
+    p_order_id := (p_payload->>'p_order_id')::uuid;
+    p_order_data := p_payload->'p_order_data';
+    p_order_items := p_payload->'p_order_items';
+
     -- Step 1: Revert stock for all original items
     FOR original_item IN
         SELECT product_id, quantity FROM public.sales WHERE order_id = p_order_id

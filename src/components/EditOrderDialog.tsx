@@ -206,7 +206,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     }
     setSaving(true);
     try {
-      const { error: updateError } = await supabase.rpc('update_order_and_items', {
+      const payload = {
         p_order_id: orderId,
         p_order_data: {
           order_date: orderData.order_date,
@@ -220,6 +220,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           quantity,
           total_price: amount,
         })),
+      };
+
+      const { error: updateError } = await supabase.rpc('update_order_and_items', {
+        p_payload: payload
       });
 
       if (updateError) {
