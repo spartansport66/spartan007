@@ -59,3 +59,6 @@ BEGIN
 
 END;
 $$ LANGUAGE plpgsql;
+
+-- Grant permission to the authenticated role to execute this function
+GRANT EXECUTE ON FUNCTION public.update_order_and_items(jsonb) TO authenticated;
