@@ -1,4 +1,8 @@
-CREATE OR REPLACE FUNCTION update_order_and_items(
+-- Drop the old function if it exists to ensure a clean slate
+DROP FUNCTION IF EXISTS public.update_order_and_items(jsonb);
+
+-- Create the newly named function
+CREATE OR REPLACE FUNCTION update_order_details(
     p_payload jsonb
 )
 RETURNS void AS $$
@@ -60,5 +64,5 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Grant permission to the authenticated role to execute this function
-GRANT EXECUTE ON FUNCTION public.update_order_and_items(jsonb) TO authenticated;
+-- Grant permission to the authenticated role to execute the new function
+GRANT EXECUTE ON FUNCTION public.update_order_details(jsonb) TO authenticated;

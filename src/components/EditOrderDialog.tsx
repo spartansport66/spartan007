@@ -222,7 +222,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         })),
       };
 
-      const { error: updateError } = await supabase.rpc('update_order_and_items', {
+      const { error: updateError } = await supabase.rpc('update_order_details', {
         p_payload: payload
       });
 
