@@ -1,43 +1,42 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
-import { Separator } from '@/components/ui/separator';
-
-const GET_ALL_PRODUCTS_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/get-all-products";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Product {
   id: string;
-  code: string;
   name: string;
-  dp: number;
   stock: number;
+  price: number;
 }
 
 interface OrderItem {
-  id: string; // Unique ID for React list key
+  id?: string;
   product_id: string;
+  product_name: string;
   quantity: number;
-  total_price: number; // Price at time of order (quantity * DP)
+  price: number;
+  amount: number;
 }
 
-interface OrderToEdit {
-  id: string;
+interface OrderData {
   order_number: number;
+  order_date: string;
+  dealer_id: string;
   dealer_name: string;
   total_amount: number;
-  discount_amount: number;
-  items: OrderItem[];
+  dispatched: boolean;
+  dispatch_date: string | null;
+  dispatch_number: number | null;
+  bill_no: string | null;
 }
 
 interface EditOrderDialogProps {
@@ -49,439 +48,345 @@ interface EditOrderDialogProps {
 
 const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated }) => {
   const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [orderData, setOrderData] = useState<OrderData | null>(null);
+  const [items, setItems] = useState<OrderItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [discountAmount, setDiscountAmount] = useState<number>(0);
-  const [orderData, setOrderData] = useState<OrderToEdit | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<string>('');
+  const [newItemQuantity, setNewItemQuantity] = useState<string>('1');
 
-  // Searchable product dropdown states
-  const [popoverOpenStates, setPopoverOpenStates] = useState<Record<string, boolean>>({});
-  const [searchValue, setSearchValue] = useState("");
-
-  const fetchOrderAndProducts = useCallback(async (id: string) => {
+  const fetchOrderDetails = useCallback(async (id: string) => {
     setLoading(true);
     try {
-      // 1. Fetch Order Details
-      const { data: orderRaw, error: orderError } = await supabase
+      // Fetch the main order data
+      const { data: orderResult, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, total_amount, discount_amount,
-          dealers (name),
-          sales (product_id, quantity, total_price, products (dp))
+          order_number, order_date, total_amount, dispatched, dispatch_date, dispatch_number, bill_no,
+          dealers (id, name)
         `)
         .eq('id', id)
         .single();
 
-      if (orderError) throw orderError;
-
-      const fetchedItems: OrderItem[] = (orderRaw.sales || []).map((sale: any, index: number) => ({
-        id: `${sale.product_id}-${index}`, // Use a unique ID for the list
-        product_id: sale.product_id,
-        quantity: sale.quantity,
-        total_price: sale.total_price,
-      }));
-
-      setOrderData({
-        id: orderRaw.id,
-        order_number: orderRaw.order_number,
-        dealer_name: orderRaw.dealers?.name || 'N/A',
-        total_amount: orderRaw.total_amount,
-        discount_amount: orderRaw.discount_amount || 0,
-        items: fetchedItems,
-      });
-      setOrderItems(fetchedItems);
-      setDiscountAmount(orderRaw.discount_amount || 0);
-
-      // 2. Fetch all products using Edge Function
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
-
-      const productsResponse = await fetch(GET_ALL_PRODUCTS_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (!productsResponse.ok) {
-        const errorData = await productsResponse.json();
-        throw new Error(errorData.error || 'Failed to fetch products from Edge Function.');
+      if (orderError || !orderResult) {
+        throw new Error(orderError?.message || 'Order not found.');
       }
 
-      const { products } = await productsResponse.json();
-      setProducts(products || []);
+      const fetchedOrderData: OrderData = {
+        order_number: orderResult.order_number,
+        order_date: new Date(orderResult.order_date).toISOString().split('T')[0],
+        dealer_id: orderResult.dealers.id,
+        dealer_name: orderResult.dealers.name,
+        total_amount: orderResult.total_amount,
+        dispatched: orderResult.dispatched,
+        dispatch_date: orderResult.dispatch_date ? new Date(orderResult.dispatch_date).toISOString().split('T')[0] : null,
+        dispatch_number: orderResult.dispatch_number,
+        bill_no: orderResult.bill_no,
+      };
+      setOrderData(fetchedOrderData);
+
+      // Fetch the associated order items
+      const { data: itemsResult, error: itemsError } = await supabase
+        .from('order_items')
+        .select(`
+          id, quantity, price,
+          products (id, name)
+        `)
+        .eq('order_id', id);
+
+      if (itemsError) {
+        throw new Error(itemsError.message);
+      }
+
+      const fetchedItems: OrderItem[] = itemsResult.map((item: any) => ({
+        id: item.id,
+        product_id: item.products.id,
+        product_name: item.products.name,
+        quantity: item.quantity,
+        price: item.price,
+        amount: item.quantity * item.price,
+      }));
+      setItems(fetchedItems);
 
     } catch (error: any) {
-      console.error('Error fetching order details for edit:', error.message);
-      showError(`Failed to load order details: ${error.message}`);
+      console.error('Error fetching order details:', error);
+      showError(`Failed to load order data: ${error.message}`);
       setOrderData(null);
+      setItems([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
+  const fetchProducts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, stock, price')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error: any) {
+      showError('Failed to load products for selection.');
+      console.error('Error fetching products:', error.message);
+    }
+  };
+
   useEffect(() => {
     if (isOpen && orderId) {
-      fetchOrderAndProducts(orderId);
-    } else if (!isOpen) {
+      fetchOrderDetails(orderId);
+      fetchProducts();
+    } else {
+      // Reset state when dialog is closed or no orderId is provided
       setOrderData(null);
-      setOrderItems([]);
-      setDiscountAmount(0);
+      setItems([]);
+      setLoading(true);
     }
-  }, [isOpen, orderId, fetchOrderAndProducts]);
+  }, [isOpen, orderId, fetchOrderDetails]);
 
-  const calculateItemTotal = (item: OrderItem) => {
-    const product = products.find(p => p.id === item.product_id);
-    return product ? item.quantity * product.dp : 0;
+  const handleItemChange = (index: number, field: 'quantity' | 'price', value: string) => {
+    const newItems = [...items];
+    const numValue = parseFloat(value) || 0;
+    newItems[index] = {
+      ...newItems[index],
+      [field]: numValue,
+      amount: field === 'quantity' ? numValue * newItems[index].price : newItems[index].quantity * numValue,
+    };
+    setItems(newItems);
+    recalculateTotal(newItems);
   };
 
-  const calculateTotalOrderValue = (items: OrderItem[]) => {
-    return items.reduce((total, item) => total + calculateItemTotal(item), 0);
-  };
-
-  const preDiscountTotalOrderValue = calculateTotalOrderValue(orderItems);
-  const finalOrderValue = Math.max(0, preDiscountTotalOrderValue - discountAmount);
-
-  const addOrderItem = () => {
-    const newId = Date.now().toString();
-    setOrderItems([...orderItems, { id: newId, product_id: '', quantity: 1, total_price: 0 }]);
-    setPopoverOpenStates(prev => ({ ...prev, [newId]: false }));
-  };
-
-  const removeOrderItem = (id: string) => {
-    if (orderItems.length > 1) {
-      setOrderItems(orderItems.filter(item => item.id !== id));
-      setPopoverOpenStates(prev => {
-        const newState = { ...prev };
-        delete newState[id];
-        return newState;
-      });
-    }
-  };
-
-  const updateOrderItem = (id: string, field: keyof OrderItem, value: string | number) => {
-    setOrderItems(prevItems => prevItems.map(item => {
-      if (item.id === id) {
-        let updatedItem = { ...item };
-        
-        if (field === 'quantity') {
-          // Ensure quantity is stored as a number (integer)
-          updatedItem.quantity = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : value);
-        } else if (field === 'product_id') {
-          // Ensure product_id is stored as a string (UUID)
-          updatedItem.product_id = String(value);
-        } else {
-          // For other fields (like total_price, which is calculated), assign directly
-          updatedItem = { ...item, [field]: value };
-        }
-
-        // Recalculate total_price if quantity or product_id changed
-        if (field === 'quantity' || field === 'product_id') {
-          const product = products.find(p => p.id === updatedItem.product_id);
-          // Use the now guaranteed number type for quantity
-          updatedItem.total_price = product ? updatedItem.quantity * product.dp : 0;
-        }
-        return updatedItem;
-      }
-      return item;
-    }));
-  };
-
-  const filteredProducts = useMemo(() => {
-    if (!searchValue) return products;
-    const lowerCaseSearchValue = searchValue.toLowerCase();
-    const searchWords = lowerCaseSearchValue.split(' ').filter(word => word.length > 0);
-
-    return products.filter(product => {
-      const productName = product.name.toLowerCase();
-      const productCode = product.code.toLowerCase();
-      return searchWords.some(word => 
-        productName.includes(word) || productCode.includes(word)
-      );
-    });
-  }, [products, searchValue]);
-
-  const handleSave = async () => {
-    if (!orderData || orderItems.some(item => !item.product_id || item.quantity <= 0)) {
-      showError('Please ensure all order items have a selected product and positive quantity.');
+  const handleAddItem = () => {
+    if (!selectedProduct || !newItemQuantity) {
+      showError("Please select a product and enter a quantity.");
       return;
     }
-    if (discountAmount < 0 || discountAmount > preDiscountTotalOrderValue) {
-      showError('Invalid discount amount.');
+    const product = products.find(p => p.id === selectedProduct);
+    if (!product) {
+      showError("Selected product not found.");
       return;
     }
-    if (orderItems.length === 0) {
-        showError('Order must contain at least one item.');
-        return;
+    if (items.some(item => item.product_id === product.id)) {
+      showError("Product is already in the order. Please update the quantity instead.");
+      return;
     }
 
-    setIsSubmitting(true);
+    const quantity = parseInt(newItemQuantity, 10);
+    const newItem: OrderItem = {
+      product_id: product.id,
+      product_name: product.name,
+      quantity: quantity,
+      price: product.price,
+      amount: quantity * product.price,
+    };
+    const newItems = [...items, newItem];
+    setItems(newItems);
+    recalculateTotal(newItems);
+    setSelectedProduct('');
+    setNewItemQuantity('1');
+  };
 
+  const handleRemoveItem = (index: number) => {
+    const newItems = items.filter((_, i) => i !== index);
+    setItems(newItems);
+    recalculateTotal(newItems);
+  };
+
+  const recalculateTotal = (currentItems: OrderItem[]) => {
+    const total = currentItems.reduce((sum, item) => sum + item.amount, 0);
+    if (orderData) {
+      setOrderData({ ...orderData, total_amount: total });
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    if (!orderId || !orderData) {
+      showError("No order data available to save.");
+      return;
+    }
+    setSaving(true);
     try {
-      // 1. Calculate final amounts
-      const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
-      const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
+      // This is a complex transaction. We should use a server-side function for this.
+      // For now, we'll update the tables directly, but this is not ideal for production.
+      const { error: updateError } = await supabase.rpc('update_order_and_items', {
+        p_order_id: orderId,
+        p_order_data: {
+          order_date: orderData.order_date,
+          total_amount: orderData.total_amount,
+          dispatch_date: orderData.dispatch_date,
+          dispatch_number: orderData.dispatch_number,
+          bill_no: orderData.bill_no,
+        },
+        p_order_items: items.map(({ product_id, quantity, price }) => ({
+          product_id,
+          quantity,
+          price,
+        })),
+      });
 
-      // 2. Update the main order record
-      const { error: orderUpdateError } = await supabase
-        .from('orders')
-        .update({
-          total_amount: finalOrderAmount,
-          discount_amount: finalDiscountAmount,
-          // Removed updated_at: new Date().toISOString(), to avoid schema cache error
-        })
-        .eq('id', orderData.id);
-
-      if (orderUpdateError) throw new Error(`Failed to update order: ${orderUpdateError.message}`);
-
-      // 3. Manage sales items (delete existing, insert new)
-      
-      // A. Delete existing sales items for this order
-      const { error: deleteSalesError } = await supabase
-        .from('sales')
-        .delete()
-        .eq('order_id', orderData.id);
-        
-      if (deleteSalesError) throw new Error(`Failed to delete old sales items: ${deleteSalesError.message}`);
-
-      // B. Prepare new sales items
-      const salesToInsert = [];
-      
-      for (const item of orderItems) {
-        salesToInsert.push({
-          order_id: orderData.id,
-          product_id: item.product_id,
-          quantity: item.quantity,
-          total_price: item.total_price, // Use the calculated total price
-        });
+      if (updateError) {
+        throw updateError;
       }
 
-      // C. Insert new sales items
-      const { error: salesInsertError } = await supabase
-        .from('sales')
-        .insert(salesToInsert);
-        
-      if (salesInsertError) throw new Error(`Failed to insert new sales items: ${salesInsertError.message}`);
-
-      showSuccess(`Order #${orderData.order_number} updated successfully!`);
+      showSuccess('Order updated successfully!');
       onOrderUpdated();
       onOpenChange(false);
-
     } catch (error: any) {
-      console.error('Error saving order changes:', error);
-      showError(`Failed to save order changes: ${error.message}`);
+      console.error('Error saving order:', error);
+      showError(`Failed to save changes: ${error.message}`);
     } finally {
-      setIsSubmitting(false);
+      setSaving(false);
     }
   };
-
-  if (!orderId || !isOpen) return null;
-
-  if (loading) {
-    return (
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[600px]">
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading order details...</p>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
-  if (!orderData) {
-    return (
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[600px]">
-          <p className="text-center text-red-500 py-8">Failed to load order data.</p>
-        </DialogContent>
-      </Dialog>
-    );
-  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Edit Order #{orderData.order_number}</DialogTitle>
+          <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
           <DialogDescription>
-            Modify items and discount for the order placed by {orderData.dealer_name}.
+            Modify the details of this order. Changes will affect stock levels if the order is dispatched.
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="space-y-6 py-4">
-          {/* Order Items Section */}
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <Label className="text-lg font-semibold">Order Items</Label>
-              <Button
-                type="button"
-                onClick={addOrderItem}
-                size="sm"
-                className="flex items-center gap-1"
-                disabled={isSubmitting}
-              >
-                <Plus className="h-4 w-4" />
-                Add Item
-              </Button>
+
+        {loading ? (
+          <div className="flex items-center justify-center flex-grow">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          </div>
+        ) : !orderData ? (
+          <div className="flex items-center justify-center flex-grow">
+            <p className="text-red-500">Could not load order data.</p>
+          </div>
+        ) : (
+          <div className="flex-grow overflow-y-auto pr-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div>
+                <Label>Dealer</Label>
+                <Input value={orderData.dealer_name} disabled />
+              </div>
+              <div>
+                <Label htmlFor="orderDate">Order Date</Label>
+                <Input
+                  id="orderDate"
+                  type="date"
+                  value={orderData.order_date}
+                  onChange={(e) => setOrderData({ ...orderData, order_date: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="dispatchDate">Dispatch Date</Label>
+                <Input
+                  id="dispatchDate"
+                  type="date"
+                  value={orderData.dispatch_date || ''}
+                  onChange={(e) => setOrderData({ ...orderData, dispatch_date: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="dispatchNumber">Dispatch Number</Label>
+                <Input
+                  id="dispatchNumber"
+                  type="number"
+                  value={orderData.dispatch_number || ''}
+                  onChange={(e) => setOrderData({ ...orderData, dispatch_number: parseInt(e.target.value) || null })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="billNo">Bill Number</Label>
+                <Input
+                  id="billNo"
+                  value={orderData.bill_no || ''}
+                  onChange={(e) => setOrderData({ ...orderData, bill_no: e.target.value })}
+                />
+              </div>
             </div>
 
-            {orderItems.map((item, index) => {
-              const product = products.find(p => p.id === item.product_id);
-              const itemTotal = calculateItemTotal(item);
-              
-              return (
-                <div key={item.id} className="space-y-3 p-4 border rounded-md bg-muted/50">
-                  <div className="flex items-end gap-2">
-                    <div className="flex-grow">
-                      <Label>Product Selection</Label>
-                      <Popover 
-                        open={popoverOpenStates[item.id]} 
-                        onOpenChange={(openState) => {
-                          setPopoverOpenStates(prev => ({ ...prev, [item.id]: openState }));
-                          if (openState) {
-                            setSearchValue("");
-                          }
-                        }}
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={popoverOpenStates[item.id]}
-                            className="w-full justify-between"
-                            disabled={products.length === 0 || loading || isSubmitting}
-                          >
-                            {product?.name || "Select product..."}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                          <Command>
-                            <CommandInput
-                              placeholder="Search product..."
-                              value={searchValue}
-                              onValueChange={setSearchValue}
-                            />
-                            <CommandList className="max-h-[300px] overflow-y-auto">
-                              {filteredProducts.length === 0 ? (
-                                <CommandEmpty>No product found.</CommandEmpty>
-                              ) : (
-                                <CommandGroup>
-                                  {filteredProducts.map((p) => (
-                                    <CommandItem
-                                      key={p.id}
-                                      value={`${p.name} ${p.code}`} 
-                                      onSelect={() => {
-                                        updateOrderItem(item.id, 'product_id', p.id);
-                                        setPopoverOpenStates(prev => ({ ...prev, [item.id]: false }));
-                                        setSearchValue("");
-                                      }}
-                                    >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          item.product_id === p.id ? "opacity-100" : "opacity-0"
-                                        )}
-                                      />
-                                      <div>
-                                        <div>{p.name} ({p.code})</div>
-                                        <div className="text-xs text-muted-foreground">
-                                          DP: ₹{p.dp.toFixed(2)} - Stock: {p.stock}
-                                        </div>
-                                      </div>
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              )}
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    {orderItems.length > 1 && (
-                      <div className="flex-shrink-0">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeOrderItem(item.id)}
-                          className="h-9 w-9"
-                          disabled={isSubmitting}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
+            <h3 className="text-lg font-semibold mb-2">Order Items</h3>
+            <div className="border rounded-md overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="w-24">Quantity</TableHead>
+                    <TableHead className="w-32">Price</TableHead>
+                    <TableHead className="w-32 text-right">Amount</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item, index) => (
+                    <TableRow key={item.product_id}>
+                      <TableCell>{item.product_name}</TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                          className="w-full"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={item.price}
+                          onChange={(e) => handleItemChange(index, 'price', e.target.value)}
+                          className="w-full"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">₹{item.amount.toFixed(2)}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(index)}>
+                          <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4 items-end">
-                    <div>
-                      <Label htmlFor={`quantity-${item.id}`}>Quantity</Label>
-                      <Input
-                        id={`quantity-${item.id}`}
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
-                        min="1"
-                        className="w-full"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-                    <div>
-                      <Label>Unit Price (DP)</Label>
-                      <div className="font-medium text-lg">₹{product?.dp.toFixed(2) || '0.00'}</div>
-                    </div>
-                    <div>
-                      <Label>Item Total</Label>
-                      <div className="font-medium text-lg">₹{itemTotal.toFixed(2)}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Summary and Discount */}
-          <div className="p-4 bg-muted rounded-md space-y-2">
-            <div className="flex justify-between text-base font-medium">
-              <span>Subtotal (Pre-Discount):</span>
-              <span>₹{preDiscountTotalOrderValue.toFixed(2)}</span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-            
-            <div className="flex justify-between items-center">
-              <Label htmlFor="discountAmount" className="text-base font-medium">Discount (₹)</Label>
-              <Input
-                id="discountAmount"
-                type="number"
-                step="0.01"
-                value={discountAmount}
-                onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
-                className="w-32 text-right"
-                min="0"
-                max={preDiscountTotalOrderValue}
-                disabled={isSubmitting}
-              />
+
+            <div className="flex items-end gap-4 mt-4 p-4 border rounded-md bg-muted/50">
+              <div className="flex-grow">
+                <Label>Add Product</Label>
+                <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a product" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map(p => (
+                      <SelectItem key={p.id} value={p.id} disabled={items.some(i => i.product_id === p.id)}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-24">
+                <Label>Quantity</Label>
+                <Input
+                  type="number"
+                  value={newItemQuantity}
+                  onChange={(e) => setNewItemQuantity(e.target.value)}
+                  min="1"
+                />
+              </div>
+              <Button onClick={handleAddItem}>Add Item</Button>
             </div>
-            {discountAmount > preDiscountTotalOrderValue && (
-              <p className="text-sm text-destructive">Discount cannot exceed subtotal.</p>
-            )}
-            
-            <Separator className="my-2" />
-            
-            <div className="flex justify-between text-lg font-bold">
-              <span>Total Order Value (Final):</span>
-              <span>₹{finalOrderValue.toFixed(2)}</span>
+
+            <div className="text-right mt-6 text-2xl font-bold">
+              Total: ₹{orderData.total_amount.toFixed(2)}
             </div>
           </div>
-        </div>
+        )}
 
-        <DialogFooter>
-          <Button onClick={handleSave} disabled={isSubmitting || orderItems.length === 0 || discountAmount < 0 || discountAmount > preDiscountTotalOrderValue}>
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}
+        <DialogFooter className="pt-4 border-t">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSaveChanges} disabled={loading || saving || !orderData}>
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Save Changes
           </Button>
         </DialogFooter>
       </DialogContent>
