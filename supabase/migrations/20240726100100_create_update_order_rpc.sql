@@ -1,6 +1,6 @@
 CREATE OR REPLACE FUNCTION update_order_and_items(
-    p_order_id uuid,
     p_order_data jsonb,
+    p_order_id uuid,
     p_order_items jsonb
 )
 RETURNS void AS $$
