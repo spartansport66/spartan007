@@ -39,6 +39,7 @@ interface OrderToEdit {
   dealer_name: string;
   total_amount: number;
   discount_amount: number;
+  gst_percent: number;
   items: OrderItem[];
 }
 
@@ -69,7 +70,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const { data: orderRaw, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, total_amount, discount_amount,
+          id, order_number, total_amount, discount_amount, gst_percent,
           dealers (name),
           sales (product_id, quantity, total_price, unit_price, discount_percent, products (name, code, dp))
         `)
@@ -95,11 +96,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         dealer_name: (orderRaw.dealers as any)?.name || 'N/A',
         total_amount: orderRaw.total_amount,
         discount_amount: orderRaw.discount_amount || 0,
+        gst_percent: orderRaw.gst_percent || 5,
         items: fetchedItems,
       });
       setOrderItems(fetchedItems);
       setDiscountAmount(orderRaw.discount_amount || 0);
-      // Note: gst_percent is not in DB, using default 5% for UI calculation
+      setGstPercent(orderRaw.gst_percent || 5);
 
       // 2. Fetch all products
       const { data: productsData, error: productsError } = await supabase
@@ -212,7 +214,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         .update({
           total_amount: parseFloat(finalOrderValue.toFixed(2)),
           discount_amount: parseFloat(discountAmount.toFixed(2)),
-          // Removed gst_percent as it's missing from the schema
+          gst_percent: gstPercent,
         })
         .eq('id', orderData.id);
 
