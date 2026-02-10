@@ -36,10 +36,20 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Correctly fetch only dealers assigned to the sales person
     const { data: assignedDealersData, error: assignedDealersError } = await supabaseAdmin
       .from('dealer_sales_persons')
-      .select(`dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))`)
+      .select(`
+        dealers (
+          id, 
+          name, 
+          credit_limit, 
+          allotted_credit_days, 
+          dealer_balances ( opening_balance )
+        )
+      `)
       .eq('sales_person_id', user.id);
+
     if (assignedDealersError) throw assignedDealersError;
 
     const formattedDealers = (assignedDealersData || []).map((item: any) => ({

@@ -4,6 +4,11 @@ import { supabase } from '../../supabaseClient';
 import { Product, Dealer } from '../../types';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const PlaceNewOrder = () => {
   const { user } = useAuth();
@@ -14,34 +19,25 @@ const PlaceNewOrder = () => {
   const [orderItems, setOrderItems] = useState<{ product_id: string; quantity: number; name: string; dp: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [comboboxOpen, setComboboxOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!user) return;
       setLoading(true);
       try {
-        // Fetch assigned dealers directly
-        const { data: dealerData, error: dealerError } = await supabase
-          .from('dealers')
-          .select(`
-            id,
-            name,
-            credit_limit,
-            allotted_credit_days,
-            dealer_balances ( opening_balance )
-          `)
-          .order('name', { ascending: true });
+        // Fetch assigned dealers
+        const { data: assignedDealersData, error: assignedDealersError } = await supabase
+          .from('dealer_sales_persons')
+          .select('dealers(*)')
+          .eq('sales_person_id', user.id);
 
-        if (dealerError) throw new Error(`Error fetching dealers: ${dealerError.message}`);
+        if (assignedDealersError) throw new Error(`Error fetching assigned dealers: ${assignedDealersError.message}`);
         
-        const formattedDealers = dealerData.map((d: any) => ({
-          ...d,
-          // @ts-ignore
-          opening_balance: d.dealer_balances?.opening_balance || 0,
-        }));
+        const formattedDealers = (assignedDealersData || []).map((item: any) => item.dealers);
         setDealers(formattedDealers);
 
-        // Fetch all products directly
+        // Fetch all products
         const { data: productData, error: productError } = await supabase
           .from('products')
           .select('id, code, name, dp, stock')
@@ -93,9 +89,9 @@ const PlaceNewOrder = () => {
         .from('orders')
         .insert({
           dealer_id: selectedDealer,
-          sales_person_id: user?.id,
+          user_id: user?.id, // Changed from sales_person_id to user_id
           total_amount: parseFloat(calculateTotal()),
-          status: 'Pending',
+          status: 'Pending', // Default status
         })
         .select()
         .single();
@@ -106,14 +102,15 @@ const PlaceNewOrder = () => {
         order_id: order.id,
         product_id: item.product_id,
         quantity: item.quantity,
-        price: item.dp,
+        total_price: item.dp * item.quantity, // Use total_price
+        sale_date: new Date().toISOString(), // Add sale_date
       }));
 
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItemsData);
+      const { error: itemsError } = await supabase.from('sales').insert(orderItemsData); // Insert into 'sales' table
       if (itemsError) throw itemsError;
 
       toast.success("Order placed successfully!");
-      navigate('/sales-person/dashboard');
+      navigate('/dashboard'); // Navigate to the main dashboard
 
     } catch (error: any) {
       toast.error(`Failed to place order: ${error.message}`);
@@ -127,24 +124,56 @@ const PlaceNewOrder = () => {
     return <div className="p-4">Loading...</div>;
   }
 
+  const selectedDealerName = dealers.find(d => d.id === selectedDealer)?.name || "Select dealer...";
+
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Place New Order</h1>
       
       <div className="mb-4">
         <label htmlFor="dealer" className="block text-sm font-medium text-gray-700">Select Dealer</label>
-        <select
-          id="dealer"
-          value={selectedDealer}
-          onChange={(e) => setSelectedDealer(e.target.value)}
-          className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-          disabled={dealers.length === 0}
-        >
-          <option value="">{dealers.length > 0 ? 'Select a dealer' : 'No dealers assigned'}</option>
-          {dealers.map(dealer => (
-            <option key={dealer.id} value={dealer.id}>{dealer.name}</option>
-          ))}
-        </select>
+        <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={comboboxOpen}
+              className="w-full md:w-[300px] justify-between"
+              disabled={dealers.length === 0}
+            >
+              {selectedDealerName}
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[300px] p-0">
+            <Command>
+              <CommandInput placeholder="Search dealer..." />
+              <CommandList>
+                <CommandEmpty>No dealer found.</CommandEmpty>
+                <CommandGroup>
+                  {dealers.map((dealer) => (
+                    <CommandItem
+                      key={dealer.id}
+                      value={dealer.name}
+                      onSelect={() => {
+                        setSelectedDealer(dealer.id);
+                        setComboboxOpen(false);
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          selectedDealer === dealer.id ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      {dealer.name}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
       </div>
 
       <div className="mb-4">

@@ -18,8 +18,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-const GET_SALES_PERSON_DATA_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/get-sales-person-data";
-
 interface Product {
   id: string;
   code: string;
@@ -114,30 +112,35 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      if (!user || !session) {
+      if (!user) {
         setDealers([]);
         setProducts([]);
         setLoading(false);
         return;
       }
       try {
-        const response = await fetch(GET_SALES_PERSON_DATA_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-        });
+        // Fetch assigned dealers
+        const { data: assignedDealersData, error: assignedDealersError } = await supabase
+          .from('dealer_sales_persons')
+          .select('dealers(*, dealer_balances(opening_balance))')
+          .eq('sales_person_id', user.id);
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch data from Edge Function.');
-        }
-
-        const { dealers, products } = await response.json();
+        if (assignedDealersError) throw new Error(`Error fetching assigned dealers: ${assignedDealersError.message}`);
         
-        setDealers(dealers || []);
-        setProducts(products || []);
+        const formattedDealers = (assignedDealersData || []).map((item: any) => ({
+          ...item.dealers,
+          opening_balance: item.dealers.dealer_balances?.opening_balance || 0,
+        }));
+        setDealers(formattedDealers);
+
+        // Fetch all products
+        const { data: productData, error: productError } = await supabase
+          .from('products')
+          .select('id, code, name, dp, stock')
+          .order('name', { ascending: true });
+
+        if (productError) throw new Error(`Error fetching products: ${productError.message}`);
+        setProducts(productData || []);
       } catch (error: any) {
         showError(`Failed to load data: ${error.message}`);
       } finally {
@@ -463,7 +466,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 </Command>
               </PopoverContent>
             </Popover>
-            {!loading && dealers.length === 0 && <p className="text-sm text-muted-foreground mt-2">No dealers assigned to your account. Please contact an administrator to assign dealers.</p>}
+            {!loading && dealers.length === 0 && <p className="text-sm text-muted-foreground mt-2">No dealers assigned to your account. Please contact an administrator.</p>}
             {selectedDealer && totalPendingAmount > 0 && <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertTitle>Overdue Payments</AlertTitle><AlertDescription>Cannot place order. Dealer has overdue payments totaling ₹{totalPendingAmount.toFixed(2)}. Please clear all overdue payments first.</AlertDescription></Alert>}
             {selectedDealer && <div className="mt-2 p-3 bg-muted rounded-md"><div className="flex justify-between text-sm"><span>Opening Balance:</span><span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Net Transaction Balance (Orders - Payments):</span><span className="font-medium">₹{dealerBalance !== null ? dealerBalance.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm font-semibold"><span>Total Outstanding Balance (Ledger):</span><span className={usedCredit !== null && usedCredit > dealerCreditLimit ? "text-destructive" : "text-primary"}>₹{usedCredit !== null ? usedCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Credit Limit (Current Month):</span><span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Available Credit:</span><span className={availableCredit !== null && availableCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Allotted Credit Days:</span><span className="font-medium">{allottedCreditDays} days</span></div>{paymentDueDate && <div className="flex justify-between text-sm"><span>Calculated Payment Due Date:</span><span className="font-medium">{formatDate(paymentDueDate)}</span></div>}<div className="flex justify-between text-sm font-bold mt-2"><span>Calculated Order Payment Status:</span><span className={calculatedPaymentStatus === 'Pending Approval' ? 'text-blue-600' : 'text-yellow-600'}>{calculatedPaymentStatus}</span></div></div>}
           </div>
