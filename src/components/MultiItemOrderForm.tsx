@@ -59,6 +59,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
   const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const [gstPercent, setGstPercent] = useState<number>(5); // Default 5% GST
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
@@ -90,9 +91,17 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     return orderItems.reduce((total, item) => total + item.total_price, 0);
   }, [orderItems]);
 
-  const finalOrderValue = useMemo(() => {
+  const taxableValue = useMemo(() => {
     return Math.max(0, preDiscountTotalOrderValue - discountAmount);
   }, [preDiscountTotalOrderValue, discountAmount]);
+
+  const gstAmount = useMemo(() => {
+    return (taxableValue * gstPercent) / 100;
+  }, [taxableValue, gstPercent]);
+
+  const finalOrderValue = useMemo(() => {
+    return taxableValue + gstAmount;
+  }, [taxableValue, gstAmount]);
 
   useEffect(() => {
     setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
@@ -321,6 +330,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setSelectedDealer('');
       setOrderItems([]);
       setDiscountAmount(0);
+      setGstPercent(5);
       setPaymentMethod('');
       setPaymentAmount(0);
       setChequeDdNo('');
@@ -557,13 +567,30 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
           {orderItems.length > 0 && (
             <div className="p-4 bg-muted rounded-md space-y-2">
-              <div className="flex justify-between text-base font-medium"><span>Subtotal:</span><span>₹{preDiscountTotalOrderValue.toFixed(2)}</span></div>
+              <div className="flex justify-between text-base font-medium">
+                <span>Subtotal:</span>
+                <span>₹{preDiscountTotalOrderValue.toFixed(2)}</span>
+              </div>
               <div className="flex justify-between items-center">
                 <Label htmlFor="discountAmount" className="text-base font-medium">Additional Discount (₹)</Label>
                 <Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} />
               </div>
+              <div className="flex justify-between text-base font-medium">
+                <span>Taxable Value:</span>
+                <span>₹{taxableValue.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="gstPercent" className="text-base font-medium">GST (%)</Label>
+                  <Input id="gstPercent" type="number" step="0.1" value={gstPercent} onChange={(e) => setGstPercent(parseFloat(e.target.value) || 0)} className="w-20 text-right" min="0" />
+                </div>
+                <span className="text-sm text-muted-foreground">₹{gstAmount.toFixed(2)}</span>
+              </div>
               <Separator className="my-2" />
-              <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
+              <div className="flex justify-between text-lg font-bold">
+                <span>Total Order Value:</span>
+                <span>₹{finalOrderValue.toFixed(2)}</span>
+              </div>
               {selectedDealer && (
                 <div className="flex justify-between text-sm">
                   <span>Remaining Credit:</span>
