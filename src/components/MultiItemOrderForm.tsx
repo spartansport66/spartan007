@@ -439,25 +439,30 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   role="combobox" 
                   aria-expanded={isDealerPopoverOpen} 
                   className="w-full justify-between" 
-                  disabled={dealers.length === 0} // Removed loading/sessionLoading checks
+                  // Force enabled if data exists
+                  disabled={dealers.length === 0}
                 >
                   {currentDealerName}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                <Command>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" onOpenAutoFocus={(e) => e.preventDefault()}>
+                <Command className="pointer-events-auto">
                   <CommandInput placeholder="Search dealer..." value={dealerSearchValue} onValueChange={setDealerSearchValue} />
                   <CommandList className="max-h-[300px] overflow-y-auto">
                     {filteredDealers.length === 0 ? <CommandEmpty>No dealer found.</CommandEmpty> : (
                       <CommandGroup>
                         {filteredDealers.map((dealer) => (
-                          <CommandItem key={dealer.id} value={dealer.name} onSelect={(currentValue) => {
-                            const selected = dealers.find(d => d.name.toLowerCase() === currentValue.toLowerCase());
-                            setSelectedDealer(selected?.id === selectedDealer ? '' : selected?.id || '');
-                            setIsDealerPopoverOpen(false);
-                            setDealerSearchValue("");
-                          }}>
+                          <CommandItem 
+                            key={dealer.id} 
+                            value={dealer.id} // Use ID for unique selection
+                            onSelect={() => {
+                              setSelectedDealer(dealer.id);
+                              setIsDealerPopoverOpen(false);
+                              setDealerSearchValue("");
+                            }}
+                            className="cursor-pointer pointer-events-auto"
+                          >
                             <Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />
                             {dealer.name}
                           </CommandItem>
@@ -482,24 +487,30 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                       variant="outline" 
                       role="combobox" 
                       className="w-full justify-between" 
-                      disabled={products.length === 0} // Removed loading/sessionLoading checks
+                      // Force enabled if data exists
+                      disabled={products.length === 0}
                     >
                       {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                    <Command>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" onOpenAutoFocus={(e) => e.preventDefault()}>
+                    <Command className="pointer-events-auto">
                       <CommandInput placeholder="Search product..." value={productSearchValue} onValueChange={setProductSearchValue} />
                       <CommandList className="max-h-[300px] overflow-y-auto">
                         {filteredProducts.length === 0 ? <CommandEmpty>No product found.</CommandEmpty> : (
                           <CommandGroup>
                             {filteredProducts.map((product) => (
-                              <CommandItem key={product.id} value={`${product.name} ${product.code}`} onSelect={() => {
-                                setNewItemProductId(product.id);
-                                setIsProductPopoverOpen(false);
-                                setProductSearchValue("");
-                              }}>
+                              <CommandItem 
+                                key={product.id} 
+                                value={product.id} // Use ID for unique selection
+                                onSelect={() => {
+                                  setNewItemProductId(product.id);
+                                  setIsProductPopoverOpen(false);
+                                  setProductSearchValue("");
+                                }}
+                                className="cursor-pointer pointer-events-auto"
+                              >
                                 <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
                                 <div><div>{product.name} ({product.code})</div><div className="text-xs text-muted-foreground">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div>
                               </CommandItem>
