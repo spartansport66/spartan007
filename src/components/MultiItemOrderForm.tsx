@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -113,45 +113,55 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
   }, [finalOrderValue]);
 
+  const fetchProducts = useCallback(async () => {
+    try {
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, code, name, dp, stock');
+      if (productsError) throw productsError;
+      setProducts(productsData || []);
+    } catch (error: any) {
+      console.error('fetchProducts Error:', error);
+      showError(`Failed to load products: ${error.message}`);
+    }
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    if (!user || !session) return;
+    setLoading(true);
+    try {
+      const { data: assignedDealersData, error: assignedDealersError } = await supabase
+        .from('dealer_sales_persons')
+        .select('dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))')
+        .eq('sales_person_id', user.id);
+
+      if (assignedDealersError) throw assignedDealersError;
+
+      const formattedDealers = (assignedDealersData || [])
+        .map((item: any) => {
+          if (!item.dealers) return null;
+          const opening_balance = item.dealers.dealer_balances?.opening_balance || 0;
+          const { dealer_balances, ...dealerData } = item.dealers;
+          return { ...dealerData, opening_balance };
+        })
+        .filter(Boolean) as Dealer[];
+      
+      formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
+      setDealers(formattedDealers);
+
+      await fetchProducts();
+
+    } catch (error: any) {
+      console.error('fetchData Error:', error);
+      showError(`Failed to load data: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, session, fetchProducts]);
+
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user || !session) return;
-      setLoading(true);
-      try {
-        const { data: assignedDealersData, error: assignedDealersError } = await supabase
-          .from('dealer_sales_persons')
-          .select('dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))')
-          .eq('sales_person_id', user.id);
-
-        if (assignedDealersError) throw assignedDealersError;
-
-        const formattedDealers = (assignedDealersData || [])
-          .map((item: any) => {
-            if (!item.dealers) return null;
-            const opening_balance = item.dealers.dealer_balances?.opening_balance || 0;
-            const { dealer_balances, ...dealerData } = item.dealers;
-            return { ...dealerData, opening_balance };
-          })
-          .filter(Boolean) as Dealer[];
-        
-        formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
-        setDealers(formattedDealers);
-
-        const { data: productsData, error: productsError } = await supabase
-          .from('products')
-          .select('id, code, name, dp, stock');
-        if (productsError) throw productsError;
-        setProducts(productsData || []);
-
-      } catch (error: any) {
-        console.error('fetchData Error:', error);
-        showError(`Failed to load data: ${error.message}`);
-      } finally {
-        setLoading(false);
-      }
-    };
     if (!sessionLoading && user) fetchData();
-  }, [user, session, sessionLoading]);
+  }, [user, session, sessionLoading, fetchData]);
 
   useEffect(() => {
     const calculateBalanceAndDueDate = async () => {
@@ -317,8 +327,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
       if (paymentInsertError) throw paymentInsertError;
 
-      // Note: Stock update is now handled by database triggers for better consistency.
-
       showSuccess('Order placed successfully!');
       setSelectedDealer('');
       setOrderItems([]);
@@ -329,6 +337,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setChequeDdNo('');
       setChequeDdDate('');
       setTransactionId('');
+      
+      // Re-fetch products to update stock levels in the UI
+      await fetchProducts();
       onOrderPlaced();
     } catch (error: any) {
       console.error('Submit Error:', error);
