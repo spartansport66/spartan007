@@ -298,7 +298,21 @@ const Dashboard = () => {
         }
       }
 
-      // 2. Delete the order (associated sales and payments will be deleted via cascade)
+      // 2. Manually delete associated payments first to avoid foreign key constraint violation
+      const { error: paymentDeleteError } = await supabase
+        .from('payments')
+        .delete()
+        .eq('order_id', order.id);
+
+      if (paymentDeleteError) {
+        console.error('Error deleting associated payments:', paymentDeleteError);
+        throw new Error(`Failed to delete associated payments: ${paymentDeleteError.message}`);
+      }
+
+      // 3. Delete the order (associated sales will be deleted via cascade if configured, or we can delete them manually)
+      // Let's delete sales manually just in case cascade isn't set up for that either
+      await supabase.from('sales').delete().eq('order_id', order.id);
+
       const { error: deleteError } = await supabase
         .from('orders')
         .delete()
