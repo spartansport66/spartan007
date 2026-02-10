@@ -90,6 +90,13 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     return orderItems.reduce((total, item) => total + item.total_price, 0);
   }, [orderItems]);
 
+  const totalItemDiscountValue = useMemo(() => {
+    return orderItems.reduce((total, item) => {
+      const discountPerUnit = (item.unit_dp * item.discount_percent) / 100;
+      return total + (item.quantity * discountPerUnit);
+    }, 0);
+  }, [orderItems]);
+
   const taxableValue = useMemo(() => {
     return Math.max(0, preDiscountTotalOrderValue - discountAmount);
   }, [preDiscountTotalOrderValue, discountAmount]);
@@ -260,6 +267,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     setLoading(true);
     try {
       const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
+      const finalItemDiscount = parseFloat(totalItemDiscountValue.toFixed(2));
       const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
 
       const { data: newOrder, error: orderError } = await supabase
@@ -269,7 +277,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           user_id: user.id,
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
-          gst_percent: gstPercent, // Re-enabled
+          item_discount: finalItemDiscount, // Added item_discount
+          gst_percent: gstPercent,
           status: 'completed',
           payment_status: 'pending_approval',
           payment_due_date: paymentDueDate,

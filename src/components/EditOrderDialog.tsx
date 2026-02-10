@@ -136,6 +136,13 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     return orderItems.reduce((total, item) => total + item.total_price, 0);
   }, [orderItems]);
 
+  const totalItemDiscountValue = useMemo(() => {
+    return orderItems.reduce((total, item) => {
+      const discountPerUnit = (item.unit_dp * item.discount_percent) / 100;
+      return total + (item.quantity * discountPerUnit);
+    }, 0);
+  }, [orderItems]);
+
   const taxableValue = useMemo(() => {
     return Math.max(0, preDiscountTotalOrderValue - discountAmount);
   }, [preDiscountTotalOrderValue, discountAmount]);
@@ -208,12 +215,15 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
     setIsSubmitting(true);
     try {
+      const finalItemDiscount = parseFloat(totalItemDiscountValue.toFixed(2));
+
       // 1. Update Order
       const { error: orderUpdateError } = await supabase
         .from('orders')
         .update({
           total_amount: parseFloat(finalOrderValue.toFixed(2)),
           discount_amount: parseFloat(discountAmount.toFixed(2)),
+          item_discount: finalItemDiscount, // Added item_discount
           gst_percent: gstPercent,
         })
         .eq('id', orderData.id);

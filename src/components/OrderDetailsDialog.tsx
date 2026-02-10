@@ -27,7 +27,8 @@ interface OrderDetail {
   order_date: string;
   total_amount: number;
   discount_amount: number;
-  gst_percent: number; // Added
+  item_discount: number; // Added
+  gst_percent: number;
   status: string;
   dealer_name: string;
   dealer_address: string;
@@ -72,7 +73,8 @@ interface FetchedOrderData {
   order_date: string;
   total_amount: number;
   discount_amount: number;
-  gst_percent: number; // Added
+  item_discount: number; // Added
+  gst_percent: number;
   status: string;
   payment_status: string;
   payment_due_date: string | null;
@@ -149,7 +151,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, order_date, total_amount, discount_amount, gst_percent, status, payment_status, payment_due_date, user_id, bill_no, dispatch_date, dispatch_number, dispatched,
+          id, order_number, order_date, total_amount, discount_amount, item_discount, gst_percent, status, payment_status, payment_due_date, user_id, bill_no, dispatch_date, dispatch_number, dispatched,
           dealers (id, name, address, phone, city, state, country),
           payments (amount, payment_method, cheque_dd_no, cheque_dd_date, card_number, card_holder_name, expiry_date, cvv, bank_name, account_number, ifsc_code, upi_id, transaction_id, payment_date)
         `)
@@ -201,7 +203,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         order_date: orderData.order_date,
         total_amount: orderData.total_amount,
         discount_amount: orderData.discount_amount || 0,
-        gst_percent: orderData.gst_percent || 5, // Added
+        item_discount: orderData.item_discount || 0, // Added
+        gst_percent: orderData.gst_percent || 5,
         status: orderData.status,
         dealer_name: orderData.dealers?.name || 'N/A',
         dealer_address: orderData.dealers?.address || 'N/A',
@@ -355,7 +358,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     autoTable(doc, { head: [tableColumn], body: tableRows, startY: yPos, styles: { fontSize: 7, cellPadding: 1, valign: 'middle', overflow: 'linebreak', lineWidth: 0.1 }, headStyles: { fillColor: darkBlue, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', lineWidth: 0.1 }, bodyStyles: { textColor: [0, 0, 0] }, margin: { top: 0, left: margin, right: margin }, columnStyles: { 0: { halign: 'center' }, 1: { halign: 'center' }, 2: { halign: 'center' }, 3: { halign: 'center' }, 4: { halign: 'center' }, 5: { halign: 'center' }, 6: { halign: 'center' }, 7: { halign: 'center' } } as any });
     yPos = (doc as any).lastAutoTable.finalY + 5;
     const preDiscountTotal = orderDetails.items.reduce((sum, item) => sum + item.total_price, 0);
-    const summaryRows = [['Subtotal (Pre-Discount):', `Rs. ${preDiscountTotal.toFixed(2)}`, 10, 'normal'], ['Discount Applied:', `- Rs. ${orderDetails.discount_amount.toFixed(2)}`, 10, 'bold'], ['GST Applied:', `+ ${orderDetails.gst_percent}%`, 10, 'normal'], ['Total Order Amount (Final):', `Rs. ${orderDetails.total_amount.toFixed(2)}`, 12, 'bold']];
+    const summaryRows = [['Subtotal (Pre-Discount):', `Rs. ${preDiscountTotal.toFixed(2)}`, 10, 'normal'], ['Item Discount:', `- Rs. ${orderDetails.item_discount.toFixed(2)}`, 10, 'normal'], ['Extra Discount:', `- Rs. ${orderDetails.discount_amount.toFixed(2)}`, 10, 'bold'], ['GST Applied:', `+ ${orderDetails.gst_percent}%`, 10, 'normal'], ['Total Order Amount (Final):', `Rs. ${orderDetails.total_amount.toFixed(2)}`, 12, 'bold']];
     const summaryTableWidth = 90; const summaryTableX = pageWidth - margin - summaryTableWidth;
     autoTable(doc, { body: summaryRows.map(row => [row[0], row[1]]), startY: yPos, theme: 'plain', styles: { fontSize: 10, cellPadding: 1, valign: 'middle', overflow: 'linebreak', lineWidth: 0 }, columnStyles: { 0: { cellWidth: 40, halign: 'left', fontStyle: 'normal' }, 1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' } }, margin: { top: 0, left: summaryTableX, right: margin }, didParseCell: (data) => { const rowIndex = data.row.index; if (rowIndex < summaryRows.length) { const rowData = summaryRows[rowIndex]; data.cell.styles.fontSize = rowData[2] as number; data.cell.styles.fontStyle = rowData[3] as 'normal' | 'bold' | 'italic' | 'bolditalic'; if (rowIndex === summaryRows.length - 1) { data.cell.styles.lineWidth = { top: 0.5 }; data.cell.styles.lineColor = [0, 0, 0]; } } } });
     yPos = (doc as any).lastAutoTable.finalY + 10;
@@ -415,7 +418,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
               </div>
             )}
             <div className="text-right text-sm font-medium mt-4">Subtotal (Pre-Discount): ₹{preDiscountTotalDisplay.toFixed(2)}</div>
-            <div className="text-right text-sm font-medium">Discount Applied: - ₹{orderDetails.discount_amount.toFixed(2)}</div>
+            <div className="text-right text-sm font-medium">Item Discount: - ₹{orderDetails.item_discount.toFixed(2)}</div>
+            <div className="text-right text-sm font-medium">Extra Discount: - ₹{orderDetails.discount_amount.toFixed(2)}</div>
             <div className="text-right text-sm font-medium">GST Applied: + {orderDetails.gst_percent}%</div>
             <div className="text-right text-lg font-bold mt-1">Total Order Amount (Final): ₹{orderDetails.total_amount.toFixed(2)}</div>
           </div>
