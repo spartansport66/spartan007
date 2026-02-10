@@ -111,7 +111,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   useEffect(() => {
     const fetchData = async () => {
-      console.log('[MultiItemOrderForm] fetchData: Starting...');
       setLoading(true);
       if (!user || !session) {
         setDealers([]);
@@ -150,13 +149,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         showError(`Failed to load data: ${error.message}`);
       } finally {
         setLoading(false);
-        console.log('[MultiItemOrderForm] fetchData: Finished.');
       }
     };
     if (!sessionLoading && user) {
       fetchData();
-    } else if (!sessionLoading && !user) {
-      setLoading(false);
     }
   }, [user, session, sessionLoading]);
 
@@ -403,7 +399,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       return searchWords.some(word => productName.includes(word) || productCode.includes(word));
     });
 
-    // Optimization: If no search term, only show first 100 to prevent UI lag
     if (searchWords.length === 0) {
       return filtered.slice(0, 100);
     }
@@ -419,16 +414,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
   const calculatedPaymentStatus = isPaidAtOrderTime ? 'Pending Approval' : 'Pending';
   
-  // Debug logs for disabled state
-  console.log('[MultiItemOrderForm] Render State:', { 
-    loading, 
-    sessionLoading, 
-    dealersCount: dealers.length, 
-    productsCount: products.length,
-    isDealerDisabled: dealers.length === 0 || loading || sessionLoading,
-    isProductDisabled: products.length === 0 || loading || sessionLoading
-  });
-
   const isSubmitDisabled = useMemo(() => {
     const baseChecks = loading || !selectedDealer || orderItems.length === 0 || (orderItems.some(item => !item.product_id || item.quantity <= 0)) || discountAmount < 0 || discountAmount > preDiscountTotalOrderValue;
     if (baseChecks) return true;
@@ -454,7 +439,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   role="combobox" 
                   aria-expanded={isDealerPopoverOpen} 
                   className="w-full justify-between" 
-                  disabled={dealers.length === 0 || loading || sessionLoading}
+                  disabled={dealers.length === 0} // Removed loading/sessionLoading checks
                 >
                   {currentDealerName}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -483,7 +468,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 </Command>
               </PopoverContent>
             </Popover>
-            {!loading && !sessionLoading && dealers.length === 0 && <p className="text-sm text-muted-foreground mt-2">No dealers assigned to your account. Please contact an administrator.</p>}
             {selectedDealer && <div className="mt-2 p-3 bg-muted rounded-md"><div className="flex justify-between text-sm"><span>Opening Balance:</span><span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Net Transaction Balance (Orders - Payments):</span><span className="font-medium">₹{dealerBalance !== null ? dealerBalance.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm font-semibold"><span>Total Outstanding Balance (Ledger):</span><span className={usedCredit !== null && usedCredit > dealerCreditLimit ? "text-destructive" : "text-primary"}>₹{usedCredit !== null ? usedCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Credit Limit (Current Month):</span><span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Available Credit:</span><span className={availableCredit !== null && availableCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Allotted Credit Days:</span><span className="font-medium">{allottedCreditDays} days</span></div>{paymentDueDate && <div className="flex justify-between text-sm"><span>Calculated Payment Due Date:</span><span className="font-medium">{formatDate(paymentDueDate)}</span></div>}<div className="flex justify-between text-sm font-bold mt-2"><span>Calculated Order Payment Status:</span><span className={calculatedPaymentStatus === 'Pending Approval' ? 'text-blue-600' : 'text-yellow-600'}>{calculatedPaymentStatus}</span></div></div>}
           </div>
 
@@ -498,7 +482,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                       variant="outline" 
                       role="combobox" 
                       className="w-full justify-between" 
-                      disabled={products.length === 0 || loading || sessionLoading}
+                      disabled={products.length === 0} // Removed loading/sessionLoading checks
                     >
                       {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -531,7 +515,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Label>Quantity</Label>
                 <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
               </div>
-              <Button type="button" onClick={addOrderItem} disabled={loading || sessionLoading}><Plus className="h-4 w-4" /></Button>
+              <Button type="button" onClick={addOrderItem} disabled={loading}><Plus className="h-4 w-4" /></Button>
             </div>
 
             {orderItems.length > 0 && (
