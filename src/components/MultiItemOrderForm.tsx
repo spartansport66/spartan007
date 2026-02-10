@@ -59,14 +59,13 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
   const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
-  const [gstPercent, setGstPercent] = useState<number>(5); // Default 5% GST
+  const [gstPercent, setGstPercent] = useState<number>(5);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
   
-  // Manual Search States
   const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
   const [dealerSearch, setDealerSearch] = useState('');
   
@@ -207,10 +206,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     calculateBalanceAndDueDate();
   }, [selectedDealer, dealers, user]);
 
-  const usedCredit = dealerBalance !== null ? dealerBalance + dealerOpeningBalance : null;
-  const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
-  const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
-
   const newItemFinalUnitPrice = useMemo(() => {
     const discount = (newItemUnitPrice * newItemDiscountPercent) / 100;
     return Math.max(0, newItemUnitPrice - discount);
@@ -274,6 +269,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           user_id: user.id,
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
+          gst_percent: gstPercent,
           status: 'completed',
           payment_status: 'pending_approval',
           payment_due_date: paymentDueDate,
@@ -289,6 +285,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         order_id: newOrder.id,
         product_id: item.product_id,
         quantity: item.quantity,
+        unit_price: item.unit_dp,
+        discount_percent: item.discount_percent,
         total_price: item.total_price,
       }));
       
@@ -314,16 +312,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         const product = products.find(p => p.id === item.product_id);
         if (!product) continue;
         const newStockLevel = product.stock - item.quantity;
-        const { data: updatedProduct } = await supabase
-          .from('products').update({ stock: newStockLevel }).eq('id', item.product_id).select('id, stock').single();
-        
-        if (updatedProduct && updatedProduct.stock < 0) {
-          const newRequiredQuantity = Math.abs(updatedProduct.stock);
-          const { data: existingAlert } = await supabase.from('production_alerts').select('id').eq('product_id', item.product_id).eq('resolved', false).single();
-          const alertData = { product_id: item.product_id, required_quantity: newRequiredQuantity, created_by: user.id, dealer_id: selectedDealer, resolved: false, created_at: new Date().toISOString() };
-          if (existingAlert) await supabase.from('production_alerts').update(alertData).eq('id', existingAlert.id);
-          else await supabase.from('production_alerts').insert(alertData);
-        }
+        await supabase.from('products').update({ stock: newStockLevel }).eq('id', item.product_id);
       }
 
       showSuccess('Order placed successfully!');
@@ -345,7 +334,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     }
   };
 
-  // Manual Filtering Logic
   const filteredDealers = useMemo(() => {
     if (!dealerSearch) return dealers;
     return dealers.filter(d => d.name.toLowerCase().includes(dealerSearch.toLowerCase()));
@@ -364,9 +352,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     <Card className="bg-card text-card-foreground shadow-lg">
       <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold text-white">Place New Order</CardTitle>
-        <CardDescription className="text-blue-100 dark:text-blue-200">
-          Create an order with multiple items for a registered dealer.
-        </CardDescription>
+        <CardDescription className="text-blue-100 dark:text-blue-200">Create an order with multiple items for a registered dealer.</CardDescription>
       </CardHeader>
       <CardContent className="p-4">
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -374,62 +360,19 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             <Label htmlFor="dealer">Dealer</Label>
             <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
               <PopoverTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  role="combobox" 
-                  className="w-full justify-between" 
-                  disabled={dealers.length === 0}
-                >
-                  {currentDealerName}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
+                <Button variant="outline" role="combobox" className="w-full justify-between" disabled={dealers.length === 0}>{currentDealerName}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
               </PopoverTrigger>
               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                <div className="p-2 border-b flex items-center gap-2">
-                  <Search className="h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Search dealer..." 
-                    value={dealerSearch} 
-                    onChange={(e) => setDealerSearch(e.target.value)}
-                    className="h-8 border-none focus-visible:ring-0"
-                  />
-                </div>
+                <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search dealer..." value={dealerSearch} onChange={(e) => setDealerSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
                 <ScrollArea className="h-[200px]">
                   <div className="p-1">
-                    {filteredDealers.length === 0 ? (
-                      <div className="p-2 text-sm text-center text-muted-foreground">No dealer found.</div>
-                    ) : (
-                      filteredDealers.map((dealer) => (
-                        <Button
-                          key={dealer.id}
-                          variant="ghost"
-                          className="w-full justify-start font-normal"
-                          onClick={() => {
-                            setSelectedDealer(dealer.id);
-                            setIsDealerPopoverOpen(false);
-                            setDealerSearch('');
-                          }}
-                        >
-                          <Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />
-                          {dealer.name}
-                        </Button>
-                      ))
+                    {filteredDealers.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No dealer found.</div>) : (
+                      filteredDealers.map((dealer) => (<Button key={dealer.id} variant="ghost" className="w-full justify-start font-normal" onClick={() => { setSelectedDealer(dealer.id); setIsDealerPopoverOpen(false); setDealerSearch(''); }}><Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />{dealer.name}</Button>))
                     )}
                   </div>
                 </ScrollArea>
               </PopoverContent>
             </Popover>
-            {selectedDealer && (
-              <div className="mt-2 p-3 bg-muted rounded-md text-sm space-y-1">
-                <div className="flex justify-between"><span>Opening Balance:</span><span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Net Transaction Balance:</span><span className="font-medium">₹{dealerBalance?.toFixed(2) || '0.00'}</span></div>
-                <div className="flex justify-between font-semibold"><span>Total Outstanding (Ledger):</span><span className={usedCredit! > dealerCreditLimit ? "text-destructive" : "text-primary"}>₹{usedCredit?.toFixed(2) || '0.00'}</span></div>
-                <div className="flex justify-between"><span>Credit Limit:</span><span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Available Credit:</span><span className={availableCredit! < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{availableCredit?.toFixed(2) || '0.00'}</span></div>
-                <div className="flex justify-between"><span>Credit Days:</span><span className="font-medium">{allottedCreditDays} days</span></div>
-                {paymentDueDate && <div className="flex justify-between"><span>Payment Due Date:</span><span className="font-medium">{formatDate(paymentDueDate)}</span></div>}
-              </div>
-            )}
           </div>
 
           <div className="space-y-4">
@@ -439,126 +382,35 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Label>Product</Label>
                 <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                   <PopoverTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      role="combobox" 
-                      className="w-full justify-between" 
-                      disabled={products.length === 0}
-                    >
-                      {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
+                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0}>{newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                    <div className="p-2 border-b flex items-center gap-2">
-                      <Search className="h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        placeholder="Search product..." 
-                        value={productSearch} 
-                        onChange={(e) => setProductSearch(e.target.value)}
-                        className="h-8 border-none focus-visible:ring-0"
-                      />
-                    </div>
+                    <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
                     <ScrollArea className="h-[250px]">
                       <div className="p-1">
-                        {filteredProducts.length === 0 ? (
-                          <div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>
-                        ) : (
-                          filteredProducts.map((product) => (
-                            <Button
-                              key={product.id}
-                              variant="ghost"
-                              className="w-full justify-start font-normal h-auto py-2"
-                              onClick={() => {
-                                setNewItemProductId(product.id);
-                                setNewItemUnitPrice(product.dp);
-                                setIsProductPopoverOpen(false);
-                                setProductSearch('');
-                              }}
-                            >
-                              <div className="flex flex-col items-start">
-                                <div className="flex items-center">
-                                  <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                                  <span>{product.name} ({product.code})</span>
-                                </div>
-                                <div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div>
-                              </div>
-                            </Button>
-                          ))
+                        {filteredProducts.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>) : (
+                          filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start"><div className="flex items-center"><Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span>{product.name} ({product.code})</span></div><div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div></Button>))
                         )}
                       </div>
                     </ScrollArea>
                   </PopoverContent>
                 </Popover>
               </div>
-              
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-end">
-                <div>
-                  <Label>Quantity</Label>
-                  <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
-                </div>
-                <div>
-                  <Label>Unit Price (DP)</Label>
-                  <Input 
-                    type="number" 
-                    step="0.01" 
-                    value={newItemUnitPrice} 
-                    onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} 
-                    min="0" 
-                  />
-                </div>
-                <div>
-                  <Label>Discount (%)</Label>
-                  <div className="relative">
-                    <Input 
-                      type="number" 
-                      step="0.1" 
-                      value={newItemDiscountPercent} 
-                      onChange={(e) => setNewItemDiscountPercent(parseFloat(e.target.value) || 0)} 
-                      min="0" 
-                      max="100"
-                      className="pr-8"
-                    />
-                    <Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label className="text-xs text-muted-foreground">Final Item Total</Label>
-                  <div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">
-                    ₹{newItemTotalPrice.toFixed(2)}
-                  </div>
-                </div>
+                <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
+                <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
+                <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(parseFloat(e.target.value) || 0)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
+                <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Final Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemTotalPrice.toFixed(2)}</div></div>
               </div>
-              
-              <Button type="button" onClick={addOrderItem} disabled={loading} className="w-full">
-                <Plus className="h-4 w-4 mr-2" /> Add to Order
-              </Button>
+              <Button type="button" onClick={addOrderItem} disabled={loading} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
             </div>
 
             {orderItems.length > 0 && (
               <div className="max-h-[250px] overflow-y-auto border rounded-md">
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Qty</TableHead>
-                      <TableHead>DP</TableHead>
-                      <TableHead>Disc %</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Qty</TableHead><TableHead>DP</TableHead><TableHead>Disc %</TableHead><TableHead className="text-right">Total</TableHead><TableHead></TableHead></TableRow></TableHeader>
                   <TableBody>
-                    {orderItems.map(item => (
-                      <TableRow key={item.id}>
-                        <TableCell className="max-w-[150px] truncate">{item.product_name}</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>₹{item.unit_dp.toFixed(2)}</TableCell>
-                        <TableCell>{item.discount_percent}%</TableCell>
-                        <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
-                        <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
-                      </TableRow>
-                    ))}
+                    {orderItems.map(item => (<TableRow key={item.id}><TableCell className="max-w-[150px] truncate">{item.product_name}</TableCell><TableCell>{item.quantity}</TableCell><TableCell>₹{item.unit_dp.toFixed(2)}</TableCell><TableCell>{item.discount_percent}%</TableCell><TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell><TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}
                   </TableBody>
                 </Table>
               </div>
@@ -567,65 +419,26 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
           {orderItems.length > 0 && (
             <div className="p-4 bg-muted rounded-md space-y-2">
-              <div className="flex justify-between text-base font-medium">
-                <span>Subtotal:</span>
-                <span>₹{preDiscountTotalOrderValue.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <Label htmlFor="discountAmount" className="text-base font-medium">Additional Discount (₹)</Label>
-                <Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} />
-              </div>
-              <div className="flex justify-between text-base font-medium">
-                <span>Taxable Value:</span>
-                <span>₹{taxableValue.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="gstPercent" className="text-base font-medium">GST (%)</Label>
-                  <Input id="gstPercent" type="number" step="0.1" value={gstPercent} onChange={(e) => setGstPercent(parseFloat(e.target.value) || 0)} className="w-20 text-right" min="0" />
-                </div>
-                <span className="text-sm text-muted-foreground">₹{gstAmount.toFixed(2)}</span>
-              </div>
+              <div className="flex justify-between text-base font-medium"><span>Subtotal:</span><span>₹{preDiscountTotalOrderValue.toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><Label htmlFor="discountAmount" className="text-base font-medium">Additional Discount (₹)</Label><Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} /></div>
+              <div className="flex justify-between text-base font-medium"><span>Taxable Value:</span><span>₹{taxableValue.toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><div className="flex items-center gap-2"><Label htmlFor="gstPercent" className="text-base font-medium">GST (%)</Label><Input id="gstPercent" type="number" step="0.1" value={gstPercent} onChange={(e) => setGstPercent(parseFloat(e.target.value) || 0)} className="w-20 text-right" min="0" /></div><span className="text-sm text-muted-foreground">₹{gstAmount.toFixed(2)}</span></div>
               <Separator className="my-2" />
-              <div className="flex justify-between text-lg font-bold">
-                <span>Total Order Value:</span>
-                <span>₹{finalOrderValue.toFixed(2)}</span>
-              </div>
-              {selectedDealer && (
-                <div className="flex justify-between text-sm">
-                  <span>Remaining Credit:</span>
-                  <span className={remainingCredit! < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{remainingCredit?.toFixed(2) || '0.00'}</span>
-                </div>
-              )}
+              <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
             </div>
           )}
 
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex items-center space-x-2"><Check className="h-5 w-5 text-green-600" /><Label className="text-base font-medium text-green-600">Payment Received at Order Time</Label></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="paymentMethod">Payment Method</Label>
-                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger id="paymentMethod"><SelectValue placeholder="Select method" /></SelectTrigger>
-                  <SelectContent>{paymentMethodsOptions.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+              <div><Label htmlFor="paymentMethod">Payment Method</Label><Select value={paymentMethod} onValueChange={setPaymentMethod}><SelectTrigger id="paymentMethod"><SelectValue placeholder="Select method" /></SelectTrigger><SelectContent>{paymentMethodsOptions.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
               <div><Label htmlFor="paymentAmount">Amount Paid</Label><Input id="paymentAmount" type="number" value={paymentAmount} readOnly className="bg-muted" /></div>
-              {paymentMethod === 'Cheque/DD' && (
-                <>
-                  <div><Label htmlFor="chequeDdNo">Cheque/DD No</Label><Input id="chequeDdNo" value={chequeDdNo} onChange={e => setChequeDdNo(e.target.value)} /></div>
-                  <div><Label htmlFor="chequeDdDate">Cheque/DD Date</Label><Input id="chequeDdDate" type="date" value={chequeDdDate} onChange={e => setChequeDdDate(e.target.value)} /></div>
-                </>
-              )}
-              {['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod) && (
-                <div><Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label><Input id="transactionId" value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="e.g., TXN123456" /></div>
-              )}
+              {paymentMethod === 'Cheque/DD' && (<><div><Label htmlFor="chequeDdNo">Cheque/DD No</Label><Input id="chequeDdNo" value={chequeDdNo} onChange={e => setChequeDdNo(e.target.value)} /></div><div><Label htmlFor="chequeDdDate">Cheque/DD Date</Label><Input id="chequeDdDate" type="date" value={chequeDdDate} onChange={e => setChequeDdDate(e.target.value)} /></div></>)}
+              {['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod) && (<div><Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label><Input id="transactionId" value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="e.g., TXN123456" /></div>)}
             </div>
           </div>
 
-          <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSubmitDisabled}>
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}
-          </Button>
+          <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSubmitDisabled}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}</Button>
         </form>
       </CardContent>
     </Card>
