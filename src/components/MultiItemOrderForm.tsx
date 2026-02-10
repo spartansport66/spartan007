@@ -18,8 +18,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-const GET_SALES_PERSON_DATA_EDGE_FUNCTION_URL = "get-sales-person-data";
-
 interface Product {
   id: string;
   code: string;
@@ -121,13 +119,35 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         return;
       }
       try {
-        const { data, error } = await supabase.functions.invoke(GET_SALES_PERSON_DATA_EDGE_FUNCTION_URL);
-        if (error) throw error;
+        // Fetch dealers assigned to the current user
+        const { data: assignedDealersData, error: assignedDealersError } = await supabase
+          .from('dealer_sales_persons')
+          .select('dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))')
+          .eq('sales_person_id', user.id);
+
+        if (assignedDealersError) throw assignedDealersError;
+
+        const formattedDealers = (assignedDealersData || [])
+          .map((item: any) => {
+            if (!item.dealers) return null;
+            const opening_balance = item.dealers.dealer_balances?.opening_balance || 0;
+            const { dealer_balances, ...dealerData } = item.dealers;
+            return { ...dealerData, opening_balance };
+          })
+          .filter(Boolean) as Dealer[];
         
-        setDealers(data.dealers || []);
-        setProducts(data.products || []);
+        formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
+        setDealers(formattedDealers);
+
+        // Fetch all products
+        const { data: productsData, error: productsError } = await supabase
+          .from('products')
+          .select('id, code, name, dp, stock');
+        if (productsError) throw productsError;
+        setProducts(productsData || []);
+
       } catch (error: any) {
-        showError(`Failed to load data: ${error.message}`);
+        showError(`Failed to load data: ${error.message}. This might be due to database security policies.`);
       } finally {
         setLoading(false);
       }
