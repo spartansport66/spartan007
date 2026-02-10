@@ -72,6 +72,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [productSearch, setProductSearch] = useState('');
   const [newItemProductId, setNewItemProductId] = useState<string>('');
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
+  const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0); // New state for editable DP
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -213,12 +214,13 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       quantity: newItemQuantity,
       product_name: product.name,
       product_code: product.code,
-      unit_dp: product.dp,
-      total_price: newItemQuantity * product.dp,
+      unit_dp: newItemUnitPrice, // Use the manually entered unit price
+      total_price: newItemQuantity * newItemUnitPrice,
     };
     setOrderItems(prevItems => [newOrderItem, ...prevItems]);
     setNewItemProductId('');
     setNewItemQuantity(1);
+    setNewItemUnitPrice(0);
   };
 
   const removeOrderItem = (id: string) => {
@@ -351,6 +353,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               <PopoverTrigger asChild>
                 <Button 
                   variant="outline" 
+                  role="combobox" 
                   className="w-full justify-between" 
                   disabled={dealers.length === 0}
                 >
@@ -408,13 +411,14 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
           <div className="space-y-4">
             <Label>Order Items</Label>
-            <div className="flex items-end gap-2 p-4 border rounded-md bg-muted/50">
-              <div className="flex-grow">
+            <div className="flex flex-col sm:flex-row items-end gap-2 p-4 border rounded-md bg-muted/50">
+              <div className="flex-grow w-full">
                 <Label>Product</Label>
                 <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                   <PopoverTrigger asChild>
                     <Button 
                       variant="outline" 
+                      role="combobox" 
                       className="w-full justify-between" 
                       disabled={products.length === 0}
                     >
@@ -444,6 +448,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                               className="w-full justify-start font-normal h-auto py-2"
                               onClick={() => {
                                 setNewItemProductId(product.id);
+                                setNewItemUnitPrice(product.dp); // Pre-fill DP
                                 setIsProductPopoverOpen(false);
                                 setProductSearch('');
                               }}
@@ -463,11 +468,21 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="w-24">
+              <div className="w-full sm:w-24">
                 <Label>Quantity</Label>
                 <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
               </div>
-              <Button type="button" onClick={addOrderItem} disabled={loading}><Plus className="h-4 w-4" /></Button>
+              <div className="w-full sm:w-32">
+                <Label>Unit Price (DP)</Label>
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  value={newItemUnitPrice} 
+                  onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} 
+                  min="0" 
+                />
+              </div>
+              <Button type="button" onClick={addOrderItem} disabled={loading} className="w-full sm:w-auto"><Plus className="h-4 w-4" /></Button>
             </div>
 
             {orderItems.length > 0 && (
