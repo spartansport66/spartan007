@@ -77,7 +77,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
   
-  // Search states
+  // Search states for manual filtering
   const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
   const [dealerSearch, setDealerSearch] = useState("");
   
@@ -390,10 +390,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     }
   };
 
-  // Manual filtering logic
+  // Manual filtering logic to bypass cmdk's internal filtering
   const filteredDealers = useMemo(() => {
     if (!dealerSearch) return dealers;
-    return dealers.filter(d => d.name.toLowerCase().includes(dealerSearch.toLowerCase()));
+    const search = dealerSearch.toLowerCase();
+    return dealers.filter(d => d.name.toLowerCase().includes(search));
   }, [dealers, dealerSearch]);
 
   const filteredProducts = useMemo(() => {
@@ -435,7 +436,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" onOpenAutoFocus={(e) => e.preventDefault()}>
                 <Command shouldFilter={false}>
                   <CommandInput 
                     placeholder="Search dealer..." 
@@ -454,7 +455,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                               setIsDealerPopoverOpen(false);
                               setDealerSearch("");
                             }}
-                            className="cursor-pointer"
+                            className="cursor-pointer pointer-events-auto"
                           >
                             <Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />
                             {dealer.name}
@@ -485,7 +486,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" onOpenAutoFocus={(e) => e.preventDefault()}>
                     <Command shouldFilter={false}>
                       <CommandInput 
                         placeholder="Search product..." 
@@ -504,7 +505,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                                   setIsProductPopoverOpen(false);
                                   setProductSearch("");
                                 }}
-                                className="cursor-pointer"
+                                className="cursor-pointer pointer-events-auto"
                               >
                                 <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
                                 <div><div>{product.name} ({product.code})</div><div className="text-xs text-muted-foreground">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div>
