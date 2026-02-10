@@ -213,6 +213,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const currentMonthDate = new Date();
       const currentMonthYear = new Date(Date.UTC(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1)).toISOString().split('T')[0];
       try {
+        // Fetch monthly credit limit
         const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
           .from('dealer_monthly_credit_limits')
           .select('credit_limit')
@@ -226,22 +227,37 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         } else {
           setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
         }
-        const { data: transactions, error: transactionsError } = await supabase
+
+        // --- REVISED BALANCE CALCULATION ---
+        // 1. Fetch orders for the user and dealer
+        const { data: orders, error: ordersError } = await supabase
           .from('orders')
-          .select(`total_amount, payments(amount, status)`)
+          .select('id, total_amount')
           .eq('dealer_id', selectedDealer)
-          .eq('user_id', user.id); // Filter by current user
-        if (transactionsError) throw transactionsError;
-        let netBalance = 0;
-        (transactions || []).forEach(order => {
-          netBalance += order.total_amount;
-          (order.payments || []).forEach(payment => {
-            if (payment.status === 'completed') {
-              netBalance -= payment.amount;
-            }
-          });
-        });
+          .eq('user_id', user.id);
+
+        if (ordersError) throw ordersError;
+
+        const totalOrderValue = (orders || []).reduce((sum, o) => sum + o.total_amount, 0);
+
+        // 2. Fetch completed payments for those orders
+        const orderIds = (orders || []).map(o => o.id);
+        let totalPaymentsValue = 0;
+        if (orderIds.length > 0) {
+          const { data: paymentsData, error: paymentsError } = await supabase
+            .from('payments')
+            .select('amount')
+            .in('order_id', orderIds)
+            .eq('status', 'completed');
+          
+          if (paymentsError) throw paymentsError;
+          totalPaymentsValue = (paymentsData || []).reduce((sum, p) => sum + p.amount, 0);
+        }
+        
+        const netBalance = totalOrderValue - totalPaymentsValue;
         setDealerBalance(netBalance);
+        // --- END REVISED BALANCE CALCULATION ---
+
       } catch (error: any) {
         showError(`Failed to calculate dealer balance: ${error.message}`);
       }
