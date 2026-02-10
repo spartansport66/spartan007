@@ -38,7 +38,7 @@ const PaymentOverviewCard = ({ selectedSalesPersonId }: PaymentOverviewCardProps
         console.log('DEBUG: PaymentOverviewCard - Querying for total pending orders...');
         let pendingOrdersQuery = supabase
           .from('orders')
-          .select('total_price')
+          .select('total_amount')
           .eq('payment_status', 'pending');
         if (selectedSalesPersonId) {
           pendingOrdersQuery = pendingOrdersQuery.eq('sales_person_id', selectedSalesPersonId);
@@ -46,7 +46,7 @@ const PaymentOverviewCard = ({ selectedSalesPersonId }: PaymentOverviewCardProps
         const { data: pendingOrders, error: pendingError } = await pendingOrdersQuery;
         if (pendingError) throw new Error(`Error fetching pending orders: ${pendingError.message}`);
         console.log('DEBUG: PaymentOverviewCard - Raw pendingOrders data:', pendingOrders);
-        const totalPendingAmount = pendingOrders?.reduce((sum, order) => sum + (order.total_price || 0), 0) || 0;
+        const totalPendingAmount = pendingOrders?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
         console.log('DEBUG: PaymentOverviewCard - Calculated Total Pending Amount:', totalPendingAmount);
         setTotalPending(totalPendingAmount);
 

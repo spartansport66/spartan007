@@ -129,7 +129,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         
         const formattedDealers = (assignedDealersData || []).map((item: any) => ({
           ...item.dealers,
-          opening_balance: item.dealers.dealer_balances?.opening_balance || 0,
+          opening_balance: item.dealers.dealer_balances?.[0]?.opening_balance || 0,
         }));
         setDealers(formattedDealers);
 

@@ -210,7 +210,7 @@ const DealerLedgerReport = () => {
           )}
         </div>
       </CardContent>
-      <style jsx global>{`
+      <style>{`
         @media print {
           body * {
             visibility: hidden;

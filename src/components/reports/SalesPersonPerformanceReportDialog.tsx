@@ -93,7 +93,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
           .from('sales')
           .select(`
             total_price, sale_date,
-            orders (user_id)
+            orders!inner (user_id)
           `)
           .gte('sale_date', startOfYear)
           .lte('sale_date', endOfYear);
@@ -165,7 +165,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
           .from('sales')
           .select(`
             total_price,
-            orders (user_id)
+            orders!inner (user_id)
           `)
           .gte('sale_date', startOfMonth)
           .lte('sale_date', endOfMonth);

@@ -18,7 +18,7 @@ import RCSBulkMessageSender from '@/components/RCSBulkMessageSender';
 import { cn } from '@/lib/utils';
 import UpdatePaymentDialog from '@/components/UpdatePaymentDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import DealerPaymentsReceivedDialog from '@/components/reports/DealerPaymentsReceivedDialog';
+import { DealerPaymentsReceivedDialog } from '@/components/reports/DealerPaymentsReceivedDialog';
 
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
 
