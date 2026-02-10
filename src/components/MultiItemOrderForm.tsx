@@ -277,7 +277,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           user_id: user.id,
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
-          item_discount: finalItemDiscount, // Added item_discount
+          item_discount: finalItemDiscount,
           gst_percent: gstPercent,
           status: 'completed',
           payment_status: 'pending_approval',
@@ -317,12 +317,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
       if (paymentInsertError) throw paymentInsertError;
 
-      for (const item of orderItems) {
-        const product = products.find(p => p.id === item.product_id);
-        if (!product) continue;
-        const newStockLevel = product.stock - item.quantity;
-        await supabase.from('products').update({ stock: newStockLevel }).eq('id', item.product_id);
-      }
+      // Note: Stock update is now handled by database triggers for better consistency.
 
       showSuccess('Order placed successfully!');
       setSelectedDealer('');
