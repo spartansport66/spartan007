@@ -39,7 +39,6 @@ interface OrderToEdit {
   dealer_name: string;
   total_amount: number;
   discount_amount: number;
-  gst_percent: number;
   items: OrderItem[];
 }
 
@@ -70,7 +69,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const { data: orderRaw, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, total_amount, discount_amount, gst_percent,
+          id, order_number, total_amount, discount_amount,
           dealers (name),
           sales (product_id, quantity, total_price, unit_price, discount_percent, products (name, code, dp))
         `)
@@ -96,12 +95,11 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         dealer_name: (orderRaw.dealers as any)?.name || 'N/A',
         total_amount: orderRaw.total_amount,
         discount_amount: orderRaw.discount_amount || 0,
-        gst_percent: orderRaw.gst_percent || 5,
         items: fetchedItems,
       });
       setOrderItems(fetchedItems);
       setDiscountAmount(orderRaw.discount_amount || 0);
-      setGstPercent(orderRaw.gst_percent || 5);
+      // Note: gst_percent is not in DB, using default 5% for UI calculation
 
       // 2. Fetch all products
       const { data: productsData, error: productsError } = await supabase
@@ -214,7 +212,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         .update({
           total_amount: parseFloat(finalOrderValue.toFixed(2)),
           discount_amount: parseFloat(discountAmount.toFixed(2)),
-          gst_percent: gstPercent,
+          // Removed gst_percent as it's missing from the schema
         })
         .eq('id', orderData.id);
 
@@ -264,7 +262,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
             </div>
 
             {orderItems.map((item) => (
-              <div key={item.id} className="p-4 border rounded-md bg-muted/30 space-y-4">
+              <div className="p-4 border rounded-md bg-muted/30 space-y-4" key={item.id}>
                 <div className="flex items-end gap-2">
                   <div className="flex-grow">
                     <Label>Product</Label>

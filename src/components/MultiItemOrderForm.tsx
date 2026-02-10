@@ -269,7 +269,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           user_id: user.id,
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
-          gst_percent: gstPercent,
+          // Removed gst_percent as it's missing from the schema
           status: 'completed',
           payment_status: 'pending_approval',
           payment_due_date: paymentDueDate,
