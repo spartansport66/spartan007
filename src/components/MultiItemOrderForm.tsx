@@ -56,7 +56,6 @@ interface MultiItemOrderFormProps {
 }
 
 const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }) => {
-  console.log('[MultiItemOrderForm] Component rendered.');
   const { user, session, loading: sessionLoading } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -112,24 +111,21 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   useEffect(() => {
     const fetchData = async () => {
-      console.log('[MultiItemOrderForm] useEffect: Fetching initial data...');
+      console.log('[MultiItemOrderForm] fetchData: Starting...');
       setLoading(true);
       if (!user || !session) {
-        console.log('[MultiItemOrderForm] No user or session, aborting fetch.');
         setDealers([]);
         setProducts([]);
         setLoading(false);
         return;
       }
       try {
-        // Fetch dealers assigned to the current user
         const { data: assignedDealersData, error: assignedDealersError } = await supabase
           .from('dealer_sales_persons')
           .select('dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))')
           .eq('sales_person_id', user.id);
 
         if (assignedDealersError) throw assignedDealersError;
-        console.log('[MultiItemOrderForm] Fetched assigned dealers data:', assignedDealersData);
 
         const formattedDealers = (assignedDealersData || [])
           .map((item: any) => {
@@ -142,32 +138,25 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         
         formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
         setDealers(formattedDealers);
-        console.log('[MultiItemOrderForm] Formatted and set dealers:', formattedDealers);
 
-        // Fetch all products
         const { data: productsData, error: productsError } = await supabase
           .from('products')
           .select('id, code, name, dp, stock');
         if (productsError) throw productsError;
         setProducts(productsData || []);
-        console.log('[MultiItemOrderForm] Fetched and set products:', productsData);
 
       } catch (error: any) {
-        console.error('[MultiItemOrderForm] Error fetching data:', error);
-        showError(`Failed to load data: ${error.message}. This might be due to database security policies.`);
+        console.error('[MultiItemOrderForm] fetchData Error:', error);
+        showError(`Failed to load data: ${error.message}`);
       } finally {
         setLoading(false);
-        console.log('[MultiItemOrderForm] Initial data fetch finished.');
+        console.log('[MultiItemOrderForm] fetchData: Finished.');
       }
     };
     if (!sessionLoading && user) {
       fetchData();
     } else if (!sessionLoading && !user) {
-      setDealers([]);
-      setProducts([]);
       setLoading(false);
-    } else if (sessionLoading) {
-      setLoading(true);
     }
   }, [user, session, sessionLoading]);
 
@@ -178,25 +167,21 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setTotalPendingAmount(0);
         return;
       }
-      console.log(`[MultiItemOrderForm] Checking pending payments for dealer: ${selectedDealer}`);
       try {
         const todayISOString = new Date().toISOString();
         const { data, error } = await supabase
           .from('orders')
           .select('order_number, total_amount, payment_status, payment_due_date')
           .eq('dealer_id', selectedDealer)
-          .eq('user_id', user.id) // Filter by current user
+          .eq('user_id', user.id)
           .eq('payment_status', 'pending')
           .lte('payment_due_date', todayISOString);
         if (error) throw error;
         const pendingData = data || [];
         setPendingPayments(pendingData);
-        const totalPending = pendingData.reduce((sum, order) => sum + order.total_amount, 0);
-        setTotalPendingAmount(totalPending);
-        console.log(`[MultiItemOrderForm] Found ${pendingData.length} pending payments totaling ${totalPending}.`);
+        setTotalPendingAmount(pendingData.reduce((sum, order) => sum + order.total_amount, 0));
       } catch (error: any) {
-        console.error('[MultiItemOrderForm] Error checking pending payments:', error);
-        showError(`Failed to check pending payments: ${error.message}`);
+        console.error('[MultiItemOrderForm] checkPendingPayments Error:', error);
       }
     };
     checkPendingPayments();
@@ -213,7 +198,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setDiscountAmount(0);
         return;
       }
-      console.log(`[MultiItemOrderForm] Calculating balance for dealer: ${selectedDealer}`);
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
@@ -226,22 +210,19 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const currentMonthDate = new Date();
       const currentMonthYear = new Date(Date.UTC(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1)).toISOString().split('T')[0];
       try {
-        // Fetch monthly credit limit
         const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
           .from('dealer_monthly_credit_limits')
           .select('credit_limit')
           .eq('dealer_id', selectedDealer)
           .eq('month_year', currentMonthYear)
           .single();
-        if (monthlyLimitError && monthlyLimitError.code !== 'PGRST116') {
-          console.error('Error fetching monthly credit limit:', monthlyLimitError.message);
-        } else if (monthlyLimitData) {
+        
+        if (monthlyLimitData) {
           setDealerCreditLimit(monthlyLimitData.credit_limit);
         } else {
           setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
         }
 
-        // --- REVISED BALANCE CALCULATION ---
         const { data: orders, error: ordersError } = await supabase
           .from('orders')
           .select('id, total_amount')
@@ -262,12 +243,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           totalPaymentsValue = (paymentsData || []).reduce((sum, p) => sum + p.amount, 0);
         }
         
-        const netBalance = totalOrderValue - totalPaymentsValue;
-        setDealerBalance(netBalance);
-        console.log(`[MultiItemOrderForm] Balance calculated. Opening: ${selectedDealerData?.opening_balance}, Net Transactions: ${netBalance}`);
+        setDealerBalance(totalOrderValue - totalPaymentsValue);
       } catch (error: any) {
-        console.error('[MultiItemOrderForm] Error calculating dealer balance:', error);
-        showError(`Failed to calculate dealer balance: ${error.message}`);
+        console.error('[MultiItemOrderForm] calculateBalance Error:', error);
       }
     };
     calculateBalanceAndDueDate();
@@ -297,14 +275,12 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       total_price: newItemQuantity * product.dp,
     };
     setOrderItems(prevItems => [newOrderItem, ...prevItems]);
-    console.log('[MultiItemOrderForm] Added item:', newOrderItem);
     setNewItemProductId('');
     setNewItemQuantity(1);
   };
 
   const removeOrderItem = (id: string) => {
     setOrderItems(orderItems.filter(item => item.id !== id));
-    console.log(`[MultiItemOrderForm] Removed item with id: ${id}`);
   };
 
   const isPaymentDetailsValid = useMemo(() => {
@@ -317,10 +293,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('[MultiItemOrderForm] handleSubmit triggered.');
     if (!user || !selectedDealer || orderItems.length === 0 || discountAmount < 0 || discountAmount > preDiscountTotalOrderValue || !isPaymentDetailsValid) {
       showError('Please correct all errors before submitting.');
-      console.error('[MultiItemOrderForm] Submit validation failed.', { user, selectedDealer, orderItems, discountAmount, preDiscountTotalOrderValue, isPaymentDetailsValid });
       return;
     }
     setLoading(true);
@@ -337,7 +311,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         quantitySold: item.quantity,
       }));
 
-      console.log('[MultiItemOrderForm] Creating order with payload:', { dealer_id: selectedDealer, user_id: user.id, total_amount: finalOrderAmount, discount_amount: finalDiscountAmount });
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -353,13 +326,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         .single();
       if (orderError) throw new Error(`Failed to create order: ${orderError.message}`);
       if (!newOrder) throw new Error('Order creation failed.');
-      console.log('[MultiItemOrderForm] Order created successfully:', newOrder);
 
       await supabase.from('dealers').update({ last_billing_date: newOrder.order_date }).eq('id', selectedDealer);
       const salesWithOrderId = salesToInsert.map(sale => ({ ...sale, order_id: newOrder.id }));
       const { error: salesInsertError } = await supabase.from('sales').insert(salesWithOrderId);
       if (salesInsertError) throw new Error(`Failed to insert sales items: ${salesInsertError.message}`);
-      console.log('[MultiItemOrderForm] Sales items inserted.');
 
       let transactionIdValue = null;
       if (['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod)) transactionIdValue = transactionId;
@@ -376,7 +347,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       };
       const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
       if (paymentInsertError) throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
-      console.log('[MultiItemOrderForm] Payment details inserted.');
 
       for (const update of stockUpdates) {
         const product = products.find(p => p.id === update.id);
@@ -398,7 +368,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', update.id).eq('resolved', false);
         }
       }
-      console.log('[MultiItemOrderForm] Stock levels updated.');
 
       const { count: orderCount } = await supabase.from('orders').select('count', { count: 'exact' }).eq('dealer_id', selectedDealer);
       if (orderCount === 1 && dealerOpeningBalance > 0) {
@@ -416,7 +385,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setTransactionId('');
       onOrderPlaced();
     } catch (error: any) {
-      console.error('[MultiItemOrderForm] Error during submit:', error);
+      console.error('[MultiItemOrderForm] Submit Error:', error);
       showError(`Failed to place order: ${error.message}`);
     } finally {
       setLoading(false);
@@ -424,14 +393,21 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   };
 
   const filteredProducts = useMemo(() => {
-    if (!productSearchValue) return products;
     const lowerCaseSearchValue = productSearchValue.toLowerCase();
     const searchWords = lowerCaseSearchValue.split(' ').filter(word => word.length > 0);
-    return products.filter(product => {
+    
+    const filtered = products.filter(product => {
+      if (searchWords.length === 0) return true;
       const productName = product.name.toLowerCase();
       const productCode = product.code.toLowerCase();
       return searchWords.some(word => productName.includes(word) || productCode.includes(word));
     });
+
+    // Optimization: If no search term, only show first 100 to prevent UI lag
+    if (searchWords.length === 0) {
+      return filtered.slice(0, 100);
+    }
+    return filtered;
   }, [products, productSearchValue]);
 
   const filteredDealers = useMemo(() => {
@@ -442,6 +418,17 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
   const calculatedPaymentStatus = isPaidAtOrderTime ? 'Pending Approval' : 'Pending';
+  
+  // Debug logs for disabled state
+  console.log('[MultiItemOrderForm] Render State:', { 
+    loading, 
+    sessionLoading, 
+    dealersCount: dealers.length, 
+    productsCount: products.length,
+    isDealerDisabled: dealers.length === 0 || loading || sessionLoading,
+    isProductDisabled: products.length === 0 || loading || sessionLoading
+  });
+
   const isSubmitDisabled = useMemo(() => {
     const baseChecks = loading || !selectedDealer || orderItems.length === 0 || (orderItems.some(item => !item.product_id || item.quantity <= 0)) || discountAmount < 0 || discountAmount > preDiscountTotalOrderValue;
     if (baseChecks) return true;
@@ -462,7 +449,13 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             <Label htmlFor="dealer">Dealer</Label>
             <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
               <PopoverTrigger asChild>
-                <Button variant="outline" role="combobox" aria-expanded={isDealerPopoverOpen} className="w-full justify-between" disabled={dealers.length === 0 || loading}>
+                <Button 
+                  variant="outline" 
+                  role="combobox" 
+                  aria-expanded={isDealerPopoverOpen} 
+                  className="w-full justify-between" 
+                  disabled={dealers.length === 0 || loading || sessionLoading}
+                >
                   {currentDealerName}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -490,7 +483,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 </Command>
               </PopoverContent>
             </Popover>
-            {!loading && dealers.length === 0 && <p className="text-sm text-muted-foreground mt-2">No dealers assigned to your account. Please contact an administrator.</p>}
+            {!loading && !sessionLoading && dealers.length === 0 && <p className="text-sm text-muted-foreground mt-2">No dealers assigned to your account. Please contact an administrator.</p>}
             {selectedDealer && <div className="mt-2 p-3 bg-muted rounded-md"><div className="flex justify-between text-sm"><span>Opening Balance:</span><span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Net Transaction Balance (Orders - Payments):</span><span className="font-medium">₹{dealerBalance !== null ? dealerBalance.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm font-semibold"><span>Total Outstanding Balance (Ledger):</span><span className={usedCredit !== null && usedCredit > dealerCreditLimit ? "text-destructive" : "text-primary"}>₹{usedCredit !== null ? usedCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Credit Limit (Current Month):</span><span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Available Credit:</span><span className={availableCredit !== null && availableCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Allotted Credit Days:</span><span className="font-medium">{allottedCreditDays} days</span></div>{paymentDueDate && <div className="flex justify-between text-sm"><span>Calculated Payment Due Date:</span><span className="font-medium">{formatDate(paymentDueDate)}</span></div>}<div className="flex justify-between text-sm font-bold mt-2"><span>Calculated Order Payment Status:</span><span className={calculatedPaymentStatus === 'Pending Approval' ? 'text-blue-600' : 'text-yellow-600'}>{calculatedPaymentStatus}</span></div></div>}
           </div>
 
@@ -501,7 +494,12 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Label>Product</Label>
                 <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0 || loading}>
+                    <Button 
+                      variant="outline" 
+                      role="combobox" 
+                      className="w-full justify-between" 
+                      disabled={products.length === 0 || loading || sessionLoading}
+                    >
                       {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
@@ -533,7 +531,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Label>Quantity</Label>
                 <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
               </div>
-              <Button type="button" onClick={addOrderItem}><Plus className="h-4 w-4" /></Button>
+              <Button type="button" onClick={addOrderItem} disabled={loading || sessionLoading}><Plus className="h-4 w-4" /></Button>
             </div>
 
             {orderItems.length > 0 && (
