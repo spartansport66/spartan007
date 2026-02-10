@@ -280,6 +280,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const finalItemDiscount = parseFloat(totalItemDiscountValue.toFixed(2));
       const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
 
+      // 1. Create the Order
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -300,6 +301,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
       await supabase.from('dealers').update({ last_billing_date: newOrder.order_date }).eq('id', selectedDealer);
       
+      // 2. Insert Sales Items and Manually Update Stock
       const salesWithOrderId = orderItems.map(item => ({
         order_id: newOrder.id,
         product_id: item.product_id,
@@ -312,6 +314,54 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const { error: salesInsertError } = await supabase.from('sales').insert(salesWithOrderId);
       if (salesInsertError) throw salesInsertError;
 
+      // Manual Stock Update Loop
+      for (const item of orderItems) {
+        const { data: productData, error: productFetchError } = await supabase
+          .from('products')
+          .select('stock')
+          .eq('id', item.product_id)
+          .single();
+        
+        if (!productFetchError && productData) {
+          const newStock = productData.stock - item.quantity;
+          
+          // Update Stock
+          await supabase
+            .from('products')
+            .update({ stock: newStock })
+            .eq('id', item.product_id);
+          
+          // Create Production Alert if stock is negative
+          if (newStock < 0) {
+            const requiredQty = Math.abs(newStock);
+            const { data: existingAlert } = await supabase
+              .from('production_alerts')
+              .select('id')
+              .eq('product_id', item.product_id)
+              .eq('resolved', false)
+              .single();
+            
+            if (existingAlert) {
+              await supabase
+                .from('production_alerts')
+                .update({ required_quantity: requiredQty, created_at: new Date().toISOString() })
+                .eq('id', existingAlert.id);
+            } else {
+              await supabase
+                .from('production_alerts')
+                .insert({
+                  product_id: item.product_id,
+                  required_quantity: requiredQty,
+                  resolved: false,
+                  created_by: user.id,
+                  dealer_id: selectedDealer
+                });
+            }
+          }
+        }
+      }
+
+      // 3. Record Payment
       const paymentData = {
         order_id: newOrder.id,
         dealer_id: selectedDealer,
@@ -338,7 +388,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setChequeDdDate('');
       setTransactionId('');
       
-      // Re-fetch products to update stock levels in the UI
       await fetchProducts();
       onOrderPlaced();
     } catch (error: any) {
