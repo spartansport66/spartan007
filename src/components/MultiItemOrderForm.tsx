@@ -414,6 +414,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   role="combobox" 
                   aria-expanded={isDealerPopoverOpen} 
                   className="w-full justify-between" 
+                  disabled={dealers.length === 0}
                 >
                   {currentDealerName}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -428,7 +429,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                       {dealers.map((dealer) => (
                         <CommandItem 
                           key={dealer.id} 
-                          value={dealer.name} // Use Name for searching
+                          value={dealer.name} // Searchable value
                           onSelect={() => {
                             setSelectedDealer(dealer.id);
                             setIsDealerPopoverOpen(false);
@@ -458,6 +459,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                       variant="outline" 
                       role="combobox" 
                       className="w-full justify-between" 
+                      disabled={products.length === 0}
                     >
                       {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -472,7 +474,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                           {products.map((product) => (
                             <CommandItem 
                               key={product.id} 
-                              value={`${product.name} ${product.code}`} // Use Name + Code for searching
+                              value={`${product.name} ${product.code}`} // Searchable value
                               onSelect={() => {
                                 setNewItemProductId(product.id);
                                 setIsProductPopoverOpen(false);
