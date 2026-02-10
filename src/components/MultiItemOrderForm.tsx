@@ -8,12 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react';
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Search } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Product {
   id: string;
@@ -41,13 +41,6 @@ interface OrderItem {
   total_price: number;
 }
 
-interface PendingPayment {
-  order_number: number;
-  total_amount: number;
-  payment_status: string;
-  payment_due_date: string | null;
-}
-
 interface MultiItemOrderFormProps {
   onOrderPlaced: () => void;
 }
@@ -71,8 +64,12 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
   
+  // Manual Search States
   const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
+  const [dealerSearch, setDealerSearch] = useState('');
+  
   const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
   const [newItemProductId, setNewItemProductId] = useState<string>('');
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
 
@@ -323,6 +320,18 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     }
   };
 
+  // Manual Filtering Logic
+  const filteredDealers = useMemo(() => {
+    if (!dealerSearch) return dealers;
+    return dealers.filter(d => d.name.toLowerCase().includes(dealerSearch.toLowerCase()));
+  }, [dealers, dealerSearch]);
+
+  const filteredProducts = useMemo(() => {
+    if (!productSearch) return products;
+    const search = productSearch.toLowerCase();
+    return products.filter(p => p.name.toLowerCase().includes(search) || p.code.toLowerCase().includes(search));
+  }, [products, productSearch]);
+
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
   const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid;
 
@@ -342,7 +351,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               <PopoverTrigger asChild>
                 <Button 
                   variant="outline" 
-                  role="combobox" 
                   className="w-full justify-between" 
                   disabled={dealers.length === 0}
                 >
@@ -350,29 +358,39 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                <Command>
-                  <CommandInput placeholder="Search dealer..." />
-                  <CommandList className="max-h-[300px] overflow-y-auto">
-                    <CommandEmpty>No dealer found.</CommandEmpty>
-                    <CommandGroup>
-                      {dealers.map((dealer) => (
-                        <CommandItem 
-                          key={dealer.id} 
-                          value={dealer.name}
-                          onSelect={() => {
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <div className="p-2 border-b flex items-center gap-2">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search dealer..." 
+                    value={dealerSearch} 
+                    onChange={(e) => setDealerSearch(e.target.value)}
+                    className="h-8 border-none focus-visible:ring-0"
+                  />
+                </div>
+                <ScrollArea className="h-[200px]">
+                  <div className="p-1">
+                    {filteredDealers.length === 0 ? (
+                      <div className="p-2 text-sm text-center text-muted-foreground">No dealer found.</div>
+                    ) : (
+                      filteredDealers.map((dealer) => (
+                        <Button
+                          key={dealer.id}
+                          variant="ghost"
+                          className="w-full justify-start font-normal"
+                          onClick={() => {
                             setSelectedDealer(dealer.id);
                             setIsDealerPopoverOpen(false);
+                            setDealerSearch('');
                           }}
-                          className="cursor-pointer pointer-events-auto"
                         >
                           <Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />
                           {dealer.name}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
+                        </Button>
+                      ))
+                    )}
+                  </div>
+                </ScrollArea>
               </PopoverContent>
             </Popover>
             {selectedDealer && (
@@ -397,7 +415,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   <PopoverTrigger asChild>
                     <Button 
                       variant="outline" 
-                      role="combobox" 
                       className="w-full justify-between" 
                       disabled={products.length === 0}
                     >
@@ -405,32 +422,44 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                    <Command>
-                      <CommandInput placeholder="Search product..." />
-                      <CommandList className="max-h-[300px] overflow-y-auto">
-                        <CommandEmpty>No product found.</CommandEmpty>
-                        <CommandGroup>
-                          {products.map((product) => (
-                            <CommandItem 
-                              key={product.id} 
-                              value={`${product.name} ${product.code}`}
-                              onSelect={() => {
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <div className="p-2 border-b flex items-center gap-2">
+                      <Search className="h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        placeholder="Search product..." 
+                        value={productSearch} 
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        className="h-8 border-none focus-visible:ring-0"
+                      />
+                    </div>
+                    <ScrollArea className="h-[250px]">
+                      <div className="p-1">
+                        {filteredProducts.length === 0 ? (
+                          <div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>
+                        ) : (
+                          filteredProducts.map((product) => (
+                            <Button
+                              key={product.id}
+                              variant="ghost"
+                              className="w-full justify-start font-normal h-auto py-2"
+                              onClick={() => {
                                 setNewItemProductId(product.id);
                                 setIsProductPopoverOpen(false);
+                                setProductSearch('');
                               }}
-                              className="cursor-pointer pointer-events-auto"
                             >
-                              <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                              <div>
-                                <div>{product.name} ({product.code})</div>
-                                <div className="text-xs text-muted-foreground">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div>
+                              <div className="flex flex-col items-start">
+                                <div className="flex items-center">
+                                  <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                  <span>{product.name} ({product.code})</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div>
                               </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
+                            </Button>
+                          ))
+                        )}
+                      </div>
+                    </ScrollArea>
                   </PopoverContent>
                 </Popover>
               </div>
