@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Search } from 'lucide-react';
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Search, Percent } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -38,6 +38,7 @@ interface OrderItem {
   product_name: string;
   product_code: string;
   unit_dp: number;
+  discount_percent: number;
   total_price: number;
 }
 
@@ -72,7 +73,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [productSearch, setProductSearch] = useState('');
   const [newItemProductId, setNewItemProductId] = useState<string>('');
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
-  const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0); // New state for editable DP
+  const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
+  const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<number>(0);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -200,6 +202,15 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
   const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
 
+  const newItemFinalUnitPrice = useMemo(() => {
+    const discount = (newItemUnitPrice * newItemDiscountPercent) / 100;
+    return Math.max(0, newItemUnitPrice - discount);
+  }, [newItemUnitPrice, newItemDiscountPercent]);
+
+  const newItemTotalPrice = useMemo(() => {
+    return newItemQuantity * newItemFinalUnitPrice;
+  }, [newItemQuantity, newItemFinalUnitPrice]);
+
   const addOrderItem = () => {
     if (!newItemProductId || newItemQuantity <= 0) {
       showError("Please select a product and enter a valid quantity.");
@@ -214,13 +225,15 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       quantity: newItemQuantity,
       product_name: product.name,
       product_code: product.code,
-      unit_dp: newItemUnitPrice, // Use the manually entered unit price
-      total_price: newItemQuantity * newItemUnitPrice,
+      unit_dp: newItemUnitPrice,
+      discount_percent: newItemDiscountPercent,
+      total_price: newItemTotalPrice,
     };
     setOrderItems(prevItems => [newOrderItem, ...prevItems]);
     setNewItemProductId('');
     setNewItemQuantity(1);
     setNewItemUnitPrice(0);
+    setNewItemDiscountPercent(0);
   };
 
   const removeOrderItem = (id: string) => {
@@ -411,8 +424,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
           <div className="space-y-4">
             <Label>Order Items</Label>
-            <div className="flex flex-col sm:flex-row items-end gap-2 p-4 border rounded-md bg-muted/50">
-              <div className="flex-grow w-full">
+            <div className="flex flex-col gap-4 p-4 border rounded-md bg-muted/50">
+              <div className="w-full">
                 <Label>Product</Label>
                 <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                   <PopoverTrigger asChild>
@@ -448,7 +461,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                               className="w-full justify-start font-normal h-auto py-2"
                               onClick={() => {
                                 setNewItemProductId(product.id);
-                                setNewItemUnitPrice(product.dp); // Pre-fill DP
+                                setNewItemUnitPrice(product.dp);
                                 setIsProductPopoverOpen(false);
                                 setProductSearch('');
                               }}
@@ -468,34 +481,71 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="w-full sm:w-24">
-                <Label>Quantity</Label>
-                <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
+              
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-end">
+                <div>
+                  <Label>Quantity</Label>
+                  <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
+                </div>
+                <div>
+                  <Label>Unit Price (DP)</Label>
+                  <Input 
+                    type="number" 
+                    step="0.01" 
+                    value={newItemUnitPrice} 
+                    onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} 
+                    min="0" 
+                  />
+                </div>
+                <div>
+                  <Label>Discount (%)</Label>
+                  <div className="relative">
+                    <Input 
+                      type="number" 
+                      step="0.1" 
+                      value={newItemDiscountPercent} 
+                      onChange={(e) => setNewItemDiscountPercent(parseFloat(e.target.value) || 0)} 
+                      min="0" 
+                      max="100"
+                      className="pr-8"
+                    />
+                    <Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-xs text-muted-foreground">Final Item Total</Label>
+                  <div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">
+                    ₹{newItemTotalPrice.toFixed(2)}
+                  </div>
+                </div>
               </div>
-              <div className="w-full sm:w-32">
-                <Label>Unit Price (DP)</Label>
-                <Input 
-                  type="number" 
-                  step="0.01" 
-                  value={newItemUnitPrice} 
-                  onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} 
-                  min="0" 
-                />
-              </div>
-              <Button type="button" onClick={addOrderItem} disabled={loading} className="w-full sm:w-auto"><Plus className="h-4 w-4" /></Button>
+              
+              <Button type="button" onClick={addOrderItem} disabled={loading} className="w-full">
+                <Plus className="h-4 w-4 mr-2" /> Add to Order
+              </Button>
             </div>
 
             {orderItems.length > 0 && (
               <div className="max-h-[250px] overflow-y-auto border rounded-md">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Qty</TableHead><TableHead>Unit DP</TableHead><TableHead className="text-right">Total</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Qty</TableHead>
+                      <TableHead>DP</TableHead>
+                      <TableHead>Disc %</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {orderItems.map(item => (
                       <TableRow key={item.id}>
-                        <TableCell>{item.product_name} ({item.product_code})</TableCell>
+                        <TableCell className="max-w-[150px] truncate">{item.product_name}</TableCell>
                         <TableCell>{item.quantity}</TableCell>
                         <TableCell>₹{item.unit_dp.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">₹{item.total_price.toFixed(2)}</TableCell>
+                        <TableCell>{item.discount_percent}%</TableCell>
+                        <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
                         <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
                       </TableRow>
                     ))}
@@ -509,7 +559,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             <div className="p-4 bg-muted rounded-md space-y-2">
               <div className="flex justify-between text-base font-medium"><span>Subtotal:</span><span>₹{preDiscountTotalOrderValue.toFixed(2)}</span></div>
               <div className="flex justify-between items-center">
-                <Label htmlFor="discountAmount" className="text-base font-medium">Discount (₹)</Label>
+                <Label htmlFor="discountAmount" className="text-base font-medium">Additional Discount (₹)</Label>
                 <Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} />
               </div>
               <Separator className="my-2" />
