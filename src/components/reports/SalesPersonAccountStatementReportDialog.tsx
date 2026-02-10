@@ -39,6 +39,7 @@ interface LedgerEntry {
   payment_amount?: number;
   cheque_dd_date?: string | null;
   transaction_id?: string | null;
+  payment_date?: string | null;
 }
 
 interface DealerAccountStatement {
@@ -431,7 +432,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
     setReportData([]);
   };
 
-  const handleSendOrderWhatsApp = async (orderNumber: number, amountDue: number, dueDate: string | null) => {
+  const handleSendOrderWhatsApp = async (dealerId: string, orderNumber: number, amountDue: number, dueDate: string | null) => {
     if (!user) { showError('You must be logged in to send WhatsApp messages.'); return; }
     if (!selectedDealerPhone) { showError('Dealer phone number is not available.'); return; }
     if (!companyName) { showError('Company name is required. Please set it in Admin Dashboard -> Company Information.'); return; }
@@ -446,7 +447,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dealerIds: [filterDealerId],
+          dealerIds: [dealerId],
           message: message,
           comboOfferId: null,
           sentByUserId: user.id,
@@ -466,7 +467,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
     }
   };
 
-  const handleSendBalanceWhatsApp = async (balance: number) => {
+  const handleSendBalanceWhatsApp = async (dealerId: string, balance: number) => {
     if (!user) { showError('You must be logged in.'); return; }
     if (!selectedDealerPhone) { showError('Dealer phone number is not available.'); return; }
     if (!companyName) { showError('Company name is required.'); return; }
@@ -482,7 +483,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dealerIds: [filterDealerId],
+          dealerIds: [dealerId],
           message: message,
           comboOfferId: null,
           sentByUserId: user.id,
@@ -734,7 +735,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      onClick={() => handleSendOrderWhatsApp(entry.order_number!, entry.debit, entry.payment_due_date || null)}
+                                      onClick={() => handleSendOrderWhatsApp(dealerStatement.dealer_id, entry.order_number!, entry.debit, entry.payment_due_date || null)}
                                       title="Send WhatsApp Reminder for this Pending Order"
                                       disabled={!dealerStatement.dealer_phone}
                                     >
@@ -745,7 +746,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      onClick={() => handleSendBalanceWhatsApp(entry.balance)}
+                                      onClick={() => handleSendBalanceWhatsApp(dealerStatement.dealer_id, entry.balance)}
                                       title="Send WhatsApp Reminder for Current Balance"
                                       disabled={!dealerStatement.dealer_phone}
                                     >
