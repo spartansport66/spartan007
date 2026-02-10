@@ -165,7 +165,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   useEffect(() => {
     const checkPendingPayments = async () => {
-      if (!selectedDealer) {
+      if (!selectedDealer || !user) {
         setPendingPayments([]);
         setTotalPendingAmount(0);
         return;
@@ -176,6 +176,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           .from('orders')
           .select('order_number, total_amount, payment_status, payment_due_date')
           .eq('dealer_id', selectedDealer)
+          .eq('user_id', user.id) // Filter by current user
           .eq('payment_status', 'pending')
           .lte('payment_due_date', todayISOString);
         if (error) throw error;
@@ -187,11 +188,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       }
     };
     checkPendingPayments();
-  }, [selectedDealer]);
+  }, [selectedDealer, user]);
 
   useEffect(() => {
     const calculateBalanceAndDueDate = async () => {
-      if (!selectedDealer) {
+      if (!selectedDealer || !user) {
         setDealerBalance(null);
         setDealerCreditLimit(0);
         setAllottedCreditDays(0);
@@ -228,7 +229,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         const { data: transactions, error: transactionsError } = await supabase
           .from('orders')
           .select(`total_amount, payments(amount, status)`)
-          .eq('dealer_id', selectedDealer);
+          .eq('dealer_id', selectedDealer)
+          .eq('user_id', user.id); // Filter by current user
         if (transactionsError) throw transactionsError;
         let netBalance = 0;
         (transactions || []).forEach(order => {
@@ -245,7 +247,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       }
     };
     calculateBalanceAndDueDate();
-  }, [selectedDealer, dealers]);
+  }, [selectedDealer, dealers, user]);
 
   const usedCredit = dealerBalance !== null ? dealerBalance + dealerOpeningBalance : null;
   const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
