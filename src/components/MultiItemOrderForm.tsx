@@ -76,12 +76,15 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
+  
+  // Search states
   const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
-
-  // New state for the single item entry form
+  const [dealerSearch, setDealerSearch] = useState("");
+  
+  const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
   const [newItemProductId, setNewItemProductId] = useState<string>('');
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
-  const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -271,6 +274,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     setOrderItems(prevItems => [newOrderItem, ...prevItems]);
     setNewItemProductId('');
     setNewItemQuantity(1);
+    setProductSearch("");
   };
 
   const removeOrderItem = (id: string) => {
@@ -386,6 +390,18 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     }
   };
 
+  // Manual filtering logic
+  const filteredDealers = useMemo(() => {
+    if (!dealerSearch) return dealers;
+    return dealers.filter(d => d.name.toLowerCase().includes(dealerSearch.toLowerCase()));
+  }, [dealers, dealerSearch]);
+
+  const filteredProducts = useMemo(() => {
+    if (!productSearch) return products;
+    const search = productSearch.toLowerCase();
+    return products.filter(p => p.name.toLowerCase().includes(search) || p.code.toLowerCase().includes(search));
+  }, [products, productSearch]);
+
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
   const calculatedPaymentStatus = isPaidAtOrderTime ? 'Pending Approval' : 'Pending';
   
@@ -420,26 +436,32 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                <Command>
-                  <CommandInput placeholder="Search dealer..." />
+                <Command shouldFilter={false}>
+                  <CommandInput 
+                    placeholder="Search dealer..." 
+                    value={dealerSearch} 
+                    onValueChange={setDealerSearch}
+                  />
                   <CommandList className="max-h-[300px] overflow-y-auto">
-                    <CommandEmpty>No dealer found.</CommandEmpty>
-                    <CommandGroup>
-                      {dealers.map((dealer) => (
-                        <CommandItem 
-                          key={dealer.id} 
-                          value={dealer.name} // Use Name for searching
-                          onSelect={() => {
-                            setSelectedDealer(dealer.id);
-                            setIsDealerPopoverOpen(false);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />
-                          {dealer.name}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
+                    {filteredDealers.length === 0 ? <CommandEmpty>No dealer found.</CommandEmpty> : (
+                      <CommandGroup>
+                        {filteredDealers.map((dealer) => (
+                          <CommandItem 
+                            key={dealer.id} 
+                            value={dealer.id}
+                            onSelect={() => {
+                              setSelectedDealer(dealer.id);
+                              setIsDealerPopoverOpen(false);
+                              setDealerSearch("");
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />
+                            {dealer.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
                   </CommandList>
                 </Command>
               </PopoverContent>
@@ -464,26 +486,32 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                    <Command>
-                      <CommandInput placeholder="Search product..." />
+                    <Command shouldFilter={false}>
+                      <CommandInput 
+                        placeholder="Search product..." 
+                        value={productSearch} 
+                        onValueChange={setProductSearch}
+                      />
                       <CommandList className="max-h-[300px] overflow-y-auto">
-                        <CommandEmpty>No product found.</CommandEmpty>
-                        <CommandGroup>
-                          {products.map((product) => (
-                            <CommandItem 
-                              key={product.id} 
-                              value={`${product.name} ${product.code}`} // Use Name + Code for searching
-                              onSelect={() => {
-                                setNewItemProductId(product.id);
-                                setIsProductPopoverOpen(false);
-                              }}
-                              className="cursor-pointer"
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                              <div><div>{product.name} ({product.code})</div><div className="text-xs text-muted-foreground">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
+                        {filteredProducts.length === 0 ? <CommandEmpty>No product found.</CommandEmpty> : (
+                          <CommandGroup>
+                            {filteredProducts.map((product) => (
+                              <CommandItem 
+                                key={product.id} 
+                                value={product.id}
+                                onSelect={() => {
+                                  setNewItemProductId(product.id);
+                                  setIsProductPopoverOpen(false);
+                                  setProductSearch("");
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                <div><div>{product.name} ({product.code})</div><div className="text-xs text-muted-foreground">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
                       </CommandList>
                     </Command>
                   </PopoverContent>

@@ -9,7 +9,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "approve": "node run-approve.js"
+    "approve": "node run-approve.js",
+    "prepare": "husky"
   },
   "dependencies": {
     "@capacitor/android": "7.4.4",
