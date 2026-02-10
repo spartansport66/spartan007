@@ -7,12 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, Edit } from 'lucide-react';
+import { Loader2, Search, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
-import EditOrderDialog from '@/components/EditOrderDialog';
 
 interface DispatchedOrder {
   id: string;
@@ -44,10 +43,6 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDispatchDate, setFilterFromDispatchDate] = useState<string>('');
   const [filterToDispatchDate, setFilterToDispatchDate] = useState<string>('');
-
-  // State for Edit Order Dialog
-  const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false);
-  const [selectedOrderIdForEdit, setSelectedOrderIdForEdit] = useState<string | null>(null);
 
   const fetchOrdersAndDealers = useCallback(async () => {
     setLoading(true);
@@ -129,15 +124,6 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
     setFilterToDispatchDate('');
   };
 
-  const handleEditOrder = (orderId: string) => {
-    setSelectedOrderIdForEdit(orderId);
-    setIsEditOrderDialogOpen(true);
-  };
-
-  const handleOrderUpdated = () => {
-    fetchOrdersAndDealers(); // Refresh the list after an update
-  };
-
   const handlePrint = () => {
     const doc = new jsPDF();
     doc.setFontSize(18);
@@ -173,135 +159,115 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
   };
 
   return (
-    <>
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Dispatched Orders Report</DialogTitle>
-            <DialogDescription>
-              Generate a report of all orders that have been successfully dispatched.
-            </DialogDescription>
-          </DialogHeader>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Dispatched Orders Report</DialogTitle>
+          <DialogDescription>
+            Generate a report of all orders that have been successfully dispatched.
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="flex flex-wrap items-end gap-4 mb-6">
-            <div className="flex-1 min-w-[150px]">
-              <Label htmlFor="filterOrderNumber">Order Number</Label>
-              <Input
-                id="filterOrderNumber"
-                type="number"
-                placeholder="Filter by order no."
-                value={filterOrderNumber}
-                onChange={(e) => setFilterOrderNumber(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            <div className="flex-1 min-w-[150px]">
-              <Label htmlFor="filterDealer">Dealer Name</Label>
-              <Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}>
-                <SelectTrigger id="filterDealer" className="w-full">
-                  <SelectValue placeholder="Filter by dealer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Dealers</SelectItem>
-                  {allDealers.map(dealer => (
-                    <SelectItem key={dealer.value} value={dealer.value}>{dealer.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1 min-w-[150px]">
-              <Label htmlFor="filterFromDispatchDate">From Dispatch Date</Label>
-              <Input
-                id="filterFromDispatchDate"
-                type="date"
-                value={filterFromDispatchDate}
-                onChange={(e) => setFilterFromDispatchDate(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            <div className="flex-1 min-w-[150px]">
-              <Label htmlFor="filterToDispatchDate">To Dispatch Date</Label>
-              <Input
-                id="filterToDispatchDate"
-                type="date"
-                value={filterToDispatchDate}
-                onChange={(e) => setFilterToDispatchDate(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            <Button onClick={fetchOrdersAndDealers} className="flex items-center gap-2">
-              <Search className="h-4 w-4" /> Apply Filters
-            </Button>
-            <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
-              Clear Filters
-            </Button>
+        <div className="flex flex-wrap items-end gap-4 mb-6">
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterOrderNumber">Order Number</Label>
+            <Input
+              id="filterOrderNumber"
+              type="number"
+              placeholder="Filter by order no."
+              value={filterOrderNumber}
+              onChange={(e) => setFilterOrderNumber(e.target.value)}
+              className="w-full"
+            />
           </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterDealer">Dealer Name</Label>
+            <Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}>
+              <SelectTrigger id="filterDealer" className="w-full">
+                <SelectValue placeholder="Filter by dealer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Dealers</SelectItem>
+                {allDealers.map(dealer => (
+                  <SelectItem key={dealer.value} value={dealer.value}>{dealer.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterFromDispatchDate">From Dispatch Date</Label>
+            <Input
+              id="filterFromDispatchDate"
+              type="date"
+              value={filterFromDispatchDate}
+              onChange={(e) => setFilterFromDispatchDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterToDispatchDate">To Dispatch Date</Label>
+            <Input
+              id="filterToDispatchDate"
+              type="date"
+              value={filterToDispatchDate}
+              onChange={(e) => setFilterToDispatchDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <Button onClick={fetchOrdersAndDealers} className="flex items-center gap-2">
+            <Search className="h-4 w-4" /> Apply Filters
+          </Button>
+          <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
+            Clear Filters
+          </Button>
+        </div>
 
-          <div className="overflow-x-auto">
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading orders...</p>
-              </div>
-            ) : orders.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No dispatched orders found matching your criteria.</p>
-            ) : (
-              <div className="max-h-[400px] overflow-y-auto border rounded-md">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-background z-10">
-                    <TableRow className="bg-muted hover:bg-muted/90">
-                      <TableHead className="text-muted-foreground">Order No.</TableHead>
-                      <TableHead className="text-muted-foreground">Dispatch No.</TableHead>
-                      <TableHead className="text-muted-foreground">Bill No.</TableHead>
-                      <TableHead className="text-muted-foreground">Dealer Name</TableHead>
-                      <TableHead className="text-muted-foreground">Dispatch Date</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
-                      <TableHead className="text-muted-foreground text-center">Actions</TableHead>
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading orders...</p>
+            </div>
+          ) : orders.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No dispatched orders found matching your criteria.</p>
+          ) : (
+            <div className="max-h-[400px] overflow-y-auto border rounded-md">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead className="text-muted-foreground">Order No.</TableHead>
+                    <TableHead className="text-muted-foreground">Dispatch No.</TableHead>
+                    <TableHead className="text-muted-foreground">Bill No.</TableHead>
+                    <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                    <TableHead className="text-muted-foreground">Dispatch Date</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {orders.map((order) => (
+                    <TableRow key={order.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
+                      <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
+                      <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
+                      <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                      <TableCell className="text-muted-foreground">{new Date(order.dispatch_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orders.map((order) => (
-                      <TableRow key={order.id} className="hover:bg-accent/50">
-                        <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
-                        <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
-                        <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
-                        <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                        <TableCell className="text-muted-foreground">{new Date(order.dispatch_date).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
-                        <TableCell className="text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditOrder(order.id)}
-                            title="Edit Order"
-                          >
-                            <Edit className="h-4 w-4 text-orange-600" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
 
-          <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={handlePrint} disabled={orders.length === 0}>
-              <Printer className="mr-2 h-4 w-4" /> Print Report
-            </Button>
-            <Button onClick={() => onOpenChange(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <EditOrderDialog
-        orderId={selectedOrderIdForEdit}
-        isOpen={isEditOrderDialogOpen}
-        onOpenChange={setIsEditOrderDialogOpen}
-        onOrderUpdated={handleOrderUpdated}
-      />
-    </>
+        <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
+          <Button variant="outline" onClick={handlePrint} disabled={orders.length === 0}>
+            <Printer className="mr-2 h-4 w-4" /> Print Report
+          </Button>
+          <Button onClick={() => onOpenChange(false)}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 
