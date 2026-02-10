@@ -119,44 +119,25 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         return;
       }
       try {
-        // Step 1: Get assigned dealer IDs
-        const { data: assignedDealers, error: assignedDealersError } = await supabase
+        // Fetch dealers assigned to the current user
+        const { data: assignedDealersData, error: assignedDealersError } = await supabase
           .from('dealer_sales_persons')
-          .select('dealer_id')
+          .select('dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))')
           .eq('sales_person_id', user.id);
 
         if (assignedDealersError) throw assignedDealersError;
-        const dealerIds = assignedDealers.map(d => d.dealer_id);
 
-        if (dealerIds.length === 0) {
-          setDealers([]);
-        } else {
-          // Step 2: Fetch dealer details for those IDs
-          const { data: dealersData, error: dealersError } = await supabase
-            .from('dealers')
-            .select('id, name, credit_limit, allotted_credit_days')
-            .in('id', dealerIds);
-
-          if (dealersError) throw dealersError;
-
-          // Step 3: Fetch dealer balances for those IDs
-          const { data: balancesData, error: balancesError } = await supabase
-            .from('dealer_balances')
-            .select('dealer_id, opening_balance')
-            .in('dealer_id', dealerIds);
-
-          if (balancesError) throw balancesError;
-          const balancesMap = new Map((balancesData || []).map(b => [b.dealer_id, b.opening_balance]));
-
-          // Step 4: Combine
-          const formattedDealers = (dealersData || []).map(dealer => ({
-            ...dealer,
-            opening_balance: balancesMap.get(dealer.id) || 0,
-          }));
-          
-          formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
-          setDealers(formattedDealers);
-        }
+        const formattedDealers = (assignedDealersData || [])
+          .map((item: any) => {
+            if (!item.dealers) return null;
+            const opening_balance = item.dealers.dealer_balances?.opening_balance || 0;
+            const { dealer_balances, ...dealerData } = item.dealers;
+            return { ...dealerData, opening_balance };
+          })
+          .filter(Boolean) as Dealer[];
+        
+        formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
+        setDealers(formattedDealers);
 
         // Fetch all products
         const { data: productsData, error: productsError } = await supabase
