@@ -18,7 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-const GET_SALES_PERSON_DATA_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/get-sales-person-data";
+const GET_SALES_PERSON_DATA_EDGE_FUNCTION_URL = "get-sales-person-data";
 
 interface Product {
   id: string;
@@ -121,23 +121,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         return;
       }
       try {
-        const response = await fetch(GET_SALES_PERSON_DATA_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to fetch data from Edge Function.');
-        }
-
-        const { dealers, products } = await response.json();
+        const { data, error } = await supabase.functions.invoke(GET_SALES_PERSON_DATA_EDGE_FUNCTION_URL);
+        if (error) throw error;
         
-        setDealers(dealers || []);
-        setProducts(products || []);
+        setDealers(data.dealers || []);
+        setProducts(data.products || []);
       } catch (error: any) {
         showError(`Failed to load data: ${error.message}`);
       } finally {
@@ -242,22 +230,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const usedCredit = dealerBalance !== null ? dealerBalance + dealerOpeningBalance : null;
   const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
   const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
-
-  const updateItemQuantity = (id: string, newQuantity: number) => {
-    const quantity = Math.max(1, newQuantity); // Ensure quantity is at least 1
-    setOrderItems(prevItems => prevItems.map(item => {
-      if (item.id === id) {
-        const product = products.find(p => p.id === item.product_id);
-        const unit_dp = product?.dp || 0;
-        return {
-          ...item,
-          quantity: quantity,
-          total_price: quantity * unit_dp,
-        };
-      }
-      return item;
-    }));
-  };
 
   const addOrderItem = () => {
     if (!newItemProductId || newItemQuantity <= 0) {
@@ -447,8 +419,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                     {filteredDealers.length === 0 ? <CommandEmpty>No dealer found.</CommandEmpty> : (
                       <CommandGroup>
                         {filteredDealers.map((dealer) => (
-                          <CommandItem key={dealer.id} value={dealer.name} onSelect={() => {
-                            setSelectedDealer(dealer.id === selectedDealer ? '' : dealer.id);
+                          <CommandItem key={dealer.id} value={dealer.name} onSelect={(currentValue) => {
+                            const selected = dealers.find(d => d.name.toLowerCase() === currentValue.toLowerCase());
+                            setSelectedDealer(selected?.id === selectedDealer ? '' : selected?.id || '');
                             setIsDealerPopoverOpen(false);
                             setDealerSearchValue("");
                           }}>
@@ -462,61 +435,51 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 </Command>
               </PopoverContent>
             </Popover>
-            {!loading && dealers.length === 0 && <p className="text-sm text-muted-foreground mt-2">No dealers assigned to your account. Please contact an administrator to assign dealers.</p>}
+            {!loading && dealers.length === 0 && <p className="text-sm text-muted-foreground mt-2">No dealers assigned to your account. Please contact an administrator.</p>}
             {selectedDealer && totalPendingAmount > 0 && <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertTitle>Overdue Payments</AlertTitle><AlertDescription>Cannot place order. Dealer has overdue payments totaling ₹{totalPendingAmount.toFixed(2)}. Please clear all overdue payments first.</AlertDescription></Alert>}
             {selectedDealer && <div className="mt-2 p-3 bg-muted rounded-md"><div className="flex justify-between text-sm"><span>Opening Balance:</span><span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Net Transaction Balance (Orders - Payments):</span><span className="font-medium">₹{dealerBalance !== null ? dealerBalance.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm font-semibold"><span>Total Outstanding Balance (Ledger):</span><span className={usedCredit !== null && usedCredit > dealerCreditLimit ? "text-destructive" : "text-primary"}>₹{usedCredit !== null ? usedCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Credit Limit (Current Month):</span><span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Available Credit:</span><span className={availableCredit !== null && availableCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Allotted Credit Days:</span><span className="font-medium">{allottedCreditDays} days</span></div>{paymentDueDate && <div className="flex justify-between text-sm"><span>Calculated Payment Due Date:</span><span className="font-medium">{formatDate(paymentDueDate)}</span></div>}<div className="flex justify-between text-sm font-bold mt-2"><span>Calculated Order Payment Status:</span><span className={calculatedPaymentStatus === 'Pending Approval' ? 'text-blue-600' : 'text-yellow-600'}>{calculatedPaymentStatus}</span></div></div>}
           </div>
 
           <div className="space-y-4">
             <Label>Order Items</Label>
-            <div className="p-4 border rounded-md bg-muted/50">
-              {/* Responsive layout for adding new item */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                {/* Product Selection (Full width on mobile, 2/3 on desktop) */}
-                <div className="col-span-1 md:col-span-2">
-                  <Label>Product</Label>
-                  <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0 || loading}>
-                        {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                      <Command>
-                        <CommandInput placeholder="Search product..." value={productSearchValue} onValueChange={setProductSearchValue} />
-                        <CommandList className="max-h-[300px] overflow-y-auto">
-                          {filteredProducts.length === 0 ? <CommandEmpty>No product found.</CommandEmpty> : (
-                            <CommandGroup>
-                              {filteredProducts.map((product) => (
-                                <CommandItem key={product.id} value={`${product.name} ${product.code}`} onSelect={() => {
-                                  setNewItemProductId(product.id);
-                                  setIsProductPopoverOpen(false);
-                                  setProductSearchValue("");
-                                }}>
-                                  <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                                  <div><div>{product.name} ({product.code})</div><div className="text-xs text-muted-foreground">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          )}
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                
-                {/* Quantity and Add Button (Full width on mobile, 1/3 on desktop) */}
-                <div className="col-span-1 md:col-span-1 grid grid-cols-2 md:grid-cols-[2fr_1fr] gap-2">
-                  <div>
-                    <Label>Quantity</Label>
-                    <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
-                  </div>
-                  <Button type="button" onClick={addOrderItem} disabled={disableAddItem} className="self-end">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
+            <div className="flex items-end gap-2 p-4 border rounded-md bg-muted/50">
+              <div className="flex-grow">
+                <Label>Product</Label>
+                <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0 || loading}>
+                      {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                    <Command>
+                      <CommandInput placeholder="Search product..." value={productSearchValue} onValueChange={setProductSearchValue} />
+                      <CommandList className="max-h-[300px] overflow-y-auto">
+                        {filteredProducts.length === 0 ? <CommandEmpty>No product found.</CommandEmpty> : (
+                          <CommandGroup>
+                            {filteredProducts.map((product) => (
+                              <CommandItem key={product.id} value={`${product.name} ${product.code}`} onSelect={() => {
+                                setNewItemProductId(product.id);
+                                setIsProductPopoverOpen(false);
+                                setProductSearchValue("");
+                              }}>
+                                <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                <div><div>{product.name} ({product.code})</div><div className="text-xs text-muted-foreground">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
+              <div className="w-24">
+                <Label>Quantity</Label>
+                <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
+              </div>
+              <Button type="button" onClick={addOrderItem} disabled={disableAddItem}><Plus className="h-4 w-4" /></Button>
             </div>
 
             {disableAddItem && <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertTitle>Insufficient Credit</AlertTitle><AlertDescription>Dealer's available credit is ₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}. Please clear the balance or increase the credit limit to add more items.</AlertDescription></Alert>}
@@ -529,15 +492,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                     {orderItems.map(item => (
                       <TableRow key={item.id}>
                         <TableCell>{item.product_name} ({item.product_code})</TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateItemQuantity(item.id, parseInt(e.target.value) || 1)}
-                            min="1"
-                            className="w-16 h-8 text-center"
-                          />
-                        </TableCell>
+                        <TableCell>{item.quantity}</TableCell>
                         <TableCell>₹{item.unit_dp.toFixed(2)}</TableCell>
                         <TableCell className="text-right">₹{item.total_price.toFixed(2)}</TableCell>
                         <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>

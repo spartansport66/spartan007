@@ -17,6 +17,7 @@ serve(async (req) => {
   }
 
   try {
+    // Create a Supabase client with the user's authentication token
     const supabaseClient = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -25,10 +26,12 @@ serve(async (req) => {
       { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     );
 
+    // Get the authenticated user
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError) throw userError;
     if (!user) throw new Error("User not authenticated.");
 
+    // Create a Supabase admin client to bypass RLS
     const supabaseAdmin = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -36,6 +39,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Fetch dealers assigned to the authenticated user
     const { data: assignedDealersData, error: assignedDealersError } = await supabaseAdmin
       .from('dealer_sales_persons')
       .select(`dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))`)
@@ -62,6 +66,7 @@ serve(async (req) => {
 
     formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
 
+    // Fetch all products
     const { data: productsData, error: productsError } = await supabaseAdmin
       .from('products')
       .select('id, code, name, dp, stock');
