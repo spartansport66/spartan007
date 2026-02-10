@@ -1,4 +1,6 @@
-import approveProposal from "./approve-proposal.js";
+// If approve-proposal.js is in the project root
+import approveProposal from '../approve-proposal.js';
+
 
 try {
   const result = approveProposal();

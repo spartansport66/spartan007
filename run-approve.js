@@ -1,4 +1,4 @@
-import approveProposal from "./approve-proposal.js";
+import approveProposal from './scripts/approve-proposal.js';
 
 try {
   const result = approveProposal();
