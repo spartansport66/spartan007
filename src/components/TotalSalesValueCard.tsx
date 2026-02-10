@@ -33,7 +33,7 @@ const TotalSalesValueCard = () => {
       const { data: currentMonthData, error: currentMonthError } = await supabase
         .from('orders')
         .select('subtotal, discount')
-        .gte('order_date', currentMonthStart);
+        .gte('created_at', currentMonthStart);
 
       if (currentMonthError) throw new Error(`Failed to fetch current month sales: ${currentMonthError.message}`);
       
@@ -44,8 +44,8 @@ const TotalSalesValueCard = () => {
       const { data: lastMonthData, error: lastMonthError } = await supabase
         .from('orders')
         .select('subtotal, discount')
-        .gte('order_date', lastMonthStart)
-        .lte('order_date', lastMonthEnd);
+        .gte('created_at', lastMonthStart)
+        .lte('created_at', lastMonthEnd);
 
       if (lastMonthError) throw new Error(`Failed to fetch last month sales: ${lastMonthError.message}`);
 

@@ -23,21 +23,22 @@ const SalesPersonPerformanceCard = () => {
       const today = new Date();
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
       const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
-      const targetMonthFilterDate = new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)).toISOString().split('T')[0];
 
-      // 1. Fetch sales target for the current user for the current month.
+      // 1. Fetch sales target for the current user.
+      // Removed .single() to prevent 406 error if multiple targets exist.
       const { data: targetData, error: targetError } = await supabase
         .from('sales_targets')
         .select('target_amount')
-        .eq('sales_person_id', user.id)
-        .eq('target_month', targetMonthFilterDate);
+        .eq('sales_person_id', user.id);
 
       if (targetError) {
+        // We no longer need to check for 'PGRST116' because we aren't using .single()
         throw new Error(`Failed to fetch sales target: ${targetError.message}`);
       }
       
-      const currentMonthTarget = (targetData || []).reduce((sum, target) => sum + target.target_amount, 0);
-      setSalesTarget(currentMonthTarget);
+      // Safely get the target from the first result, or default to 0.
+      const firstTarget = targetData?.[0]?.target_amount || 0;
+      setSalesTarget(firstTarget);
 
       // 2. Fetch total achieved sales (post-discount) for the current month
       const { data: ordersData, error: ordersError } = await supabase

@@ -29,15 +29,6 @@ interface PaymentReportData {
   payment_id: string | null; // Actual payment record ID
   payment_method: string | null;
   cheque_dd_date: string | null;
-  dealer_id: string;
-}
-
-interface PendingOrderPayment {
-  id: string;
-  order_number: number;
-  total_amount: number;
-  dealer_name: string;
-  payment_due_date: string | null;
 }
 
 interface FilterOption {
@@ -63,7 +54,7 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
 
   // Dialog states for adding payment details
   const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
-  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PendingOrderPayment | null>(null);
+  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PaymentReportData | null>(null);
 
   // Filter states
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
@@ -212,13 +203,13 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
             const isGeneralPayment = !item.order_id;
             
             currentPaymentStatus = item.status === 'completed' ? 'paid' : item.status;
-            currentOrderId = isGeneralPayment ? item.dealer_id : (item.orders as any).id; // Use dealer ID if general payment
-            currentOrderNumber = isGeneralPayment ? 0 : (item.orders as any).order_number;
-            currentDealerName = isGeneralPayment ? (item.dealers as any)?.name || 'N/A' : (item.orders as any)?.dealers?.name || 'N/A';
-            currentDealerPhone = isGeneralPayment ? (item.dealers as any)?.phone || '' : (item.orders as any)?.dealers?.phone || '';
+            currentOrderId = isGeneralPayment ? item.dealer_id : item.orders.id; // Use dealer ID if general payment
+            currentOrderNumber = isGeneralPayment ? 0 : item.orders.order_number;
+            currentDealerName = isGeneralPayment ? item.dealers?.name || 'N/A' : item.orders?.dealers?.name || 'N/A';
+            currentDealerPhone = isGeneralPayment ? item.dealers?.phone || '' : item.orders?.dealers?.phone || '';
             currentTotalAmount = item.amount; // Payment amount from the payment record
-            currentPaymentDueDate = isGeneralPayment ? null : (item.orders as any)?.payment_due_date;
-            currentOrderDate = isGeneralPayment ? item.payment_date : (item.orders as any)?.order_date; // Use payment date for general payment
+            currentPaymentDueDate = isGeneralPayment ? null : item.orders?.payment_due_date;
+            currentOrderDate = isGeneralPayment ? item.payment_date : item.orders?.order_date; // Use payment date for general payment
             currentPaymentId = item.id; // This is the payment record ID
             currentPaymentMethod = item.payment_method;
             currentChequeDdDate = item.cheque_dd_date;
@@ -227,8 +218,8 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
             currentPaymentStatus = item.payment_status;
             currentOrderId = item.id;
             currentOrderNumber = item.order_number;
-            currentDealerName = (item.dealers as any)?.name || 'N/A';
-            currentDealerPhone = (item.dealers as any)?.phone || '';
+            currentDealerName = item.dealers?.name || 'N/A';
+            currentDealerPhone = item.dealers?.phone || '';
             currentTotalAmount = item.total_amount; // Total amount from the order record
             currentPaymentDueDate = item.payment_due_date;
             currentOrderDate = item.order_date;

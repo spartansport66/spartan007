@@ -168,8 +168,8 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
           product_dp: sale.products?.dp || 0, // New
           quantity: sale.quantity,
           total_price: sale.total_price,
-          dealer_name: (sale.orders as any)?.dealers?.name || 'N/A',
-          sales_person_name: `${(sale.orders as any)?.profiles?.first_name || ''} ${(sale.orders as any)?.profiles?.last_name || ''}`.trim() || 'N/A',
+          dealer_name: sale.orders?.dealers?.name || 'N/A',
+          sales_person_name: `${sale.orders?.profiles?.first_name || ''} ${sale.orders?.profiles?.last_name || ''}`.trim() || 'N/A',
         }));
         setSales(formattedSales);
       }

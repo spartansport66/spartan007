@@ -24,7 +24,7 @@ interface Dealer {
   name: string;
 }
 
-const VISIT_STATUS_OPTIONS = ['Routine Visit', 'Payment Reminder Visit', 'New Order'] as const;
+const VISIT_STATUS_OPTIONS = ['Routine Visit', 'Payment Reminder Visit', 'New Order'];
 
 // Define a custom schema for the file input
 const fileSchema = z.instanceof(File, { message: 'A photo is required.' })
@@ -32,7 +32,7 @@ const fileSchema = z.instanceof(File, { message: 'A photo is required.' })
 
 const formSchema = z.object({
   dealerId: z.string().uuid({ message: 'Please select a dealer.' }),
-  visitStatus: z.enum(VISIT_STATUS_OPTIONS, { message: 'Please select a status.' }),
+  visitStatus: z.enum(VISIT_STATUS_OPTIONS as [string, ...string[]], { message: 'Please select a status.' }),
   remarks: z.string().min(1, { message: 'Remarks are required.' }).max(500, { message: 'Remarks cannot exceed 500 characters.' }),
   photoFile: fileSchema, // Use the custom file schema
   nextVisitDate: z.string().min(1, { message: 'Next Follow-up Date is required.' }),

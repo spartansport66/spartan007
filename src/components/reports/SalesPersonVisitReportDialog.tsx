@@ -34,7 +34,7 @@ interface SalesPersonVisitReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> = ({ isOpen, onOpenChange }) => {
+const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const [visits, setVisits] = useState<VisitReportData[]>([]);
   const [loading, setLoading] = useState(true);
   const [allSalesPersons, setAllSalesPersons] = useState<FilterOption[]>([]);
@@ -91,7 +91,7 @@ export const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialog
       const formattedVisits: VisitReportData[] = (visitsData || []).map((visit: any) => ({
         id: visit.id,
         sales_person_name: salesPersonMap.get(visit.sales_person_id) || 'N/A',
-        dealer_name: (visit.dealers as any)?.name || 'N/A',
+        dealer_name: visit.dealers?.name || 'N/A',
         visit_time: visit.visit_time,
         photo_url: visit.photo_url,
         visit_status: visit.visit_status || 'Routine Visit',
@@ -284,3 +284,5 @@ export const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialog
     </Dialog>
   );
 };
+
+export default SalesPersonVisitReportDialog;

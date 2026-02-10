@@ -28,7 +28,7 @@ interface DealerPaymentsReceivedDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export const DealerPaymentsReceivedDialog: React.FC<DealerPaymentsReceivedDialogProps> = ({ dealerId, dealerName, isOpen, onOpenChange }) => {
+const DealerPaymentsReceivedDialog: React.FC<DealerPaymentsReceivedDialogProps> = ({ dealerId, dealerName, isOpen, onOpenChange }) => {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
@@ -62,8 +62,8 @@ export const DealerPaymentsReceivedDialog: React.FC<DealerPaymentsReceivedDialog
         payment_date: p.payment_date,
         payment_method: p.payment_method,
         status: p.status,
-        order_number: (p.orders as any)?.order_number || 0, // 0 for general payments
-        dealer_name: (p.dealers as any)?.name || dealerName || 'N/A',
+        order_number: p.orders?.order_number || 0, // 0 for general payments
+        dealer_name: p.dealers?.name || dealerName || 'N/A',
       }));
 
       setPayments(formattedPayments);
@@ -199,3 +199,5 @@ export const DealerPaymentsReceivedDialog: React.FC<DealerPaymentsReceivedDialog
     </>
   );
 };
+
+export default DealerPaymentsReceivedDialog;
