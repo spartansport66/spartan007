@@ -47,8 +47,8 @@ serve(async (req) => {
         if (!item.dealers) {
           return null;
         }
-        // Handle dealer_balances which can be an object or null
-        const opening_balance = item.dealers.dealer_balances?.opening_balance || 0;
+        // Handle dealer_balances which is an array for a one-to-many or many-to-many relationship
+        const opening_balance = item.dealers.dealer_balances?.[0]?.opening_balance || 0;
         
         // Return a new object without the nested dealer_balances
         const { dealer_balances, ...dealerData } = item.dealers;
@@ -64,7 +64,8 @@ serve(async (req) => {
 
     const { data: productsData, error: productsError } = await supabaseAdmin
       .from('products')
-      .select('id, code, name, dp, stock');
+      .select('id, code, name, dp, stock')
+      .order('name', { ascending: true });
     if (productsError) throw productsError;
 
     return new Response(JSON.stringify({ dealers: formattedDealers, products: productsData || [] }), {
