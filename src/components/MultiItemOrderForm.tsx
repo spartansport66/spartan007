@@ -10,9 +10,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { Loader2, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -35,7 +32,7 @@ interface Dealer {
 }
 
 interface OrderItem {
-  id: string; // Unique ID for React list key
+  id: string;
   product_id: string;
   quantity: number;
   product_name: string;
@@ -70,18 +67,16 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
   const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
-  const isPaidAtOrderTime = true;
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
+  
   const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
-
-  // New state for the single item entry form
+  const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
   const [newItemProductId, setNewItemProductId] = useState<string>('');
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
-  const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -102,20 +97,13 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   }, [preDiscountTotalOrderValue, discountAmount]);
 
   useEffect(() => {
-    if (isPaidAtOrderTime) {
-      setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
-    }
-  }, [finalOrderValue, isPaidAtOrderTime]);
+    setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
+  }, [finalOrderValue]);
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!user || !session) return;
       setLoading(true);
-      if (!user || !session) {
-        setDealers([]);
-        setProducts([]);
-        setLoading(false);
-        return;
-      }
       try {
         const { data: assignedDealersData, error: assignedDealersError } = await supabase
           .from('dealer_sales_persons')
@@ -143,43 +131,14 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setProducts(productsData || []);
 
       } catch (error: any) {
-        console.error('[MultiItemOrderForm] fetchData Error:', error);
+        console.error('fetchData Error:', error);
         showError(`Failed to load data: ${error.message}`);
       } finally {
         setLoading(false);
       }
     };
-    if (!sessionLoading && user) {
-      fetchData();
-    }
+    if (!sessionLoading && user) fetchData();
   }, [user, session, sessionLoading]);
-
-  useEffect(() => {
-    const checkPendingPayments = async () => {
-      if (!selectedDealer || !user) {
-        setPendingPayments([]);
-        setTotalPendingAmount(0);
-        return;
-      }
-      try {
-        const todayISOString = new Date().toISOString();
-        const { data, error } = await supabase
-          .from('orders')
-          .select('order_number, total_amount, payment_status, payment_due_date')
-          .eq('dealer_id', selectedDealer)
-          .eq('user_id', user.id)
-          .eq('payment_status', 'pending')
-          .lte('payment_due_date', todayISOString);
-        if (error) throw error;
-        const pendingData = data || [];
-        setPendingPayments(pendingData);
-        setTotalPendingAmount(pendingData.reduce((sum, order) => sum + order.total_amount, 0));
-      } catch (error: any) {
-        console.error('[MultiItemOrderForm] checkPendingPayments Error:', error);
-      }
-    };
-    checkPendingPayments();
-  }, [selectedDealer, user]);
 
   useEffect(() => {
     const calculateBalanceAndDueDate = async () => {
@@ -201,45 +160,41 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         dueDate.setDate(today.getDate() + selectedDealerData.allotted_credit_days);
         setPaymentDueDate(dueDate.toISOString().split('T')[0]);
       }
+      
       const currentMonthDate = new Date();
       const currentMonthYear = new Date(Date.UTC(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1)).toISOString().split('T')[0];
+      
       try {
-        const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
+        const { data: monthlyLimitData } = await supabase
           .from('dealer_monthly_credit_limits')
           .select('credit_limit')
           .eq('dealer_id', selectedDealer)
           .eq('month_year', currentMonthYear)
           .single();
         
-        if (monthlyLimitData) {
-          setDealerCreditLimit(monthlyLimitData.credit_limit);
-        } else {
-          setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
-        }
+        setDealerCreditLimit(monthlyLimitData?.credit_limit || selectedDealerData?.credit_limit || 0);
 
-        const { data: orders, error: ordersError } = await supabase
+        const { data: orders } = await supabase
           .from('orders')
           .select('id, total_amount')
-          .eq('dealer_id', selectedDealer)
-          .eq('user_id', user.id);
-        if (ordersError) throw ordersError;
+          .eq('dealer_id', selectedDealer);
+        
         const totalOrderValue = (orders || []).reduce((sum, o) => sum + o.total_amount, 0);
-
         const orderIds = (orders || []).map(o => o.id);
+        
         let totalPaymentsValue = 0;
         if (orderIds.length > 0) {
-          const { data: paymentsData, error: paymentsError } = await supabase
+          const { data: paymentsData } = await supabase
             .from('payments')
             .select('amount')
             .in('order_id', orderIds)
             .eq('status', 'completed');
-          if (paymentsError) throw paymentsError;
           totalPaymentsValue = (paymentsData || []).reduce((sum, p) => sum + p.amount, 0);
         }
         
         setDealerBalance(totalOrderValue - totalPaymentsValue);
       } catch (error: any) {
-        console.error('[MultiItemOrderForm] calculateBalance Error:', error);
+        console.error('calculateBalance Error:', error);
       }
     };
     calculateBalanceAndDueDate();
@@ -255,10 +210,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       return;
     }
     const product = products.find(p => p.id === newItemProductId);
-    if (!product) {
-      showError("Selected product not found.");
-      return;
-    }
+    if (!product) return;
+
     const newOrderItem: OrderItem = {
       id: Date.now().toString(),
       product_id: product.id,
@@ -278,12 +231,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   };
 
   const isPaymentDetailsValid = useMemo(() => {
-    if (!isPaidAtOrderTime) return true;
     if (!paymentMethod || paymentAmount <= 0) return false;
     if (paymentMethod === 'Cheque/DD' && (!chequeDdNo || !chequeDdDate)) return false;
     if (['Card', 'Bank Transfer', 'UPI'].includes(paymentMethod) && !transactionId) return false;
     return true;
-  }, [isPaidAtOrderTime, paymentMethod, paymentAmount, chequeDdNo, chequeDdDate, transactionId]);
+  }, [paymentMethod, paymentAmount, chequeDdNo, chequeDdDate, transactionId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -295,15 +247,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     try {
       const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
       const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
-      const salesToInsert = orderItems.map(item => ({
-        product_id: item.product_id,
-        quantity: item.quantity,
-        total_price: item.total_price,
-      }));
-      const stockUpdates = orderItems.map(item => ({
-        id: item.product_id,
-        quantitySold: item.quantity,
-      }));
 
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
@@ -318,16 +261,21 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         })
         .select('id, order_number, order_date')
         .single();
-      if (orderError) throw new Error(`Failed to create order: ${orderError.message}`);
-      if (!newOrder) throw new Error('Order creation failed.');
+
+      if (orderError) throw orderError;
 
       await supabase.from('dealers').update({ last_billing_date: newOrder.order_date }).eq('id', selectedDealer);
-      const salesWithOrderId = salesToInsert.map(sale => ({ ...sale, order_id: newOrder.id }));
+      
+      const salesWithOrderId = orderItems.map(item => ({
+        order_id: newOrder.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        total_price: item.total_price,
+      }));
+      
       const { error: salesInsertError } = await supabase.from('sales').insert(salesWithOrderId);
-      if (salesInsertError) throw new Error(`Failed to insert sales items: ${salesInsertError.message}`);
+      if (salesInsertError) throw salesInsertError;
 
-      let transactionIdValue = null;
-      if (['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod)) transactionIdValue = transactionId;
       const paymentData = {
         order_id: newOrder.id,
         dealer_id: selectedDealer,
@@ -337,35 +285,26 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         status: 'pending_approval',
         cheque_dd_no: paymentMethod === 'Cheque/DD' ? chequeDdNo : null,
         cheque_dd_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : null,
-        transaction_id: transactionIdValue,
+        transaction_id: ['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod) ? transactionId : null,
       };
+      
       const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
-      if (paymentInsertError) throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
+      if (paymentInsertError) throw paymentInsertError;
 
-      for (const update of stockUpdates) {
-        const product = products.find(p => p.id === update.id);
+      for (const item of orderItems) {
+        const product = products.find(p => p.id === item.product_id);
         if (!product) continue;
-        const newStockLevel = product.stock - update.quantitySold;
-        const { data: updatedProduct, error: stockUpdateError } = await supabase
-          .from('products').update({ stock: newStockLevel }).eq('id', update.id).select('id, stock').single();
-        if (stockUpdateError) console.error(`Failed to update stock for product ${update.id}: ${stockUpdateError.message}`);
+        const newStockLevel = product.stock - item.quantity;
+        const { data: updatedProduct } = await supabase
+          .from('products').update({ stock: newStockLevel }).eq('id', item.product_id).select('id, stock').single();
+        
         if (updatedProduct && updatedProduct.stock < 0) {
           const newRequiredQuantity = Math.abs(updatedProduct.stock);
-          const { data: existingAlert } = await supabase.from('production_alerts').select('id').eq('product_id', update.id).eq('resolved', false).single();
-          const alertData = { product_id: update.id, required_quantity: newRequiredQuantity, created_by: user.id, dealer_id: selectedDealer, resolved: false, created_at: new Date().toISOString() };
-          if (existingAlert) {
-            await supabase.from('production_alerts').update(alertData).eq('id', existingAlert.id);
-          } else {
-            await supabase.from('production_alerts').insert(alertData);
-          }
-        } else if (product.stock < 0 && updatedProduct && updatedProduct.stock >= 0) {
-          await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', update.id).eq('resolved', false);
+          const { data: existingAlert } = await supabase.from('production_alerts').select('id').eq('product_id', item.product_id).eq('resolved', false).single();
+          const alertData = { product_id: item.product_id, required_quantity: newRequiredQuantity, created_by: user.id, dealer_id: selectedDealer, resolved: false, created_at: new Date().toISOString() };
+          if (existingAlert) await supabase.from('production_alerts').update(alertData).eq('id', existingAlert.id);
+          else await supabase.from('production_alerts').insert(alertData);
         }
-      }
-
-      const { count: orderCount } = await supabase.from('orders').select('count', { count: 'exact' }).eq('dealer_id', selectedDealer);
-      if (orderCount === 1 && dealerOpeningBalance > 0) {
-        await supabase.from('dealer_balances').update({ opening_balance: 0 }).eq('dealer_id', selectedDealer);
       }
 
       showSuccess('Order placed successfully!');
@@ -379,7 +318,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setTransactionId('');
       onOrderPlaced();
     } catch (error: any) {
-      console.error('[MultiItemOrderForm] Submit Error:', error);
+      console.error('Submit Error:', error);
       showError(`Failed to place order: ${error.message}`);
     } finally {
       setLoading(false);
@@ -387,13 +326,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   };
 
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
-  const calculatedPaymentStatus = isPaidAtOrderTime ? 'Pending Approval' : 'Pending';
-  
-  const isSubmitDisabled = useMemo(() => {
-    const baseChecks = loading || !selectedDealer || orderItems.length === 0 || (orderItems.some(item => !item.product_id || item.quantity <= 0)) || discountAmount < 0 || discountAmount > preDiscountTotalOrderValue;
-    if (baseChecks) return true;
-    return !(isPaidAtOrderTime && isPaymentDetailsValid);
-  }, [loading, selectedDealer, orderItems, discountAmount, preDiscountTotalOrderValue, isPaidAtOrderTime, isPaymentDetailsValid]);
+  const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -412,7 +345,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Button 
                   variant="outline" 
                   role="combobox" 
-                  aria-expanded={isDealerPopoverOpen} 
                   className="w-full justify-between" 
                   disabled={dealers.length === 0}
                 >
@@ -429,7 +361,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                       {dealers.map((dealer) => (
                         <CommandItem 
                           key={dealer.id} 
-                          value={dealer.name} // Searchable value
+                          value={dealer.name}
                           onSelect={() => {
                             setSelectedDealer(dealer.id);
                             setIsDealerPopoverOpen(false);
@@ -445,7 +377,17 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 </Command>
               </PopoverContent>
             </Popover>
-            {selectedDealer && <div className="mt-2 p-3 bg-muted rounded-md"><div className="flex justify-between text-sm"><span>Opening Balance:</span><span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Net Transaction Balance (Orders - Payments):</span><span className="font-medium">₹{dealerBalance !== null ? dealerBalance.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm font-semibold"><span>Total Outstanding Balance (Ledger):</span><span className={usedCredit !== null && usedCredit > dealerCreditLimit ? "text-destructive" : "text-primary"}>₹{usedCredit !== null ? usedCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Credit Limit (Current Month):</span><span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Available Credit:</span><span className={availableCredit !== null && availableCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Allotted Credit Days:</span><span className="font-medium">{allottedCreditDays} days</span></div>{paymentDueDate && <div className="flex justify-between text-sm"><span>Calculated Payment Due Date:</span><span className="font-medium">{formatDate(paymentDueDate)}</span></div>}<div className="flex justify-between text-sm font-bold mt-2"><span>Calculated Order Payment Status:</span><span className={calculatedPaymentStatus === 'Pending Approval' ? 'text-blue-600' : 'text-yellow-600'}>{calculatedPaymentStatus}</span></div></div>}
+            {selectedDealer && (
+              <div className="mt-2 p-3 bg-muted rounded-md text-sm space-y-1">
+                <div className="flex justify-between"><span>Opening Balance:</span><span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Net Transaction Balance:</span><span className="font-medium">₹{dealerBalance?.toFixed(2) || '0.00'}</span></div>
+                <div className="flex justify-between font-semibold"><span>Total Outstanding (Ledger):</span><span className={usedCredit! > dealerCreditLimit ? "text-destructive" : "text-primary"}>₹{usedCredit?.toFixed(2) || '0.00'}</span></div>
+                <div className="flex justify-between"><span>Credit Limit:</span><span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Available Credit:</span><span className={availableCredit! < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{availableCredit?.toFixed(2) || '0.00'}</span></div>
+                <div className="flex justify-between"><span>Credit Days:</span><span className="font-medium">{allottedCreditDays} days</span></div>
+                {paymentDueDate && <div className="flex justify-between"><span>Payment Due Date:</span><span className="font-medium">{formatDate(paymentDueDate)}</span></div>}
+              </div>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -474,7 +416,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                           {products.map((product) => (
                             <CommandItem 
                               key={product.id} 
-                              value={`${product.name} ${product.code}`} // Searchable value
+                              value={`${product.name} ${product.code}`}
                               onSelect={() => {
                                 setNewItemProductId(product.id);
                                 setIsProductPopoverOpen(false);
@@ -482,7 +424,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                               className="cursor-pointer"
                             >
                               <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                              <div><div>{product.name} ({product.code})</div><div className="text-xs text-muted-foreground">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div>
+                              <div>
+                                <div>{product.name} ({product.code})</div>
+                                <div className="text-xs text-muted-foreground">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div>
+                              </div>
                             </CommandItem>
                           ))}
                         </CommandGroup>
@@ -520,22 +465,42 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
           {orderItems.length > 0 && (
             <div className="p-4 bg-muted rounded-md space-y-2">
-              <div className="flex justify-between text-base font-medium"><span>Subtotal (Pre-Discount):</span><span>₹{preDiscountTotalOrderValue.toFixed(2)}</span></div>
-              <div className="flex justify-between items-center"><Label htmlFor="discountAmount" className="text-base font-medium">Discount (₹)</Label><Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} /></div>
-              {discountAmount > preDiscountTotalOrderValue && <p className="text-sm text-destructive">Discount cannot exceed subtotal.</p>}
+              <div className="flex justify-between text-base font-medium"><span>Subtotal:</span><span>₹{preDiscountTotalOrderValue.toFixed(2)}</span></div>
+              <div className="flex justify-between items-center">
+                <Label htmlFor="discountAmount" className="text-base font-medium">Discount (₹)</Label>
+                <Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} />
+              </div>
               <Separator className="my-2" />
-              <div className="flex justify-between text-lg font-bold"><span>Total Order Value (Final):</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
-              {selectedDealer && dealerBalance !== null && (<><Separator className="my-2" /><div className="flex justify-between text-sm"><span>Remaining Credit After Order:</span><span className={remainingCredit !== null && remainingCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{remainingCredit !== null ? remainingCredit.toFixed(2) : '0.00'}</span></div></>)}
+              <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
+              {selectedDealer && (
+                <div className="flex justify-between text-sm">
+                  <span>Remaining Credit:</span>
+                  <span className={remainingCredit! < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{remainingCredit?.toFixed(2) || '0.00'}</span>
+                </div>
+              )}
             </div>
           )}
 
           <div className="space-y-4 p-4 border rounded-md">
-            <div className="flex items-center space-x-2"><Check className="h-5 w-5 text-green-600" /><Label className="text-base font-medium text-green-600">Payment Received at Order Time (Mandatory)</Label></div>
+            <div className="flex items-center space-x-2"><Check className="h-5 w-5 text-green-600" /><Label className="text-base font-medium text-green-600">Payment Received at Order Time</Label></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div><Label htmlFor="paymentMethod">Payment Method</Label><Select value={paymentMethod} onValueChange={setPaymentMethod}><SelectTrigger id="paymentMethod" className="w-full"><SelectValue placeholder="Select payment method" /></SelectTrigger><SelectContent>{paymentMethodsOptions.map((method) => (<SelectItem key={method} value={method}>{method}</SelectItem>))}</SelectContent></Select></div>
-              <div><Label htmlFor="paymentAmount">Amount Paid</Label><Input id="paymentAmount" type="number" step="0.01" value={paymentAmount} onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)} className="w-full bg-muted" readOnly /></div>
-              {paymentMethod === 'Cheque/DD' && (<><div><Label htmlFor="chequeDdNo">Cheque/DD Number</Label><Input id="chequeDdNo" type="text" value={chequeDdNo} onChange={(e) => setChequeDdNo(e.target.value)} className="w-full" /></div><div><Label htmlFor="chequeDdDate">Cheque/DD Date</Label><Input id="chequeDdDate" type="date" value={chequeDdDate} onChange={(e) => setChequeDdDate(e.target.value)} className="w-full" /></div></>)}
-              {(['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod)) && (<div><Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label><Input id="transactionId" type="text" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} className="w-full" placeholder={paymentMethod === 'Cash' ? 'Cash transaction reference' : 'e.g., TXN123456789'} /></div>)}
+              <div>
+                <Label htmlFor="paymentMethod">Payment Method</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger id="paymentMethod"><SelectValue placeholder="Select method" /></SelectTrigger>
+                  <SelectContent>{paymentMethodsOptions.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label htmlFor="paymentAmount">Amount Paid</Label><Input id="paymentAmount" type="number" value={paymentAmount} readOnly className="bg-muted" /></div>
+              {paymentMethod === 'Cheque/DD' && (
+                <>
+                  <div><Label htmlFor="chequeDdNo">Cheque/DD No</Label><Input id="chequeDdNo" value={chequeDdNo} onChange={e => setChequeDdNo(e.target.value)} /></div>
+                  <div><Label htmlFor="chequeDdDate">Cheque/DD Date</Label><Input id="chequeDdDate" type="date" value={chequeDdDate} onChange={e => setChequeDdDate(e.target.value)} /></div>
+                </>
+              )}
+              {['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod) && (
+                <div><Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label><Input id="transactionId" value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="e.g., TXN123456" /></div>
+              )}
             </div>
           </div>
 
