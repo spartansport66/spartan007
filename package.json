@@ -1,15 +1,14 @@
 {
-  "name": "vite_react_shadcn_ts",
-  "private": true,
+  "name": "spartan",
   "version": "0.0.0",
-  "type": "module",
+  "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "approve": "node run-approve.js",
+    "approve": "node scripts/run-approve.js",
     "prepare": "husky"
   },
   "dependencies": {
