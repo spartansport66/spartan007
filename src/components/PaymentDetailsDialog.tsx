@@ -81,7 +81,7 @@ const PaymentDetailsDialog: React.FC<PaymentDetailsDialogProps> = ({ paymentId, 
         setPaymentDetails({
           id: data.id,
           order_id: data.order_id,
-          order_number: data.orders?.order_number || 0,
+          order_number: (data.orders as any)?.order_number || 0,
           amount: data.amount,
           payment_method: data.payment_method,
           payment_date: data.payment_date,

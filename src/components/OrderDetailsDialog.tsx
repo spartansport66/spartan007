@@ -379,7 +379,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     let yPos = margin;
     const pageWidth = doc.internal.pageSize.width;
     const companyNameDisplay = companyName ? companyName.toUpperCase() : "COMPANY NAME";
-    const darkBlue = [30, 58, 138]; // Dark Blue (Indigo-800 equivalent)
+    const darkBlue: [number, number, number] = [30, 58, 138]; // Dark Blue (Indigo-800 equivalent)
 
     // --- HEADER STRIP LOGIC (Applied to both Gate Pass and Detailed Receipt) ---
     const stripHeight = 15; 
@@ -390,7 +390,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     const logoXRight = pageWidth - margin - LOGO_WIDTH - 2;
 
     // Draw dark blue background strip
-    doc.setFillColor(...darkBlue);
+    doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
     doc.rect(0, stripY - 2, pageWidth, stripHeight, 'F'); 
 
     // Add Logos (Left and Right)
@@ -601,14 +601,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
     // Updated column styles to center all columns
     const itemTableColumnStyles = {
-        0: { halign: 'center' }, // Code
-        1: { halign: 'center' }, // Product Name
-        2: { halign: 'center' }, // Size
-        3: { halign: 'center' }, // HSN
-        4: { halign: 'center' }, // GST (%)
-        5: { halign: 'center' }, // Quantity
-        6: { halign: 'center' }, // Unit Price
-        7: { halign: 'center' }, // Total Price
+        0: { halign: 'center' as const }, // Code
+        1: { halign: 'center' as const }, // Product Name
+        2: { halign: 'center' as const }, // Size
+        3: { halign: 'center' as const }, // HSN
+        4: { halign: 'center' as const }, // GST (%)
+        5: { halign: 'center' as const }, // Quantity
+        6: { halign: 'center' as const }, // Unit Price
+        7: { halign: 'center' as const }, // Total Price
     };
 
     autoTable(doc, {
@@ -633,7 +633,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         textColor: [0, 0, 0],
       },
       margin: { top: 0, left: margin, right: margin },
-      columnStyles: itemTableColumnStyles
+      columnStyles: itemTableColumnStyles as any,
     });
 
     yPos = (doc as any).lastAutoTable.finalY + 5;
@@ -673,12 +673,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             if (rowIndex < summaryRows.length) {
                 const rowData = summaryRows[rowIndex];
                 data.cell.styles.fontSize = rowData[2] as number;
-                data.cell.styles.fontStyle = rowData[3] as string;
+                data.cell.styles.fontStyle = rowData[3] as 'normal' | 'bold' | 'italic' | 'bolditalic';
                 
                 // Add a top border for the final total row
                 if (rowIndex === summaryRows.length - 1) {
                     data.cell.styles.lineWidth = { top: 0.5 };
-                    data.cell.styles.lineColor = { top: [0, 0, 0] };
+                    data.cell.styles.lineColor = [0, 0, 0];
                 }
             }
         },
@@ -813,6 +813,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                     <TableRow>
                       <TableHead>Code</TableHead>
                       <TableHead>Product Name</TableHead>
+      
                       <TableHead>Size</TableHead>
                       <TableHead>HSN</TableHead>
                       <TableHead className="text-right">GST (%)</TableHead>

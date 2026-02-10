@@ -41,6 +41,14 @@ interface SalesPersonPaymentsReportProps {
   onOpenChange: (open: boolean) => void;
 }
 
+interface PendingOrderPayment {
+  id: string;
+  order_number: number;
+  total_amount: number;
+  dealer_name: string;
+  payment_due_date: string | null;
+}
+
 const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ isOpen, onOpenChange }) => {
   const { user } = useSession();
   const [payments, setPayments] = useState<PaymentReportData[]>([]);
@@ -54,7 +62,7 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
 
   // Dialog states for adding payment details
   const [isUpdatePaymentDialogOpen, setIsUpdatePaymentDialogOpen] = useState(false);
-  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PaymentReportData | null>(null);
+  const [selectedOrderForPaymentUpdate, setSelectedOrderForPaymentUpdate] = useState<PendingOrderPayment | null>(null);
 
   // Filter states
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
@@ -289,13 +297,14 @@ const SalesPersonPaymentsReport: React.FC<SalesPersonPaymentsReportProps> = ({ i
       showError('Only pending orders can have payment details added.');
       return;
     }
-    setSelectedOrderForPaymentUpdate({
+    const orderToUpdate: PendingOrderPayment = {
       id: order.id,
       order_number: order.order_number,
       total_amount: order.total_amount,
       dealer_name: order.dealer_name,
       payment_due_date: order.payment_due_date,
-    });
+    };
+    setSelectedOrderForPaymentUpdate(orderToUpdate);
     setIsUpdatePaymentDialogOpen(true);
   };
 
