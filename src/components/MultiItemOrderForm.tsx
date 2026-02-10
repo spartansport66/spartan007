@@ -483,7 +483,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Label>Product</Label>
                 <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0 || loading}>
+                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0 || loading || !selectedDealer}>
                       {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
@@ -513,9 +513,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               </div>
               <div className="w-24">
                 <Label>Quantity</Label>
-                <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
+                <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" disabled={!selectedDealer} />
               </div>
-              <Button type="button" onClick={addOrderItem}><Plus className="h-4 w-4" /></Button>
+              <Button type="button" onClick={addOrderItem} disabled={!selectedDealer}><Plus className="h-4 w-4" /></Button>
             </div>
 
             {orderItems.length > 0 && (
