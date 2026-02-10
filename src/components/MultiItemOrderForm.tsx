@@ -63,8 +63,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
-  const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
-  const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
   const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
@@ -366,7 +364,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                             setSelectedDealer(dealer.id);
                             setIsDealerPopoverOpen(false);
                           }}
-                          className="cursor-pointer"
+                          className="cursor-pointer pointer-events-auto"
                         >
                           <Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />
                           {dealer.name}
@@ -421,7 +419,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                                 setNewItemProductId(product.id);
                                 setIsProductPopoverOpen(false);
                               }}
-                              className="cursor-pointer"
+                              className="cursor-pointer pointer-events-auto"
                             >
                               <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
                               <div>
