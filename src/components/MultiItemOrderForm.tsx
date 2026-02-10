@@ -56,6 +56,7 @@ interface MultiItemOrderFormProps {
 }
 
 const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }) => {
+  console.log('[MultiItemOrderForm] Component rendered.');
   const { user, session, loading: sessionLoading } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -111,8 +112,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   useEffect(() => {
     const fetchData = async () => {
+      console.log('[MultiItemOrderForm] useEffect: Fetching initial data...');
       setLoading(true);
       if (!user || !session) {
+        console.log('[MultiItemOrderForm] No user or session, aborting fetch.');
         setDealers([]);
         setProducts([]);
         setLoading(false);
@@ -126,6 +129,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           .eq('sales_person_id', user.id);
 
         if (assignedDealersError) throw assignedDealersError;
+        console.log('[MultiItemOrderForm] Fetched assigned dealers data:', assignedDealersData);
 
         const formattedDealers = (assignedDealersData || [])
           .map((item: any) => {
@@ -138,6 +142,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         
         formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
         setDealers(formattedDealers);
+        console.log('[MultiItemOrderForm] Formatted and set dealers:', formattedDealers);
 
         // Fetch all products
         const { data: productsData, error: productsError } = await supabase
@@ -145,11 +150,14 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           .select('id, code, name, dp, stock');
         if (productsError) throw productsError;
         setProducts(productsData || []);
+        console.log('[MultiItemOrderForm] Fetched and set products:', productsData);
 
       } catch (error: any) {
+        console.error('[MultiItemOrderForm] Error fetching data:', error);
         showError(`Failed to load data: ${error.message}. This might be due to database security policies.`);
       } finally {
         setLoading(false);
+        console.log('[MultiItemOrderForm] Initial data fetch finished.');
       }
     };
     if (!sessionLoading && user) {
@@ -170,6 +178,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setTotalPendingAmount(0);
         return;
       }
+      console.log(`[MultiItemOrderForm] Checking pending payments for dealer: ${selectedDealer}`);
       try {
         const todayISOString = new Date().toISOString();
         const { data, error } = await supabase
@@ -182,8 +191,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         if (error) throw error;
         const pendingData = data || [];
         setPendingPayments(pendingData);
-        setTotalPendingAmount(pendingData.reduce((sum, order) => sum + order.total_amount, 0));
+        const totalPending = pendingData.reduce((sum, order) => sum + order.total_amount, 0);
+        setTotalPendingAmount(totalPending);
+        console.log(`[MultiItemOrderForm] Found ${pendingData.length} pending payments totaling ${totalPending}.`);
       } catch (error: any) {
+        console.error('[MultiItemOrderForm] Error checking pending payments:', error);
         showError(`Failed to check pending payments: ${error.message}`);
       }
     };
@@ -201,6 +213,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setDiscountAmount(0);
         return;
       }
+      console.log(`[MultiItemOrderForm] Calculating balance for dealer: ${selectedDealer}`);
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
@@ -229,18 +242,14 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         }
 
         // --- REVISED BALANCE CALCULATION ---
-        // 1. Fetch orders for the user and dealer
         const { data: orders, error: ordersError } = await supabase
           .from('orders')
           .select('id, total_amount')
           .eq('dealer_id', selectedDealer)
           .eq('user_id', user.id);
-
         if (ordersError) throw ordersError;
-
         const totalOrderValue = (orders || []).reduce((sum, o) => sum + o.total_amount, 0);
 
-        // 2. Fetch completed payments for those orders
         const orderIds = (orders || []).map(o => o.id);
         let totalPaymentsValue = 0;
         if (orderIds.length > 0) {
@@ -249,16 +258,15 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             .select('amount')
             .in('order_id', orderIds)
             .eq('status', 'completed');
-          
           if (paymentsError) throw paymentsError;
           totalPaymentsValue = (paymentsData || []).reduce((sum, p) => sum + p.amount, 0);
         }
         
         const netBalance = totalOrderValue - totalPaymentsValue;
         setDealerBalance(netBalance);
-        // --- END REVISED BALANCE CALCULATION ---
-
+        console.log(`[MultiItemOrderForm] Balance calculated. Opening: ${selectedDealerData?.opening_balance}, Net Transactions: ${netBalance}`);
       } catch (error: any) {
+        console.error('[MultiItemOrderForm] Error calculating dealer balance:', error);
         showError(`Failed to calculate dealer balance: ${error.message}`);
       }
     };
@@ -289,12 +297,14 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       total_price: newItemQuantity * product.dp,
     };
     setOrderItems(prevItems => [newOrderItem, ...prevItems]);
+    console.log('[MultiItemOrderForm] Added item:', newOrderItem);
     setNewItemProductId('');
     setNewItemQuantity(1);
   };
 
   const removeOrderItem = (id: string) => {
     setOrderItems(orderItems.filter(item => item.id !== id));
+    console.log(`[MultiItemOrderForm] Removed item with id: ${id}`);
   };
 
   const isPaymentDetailsValid = useMemo(() => {
@@ -307,8 +317,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[MultiItemOrderForm] handleSubmit triggered.');
     if (!user || !selectedDealer || orderItems.length === 0 || discountAmount < 0 || discountAmount > preDiscountTotalOrderValue || !isPaymentDetailsValid) {
       showError('Please correct all errors before submitting.');
+      console.error('[MultiItemOrderForm] Submit validation failed.', { user, selectedDealer, orderItems, discountAmount, preDiscountTotalOrderValue, isPaymentDetailsValid });
       return;
     }
     setLoading(true);
@@ -325,6 +337,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         quantitySold: item.quantity,
       }));
 
+      console.log('[MultiItemOrderForm] Creating order with payload:', { dealer_id: selectedDealer, user_id: user.id, total_amount: finalOrderAmount, discount_amount: finalDiscountAmount });
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -340,11 +353,13 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         .single();
       if (orderError) throw new Error(`Failed to create order: ${orderError.message}`);
       if (!newOrder) throw new Error('Order creation failed.');
+      console.log('[MultiItemOrderForm] Order created successfully:', newOrder);
 
       await supabase.from('dealers').update({ last_billing_date: newOrder.order_date }).eq('id', selectedDealer);
       const salesWithOrderId = salesToInsert.map(sale => ({ ...sale, order_id: newOrder.id }));
       const { error: salesInsertError } = await supabase.from('sales').insert(salesWithOrderId);
       if (salesInsertError) throw new Error(`Failed to insert sales items: ${salesInsertError.message}`);
+      console.log('[MultiItemOrderForm] Sales items inserted.');
 
       let transactionIdValue = null;
       if (['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod)) transactionIdValue = transactionId;
@@ -361,6 +376,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       };
       const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
       if (paymentInsertError) throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
+      console.log('[MultiItemOrderForm] Payment details inserted.');
 
       for (const update of stockUpdates) {
         const product = products.find(p => p.id === update.id);
@@ -382,6 +398,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', update.id).eq('resolved', false);
         }
       }
+      console.log('[MultiItemOrderForm] Stock levels updated.');
 
       const { count: orderCount } = await supabase.from('orders').select('count', { count: 'exact' }).eq('dealer_id', selectedDealer);
       if (orderCount === 1 && dealerOpeningBalance > 0) {
@@ -399,6 +416,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setTransactionId('');
       onOrderPlaced();
     } catch (error: any) {
+      console.error('[MultiItemOrderForm] Error during submit:', error);
       showError(`Failed to place order: ${error.message}`);
     } finally {
       setLoading(false);
@@ -473,7 +491,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               </PopoverContent>
             </Popover>
             {!loading && dealers.length === 0 && <p className="text-sm text-muted-foreground mt-2">No dealers assigned to your account. Please contact an administrator.</p>}
-            {selectedDealer && totalPendingAmount > 0 && <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertTitle>Overdue Payments</AlertTitle><AlertDescription>This dealer has overdue payments totaling ₹{totalPendingAmount.toFixed(2)}. You can still proceed with the order.</AlertDescription></Alert>}
             {selectedDealer && <div className="mt-2 p-3 bg-muted rounded-md"><div className="flex justify-between text-sm"><span>Opening Balance:</span><span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Net Transaction Balance (Orders - Payments):</span><span className="font-medium">₹{dealerBalance !== null ? dealerBalance.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm font-semibold"><span>Total Outstanding Balance (Ledger):</span><span className={usedCredit !== null && usedCredit > dealerCreditLimit ? "text-destructive" : "text-primary"}>₹{usedCredit !== null ? usedCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Credit Limit (Current Month):</span><span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Available Credit:</span><span className={availableCredit !== null && availableCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Allotted Credit Days:</span><span className="font-medium">{allottedCreditDays} days</span></div>{paymentDueDate && <div className="flex justify-between text-sm"><span>Calculated Payment Due Date:</span><span className="font-medium">{formatDate(paymentDueDate)}</span></div>}<div className="flex justify-between text-sm font-bold mt-2"><span>Calculated Order Payment Status:</span><span className={calculatedPaymentStatus === 'Pending Approval' ? 'text-blue-600' : 'text-yellow-600'}>{calculatedPaymentStatus}</span></div></div>}
           </div>
 
@@ -484,7 +501,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Label>Product</Label>
                 <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0 || loading || !selectedDealer}>
+                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0 || loading}>
                       {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
@@ -514,9 +531,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               </div>
               <div className="w-24">
                 <Label>Quantity</Label>
-                <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" disabled={!selectedDealer} />
+                <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
               </div>
-              <Button type="button" onClick={addOrderItem} disabled={!selectedDealer}><Plus className="h-4 w-4" /></Button>
+              <Button type="button" onClick={addOrderItem}><Plus className="h-4 w-4" /></Button>
             </div>
 
             {orderItems.length > 0 && (
