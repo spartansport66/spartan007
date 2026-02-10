@@ -58,7 +58,7 @@ interface MultiItemOrderFormProps {
 }
 
 const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }) => {
-  const { user, session, sessionLoading } = useSession();
+  const { user, session, loading: sessionLoading } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedDealer, setSelectedDealer] = useState<string>('');

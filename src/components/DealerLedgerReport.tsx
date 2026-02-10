@@ -210,22 +210,6 @@ const DealerLedgerReport = () => {
           )}
         </div>
       </CardContent>
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .printable-area, .printable-area * {
-            visibility: visible;
-          }
-          .printable-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-        }
-      `}</style>
     </Card>
   );
 };

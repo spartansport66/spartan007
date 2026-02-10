@@ -42,10 +42,24 @@ serve(async (req) => {
       .eq('sales_person_id', user.id);
     if (assignedDealersError) throw assignedDealersError;
 
-    const formattedDealers = (assignedDealersData || []).map((item: any) => ({
-      ...item.dealers,
-      opening_balance: item.dealers.dealer_balances?.opening_balance || 0
-    }));
+    const formattedDealers = (assignedDealersData || [])
+      .map((item: any) => {
+        if (!item.dealers) {
+          return null;
+        }
+        // Handle dealer_balances which can be an object or null
+        const opening_balance = item.dealers.dealer_balances?.opening_balance || 0;
+        
+        // Return a new object without the nested dealer_balances
+        const { dealer_balances, ...dealerData } = item.dealers;
+        
+        return {
+          ...dealerData,
+          opening_balance,
+        };
+      })
+      .filter(Boolean); // Remove null entries
+
     formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
 
     const { data: productsData, error: productsError } = await supabaseAdmin

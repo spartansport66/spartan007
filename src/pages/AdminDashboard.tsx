@@ -142,7 +142,7 @@ const AdminDashboard = () => {
         setTotalSalesValue(0);
       } else {
         // The RPC returns a single row with a column named 'net_sales_value'
-        const netSalesValue = salesRpcData?.net_sales_value || 0;
+        const netSalesValue = (salesRpcData as any)?.net_sales_value || 0;
         setTotalSalesValue(netSalesValue);
       }
       // --- END UPDATED SECTION ---

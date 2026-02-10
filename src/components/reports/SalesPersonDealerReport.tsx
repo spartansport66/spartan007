@@ -102,7 +102,7 @@ const SalesPersonDealerReport: React.FC<SalesPersonDealerReportProps> = ({ isOpe
       } else {
         const formattedDealers: DealerReportData[] = (data || []).map((item: any) => {
           const dealer = item.dealers;
-          const openingBalance = dealer.dealer_balances?.[0]?.opening_balance || 0;
+          const openingBalance = dealer.dealer_balances?.opening_balance || 0;
 
           let currentBalance = openingBalance;
           (dealer.orders || []).forEach((order: any) => {
