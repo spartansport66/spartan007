@@ -88,7 +88,7 @@ const SalesPersonTodayFollowupsReportDialog: React.FC<SalesPersonTodayFollowupsR
       const latestFollowupsMap = new Map<string, any>(); // Key: sales_person_id-dealer_id
 
       for (const visit of visitsData || []) {
-        const key = `${visit.sales_person_id}-${visit.dealers?.name}`;
+        const key = `${visit.sales_person_id}-${(visit.dealers as any)?.name}`;
         
         // Since we ordered by visit_time descending in the main query (if we had one), 
         // we need to ensure we only keep the latest visit that set the follow-up date.
@@ -123,8 +123,8 @@ const SalesPersonTodayFollowupsReportDialog: React.FC<SalesPersonTodayFollowupsR
         return {
           id: visit.id,
           sales_person_name: salesPersonMap.get(visit.sales_person_id) || 'N/A',
-          dealer_name: visit.dealers?.name || 'N/A',
-          visit_time: visit.visit_time,
+          dealer_name: (visit.dealers as any)?.name || 'N/A',
+          last_visit_time: visit.visit_time,
           next_visit_date: nextVisitDate,
           visit_status: visit.visit_status || 'N/A',
           remarks: visit.remarks,
@@ -197,7 +197,7 @@ const SalesPersonTodayFollowupsReportDialog: React.FC<SalesPersonTodayFollowupsR
       formatDate(visit.next_visit_date),
       visit.visit_status,
       visit.remarks || 'N/A',
-      new Date(visit.visit_time).toLocaleString(),
+      new Date(visit.last_visit_time).toLocaleString(),
     ]);
 
     autoTable(doc, {

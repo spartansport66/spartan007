@@ -40,7 +40,8 @@ interface GatePassOrderSearchProps {
   onDispatchSuccess: () => void;
 }
 
-const formatDate = (dateString: string) => {
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
   const date = new Date(dateString);
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -110,16 +111,16 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
       console.log("DEBUG: Raw sales data received:", data.sales);
 
       // Access profiles data using the explicit alias 'profiles'
-      const salesPersonName = `${data.profiles?.first_name || ''} ${data.profiles?.last_name || ''}`.trim() || 'N/A';
+      const salesPersonName = `${(data.profiles as any)?.first_name || ''} ${(data.profiles as any)?.last_name || ''}`.trim() || 'N/A';
 
       const formattedOrder: OrderDetail = {
         id: data.id,
         order_number: data.order_number,
         order_date: data.order_date,
         total_amount: data.total_amount,
-        dealer_name: data.dealers?.name || 'N/A',
-        dealer_address: data.dealers?.address || 'N/A',
-        dealer_phone: data.dealers?.phone || 'N/A',
+        dealer_name: (data.dealers as any)?.name || 'N/A',
+        dealer_address: (data.dealers as any)?.address || 'N/A',
+        dealer_phone: (data.dealers as any)?.phone || 'N/A',
         sales_person_name: salesPersonName,
         dispatched: data.dispatched,
         gate_pass_dispatch_time: data.gate_pass_dispatch_time, // NEW

@@ -118,7 +118,7 @@ const OrderSummaryReportDialog: React.FC<OrderSummaryReportDialogProps> = ({ isO
         query = query.gte('order_date', startOfDay);
       }
       if (filterToOrderDate) {
-        const endOfDay = `${filterToDate}T23:59:59.999Z`;
+        const endOfDay = `${filterToOrderDate}T23:59:59.999Z`;
         query = query.lte('order_date', endOfDay);
       }
 

@@ -54,7 +54,7 @@ const SalesPersonFollowupsCard: React.FC = () => {
 
       for (const visit of visitsData || []) {
         const dealerId = visit.dealer_id;
-        const dealerName = visit.dealers?.name || 'N/A';
+        const dealerName = (visit.dealers as any)?.name || 'N/A';
         const nextVisitDate = visit.next_visit_date;
         const lastVisitTime = visit.visit_time;
         const lastVisitStatus = visit.visit_status || 'N/A';

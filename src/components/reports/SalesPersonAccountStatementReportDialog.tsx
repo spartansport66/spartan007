@@ -12,28 +12,31 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
-import { useSession } from '@/contexts/SessionContext';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { useSession } from '@/contexts/SessionContext'; // Import useSession
 import { getStartOfUTCDayISO } from '@/utils/date';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
 
-interface AccountStatementEntry {
+interface LedgerEntry {
   date: string; // YYYY-MM-DD
   description: string;
-  debit: number; // Order amount
-  credit: number; // Payment amount
+  debit: number; // Amount owed by dealer (e.g., for orders)
+  credit: number; // Amount paid by dealer
   balance: number; // Running balance
   type: 'opening_balance' | 'order' | 'payment';
-  // Order specific details
-  order_number?: number;
+  refId?: string; // Order ID or Payment ID
+  order_number?: number; // New: For WhatsApp action
+  payment_due_date?: string | null; // New: For WhatsApp action
+  payment_status?: string; // New: To check if payment is still pending
   bill_no?: string;
-  payment_status?: string;
   days_overdue?: number | null;
-  // Payment specific details (if cleared/pending approval)
-  payment_method?: string | null;
-  payment_amount?: number | null;
-  payment_date?: string | null;
+  payment_method?: string;
+  payment_amount?: number;
   cheque_dd_date?: string | null;
   transaction_id?: string | null;
 }
@@ -43,7 +46,7 @@ interface DealerAccountStatement {
   dealer_name: string;
   dealer_phone: string;
   dealer_credit_days: number;
-  entries: AccountStatementEntry[];
+  entries: LedgerEntry[];
   final_balance: number;
 }
 
@@ -57,8 +60,35 @@ interface SalesPersonAccountStatementReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const editBalanceFormSchema = z.object({
+  openingBalance: z.preprocess(
+    (val) => Number(val),
+    z.number().min(0, { message: 'Opening balance cannot be negative.' })
+  ),
+});
+
+// New interfaces for Supabase query results
+interface PrevPayment {
+  amount: number;
+  orders: { dealer_id: string } | null;
+}
+
+interface FetchedPayment {
+  id: string;
+  amount: number;
+  payment_date: string;
+  payment_method: string;
+  transaction_id: string | null;
+  order_id: string | null; // Now nullable
+  dealer_id: string | null; // New
+  orders: {
+    dealer_id: string;
+    order_number: number;
+  } | null;
+}
+
 const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatementReportDialogProps> = ({ isOpen, onOpenChange }) => {
-  const { user } = useSession();
+  const { user } = useSession(); // Use useSession to get the current user
   const [reportData, setReportData] = useState<DealerAccountStatement[]>([]);
   const [loading, setLoading] = useState(true);
   const [allSalesPersons, setAllSalesPersons] = useState<FilterOption[]>([]);
@@ -70,6 +100,15 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
   const [filterDealerName, setFilterDealerName] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
+  const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null); // New state for dealer phone
+  const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null); // New state for dealer name
+
+  const editForm = useForm<z.infer<typeof editBalanceFormSchema>>({
+    resolver: zodResolver(editBalanceFormSchema),
+    defaultValues: {
+      openingBalance: 0,
+    },
+  });
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -83,7 +122,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
       }
       setCompanyName(data?.company_name || null);
     } catch (error: any) {
-      console.error('Error fetching company name for PDF:', error.message);
+      console.error('[DealerLedgerReportDialog] Error fetching company name for PDF:', error.message);
       setCompanyName(null);
     }
   }, []);
@@ -119,7 +158,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
           dealers (
             id, name, phone, allotted_credit_days, last_billing_date,
             dealer_balances(opening_balance),
-            orders!inner (
+            orders (
               id, order_number, dispatch_date, bill_no, total_amount, payment_status, order_date,
               payments (id, amount, payment_date, payment_method, cheque_dd_date, transaction_id, status)
             )
@@ -138,7 +177,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
       const finalReport: DealerAccountStatement[] = [];
 
       for (const item of rawDealersData || []) {
-        const dealer = item.dealers;
+        const dealer: any = item.dealers;
         if (!dealer) continue;
 
         const dealerId = dealer.id;
@@ -146,7 +185,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
         const allottedCreditDays = dealer.allotted_credit_days || 0;
         const lastBillingDate = dealer.last_billing_date;
 
-        const allEntries: AccountStatementEntry[] = [];
+        const allEntries: LedgerEntry[] = [];
         let currentBalance = openingBalance;
 
         // --- 1. Calculate Initial Balance (Transactions before filterFromDate) ---
@@ -154,7 +193,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
         if (fromDateISO) {
           // Orders before fromDate
           const ordersBefore = (dealer.orders || []).filter((o: any) => new Date(o.dispatch_date) < new Date(fromDateISO));
-          const ordersBeforeTotal = ordersBefore.reduce((sum, order) => sum + order.total_amount, 0);
+          const ordersBeforeTotal = ordersBefore.reduce((sum: number, order: any) => sum + order.total_amount, 0);
 
           // Payments before fromDate (Order payments and General payments)
           let paymentsBeforeTotal = 0;
@@ -238,8 +277,8 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
           });
 
           // Add Payment Entry (Credit) if paid or pending approval
-          const completedPayment = order.payments?.find(p => p.status === 'completed');
-          const pendingPayment = order.payments?.find(p => p.status === 'pending_approval');
+          const completedPayment = order.payments?.find((p: any) => p.status === 'completed');
+          const pendingPayment = order.payments?.find((p: any) => p.status === 'pending_approval');
           const payment = completedPayment || pendingPayment;
 
           if (payment) {
@@ -392,50 +431,71 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
     setReportData([]);
   };
 
-  const handleSendWhatsApp = async (dealer: DealerAccountStatement, entry: AccountStatementEntry) => {
-    if (!user) {
-      showError('You must be logged in to send WhatsApp messages.');
-      return;
-    }
-    if (!dealer.dealer_phone) {
-      showError(`Phone number not available for ${dealer.dealer_name}.`);
-      return;
-    }
-    if (!companyName) {
-      showError('Company name is required to send WhatsApp messages. Please set it in Admin Dashboard -> Company Information.');
-      return;
-    }
-    if (!entry.order_number || !entry.bill_no || !entry.days_overdue) {
-        showError('Missing order details for reminder.');
-        return;
-    }
-
+  const handleSendOrderWhatsApp = async (orderNumber: number, amountDue: number, dueDate: string | null) => {
+    if (!user) { showError('You must be logged in to send WhatsApp messages.'); return; }
+    if (!selectedDealerPhone) { showError('Dealer phone number is not available.'); return; }
+    if (!companyName) { showError('Company name is required. Please set it in Admin Dashboard -> Company Information.'); return; }
+    
     setIsSendingWhatsApp(true);
     try {
-      const message = `Hello ${dealer.dealer_name},\n\nThis is an urgent reminder from *${companyName}*.\n\nPayment for Dispatched Order No. *${entry.order_number}* (Bill No: ${entry.bill_no}) of *₹${entry.debit.toFixed(2)}* is currently overdue by *${entry.days_overdue} days* (Bill Date: ${entry.date}).\n\nPlease clear this outstanding payment immediately.\n\nThank you!`;
+      const dealerName = selectedDealerName || 'Dealer';
+      const formattedDueDate = dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A';
+      const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that payment for Order No. *${orderNumber}* of *₹${amountDue.toFixed(2)}* is due on ${formattedDueDate}.\n\nPlease make the payment at your earliest convenience.\n\nThank you!`;
       
       const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dealerIds: [dealer.dealer_id],
+          dealerIds: [filterDealerId],
           message: message,
           comboOfferId: null,
           sentByUserId: user.id,
-          messageType: 'order_overdue_reminder',
+          messageType: 'order_due_reminder',
         }),
       });
-
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to log WhatsApp message send attempt');
 
-      showSuccess(`WhatsApp message drafted for ${dealer.dealer_name}. Please check the new tab.`);
+      showSuccess(`WhatsApp message drafted for ${dealerName}. Please check the new tab.`);
       const encodedMessage = encodeURIComponent(message);
-      const whatsappUrl = `https://web.whatsapp.com/send?phone=${dealer.dealer_phone}&text=${encodedMessage}`;
-      window.open(whatsappUrl, '_blank');
-      
+      window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
     } catch (error: any) {
-      console.error('Error sending WhatsApp message:', error);
+      showError(`Failed to send WhatsApp message: ${error.message}`);
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
+  };
+
+  const handleSendBalanceWhatsApp = async (balance: number) => {
+    if (!user) { showError('You must be logged in.'); return; }
+    if (!selectedDealerPhone) { showError('Dealer phone number is not available.'); return; }
+    if (!companyName) { showError('Company name is required.'); return; }
+    if (balance <= 0) { showError('Current balance is zero or negative. No reminder needed.'); return; }
+
+    setIsSendingWhatsApp(true);
+    try {
+      const dealerName = selectedDealerName || 'Dealer';
+      const formattedBalance = balance.toFixed(2);
+      const message = `Hello ${dealerName},\n\nThis is a reminder from *${companyName}* that your current outstanding balance is *₹${formattedBalance}*. Please clear your balance as soon as possible.\n\nThank you!`;
+      
+      const response = await fetch(SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealerIds: [filterDealerId],
+          message: message,
+          comboOfferId: null,
+          sentByUserId: user.id,
+          messageType: 'balance_due_reminder',
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to log WhatsApp message send attempt');
+
+      showSuccess(`WhatsApp balance reminder drafted for ${dealerName}. Please check the new tab.`);
+      const encodedMessage = encodeURIComponent(message);
+      window.open(`https://web.whatsapp.com/send?phone=${selectedDealerPhone}&text=${encodedMessage}`, '_blank');
+    } catch (error: any) {
       showError(`Failed to send WhatsApp message: ${error.message}`);
     } finally {
       setIsSendingWhatsApp(false);
@@ -634,6 +694,8 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
                       </TableHeader>
                       <TableBody>
                         {dealerStatement.entries.map((entry, index) => {
+                          const isPendingOrder = entry.type === 'order' && (entry.payment_status === 'pending' || entry.payment_status === 'pending_approval');
+                          const isBalancePositive = entry.balance > 0;
                           const isOverdue = entry.type === 'order' && entry.days_overdue && entry.days_overdue > 0;
                           const isPendingApproval = entry.type === 'payment' && entry.description.includes('Pending Approval');
                           const isOrder = entry.type === 'order';
@@ -667,17 +729,30 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
                                 )}
                               </TableCell>
                               <TableCell className="text-center">
-                                {isOverdue && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleSendWhatsApp(dealerStatement, entry)}
-                                    title="Send Overdue WhatsApp Reminder"
-                                    disabled={isSendingWhatsApp || !dealerStatement.dealer_phone}
-                                  >
-                                    <MessageCircle className="h-4 w-4 text-red-500" />
-                                  </Button>
-                                )}
+                                <div className="flex justify-center gap-2">
+                                  {isPendingOrder && entry.order_number && entry.debit > 0 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleSendOrderWhatsApp(entry.order_number!, entry.debit, entry.payment_due_date || null)}
+                                      title="Send WhatsApp Reminder for this Pending Order"
+                                      disabled={!dealerStatement.dealer_phone}
+                                    >
+                                      <MessageCircle className="h-4 w-4 text-blue-500" />
+                                    </Button>
+                                  )}
+                                  {isBalancePositive && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleSendBalanceWhatsApp(entry.balance)}
+                                      title="Send WhatsApp Reminder for Current Balance"
+                                      disabled={!dealerStatement.dealer_phone}
+                                    >
+                                      <MessageCircle className="h-4 w-4 text-green-500" />
+                                    </Button>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                           );

@@ -85,7 +85,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       setOrderData({
         id: orderRaw.id,
         order_number: orderRaw.order_number,
-        dealer_name: orderRaw.dealers?.name || 'N/A',
+        dealer_name: (orderRaw.dealers as any)?.name || 'N/A',
         total_amount: orderRaw.total_amount,
         discount_amount: orderRaw.discount_amount || 0,
         items: fetchedItems,

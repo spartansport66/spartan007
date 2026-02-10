@@ -447,9 +447,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                     {filteredDealers.length === 0 ? <CommandEmpty>No dealer found.</CommandEmpty> : (
                       <CommandGroup>
                         {filteredDealers.map((dealer) => (
-                          <CommandItem key={dealer.id} value={dealer.name} onSelect={(currentValue) => {
-                            const selected = dealers.find(d => d.name.toLowerCase() === currentValue.toLowerCase());
-                            setSelectedDealer(selected?.id === selectedDealer ? '' : selected?.id || '');
+                          <CommandItem key={dealer.id} value={dealer.name} onSelect={() => {
+                            setSelectedDealer(dealer.id === selectedDealer ? '' : dealer.id);
                             setIsDealerPopoverOpen(false);
                             setDealerSearchValue("");
                           }}>
