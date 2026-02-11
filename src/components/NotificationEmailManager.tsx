@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Plus, Trash2, Mail } from 'lucide-react';
+import { Loader2, Plus, Trash2, Mail, Database, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 interface NotificationEmail {
   id: string;
@@ -16,23 +17,45 @@ interface NotificationEmail {
   email_address: string;
 }
 
+const SQL_COMMAND = `
+CREATE TABLE IF NOT EXISTS public.notification_emails (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  department_name TEXT NOT NULL,
+  email_address TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.notification_emails ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins can manage notification emails" ON public.notification_emails
+FOR ALL TO authenticated USING (public.is_admin());
+`;
+
 const NotificationEmailManager: React.FC = () => {
   const [emails, setEmails] = useState<NotificationEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tableMissing, setTableMissing] = useState(false);
   
   const [newDept, setNewDept] = useState('');
   const [newEmail, setNewEmail] = useState('');
 
   const fetchEmails = useCallback(async () => {
     setLoading(true);
+    setTableMissing(false);
     try {
       const { data, error } = await supabase
         .from('notification_emails')
         .select('*')
         .order('department_name', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '42P01' || error.message.includes('relation "notification_emails" does not exist')) {
+          setTableMissing(true);
+          return;
+        }
+        throw error;
+      }
       setEmails(data || []);
     } catch (error: any) {
       console.error('Error fetching notification emails:', error.message);
@@ -91,17 +114,29 @@ const NotificationEmailManager: React.FC = () => {
     }
   };
 
+  if (tableMissing) {
+    return (
+      <div className="space-y-4 p-4">
+        <Alert variant="destructive">
+          <Database className="h-4 w-4" />
+          <AlertTitle>Database Table Missing</AlertTitle>
+          <AlertDescription>
+            The <code>notification_emails</code> table does not exist. Please run the following SQL in your Supabase SQL Editor:
+          </AlertDescription>
+        </Alert>
+        <pre className="bg-slate-950 text-slate-50 p-4 rounded-md overflow-x-auto text-xs font-mono">
+          {SQL_COMMAND}
+        </pre>
+        <Button onClick={fetchEmails} className="w-full">
+          <RotateCcw className="mr-2 h-4 w-4" /> I've run the SQL, Retry
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <Card className="bg-card text-card-foreground shadow-lg h-full">
-      <CardHeader className="bg-slate-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold flex items-center gap-2">
-          <Mail className="h-5 w-5" /> Order Notification Emails
-        </CardTitle>
-        <CardDescription className="text-slate-200">
-          Manage which departments receive automated emails when an order is placed.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-4 space-y-6">
+    <Card className="bg-card text-card-foreground shadow-lg h-full border-none shadow-none">
+      <CardContent className="p-0 space-y-6">
         <form onSubmit={handleAddEmail} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end p-4 border rounded-md bg-muted/30">
           <div className="space-y-2">
             <Label htmlFor="dept">Department</Label>
@@ -169,5 +204,7 @@ const NotificationEmailManager: React.FC = () => {
     </Card>
   );
 };
+
+import { RotateCcw } from 'lucide-react';
 
 export default NotificationEmailManager;
