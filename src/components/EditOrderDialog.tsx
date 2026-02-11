@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Percent, Search } from 'lucide-react';
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Percent, Search, Building, Phone, MapPin } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -44,8 +44,13 @@ interface OrderToEdit {
   id: string;
   order_number: number;
   dealer_name: string;
+  dealer_address: string;
+  dealer_phone: string;
+  dealer_city: string;
   total_amount: number;
   discount_amount: number;
+  bill_no: string | null;
+  dispatch_date: string | null;
   items: OrderItem[];
 }
 
@@ -59,6 +64,8 @@ interface EditOrderDialogProps {
 const formSchema = z.object({
   orderNumber: z.preprocess((val) => Number(val), z.number().int().min(1, { message: 'Order number must be at least 1.' })),
   discountAmount: z.preprocess((val) => Number(val), z.number().min(0)),
+  billNo: z.string().nullable().optional(),
+  dispatchDate: z.string().nullable().optional(),
 });
 
 const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated }) => {
@@ -81,6 +88,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     defaultValues: {
       orderNumber: 0,
       discountAmount: 0,
+      billNo: '',
+      dispatchDate: '',
     },
   });
 
@@ -98,8 +107,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const { data: orderRaw, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, total_amount, discount_amount,
-          dealers (name),
+          id, order_number, total_amount, discount_amount, bill_no, dispatch_date,
+          dealers (name, address, phone, city),
           sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst))
         `)
         .eq('id', id)
@@ -131,12 +140,19 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         };
       });
 
+      const dealer = (orderRaw.dealers as any);
+
       setOrderData({
         id: orderRaw.id,
         order_number: orderRaw.order_number,
-        dealer_name: (orderRaw.dealers as any)?.name || 'N/A',
+        dealer_name: dealer?.name || 'N/A',
+        dealer_address: dealer?.address || 'N/A',
+        dealer_phone: dealer?.phone || 'N/A',
+        dealer_city: dealer?.city || 'N/A',
         total_amount: orderRaw.total_amount,
         discount_amount: orderRaw.discount_amount || 0,
+        bill_no: orderRaw.bill_no,
+        dispatch_date: orderRaw.dispatch_date,
         items: fetchedItems,
       });
       
@@ -144,6 +160,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       form.reset({
         orderNumber: orderRaw.order_number,
         discountAmount: orderRaw.discount_amount || 0,
+        billNo: orderRaw.bill_no || '',
+        dispatchDate: orderRaw.dispatch_date ? orderRaw.dispatch_date.split('T')[0] : '',
       });
 
     } catch (error: any) {
@@ -267,6 +285,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           order_number: values.orderNumber,
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
+          bill_no: values.billNo || null,
+          dispatch_date: values.dispatchDate || null,
         })
         .eq('id', orderData.id);
 
@@ -318,7 +338,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         <DialogHeader>
           <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
           <DialogDescription>
-            Modify items, discounts, and order number. GST is calculated per item.
+            Modify items, discounts, billing info, and order number.
           </DialogDescription>
         </DialogHeader>
         
@@ -328,7 +348,29 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           </div>
         ) : (
           <div className="space-y-6 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Party Details Section */}
+            <div className="p-4 border rounded-md bg-muted/30 space-y-3">
+              <h3 className="text-sm font-bold flex items-center gap-2 text-primary">
+                <Building className="h-4 w-4" /> Party Details
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="space-y-1">
+                  <p className="font-semibold text-foreground">{orderData?.dealer_name}</p>
+                  <p className="flex items-start gap-1 text-muted-foreground">
+                    <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
+                    <span>{orderData?.dealer_address}, {orderData?.dealer_city}</span>
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="flex items-center gap-1 text-muted-foreground">
+                    <Phone className="h-3 w-3 shrink-0" />
+                    <span>{orderData?.dealer_phone}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="orderNumber">Order Number</Label>
                 <Input 
@@ -340,8 +382,26 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                 {form.formState.errors.orderNumber && <p className="text-xs text-destructive">{form.formState.errors.orderNumber.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label>Dealer</Label>
-                <Input value={orderData?.dealer_name} disabled className="bg-muted" />
+                <Label htmlFor="billNo">Bill Number</Label>
+                <Input 
+                  id="billNo" 
+                  placeholder="e.g., INV-001"
+                  {...form.register('billNo')} 
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dispatchDate">Bill Date (Dispatch Date)</Label>
+                <Input 
+                  id="dispatchDate" 
+                  type="date" 
+                  {...form.register('dispatchDate')} 
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Input value={orderData?.bill_no ? 'Dispatched' : 'Pending'} disabled className="bg-muted" />
               </div>
             </div>
 
