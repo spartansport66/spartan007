@@ -1,7 +1,4 @@
 // @ts-ignore
-/// <reference lib="deno.ns" />
-
-// @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
@@ -11,7 +8,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -34,7 +31,7 @@ serve(async (req) => {
     );
 
     const productsToInsert = productData.map((product: any) => {
-      const openingStock = parseInt(product.opening_stock || 0);
+      const openingStock = Number(product.opening_stock || 0);
       return {
         name: product.name,
         description: product.description || null,
@@ -45,7 +42,7 @@ serve(async (req) => {
         size: product.size || null,
         hsn: product.hsn || null,
         gst: product.gst || null,
-        dp: parseInt(product.dp || 0),
+        dp: Number(product.dp || 0),
       };
     });
 
@@ -66,7 +63,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

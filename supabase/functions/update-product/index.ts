@@ -1,6 +1,4 @@
 // @ts-ignore
-/// <reference lib="deno.ns" />
-// @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
@@ -10,7 +8,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -54,13 +52,13 @@ serve(async (req) => {
     if (size !== undefined) updateData.size = size;
     if (hsn !== undefined) updateData.hsn = hsn;
     if (gst !== undefined) updateData.gst = gst;
-    if (dp !== undefined) updateData.dp = parseInt(dp);
+    if (dp !== undefined) updateData.dp = Number(dp);
     
     if (opening_stock !== undefined) {
-      const newOpening = parseInt(opening_stock);
+      const newOpening = Number(opening_stock);
       updateData.opening_stock = newOpening;
       // Recalculate closing stock: Opening + In - Out
-      updateData.closing_stock = newOpening + currentProduct.stock_in - currentProduct.stock_out;
+      updateData.closing_stock = newOpening + (currentProduct.stock_in || 0) - (currentProduct.stock_out || 0);
     }
 
     // Fields only editable if no sales exist
@@ -101,7 +99,7 @@ serve(async (req) => {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
