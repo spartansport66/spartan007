@@ -23,6 +23,7 @@ interface Product {
   name: string;
   dp: number;
   closing_stock: number;
+  gst: string; // Added GST field
 }
 
 interface Dealer {
@@ -41,7 +42,10 @@ interface OrderItem {
   product_code: string;
   unit_dp: number;
   discount_percent: number;
-  total_price: number;
+  gst_percent: number; // Added GST percent
+  taxable_value: number; // Added taxable value (price after discount, before tax)
+  gst_amount: number; // Added GST amount
+  total_price: number; // Final price including tax
 }
 
 interface MultiItemOrderFormProps {
@@ -59,9 +63,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
-  const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
-  const [gstPercent, setGstPercent] = useState<number>(5);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
@@ -78,31 +80,23 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
   const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<number>(0);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
-  };
-
   const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
 
-  const preDiscountTotalOrderValue = useMemo(() => {
+  const totalTaxableValue = useMemo(() => {
+    return orderItems.reduce((total, item) => total + item.taxable_value, 0);
+  }, [orderItems]);
+
+  const totalGstAmount = useMemo(() => {
+    return orderItems.reduce((total, item) => total + item.gst_amount, 0);
+  }, [orderItems]);
+
+  const preGlobalDiscountTotal = useMemo(() => {
     return orderItems.reduce((total, item) => total + item.total_price, 0);
   }, [orderItems]);
 
-  const taxableValue = useMemo(() => {
-    return Math.max(0, preDiscountTotalOrderValue - discountAmount);
-  }, [preDiscountTotalOrderValue, discountAmount]);
-
-  const gstAmount = useMemo(() => {
-    return (taxableValue * gstPercent) / 100;
-  }, [taxableValue, gstPercent]);
-
   const finalOrderValue = useMemo(() => {
-    return taxableValue + gstAmount;
-  }, [taxableValue, gstAmount]);
+    return Math.max(0, preGlobalDiscountTotal - discountAmount);
+  }, [preGlobalDiscountTotal, discountAmount]);
 
   useEffect(() => {
     setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
@@ -123,7 +117,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     try {
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, code, name, dp, closing_stock');
+        .select('id, code, name, dp, closing_stock, gst');
       if (productsError) throw productsError;
       setProducts(productsData || []);
     } catch (error: any) {
@@ -176,14 +170,12 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setDealerCreditLimit(0);
         setAllottedCreditDays(0);
         setPaymentDueDate(null);
-        setDealerOpeningBalance(0);
         setDiscountAmount(0);
         return;
       }
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
-        setDealerOpeningBalance(selectedDealerData.opening_balance || 0);
         const today = new Date();
         const dueDate = new Date(today);
         dueDate.setDate(today.getDate() + selectedDealerData.allotted_credit_days);
@@ -229,14 +221,24 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     calculateBalanceAndDueDate();
   }, [selectedDealer, dealers, user]);
 
-  const newItemFinalUnitPrice = useMemo(() => {
+  const newItemCalculations = useMemo(() => {
+    const product = products.find(p => p.id === newItemProductId);
+    const gstPercent = parseFloat(product?.gst || "0") || 0;
+    
     const discount = (newItemUnitPrice * newItemDiscountPercent) / 100;
-    return Math.max(0, newItemUnitPrice - discount);
-  }, [newItemUnitPrice, newItemDiscountPercent]);
+    const discountedUnitPrice = Math.max(0, newItemUnitPrice - discount);
+    
+    const taxableValue = discountedUnitPrice * newItemQuantity;
+    const gstAmount = (taxableValue * gstPercent) / 100;
+    const totalPrice = taxableValue + gstAmount;
 
-  const newItemTotalPrice = useMemo(() => {
-    return newItemQuantity * newItemFinalUnitPrice;
-  }, [newItemQuantity, newItemFinalUnitPrice]);
+    return {
+      gstPercent,
+      taxableValue,
+      gstAmount,
+      totalPrice
+    };
+  }, [newItemProductId, newItemUnitPrice, newItemDiscountPercent, newItemQuantity, products]);
 
   const addOrderItem = () => {
     if (!newItemProductId || newItemQuantity <= 0) {
@@ -254,7 +256,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       product_code: product.code,
       unit_dp: newItemUnitPrice,
       discount_percent: newItemDiscountPercent,
-      total_price: newItemTotalPrice,
+      gst_percent: newItemCalculations.gstPercent,
+      taxable_value: newItemCalculations.taxableValue,
+      gst_amount: newItemCalculations.gstAmount,
+      total_price: newItemCalculations.totalPrice,
     };
     setOrderItems(prevItems => [newOrderItem, ...prevItems]);
     setNewItemProductId('');
@@ -269,7 +274,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !selectedDealer || orderItems.length === 0 || discountAmount < 0 || discountAmount > preDiscountTotalOrderValue || !isPaymentDetailsValid) {
+    if (!user || !selectedDealer || orderItems.length === 0 || discountAmount < 0 || discountAmount > preGlobalDiscountTotal || !isPaymentDetailsValid) {
       showError('Please correct all errors before submitting.');
       return;
     }
@@ -302,6 +307,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         order_id: newOrder.id,
         product_id: item.product_id,
         quantity: item.quantity,
+        unit_price: item.unit_dp,
+        discount_percent: item.discount_percent,
+        gst_percent: item.gst_percent,
         total_price: item.total_price,
       }));
       
@@ -324,29 +332,21 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
       if (paymentInsertError) throw paymentInsertError;
 
-      // 4. Trigger Email Notification with better logging
-      console.log("[MultiItemOrderForm] Triggering email notification for order:", newOrder.id);
+      // 4. Trigger Email Notification
       try {
-        const emailResponse = await fetch(SEND_ORDER_NOTIFICATION_URL, {
+        await fetch(SEND_ORDER_NOTIFICATION_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ orderId: newOrder.id }),
         });
-        const emailResult = await emailResponse.json();
-        console.log("[MultiItemOrderForm] Email trigger result:", emailResult);
-        
-        if (!emailResponse.ok) {
-          console.warn("[MultiItemOrderForm] Email trigger failed:", emailResult.error);
-        }
       } catch (emailErr) {
-        console.error('[MultiItemOrderForm] Network error triggering email:', emailErr);
+        console.error('[MultiItemOrderForm] Error triggering email:', emailErr);
       }
 
       showSuccess('Order placed successfully!');
       setSelectedDealer('');
       setOrderItems([]);
       setDiscountAmount(0);
-      setGstPercent(5);
       setPaymentMethod('');
       setPaymentAmount(0);
       setChequeDdNo('');
@@ -388,7 +388,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     <Card className="bg-card text-card-foreground shadow-lg">
       <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold text-white">Place New Order</CardTitle>
-        <CardDescription className="text-blue-100 dark:text-blue-200">Create an order with multiple items for a registered dealer.</CardDescription>
+        <CardDescription className="text-blue-100 dark:text-blue-200">Create an order with item-wise GST calculation.</CardDescription>
       </CardHeader>
       <CardContent className="p-4">
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -425,7 +425,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                     <ScrollArea className="h-[250px]">
                       <div className="p-1">
                         {filteredProducts.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>) : (
-                          filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start"><div className="flex items-center"><Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span>{product.name} ({product.code})</span></div><div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - Stock: {product.closing_stock}</div></div></Button>))
+                          filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start"><div className="flex items-center"><Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span>{product.name} ({product.code})</span></div><div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - GST: {product.gst}% - Stock: {product.closing_stock}</div></div></Button>))
                         )}
                       </div>
                     </ScrollArea>
@@ -436,7 +436,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
                 <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
                 <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(parseFloat(e.target.value) || 0)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
-                <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Final Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemTotalPrice.toFixed(2)}</div></div>
+                <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total (Inc. Tax)</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemCalculations.totalPrice.toFixed(2)}</div></div>
               </div>
               <Button type="button" onClick={addOrderItem} disabled={loading} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
             </div>
@@ -444,9 +444,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             {orderItems.length > 0 && (
               <div className="max-h-[250px] overflow-y-auto border rounded-md">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Qty</TableHead><TableHead>DP</TableHead><TableHead>Disc %</TableHead><TableHead className="text-right">Total</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Qty</TableHead><TableHead>DP</TableHead><TableHead>Disc %</TableHead><TableHead>GST %</TableHead><TableHead className="text-right">Total</TableHead><TableHead></TableHead></TableRow></TableHeader>
                   <TableBody>
-                    {orderItems.map(item => (<TableRow key={item.id}><TableCell className="max-w-[150px] truncate">{item.product_name} ({item.product_code})</TableCell><TableCell>{item.quantity}</TableCell><TableCell>₹{item.unit_dp.toFixed(2)}</TableCell><TableCell>{item.discount_percent}%</TableCell><TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell><TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}
+                    {orderItems.map(item => (<TableRow key={item.id}><TableCell className="max-w-[150px] truncate">{item.product_name} ({item.product_code})</TableCell><TableCell>{item.quantity}</TableCell><TableCell>₹{item.unit_dp.toFixed(2)}</TableCell><TableCell>{item.discount_percent}%</TableCell><TableCell>{item.gst_percent}%</TableCell><TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell><TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}
                   </TableBody>
                 </Table>
               </div>
@@ -455,10 +455,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
           {orderItems.length > 0 && (
             <div className="p-4 bg-muted rounded-md space-y-2">
-              <div className="flex justify-between text-base font-medium"><span>Subtotal:</span><span>₹{preDiscountTotalOrderValue.toFixed(2)}</span></div>
-              <div className="flex justify-between items-center"><Label htmlFor="discountAmount" className="text-base font-medium">Additional Discount (₹)</Label><Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} /></div>
-              <div className="flex justify-between text-base font-medium"><span>Taxable Value:</span><span>₹{taxableValue.toFixed(2)}</span></div>
-              <div className="flex justify-between items-center"><div className="flex items-center gap-2"><Label htmlFor="gstPercent" className="text-base font-medium">GST (%)</Label><Input id="gstPercent" type="number" step="0.1" value={gstPercent} onChange={(e) => setGstPercent(parseFloat(e.target.value) || 0)} className="w-20 text-right" min="0" /></div><span className="text-sm text-muted-foreground">₹{gstAmount.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span>Taxable Value (Excl. GST):</span><span>₹{totalTaxableValue.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span>Total GST:</span><span>₹{totalGstAmount.toFixed(2)}</span></div>
+              <Separator className="my-1" />
+              <div className="flex justify-between text-base font-medium"><span>Subtotal (Incl. GST):</span><span>₹{preGlobalDiscountTotal.toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><Label htmlFor="discountAmount" className="text-base font-medium">Additional Global Discount (₹)</Label><Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} /></div>
               <Separator className="my-2" />
               <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
             </div>
