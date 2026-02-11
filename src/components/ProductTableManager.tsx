@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Edit, Trash2, Loader2, Search, Info } from 'lucide-react';
+import { Edit, Trash2, Loader2, Search, Info, Printer } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -37,6 +37,8 @@ import * as z from 'zod';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const UPDATE_PRODUCT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/update-product";
@@ -80,6 +82,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [appliedSearchTerm, setAppliedSearchTerm] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -100,6 +103,20 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
       });
     }
   }, [selectedProduct, form]);
+
+  const fetchCompanyInfo = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('company_info')
+        .select('company_name')
+        .limit(1)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      setCompanyName(data?.company_name || null);
+    } catch (error: any) {
+      console.error('Error fetching company name:', error.message);
+    }
+  }, []);
 
   const fetchProducts = useCallback(async () => {
     if (!user || !isAuthorized) {
@@ -132,8 +149,11 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   }, [user, appliedSearchTerm, isAuthorized]);
 
   useEffect(() => {
-    if (!sessionLoading && user && isAuthorized) fetchProducts();
-  }, [sessionLoading, user, isAuthorized, fetchProducts]);
+    if (!sessionLoading && user && isAuthorized) {
+      fetchProducts();
+      fetchCompanyInfo();
+    }
+  }, [sessionLoading, user, isAuthorized, fetchProducts, fetchCompanyInfo]);
 
   const handleEdit = (product: Product) => {
     setSelectedProduct(product);
@@ -187,14 +207,93 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     }
   };
 
+  const handlePrint = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'landscape'
+      });
+
+      const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+      doc.setFontSize(22);
+      doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
+      doc.setFontSize(18);
+      doc.text("Product Inventory Report", doc.internal.pageSize.width / 2, 25, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
+
+      if (appliedSearchTerm) {
+        doc.setFontSize(9);
+        doc.text(`Filter: "${appliedSearchTerm}"`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
+      }
+
+      const tableColumn = ["Code", "Product Name", "Opening", "Stock In", "Stock Out", "Closing", "DP (₹)"];
+      const tableRows = products.map(product => {
+        const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+        return [
+          product.code,
+          product.name,
+          product.opening_stock.toString(),
+          `+${product.stock_in}`,
+          `-${product.stock_out}`,
+          calculatedClosing.toString(),
+          product.dp.toFixed(2),
+        ];
+      });
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 45,
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+          valign: 'middle',
+        },
+        headStyles: {
+          fillColor: [30, 58, 138],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'center',
+        },
+        bodyStyles: {
+          textColor: [0, 0, 0],
+        },
+        margin: { top: 10, left: 10, right: 10 },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          1: { cellWidth: 'auto' },
+          2: { cellWidth: 25, halign: 'right' },
+          3: { cellWidth: 25, halign: 'right' },
+          4: { cellWidth: 25, halign: 'right' },
+          5: { cellWidth: 25, halign: 'right' },
+          6: { cellWidth: 30, halign: 'right' },
+        }
+      });
+
+      doc.save('product_inventory_report.pdf');
+      showSuccess('Product report generated successfully!');
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`);
+    }
+  };
+
   if (!isAuthorized) return null;
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">Manage All Products</CardTitle>
-        <CardDescription className="text-blue-100 dark:text-blue-200">Inventory tracking: Opening + In - Out = Closing</CardDescription>
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle className="text-xl font-semibold">Manage All Products</CardTitle>
+            <CardDescription className="text-blue-100 dark:text-blue-200">Inventory tracking: Opening + In - Out = Closing</CardDescription>
+          </div>
+          <Button variant="outline" onClick={handlePrint} className="bg-white text-blue-600 hover:bg-blue-50">
+            <Printer className="h-4 w-4 mr-2" /> Print Report
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-4">
         <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
