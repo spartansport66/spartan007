@@ -3,11 +3,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Search, Calendar } from 'lucide-react';
+import { Loader2, Search, Calendar, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { showError } from '@/utils/toast';
+import { showError, showSuccess } from '@/utils/toast';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface StockInRecord {
   id: string;
@@ -22,12 +34,12 @@ interface StockInRecord {
 const StockInHistoryTable: React.FC = () => {
   const [records, setRecords] = useState<StockInRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetching with joins. This requires Foreign Keys to be set in the DB.
       const { data, error } = await supabase
         .from('stock_receipts')
         .select(`
@@ -41,16 +53,11 @@ const StockInHistoryTable: React.FC = () => {
         .order('receipt_date', { ascending: false })
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('[StockInHistoryTable] Supabase error:', error);
-        throw error;
-      }
+      if (error) throw error;
 
       const formatted: StockInRecord[] = (data || []).map((r: any) => {
-        // Handle potential nulls if join fails or data is missing
         const product = r.products || { name: 'Unknown Product', code: 'N/A' };
         const profile = r.profiles || { first_name: 'Unknown', last_name: 'User' };
-        
         const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
 
         return {
@@ -68,7 +75,6 @@ const StockInHistoryTable: React.FC = () => {
     } catch (error: any) {
       console.error('Error fetching stock in history:', error.message);
       showError(`Failed to load history: ${error.message}`);
-      setRecords([]);
     } finally {
       setLoading(false);
     }
@@ -77,6 +83,26 @@ const StockInHistoryTable: React.FC = () => {
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  const handleDelete = async (id: string) => {
+    setIsDeleting(id);
+    try {
+      const { error } = await supabase
+        .from('stock_receipts')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      showSuccess('Record deleted and stock reverted successfully.');
+      fetchHistory();
+    } catch (error: any) {
+      console.error('Error deleting record:', error.message);
+      showError(`Failed to delete: ${error.message}`);
+    } finally {
+      setIsDeleting(null);
+    }
+  };
 
   const filteredRecords = records.filter(r => 
     r.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -122,6 +148,7 @@ const StockInHistoryTable: React.FC = () => {
                     <TableHead className="text-right">Quantity</TableHead>
                     <TableHead>Received By</TableHead>
                     <TableHead>Remarks</TableHead>
+                    <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -136,6 +163,29 @@ const StockInHistoryTable: React.FC = () => {
                       <TableCell>{record.received_by_name}</TableCell>
                       <TableCell className="max-w-[200px] truncate" title={record.remarks || ''}>
                         {record.remarks || 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                              {isDeleting === record.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete this record?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will remove the entry from history and **subtract {record.quantity} units** from the current stock of {record.product_name}.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(record.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                Delete & Revert Stock
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </TableCell>
                     </TableRow>
                   ))}
