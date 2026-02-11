@@ -120,7 +120,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('id, code, name, dp, closing_stock, gst')
-        .limit(5000);
+        .order('name', { ascending: true });
       if (productsError) throw productsError;
       setProducts(productsData || []);
     } catch (error: any) {
