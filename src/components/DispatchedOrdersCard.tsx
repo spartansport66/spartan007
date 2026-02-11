@@ -41,19 +41,10 @@ const DispatchedOrdersCard: React.FC = () => {
     return `${day}/${month}/${year}`;
   };
 
-  // Get today's date in YYYY-MM-DD format
-  const getTodayDate = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // Filter states, default to today's date for dispatch date
+  // Filter states - removed default today's date to show all by default
   const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
-  const [filterDispatchDate, setFilterDispatchDate] = useState<string>(getTodayDate());
+  const [filterDispatchDate, setFilterDispatchDate] = useState<string>('');
 
   // Dialog states
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
@@ -147,7 +138,7 @@ const DispatchedOrdersCard: React.FC = () => {
   const handleClearFilters = () => {
     setFilterOrderNumber('');
     setFilterDealerId('');
-    setFilterDispatchDate(getTodayDate()); // Reset to today's date
+    setFilterDispatchDate(''); // Clear date filter
   };
 
   return (
