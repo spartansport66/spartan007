@@ -35,7 +35,7 @@ const StockInHistoryTable: React.FC = () => {
           quantity,
           remarks,
           products (name, code),
-          profiles:received_by (first_name, last_name)
+          received_by_profile:profiles!received_by (first_name, last_name)
         `)
         .order('receipt_date', { ascending: false })
         .order('created_at', { ascending: false });
@@ -49,7 +49,9 @@ const StockInHistoryTable: React.FC = () => {
         remarks: r.remarks,
         product_name: r.products?.name || 'N/A',
         product_code: r.products?.code || 'N/A',
-        received_by_name: `${r.profiles?.first_name || ''} ${r.profiles?.last_name || ''}`.trim() || 'N/A',
+        received_by_name: r.received_by_profile 
+          ? `${r.received_by_profile.first_name || ''} ${r.received_by_profile.last_name || ''}`.trim() 
+          : 'N/A',
       }));
 
       setRecords(formatted);
