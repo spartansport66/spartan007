@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Edit, Trash2, Loader2, Search, Info, Printer } from 'lucide-react';
+import { Edit, Trash2, Loader2, Search, Info, Printer, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -71,6 +71,8 @@ const formSchema = z.object({
   opening_stock: z.preprocess((val) => Number(val), z.number().int().min(0)),
 });
 
+type SortKey = 'code' | 'name' | 'opening_stock' | 'stock_in' | 'stock_out' | 'calculated_closing';
+
 const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onProductAction }) => {
   const { user, session, loading: sessionLoading, userType } = useSession();
   const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
@@ -85,6 +87,10 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   const [appliedSearchTerm, setAppliedSearchTerm] = useState<string>('');
   const [stockFilter, setStockFilter] = useState<string>('');
   const [appliedStockFilter, setAppliedStockFilter] = useState<number | null>(null);
+
+  // Sort states
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
@@ -172,6 +178,15 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     setAppliedStockFilter(null);
   };
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
+
   const handleEdit = (product: Product) => {
     setSelectedProduct(product);
     setIsEditDialogOpen(true);
@@ -224,6 +239,35 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     }
   };
 
+  const sortedAndFilteredProducts = useMemo(() => {
+    let filtered = products.filter(product => {
+      if (appliedStockFilter === null) return true;
+      const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+      return calculatedClosing <= appliedStockFilter;
+    });
+
+    return filtered.sort((a, b) => {
+      let valA: any;
+      let valB: any;
+
+      if (sortKey === 'calculated_closing') {
+        valA = (a.opening_stock || 0) + (a.stock_in || 0) - (a.stock_out || 0);
+        valB = (b.opening_stock || 0) + (b.stock_in || 0) - (b.stock_out || 0);
+      } else {
+        valA = a[sortKey as keyof Product];
+        valB = b[sortKey as keyof Product];
+      }
+
+      if (typeof valA === 'string') {
+        const comparison = valA.localeCompare(valB as string);
+        return sortDirection === 'asc' ? comparison : -comparison;
+      } else {
+        const comparison = (valA as number) - (valB as number);
+        return sortDirection === 'asc' ? comparison : -comparison;
+      }
+    });
+  }, [products, appliedStockFilter, sortKey, sortDirection]);
+
   const handlePrint = () => {
     try {
       const doc = new jsPDF({
@@ -249,7 +293,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
       }
 
       const tableColumn = ["Code", "Product Name", "Opening", "Stock In", "Stock Out", "Closing", "DP (₹)"];
-      const tableRows = filteredProductsList.map(product => {
+      const tableRows = sortedAndFilteredProducts.map(product => {
         const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
         return [
           product.code,
@@ -300,11 +344,10 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     }
   };
 
-  const filteredProductsList = products.filter(product => {
-    if (appliedStockFilter === null) return true;
-    const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
-    return calculatedClosing <= appliedStockFilter;
-  });
+  const SortIcon = ({ column }: { column: SortKey }) => {
+    if (sortKey !== column) return <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />;
+    return sortDirection === 'asc' ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
 
   if (!isAuthorized) return null;
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -340,14 +383,24 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow className="bg-muted">
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead className="text-right">Opening</TableHead>
-                <TableHead className="text-right">Stock In</TableHead>
-                <TableHead className="text-right">Stock Out</TableHead>
-                <TableHead className="text-right font-bold">
+                <TableHead className="cursor-pointer hover:bg-muted/80" onClick={() => handleSort('code')}>
+                  <div className="flex items-center">Code <SortIcon column="code" /></div>
+                </TableHead>
+                <TableHead className="cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>
+                  <div className="flex items-center">Name <SortIcon column="name" /></div>
+                </TableHead>
+                <TableHead className="text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('opening_stock')}>
+                  <div className="flex items-center justify-end">Opening <SortIcon column="opening_stock" /></div>
+                </TableHead>
+                <TableHead className="text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('stock_in')}>
+                  <div className="flex items-center justify-end">Stock In <SortIcon column="stock_in" /></div>
+                </TableHead>
+                <TableHead className="text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('stock_out')}>
+                  <div className="flex items-center justify-end">Stock Out <SortIcon column="stock_out" /></div>
+                </TableHead>
+                <TableHead className="text-right font-bold cursor-pointer hover:bg-muted/80" onClick={() => handleSort('calculated_closing')}>
                   <div className="flex items-center justify-end gap-1">
-                    Closing
+                    Closing <SortIcon column="calculated_closing" />
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -364,14 +417,14 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProductsList.length === 0 ? (
+              {sortedAndFilteredProducts.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No products found matching your filters.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredProductsList.map((product) => {
+                sortedAndFilteredProducts.map((product) => {
                   const calculatedClosingStock = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
                   
                   return (
