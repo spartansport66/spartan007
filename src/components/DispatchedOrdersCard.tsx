@@ -17,9 +17,10 @@ interface DispatchedOrder {
   order_date: string;
   total_amount: number;
   dealer_name: string;
-  gate_pass_dispatch_time: string;
+  gate_pass_dispatch_time: string | null;
   dispatch_number: number;
   bill_no: string;
+  dispatch_date: string | null;
 }
 
 interface DealerOption {
@@ -33,7 +34,8 @@ const DispatchedOrdersCard: React.FC = () => {
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
 
   // Format date as dd/mm/yyyy
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'N/A';
     const date = new Date(dateString);
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -41,7 +43,7 @@ const DispatchedOrdersCard: React.FC = () => {
     return `${day}/${month}/${year}`;
   };
 
-  // Filter states - removed default today's date to show all by default
+  // Filter states
   const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterDispatchDate, setFilterDispatchDate] = useState<string>('');
@@ -67,6 +69,7 @@ const DispatchedOrdersCard: React.FC = () => {
       }
 
       // Build the base query for dispatched orders
+      // We filter by dispatch_number not being null to show all orders in the dispatch process
       let query = supabase
         .from('orders')
         .select(`
@@ -77,10 +80,11 @@ const DispatchedOrdersCard: React.FC = () => {
           gate_pass_dispatch_time,
           dispatch_number,
           bill_no,
+          dispatch_date,
           dealers (id, name)
         `)
-        .not('gate_pass_dispatch_time', 'is', null) // Filter for orders dispatched by gatekeeper
-        .order('gate_pass_dispatch_time', { ascending: false });
+        .not('dispatch_number', 'is', null) 
+        .order('dispatch_number', { ascending: false });
 
       if (filterOrderNumber) {
         const orderNum = parseInt(filterOrderNumber);
@@ -96,7 +100,7 @@ const DispatchedOrdersCard: React.FC = () => {
       if (filterDispatchDate) {
         const startOfDay = `${filterDispatchDate}T00:00:00.000Z`;
         const endOfDay = `${filterDispatchDate}T23:59:59.999Z`;
-        query = query.gte('gate_pass_dispatch_time', startOfDay).lte('gate_pass_dispatch_time', endOfDay);
+        query = query.gte('dispatch_date', startOfDay).lte('dispatch_date', endOfDay);
       }
 
       const { data: ordersData, error: ordersError } = await query;
@@ -115,6 +119,7 @@ const DispatchedOrdersCard: React.FC = () => {
           gate_pass_dispatch_time: order.gate_pass_dispatch_time,
           dispatch_number: order.dispatch_number,
           bill_no: order.bill_no,
+          dispatch_date: order.dispatch_date,
         }));
         setOrders(formattedOrders);
       }
@@ -138,7 +143,7 @@ const DispatchedOrdersCard: React.FC = () => {
   const handleClearFilters = () => {
     setFilterOrderNumber('');
     setFilterDealerId('');
-    setFilterDispatchDate(''); // Clear date filter
+    setFilterDispatchDate('');
   };
 
   return (
@@ -146,7 +151,7 @@ const DispatchedOrdersCard: React.FC = () => {
       <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold">Dispatched Orders</CardTitle>
         <CardDescription className="text-teal-100 dark:text-teal-200">
-          View and filter orders that have been successfully dispatched.
+          View all orders that have been processed for dispatch.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4">
@@ -214,6 +219,7 @@ const DispatchedOrdersCard: React.FC = () => {
                     <TableHead className="text-muted-foreground">Bill No.</TableHead>
                     <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                     <TableHead className="text-muted-foreground">Dispatch Date</TableHead>
+                    <TableHead className="text-muted-foreground">Gate Pass</TableHead>
                     <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
                     <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                   </TableRow>
@@ -225,6 +231,7 @@ const DispatchedOrdersCard: React.FC = () => {
                       <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
                       <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
                       <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(order.dispatch_date)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(order.gate_pass_dispatch_time)}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       <TableCell className="text-center">

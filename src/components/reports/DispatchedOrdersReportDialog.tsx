@@ -60,14 +60,15 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
       }
 
       // Build the query for dispatched orders
+      // We use dispatch_number not null to identify dispatched orders
       let query = supabase
         .from('orders')
         .select(`
           id, order_number, order_date, total_amount, dispatch_date, dispatch_number, bill_no,
           dealers (id, name)
         `)
-        .eq('dispatched', true)
-        .order('dispatch_date', { ascending: false });
+        .not('dispatch_number', 'is', null)
+        .order('dispatch_number', { ascending: false });
 
       // Apply filters
       if (filterOrderNumber) {
