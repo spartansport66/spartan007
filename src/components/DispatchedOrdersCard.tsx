@@ -5,10 +5,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Eye, Search, ChevronLeft, ChevronRight, Edit } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
+import EditOrderDialog from '@/components/EditOrderDialog';
 import { Label } from '@/components/ui/label';
 
 interface DispatchedOrder {
@@ -54,6 +55,8 @@ const DispatchedOrdersCard: React.FC = () => {
   // Dialog states
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
+  const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false);
+  const [selectedOrderIdForEdit, setSelectedOrderIdForEdit] = useState<string | null>(null);
 
   const fetchOrdersAndDealers = useCallback(async () => {
     setLoading(true);
@@ -141,6 +144,15 @@ const DispatchedOrdersCard: React.FC = () => {
   const handleViewOrderDetails = (orderId: string) => {
     setSelectedOrderIdForDetails(orderId);
     setIsOrderDetailsDialogOpen(true);
+  };
+
+  const handleEditOrder = (orderId: string) => {
+    setSelectedOrderIdForEdit(orderId);
+    setIsEditOrderDialogOpen(true);
+  };
+
+  const handleOrderUpdated = () => {
+    fetchOrdersAndDealers();
   };
 
   const handleClearFilters = () => {
@@ -252,6 +264,14 @@ const DispatchedOrdersCard: React.FC = () => {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditOrder(order.id)}
+                              title="Edit Order"
+                            >
+                              <Edit className="h-4 w-4 text-orange-600" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -294,6 +314,12 @@ const DispatchedOrdersCard: React.FC = () => {
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}
         onOpenChange={setIsOrderDetailsDialogOpen}
+      />
+      <EditOrderDialog
+        orderId={selectedOrderIdForEdit}
+        isOpen={isEditOrderDialogOpen}
+        onOpenChange={setIsEditOrderDialogOpen}
+        onOrderUpdated={handleOrderUpdated}
       />
     </Card>
   );

@@ -13,6 +13,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 
 interface Product {
   id: string;
@@ -53,12 +56,16 @@ interface EditOrderDialogProps {
   onOrderUpdated: () => void;
 }
 
+const formSchema = z.object({
+  orderNumber: z.preprocess((val) => Number(val), z.number().int().min(1, { message: 'Order number must be at least 1.' })),
+  discountAmount: z.preprocess((val) => Number(val), z.number().min(0)),
+});
+
 const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated }) => {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [orderData, setOrderData] = useState<OrderToEdit | null>(null);
 
   const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
@@ -68,6 +75,14 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
   const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<number>(0);
   const [newItemGstPercent, setNewItemGstPercent] = useState<number>(0);
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      orderNumber: 0,
+      discountAmount: 0,
+    },
+  });
 
   const fetchOrderAndProducts = useCallback(async (id: string) => {
     setLoading(true);
@@ -124,8 +139,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         discount_amount: orderRaw.discount_amount || 0,
         items: fetchedItems,
       });
+      
       setOrderItems(fetchedItems);
-      setDiscountAmount(orderRaw.discount_amount || 0);
+      form.reset({
+        orderNumber: orderRaw.order_number,
+        discountAmount: orderRaw.discount_amount || 0,
+      });
 
     } catch (error: any) {
       console.error('Error fetching order details for edit:', error.message);
@@ -134,7 +153,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [form]);
 
   useEffect(() => {
     if (isOpen && orderId) {
@@ -142,7 +161,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     } else if (!isOpen) {
       setOrderData(null);
       setOrderItems([]);
-      setDiscountAmount(0);
     }
   }, [isOpen, orderId, fetchOrderAndProducts]);
 
@@ -158,9 +176,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     return orderItems.reduce((total, item) => total + item.total_price, 0);
   }, [orderItems]);
 
+  const discountAmountValue = form.watch('discountAmount');
   const finalOrderValue = useMemo(() => {
-    return Math.max(0, preGlobalDiscountTotal - discountAmount);
-  }, [preGlobalDiscountTotal, discountAmount]);
+    return Math.max(0, preGlobalDiscountTotal - discountAmountValue);
+  }, [preGlobalDiscountTotal, discountAmountValue]);
 
   const newItemCalculations = useMemo(() => {
     const taxableUnitPrice = newItemUnitPrice * (1 - newItemDiscountPercent / 100);
@@ -231,7 +250,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     return product ? `${product.name} (${product.code})` : "Select product...";
   }, [newItemProductId, products]);
 
-  const handleSave = async () => {
+  const handleSave = async (values: z.infer<typeof formSchema>) => {
     if (!orderData || orderItems.length === 0) {
       showError('Order must have at least one item.');
       return;
@@ -239,12 +258,13 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     setIsSubmitting(true);
 
     try {
-      const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
+      const finalDiscountAmount = parseFloat(values.discountAmount.toFixed(2));
       const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
 
       const { error: orderUpdateError } = await supabase
         .from('orders')
         .update({
+          order_number: values.orderNumber,
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
         })
@@ -278,7 +298,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           .eq('id', payment.id);
       }
 
-      showSuccess(`Order #${orderData.order_number} updated successfully.`);
+      showSuccess(`Order #${values.orderNumber} updated successfully.`);
       onOrderUpdated();
       onOpenChange(false);
 
@@ -298,7 +318,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         <DialogHeader>
           <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
           <DialogDescription>
-            Modify items and discounts. GST is calculated per item.
+            Modify items, discounts, and order number. GST is calculated per item.
           </DialogDescription>
         </DialogHeader>
         
@@ -308,6 +328,25 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           </div>
         ) : (
           <div className="space-y-6 py-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="orderNumber">Order Number</Label>
+                <Input 
+                  id="orderNumber" 
+                  type="number" 
+                  {...form.register('orderNumber')} 
+                  disabled={isSubmitting}
+                />
+                {form.formState.errors.orderNumber && <p className="text-xs text-destructive">{form.formState.errors.orderNumber.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Dealer</Label>
+                <Input value={orderData?.dealer_name} disabled className="bg-muted" />
+              </div>
+            </div>
+
+            <Separator />
+
             <div className="space-y-4">
               <Label className="text-lg font-semibold">Add/Modify Items</Label>
               <div className="flex flex-col gap-4 p-4 border rounded-md bg-muted/50">
@@ -417,7 +456,16 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
               <div className="flex justify-between text-base font-medium"><span>Subtotal (Incl. GST):</span><span>₹{preGlobalDiscountTotal.toFixed(2)}</span></div>
               <div className="flex justify-between items-center">
                 <Label htmlFor="discountAmount" className="text-base font-medium">Additional Global Discount (₹)</Label>
-                <Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} disabled={isSubmitting} />
+                <Input 
+                  id="discountAmount" 
+                  type="number" 
+                  step="0.01" 
+                  {...form.register('discountAmount')} 
+                  className="w-32 text-right" 
+                  min="0" 
+                  max={preGlobalDiscountTotal} 
+                  disabled={isSubmitting} 
+                />
               </div>
               <Separator className="my-2" />
               <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
@@ -427,7 +475,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
-          <Button onClick={handleSave} disabled={isSubmitting || orderItems.length === 0}>
+          <Button onClick={form.handleSubmit(handleSave)} disabled={isSubmitting || orderItems.length === 0}>
             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}
           </Button>
         </DialogFooter>
