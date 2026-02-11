@@ -302,6 +302,7 @@ const Dashboard = () => {
       }
 
       // 2. FIRST: Remove associated payments to satisfy foreign key constraint
+      // We use the order UUID (order.id) to find and delete linked payments
       const { error: paymentDeleteError } = await supabase
         .from('payments')
         .delete()
