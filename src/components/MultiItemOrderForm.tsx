@@ -119,7 +119,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     try {
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, code, name, dp, closing_stock, gst');
+        .select('id, code, name, dp, closing_stock, gst')
+        .limit(5000);
       if (productsError) throw productsError;
       setProducts(productsData || []);
     } catch (error: any) {
@@ -416,13 +417,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               </PopoverTrigger>
               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                 <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search dealer..." value={dealerSearch} onChange={(e) => setDealerSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
-                <ScrollArea className="h-[200px]">
-                  <div className="p-1">
-                    {filteredDealers.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No dealer found.</div>) : (
+                <ScrollArea className="h-[200px]"><div className="p-1">{filteredDealers.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No dealer found.</div>) : (
                       filteredDealers.map((dealer) => (<Button key={dealer.id} variant="ghost" className="w-full justify-start font-normal" onClick={() => { setSelectedDealer(dealer.id); setIsDealerPopoverOpen(false); setDealerSearch(''); }}><Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />{dealer.name}</Button>))
-                    )}
-                  </div>
-                </ScrollArea>
+                    )}</div></ScrollArea>
               </PopoverContent>
             </Popover>
           </div>

@@ -102,7 +102,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('id, code, name, dp, closing_stock, gst')
-        .order('name', { ascending: true });
+        .order('name', { ascending: true })
+        .limit(5000);
 
       if (productsError) throw productsError;
       setProducts(productsData || []);
