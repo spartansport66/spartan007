@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Edit, Trash2, Loader2, Search } from 'lucide-react';
+import { Edit, Trash2, Loader2, Search, RefreshCw, Info } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -36,6 +36,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const UPDATE_PRODUCT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/update-product";
@@ -187,13 +188,38 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   };
 
   if (!isAuthorized) return null;
-  if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">Manage All Products</CardTitle>
-        <CardDescription className="text-blue-100 dark:text-blue-200">Inventory tracking: Opening + In - Out = Closing</CardDescription>
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle className="text-xl font-semibold">Manage All Products</CardTitle>
+            <CardDescription className="text-blue-100 dark:text-blue-200 flex items-center gap-1">
+              Formula: Opening + In - Out = Closing
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Closing stock is automatically recalculated when orders are placed or deleted.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </CardDescription>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={fetchProducts} 
+            disabled={loading}
+            className="bg-white/10 hover:bg-white/20 text-white border-white/20"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Refresh
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-4">
         <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
@@ -219,33 +245,60 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((product) => {
-                // Calculate closing stock in UI to ensure it matches the formula: Opening + In - Out
-                const calculatedClosingStock = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
-                
-                return (
-                  <TableRow key={product.id} className="hover:bg-accent/50">
-                    <TableCell className="font-medium">{product.code}</TableCell>
-                    <TableCell>{product.name}</TableCell>
-                    <TableCell className="text-right">{product.opening_stock}</TableCell>
-                    <TableCell className="text-right text-green-600">+{product.stock_in}</TableCell>
-                    <TableCell className="text-right text-red-600">-{product.stock_out}</TableCell>
-                    <TableCell className="text-right font-bold">{calculatedClosingStock}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={product.has_sales}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>Delete Product?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(product.id)}>Delete</AlertDialogAction></AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                    <p className="mt-2 text-muted-foreground">Loading products...</p>
+                  </TableCell>
+                </TableRow>
+              ) : products.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    No products found.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                products.map((product) => {
+                  // Calculate closing stock in UI to ensure it matches the formula: Opening + In - Out
+                  const calculatedClosingStock = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+                  
+                  return (
+                    <TableRow key={product.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium text-foreground">{product.code}</TableCell>
+                      <TableCell className="text-foreground">{product.name}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{product.opening_stock}</TableCell>
+                      <TableCell className="text-right text-green-600">+{product.stock_in}</TableCell>
+                      <TableCell className="text-right text-red-600">-{product.stock_out}</TableCell>
+                      <TableCell className="text-right font-bold text-foreground">{calculatedClosingStock}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(product)} title="Edit Product"><Edit className="h-4 w-4" /></Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" disabled={product.has_sales} title={product.has_sales ? "Cannot delete product with sales history" : "Delete Product"}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Product?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete <strong>{product.name}</strong>? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(product.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </div>
