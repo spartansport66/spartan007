@@ -23,7 +23,7 @@ interface Product {
   name: string;
   dp: number;
   closing_stock: number;
-  gst: string; // Added GST field
+  gst: string;
 }
 
 interface Dealer {
@@ -42,10 +42,10 @@ interface OrderItem {
   product_code: string;
   unit_dp: number;
   discount_percent: number;
-  gst_percent: number; // Added GST percent
-  taxable_value: number; // Added taxable value (price after discount, before tax)
-  gst_amount: number; // Added GST amount
-  total_price: number; // Final price including tax
+  gst_percent: number;
+  taxable_value: number;
+  gst_amount: number;
+  total_price: number;
 }
 
 interface MultiItemOrderFormProps {
