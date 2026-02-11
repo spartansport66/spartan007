@@ -33,9 +33,6 @@ export const updateAllDealerCreditDays = async (days: number) => {
  */
 export const approveRejectPayment = async ({ paymentId, orderId, dealerId, action }: { paymentId: string, orderId: string | null, dealerId: string, action: 'approve' | 'reject' }) => {
   try {
-    // Note: We ensure dealer_balances(opening_balance) remains static and is not modified upon general payment approval,
-    // as the dynamic ledger calculation handles the reduction when the payment status changes to 'completed'.
-
     if (action === 'approve') {
       // 1. Update payment status to 'completed' and set approved_at timestamp
       const { error: paymentUpdateError } = await supabase
@@ -48,24 +45,47 @@ export const approveRejectPayment = async ({ paymentId, orderId, dealerId, actio
       }
 
       if (orderId) {
-        // 2a. Order Payment: Update order payment status to 'paid'
+        // 2a. Order Payment: Check if the order is now fully paid
+        const { data: orderData, error: orderFetchError } = await supabase
+          .from('orders')
+          .select('total_amount')
+          .eq('id', orderId)
+          .single();
+        
+        if (orderFetchError) throw new Error(`Failed to fetch order total: ${orderFetchError.message}`);
+
+        // Sum all allocated amounts for this order from COMPLETED payments
+        const { data: allocations, error: allocFetchError } = await supabase
+          .from('payment_allocations')
+          .select('allocated_amount, payments(status)')
+          .eq('liability_id', orderId)
+          .eq('allocation_type', 'order')
+          .eq('payments.status', 'completed');
+
+        if (allocFetchError) throw new Error(`Failed to fetch allocations: ${allocFetchError.message}`);
+
+        const totalPaid = (allocations || []).reduce((sum, alloc) => sum + alloc.allocated_amount, 0);
+
+        const newPaymentStatus = totalPaid >= orderData.total_amount ? 'paid' : 'pending';
+
         const { error: orderUpdateError } = await supabase
           .from('orders')
-          .update({ payment_status: 'paid' })
+          .update({ payment_status: newPaymentStatus })
           .eq('id', orderId);
 
         if (orderUpdateError) {
           throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
         }
-        showSuccess('Order payment approved and credit freed up successfully.');
+        showSuccess('Order payment approved and status updated.');
       } else {
-        // 2b. General Payment: Only mark payment as completed. Opening balance remains static.
+        // 2b. General Payment: Only mark payment as completed.
         showSuccess('General payment approved successfully.');
       }
 
     } else if (action === 'reject') {
+      // For rejection, we delete the payment, and CASCADE will handle the allocation.
+      // The order status (if any) should be reverted to 'pending'.
       if (orderId) {
-        // 1a. Order Payment: Revert order payment status to 'pending'
         const { error: orderUpdateError } = await supabase
           .from('orders')
           .update({ payment_status: 'pending' })
@@ -75,7 +95,7 @@ export const approveRejectPayment = async ({ paymentId, orderId, dealerId, actio
           throw new Error(`Failed to revert order payment status: ${orderUpdateError.message}`);
         }
       }
-      // 2. Delete the payment record (for both order and general payments)
+      
       const { error: paymentDeleteError } = await supabase
         .from('payments')
         .delete()

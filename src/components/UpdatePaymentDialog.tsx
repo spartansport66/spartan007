@@ -170,11 +170,10 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     setLoading(true);
     
     const isGeneralBalancePayment = orderToUpdate.order_number === 0;
-    let dealerId = orderToUpdate.order_number === 0 ? orderToUpdate.id : null; // If general payment, ID is the dealer ID
+    let dealerId = orderToUpdate.order_number === 0 ? orderToUpdate.id : null;
 
     try {
         if (!dealerId) {
-            // If it's an order payment, fetch the dealer ID from the order
             const { data: orderData, error: orderFetchError } = await supabase
                 .from('orders')
                 .select('dealer_id')
@@ -189,7 +188,6 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
             throw new Error('Could not determine dealer ID.');
         }
 
-      // Determine transaction ID based on method
       let transactionId = null;
       if (values.paymentMethod === 'Card') transactionId = values.cardTransactionId;
       else if (values.paymentMethod === 'Bank Transfer') transactionId = values.bankTransactionId;
@@ -201,28 +199,22 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         dealer_id: dealerId,
         amount: values.amount,
         payment_method: values.paymentMethod,
-        payment_date: values.paymentDate, // Use the user-provided payment date (PDC date)
+        payment_date: values.paymentDate,
         status: 'pending_approval',
         cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
         cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
         transaction_id: transactionId,
-        // Bank Transfer details
         bank_name: values.paymentMethod === 'Bank Transfer' ? values.bankName : null,
         account_number: values.paymentMethod === 'Bank Transfer' ? values.accountNumber : null,
         ifsc_code: values.paymentMethod === 'Bank Transfer' ? values.ifscCode : null,
-        // Card details
         card_number: values.paymentMethod === 'Card' ? values.cardNumber : null,
         card_holder_name: values.paymentMethod === 'Card' ? values.cardHolderName : null,
         expiry_date: values.paymentMethod === 'Card' ? values.expiryDate : null,
         cvv: values.paymentMethod === 'Card' ? values.cvv : null,
-        // UPI details
-        upi_id: values.paymentMethod === 'UPI' ? values.upiTransactionId : null, // Using transactionId field for UPI ID
+        upi_id: values.paymentMethod === 'UPI' ? values.upiTransactionId : null,
       };
 
       if (!isGeneralBalancePayment) {
-        // --- Scenario 1: Payment against a specific Order ---
-        
-        // 1. Update the order's payment status to 'pending_approval'
         const { error: orderUpdateError } = await supabase
           .from('orders')
           .update({ payment_status: 'pending_approval' })
@@ -233,14 +225,32 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         }
       }
 
-      // 2. Insert a new payment record with status 'pending_approval'
-      const { error: paymentInsertError, data: insertedPayment } = await supabase
+      const { data: newPayment, error: paymentInsertError } = await supabase
         .from('payments')
         .insert(paymentData)
-        .select('id');
+        .select('id')
+        .single();
 
-      if (paymentInsertError) {
-        throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
+      if (paymentInsertError) throw paymentInsertError;
+      if (!newPayment) throw new Error("Failed to get new payment ID.");
+
+      const allocationData = {
+        payment_id: newPayment.id,
+        allocated_amount: values.amount,
+        liability_id: isGeneralBalancePayment ? dealerId : orderToUpdate.id,
+        allocation_type: isGeneralBalancePayment ? 'opening_balance' : 'order',
+      };
+
+      const { error: allocationError } = await supabase
+        .from('payment_allocations')
+        .insert(allocationData);
+
+      if (allocationError) {
+        await supabase.from('payments').delete().eq('id', newPayment.id);
+        if (!isGeneralBalancePayment) {
+          await supabase.from('orders').update({ payment_status: 'pending' }).eq('id', orderToUpdate.id);
+        }
+        throw allocationError;
       }
 
       showSuccess(`Payment of ₹${values.amount.toFixed(2)} submitted for approval for ${orderToUpdate.order_number === 0 ? 'General Balance' : `Order #${orderToUpdate.order_number}`}.`);
