@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Percent, Search, Building, Phone, MapPin } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
@@ -16,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Product {
   id: string;
@@ -102,8 +102,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('id, code, name, dp, closing_stock, gst')
-        .order('name', { ascending: true })
-        .limit(5000);
+        .order('name', { ascending: true });
 
       if (productsError) throw productsError;
       setProducts(productsData || []);
@@ -430,50 +429,48 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command>
-                        <div className="p-2 border-b flex items-center gap-2">
-                          <Search className="h-4 w-4 text-muted-foreground" />
-                          <Input 
-                            placeholder="Search product..." 
-                            value={productSearch} 
-                            onChange={(e) => setProductSearch(e.target.value)} 
-                            className="h-8 border-none focus-visible:ring-0" 
-                          />
-                        </div>
-                        <CommandList className="max-h-[250px] overflow-y-auto">
+                      <div className="p-2 border-b flex items-center gap-2">
+                        <Search className="h-4 w-4 text-muted-foreground" />
+                        <Input 
+                          placeholder="Search product..." 
+                          value={productSearch} 
+                          onChange={(e) => setProductSearch(e.target.value)} 
+                          className="h-8 border-none focus-visible:ring-0" 
+                        />
+                      </div>
+                      <ScrollArea className="h-[250px]">
+                        <div className="p-1">
                           {filteredProducts.length === 0 ? (
-                            <CommandEmpty>No product found.</CommandEmpty>
+                            <div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>
                           ) : (
-                            <CommandGroup>
-                              {filteredProducts.map((product) => (
-                                <CommandItem
-                                  key={product.id}
-                                  value={`${product.name} ${product.code}`}
-                                  onSelect={() => {
-                                    setNewItemProductId(product.id);
-                                    setNewItemUnitPrice(product.dp);
-                                    setNewItemGstPercent(parseFloat(product.gst) || 0);
-                                    setIsProductPopoverOpen(false);
-                                    setProductSearch('');
-                                  }}
-                                  className="cursor-pointer"
-                                >
-                                  <div className="flex flex-col items-start w-full">
-                                    <div className="flex items-center justify-between w-full">
-                                      <div className="flex items-center">
-                                        <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                                        <span className="font-medium">{product.name} ({product.code})</span>
-                                      </div>
-                                      <span className="text-xs font-bold text-primary">₹{product.dp.toFixed(2)}</span>
+                            filteredProducts.map((product) => (
+                              <Button
+                                key={product.id}
+                                variant="ghost"
+                                className="w-full justify-start font-normal h-auto py-2"
+                                onClick={() => {
+                                  setNewItemProductId(product.id);
+                                  setNewItemUnitPrice(product.dp);
+                                  setNewItemGstPercent(parseFloat(product.gst) || 0);
+                                  setIsProductPopoverOpen(false);
+                                  setProductSearch('');
+                                }}
+                              >
+                                <div className="flex flex-col items-start w-full">
+                                  <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-center">
+                                      <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                      <span className="font-medium">{product.name} ({product.code})</span>
                                     </div>
-                                    <div className="text-xs text-muted-foreground ml-6">GST: {product.gst}% - Stock: {product.closing_stock}</div>
+                                    <span className="text-xs font-bold text-primary">₹{product.dp.toFixed(2)}</span>
                                   </div>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
+                                  <div className="text-xs text-muted-foreground ml-6">GST: {product.gst}% - Stock: {product.closing_stock}</div>
+                                </div>
+                              </Button>
+                            ))
                           )}
-                        </CommandList>
-                      </Command>
+                        </div>
+                      </ScrollArea>
                     </PopoverContent>
                   </Popover>
                 </div>
