@@ -189,21 +189,17 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         if (i > 0) doc.addPage();
 
         // 1. Header
-        doc.setFontSize(20);
-        doc.setFont("helvetica", "bold");
-        const dispatchText = `Gate Pass: ${orderData.dispatch_number || 'N/A'}`;
-        doc.text(dispatchText, pageWidth / 2, 15, { align: 'center' });
-
         doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
-        doc.rect(0, 22, pageWidth, 12, 'F');
-        doc.setFontSize(16);
+        doc.rect(0, 10, pageWidth, 15, 'F');
+        doc.setFontSize(18);
         doc.setTextColor(255, 255, 255);
-        doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", pageWidth / 2, 30, { align: 'center' });
+        doc.setFont("helvetica", "bold");
+        doc.text(companyName?.toUpperCase() || "ORDER INVOICE", pageWidth / 2, 20, { align: 'center' });
 
         // 2. Details
         doc.setTextColor(0);
         doc.setFontSize(10);
-        let y = 45;
+        let y = 35;
         
         doc.setFont("helvetica", "bold");
         doc.text("PARTY DETAILS:", margin, y);
@@ -217,49 +213,68 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         );
         doc.text(addressLines, margin, y);
         
-        let rightY = 45;
+        let rightY = 35;
         const rightColX = pageWidth / 2 + 10;
         doc.setFont("helvetica", "bold");
-        doc.text("ORDER DETAILS:", rightColX, rightY);
+        doc.text("ORDER SUMMARY:", rightColX, rightY);
         doc.setFont("helvetica", "normal");
         rightY += 5;
         doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
         rightY += 5;
-        doc.text(`Bill No: ${orderData.bill_no || 'N/A'}`, rightColX, rightY);
-        rightY += 5;
         doc.text(`Date: ${formatDate(orderData.order_date)}`, rightColX, rightY);
+        rightY += 5;
+        doc.text(`Phone: ${(orderData.dealers as any)?.phone || 'N/A'}`, rightColX, rightY);
 
         y = Math.max(y + (addressLines.length * 5), rightY + 10);
 
-        // 3. Items Table
-        const tableColumn = ["Code", "Product Name", "Quantity"];
+        // 3. Full Items Table (with Prices)
+        const tableColumn = ["Code", "Product", "Qty", "Unit Price", "Disc %", "GST %", "Total"];
         const tableRows = (orderData.sales || []).map((sale: any) => [
           sale.products?.code || 'N/A',
           sale.products?.name || 'N/A',
-          sale.quantity.toString()
+          sale.quantity.toString(),
+          `₹${(sale.unit_price || 0).toFixed(2)}`,
+          `${(sale.discount_percent || 0)}%`,
+          `${(sale.gst_percent || 0)}%`,
+          `₹${(sale.total_price || 0).toFixed(2)}`
         ]);
 
         autoTable(doc, {
           head: [tableColumn],
           body: tableRows,
           startY: y,
-          headStyles: { fillColor: darkBlue, halign: 'center' },
+          headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 },
           columnStyles: {
-            0: { cellWidth: 40, halign: 'center' },
+            0: { cellWidth: 20, halign: 'center' },
             1: { cellWidth: 'auto' },
-            2: { cellWidth: 30, halign: 'center' }
+            2: { cellWidth: 15, halign: 'center' },
+            3: { cellWidth: 25, halign: 'right' },
+            4: { cellWidth: 15, halign: 'center' },
+            5: { cellWidth: 15, halign: 'center' },
+            6: { cellWidth: 25, halign: 'right' }
           },
-          styles: { fontSize: 9, cellPadding: 3 }
+          styles: { fontSize: 8, cellPadding: 2 }
         });
 
-        const finalY = (doc as any).lastAutoTable.finalY + 15;
+        // 4. Summary Footer
+        const finalY = (doc as any).lastAutoTable.finalY + 10;
+        const subtotal = (orderData.sales || []).reduce((sum: number, s: any) => sum + s.total_price, 0);
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth - margin, finalY, { align: 'right' });
+        
+        if (orderData.discount_amount > 0) {
+          doc.text(`Global Discount: -₹${orderData.discount_amount.toFixed(2)}`, pageWidth - margin, finalY + 5, { align: 'right' });
+        }
+        
         doc.setFont("helvetica", "bold");
         doc.setFontSize(12);
-        doc.text(`TOTAL BILL AMOUNT: Rs. ${orderData.total_amount.toFixed(2)}`, pageWidth - margin, finalY, { align: 'right' });
+        doc.text(`FINAL TOTAL: ₹${orderData.total_amount.toFixed(2)}`, pageWidth - margin, finalY + 12, { align: 'right' });
       }
 
-      doc.save(`Bulk_Orders_${new Date().getTime()}.pdf`);
-      showSuccess(`Successfully generated PDF for ${selectedOrderIds.length} orders.`);
+      doc.save(`Bulk_Order_Details_${new Date().getTime()}.pdf`);
+      showSuccess(`Successfully generated full order details for ${selectedOrderIds.length} orders.`);
       setSelectedOrderIds([]);
     } catch (error: any) {
       console.error('Bulk Print Error:', error);
@@ -311,7 +326,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
               className="bg-white text-orange-600 hover:bg-orange-50"
             >
               {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
-              Bulk Print ({selectedOrderIds.length})
+              Bulk Print Details ({selectedOrderIds.length})
             </Button>
           )}
         </div>
