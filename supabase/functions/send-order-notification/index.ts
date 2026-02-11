@@ -30,7 +30,7 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Fetch Order Details
+    // 1. Fetch Order Details with Salesperson and Dealer info
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .select(`
@@ -46,56 +46,76 @@ serve(async (req: Request) => {
 
     if (orderError || !order) throw new Error('Failed to fetch order details for email.');
 
-    // 2. Fetch Notification Email List
+    const salespersonName = `${order.profiles.first_name} ${order.profiles.last_name}`.trim();
+    const dealerName = order.dealers.name;
+
+    // 2. Fetch Notification Email List (All departments including Warehouse / Order Prep)
     const { data: notificationEmails, error: emailError } = await supabaseAdmin
       .from('notification_emails')
-      .select('email_address');
+      .select('email_address, department_name');
 
     if (emailError) throw new Error('Failed to fetch notification email list.');
 
-    const recipientEmails = (notificationEmails || []).map((e: any) => e.email_address);
+    // Collect all unique recipient emails
+    const recipientSet = new Set<string>();
+    
+    // Add all configured department emails
+    (notificationEmails || []).forEach((e: any) => {
+      recipientSet.add(e.email_address);
+    });
+
+    // Also add dealer email if available
     if (order.dealers?.email) {
-      recipientEmails.push(order.dealers.email);
+      recipientSet.add(order.dealers.email);
     }
 
+    const recipientEmails = Array.from(recipientSet);
+
     if (recipientEmails.length === 0) {
+      console.log("[send-order-notification] No recipients found. Email skipped.");
       return new Response(JSON.stringify({ message: 'No recipients found. Email skipped.' }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // 3. Construct Email Body (Text version for now)
+    // 3. Construct Email Content as requested
+    // Subject: Order No, Salesperson Name, Dealer Name
+    const emailSubject = `New Order: #${order.order_number} - ${salespersonName} - ${dealerName}`;
+    
     const itemsList = (order.sales || []).map((s: any) => 
       `- ${s.products.name} (${s.products.code}): ${s.quantity} units (Total: ₹${s.total_price.toFixed(2)})`
     ).join('\n');
 
-    const emailSubject = `New Order Placed: #${order.order_number} - ${order.dealers.name}`;
     const emailBody = `
-      A new order has been placed in the system.
+      A new order has been placed and requires processing.
 
-      Order Details:
+      Order Summary:
       --------------
       Order Number: #${order.order_number}
+      Sales Person: ${salespersonName}
+      Dealer: ${dealerName} (${order.dealers.phone || 'N/A'})
       Date: ${new Date(order.order_date).toLocaleString()}
-      Dealer: ${order.dealers.name} (${order.dealers.phone || 'N/A'})
-      Sales Person: ${order.profiles.first_name} ${order.profiles.last_name}
       Total Amount: ₹${order.total_amount.toFixed(2)}
 
       Items:
       ------
       ${itemsList}
 
-      Please log in to the dashboard to process this order.
+      This notification has been sent to the following departments:
+      ${[...new Set(notificationEmails.map((e: any) => e.department_name))].join(', ')}
+
+      Please log in to the dashboard to view the full details and generate the official PDF.
     `;
 
-    // NOTE: To send real emails, you would integrate with a provider like Resend, SendGrid, or Mailgun here.
-    // For now, we log the attempt. You can add your API key to Supabase Secrets to enable real sending.
-    console.log(`[send-order-notification] Sending email to: ${recipientEmails.join(', ')}`);
+    // Log the attempt (Real sending requires an API key for Resend/SendGrid)
+    console.log(`[send-order-notification] Triggering email for Order #${order.order_number}`);
+    console.log(`[send-order-notification] Recipients: ${recipientEmails.join(', ')}`);
     console.log(`[send-order-notification] Subject: ${emailSubject}`);
 
     return new Response(JSON.stringify({ 
       message: 'Notification process triggered.',
+      subject: emailSubject,
       recipients: recipientEmails 
     }), {
       status: 200,
