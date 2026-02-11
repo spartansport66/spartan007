@@ -251,12 +251,12 @@ const ReceivePayment = () => {
       <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="mb-6 flex items-center gap-2">
         <ArrowLeft className="h-4 w-4" /> Back to Dashboard
       </Button>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold text-primary">Receive Payment Voucher</CardTitle>
-          <CardDescription>Record a new payment from a dealer and allocate it to their outstanding dues.</CardDescription>
+      <Card className="shadow-lg">
+        <CardHeader className="bg-blue-600 dark:bg-blue-800 text-white rounded-t-lg p-4">
+          <CardTitle className="text-2xl font-bold text-white">Receive Payment Voucher</CardTitle>
+          <CardDescription className="text-blue-100 dark:text-blue-200">Record a new payment from a dealer and allocate it to their outstanding dues.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 pt-6">
           <div className="max-w-sm">
             <Label>Select Dealer</Label>
             <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
@@ -275,8 +275,10 @@ const ReceivePayment = () => {
               <form onSubmit={paymentForm.handleSubmit(onSubmit)} className="space-y-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <Card>
-                    <CardHeader><CardTitle>Payment Details</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardHeader className="bg-muted/50">
+                      <CardTitle>Payment Details</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-6">
                       <FormField control={paymentForm.control} name="amount" render={({ field }) => (<FormItem><FormLabel>Amount Received</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
                       <FormField control={paymentForm.control} name="paymentMethod" render={({ field }) => (<FormItem><FormLabel>Payment Method</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select method" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Cash">Cash</SelectItem><SelectItem value="Card">Card</SelectItem><SelectItem value="Bank Transfer">Bank Transfer</SelectItem><SelectItem value="UPI">UPI</SelectItem><SelectItem value="Cheque/DD">Cheque/DD</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                       <FormField control={paymentForm.control} name="paymentDate" render={({ field }) => (<FormItem><FormLabel>Payment Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>)} />
@@ -286,8 +288,10 @@ const ReceivePayment = () => {
                   </Card>
 
                   <Card>
-                    <CardHeader><CardTitle>Allocate Payment</CardTitle></CardHeader>
-                    <CardContent>
+                    <CardHeader className="bg-muted/50">
+                      <CardTitle>Allocate Payment</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6">
                       {loading ? <Loader2 className="animate-spin" /> : liabilities.length === 0 ? <p>No outstanding dues for this dealer.</p> : (
                         <div className="space-y-4">
                           <div className="max-h-64 overflow-y-auto border rounded-md">
@@ -316,7 +320,7 @@ const ReceivePayment = () => {
                   </Card>
                 </div>
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={isSubmitting || loading || remainingToAllocate < 0 || totalAllocated === 0}>
+                  <Button type="submit" disabled={isSubmitting || loading || remainingToAllocate < 0 || totalAllocated === 0} className="bg-blue-600 hover:bg-blue-700 text-white">
                     {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <DollarSign className="mr-2 h-4 w-4" />}
                     Submit Payment
                   </Button>
