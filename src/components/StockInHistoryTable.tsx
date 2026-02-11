@@ -27,6 +27,7 @@ const StockInHistoryTable: React.FC = () => {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
+      // Fetching with joins. This requires Foreign Keys to be set in the DB.
       const { data, error } = await supabase
         .from('stock_receipts')
         .select(`
@@ -35,7 +36,7 @@ const StockInHistoryTable: React.FC = () => {
           quantity,
           remarks,
           products (name, code),
-          received_by_profile:profiles!received_by (first_name, last_name)
+          profiles (first_name, last_name)
         `)
         .order('receipt_date', { ascending: false })
         .order('created_at', { ascending: false });
@@ -46,19 +47,20 @@ const StockInHistoryTable: React.FC = () => {
       }
 
       const formatted: StockInRecord[] = (data || []).map((r: any) => {
-        const profile = r.received_by_profile;
-        const name = profile 
-          ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() 
-          : 'Unknown User';
+        // Handle potential nulls if join fails or data is missing
+        const product = r.products || { name: 'Unknown Product', code: 'N/A' };
+        const profile = r.profiles || { first_name: 'Unknown', last_name: 'User' };
+        
+        const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
 
         return {
           id: r.id,
           receipt_date: r.receipt_date,
           quantity: r.quantity,
           remarks: r.remarks,
-          product_name: r.products?.name || 'N/A',
-          product_code: r.products?.code || 'N/A',
-          received_by_name: name || 'N/A',
+          product_name: product.name,
+          product_code: product.code,
+          received_by_name: name,
         };
       });
 
