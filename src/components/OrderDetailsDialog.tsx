@@ -192,47 +192,84 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   const handlePrint = () => {
     if (!orderDetails) return;
     const doc = new jsPDF();
-    const margin = 10;
+    const margin = 15;
     const pageWidth = doc.internal.pageSize.width;
     const darkBlue: [number, number, number] = [30, 58, 138];
 
+    // 1. Dispatch Number at Top Center
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    const dispatchText = `DISPATCH #: ${orderDetails.dispatch_number || 'N/A'}`;
+    doc.text(dispatchText, pageWidth / 2, 15, { align: 'center' });
+
+    // 2. Company Header
     doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
-    doc.rect(0, 8, pageWidth, 15, 'F');
-    doc.setFontSize(18);
+    doc.rect(0, 22, pageWidth, 12, 'F');
+    doc.setFontSize(16);
     doc.setTextColor(255, 255, 255);
-    doc.text(companyName?.toUpperCase() || "ORDER RECEIPT", pageWidth / 2, 18, { align: 'center' });
+    doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", pageWidth / 2, 30, { align: 'center' });
     
+    // 3. Party and Order Details
     doc.setTextColor(0);
     doc.setFontSize(10);
-    let y = 35;
-    doc.text(`Order #: ${orderDetails.order_number}`, margin, y);
-    doc.text(`Dealer: ${orderDetails.dealer_name}`, pageWidth - margin, y, { align: 'right' });
-    y += 10;
+    let y = 45;
+    
+    // Left Column: Party Details
+    doc.setFont("helvetica", "bold");
+    doc.text("PARTY DETAILS:", margin, y);
+    doc.setFont("helvetica", "normal");
+    y += 5;
+    doc.text(orderDetails.dealer_name, margin, y);
+    y += 5;
+    const addressLines = doc.splitTextToSize(
+      `${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`,
+      pageWidth / 2 - margin
+    );
+    doc.text(addressLines, margin, y);
+    
+    // Right Column: Order Details
+    let rightY = 45;
+    const rightColX = pageWidth / 2 + 10;
+    doc.setFont("helvetica", "bold");
+    doc.text("ORDER DETAILS:", rightColX, rightY);
+    doc.setFont("helvetica", "normal");
+    rightY += 5;
+    doc.text(`Order No: #${orderDetails.order_number}`, rightColX, rightY);
+    rightY += 5;
+    doc.text(`Bill No: ${orderDetails.bill_no || 'N/A'}`, rightColX, rightY);
+    rightY += 5;
+    doc.text(`Date: ${formatDate(orderDetails.order_date)}`, rightColX, rightY);
 
-    const tableColumn = ["Code", "Product", "Qty", "DP", "Disc %", "GST %", "Total"];
+    y = Math.max(y + (addressLines.length * 5), rightY + 10);
+
+    // 4. Simplified Item Table (Code, Product, Qty)
+    const tableColumn = ["Code", "Product Name", "Quantity"];
     const tableRows = orderDetails.items.map(item => [
       item.product_code,
       item.product_name,
-      item.quantity.toString(),
-      item.unit_price.toFixed(2),
-      `${item.discount_percent}%`,
-      `${item.product_gst}%`,
-      item.total_price.toFixed(2)
+      item.quantity.toString()
     ]);
 
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: y,
-      headStyles: { fillColor: darkBlue },
-      styles: { fontSize: 8 }
+      headStyles: { fillColor: darkBlue, halign: 'center' },
+      columnStyles: {
+        0: { cellWidth: 40, halign: 'center' },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 30, halign: 'center' }
+      },
+      styles: { fontSize: 9, cellPadding: 3 }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    // 5. Footer: Total Bill Amount Only
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
     doc.setFont("helvetica", "bold");
-    doc.text(`Total Amount: Rs. ${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, finalY, { align: 'right' });
+    doc.setFontSize(12);
+    doc.text(`TOTAL BILL AMOUNT: Rs. ${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, finalY, { align: 'right' });
 
-    doc.save(`order_${orderDetails.order_number}.pdf`);
+    doc.save(`dispatch_slip_${orderDetails.order_number}.pdf`);
   };
 
   return (
@@ -293,7 +330,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         ) : null}
         <DialogFooter>
           <Button variant="outline" onClick={handlePrint} disabled={!orderDetails}>
-            <Printer className="mr-2 h-4 w-4" /> Print Receipt
+            <Printer className="mr-2 h-4 w-4" /> Print Dispatch Slip
           </Button>
           <Button onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
