@@ -99,12 +99,38 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const fetchOrderAndProducts = useCallback(async (id: string) => {
     setLoading(true);
     try {
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
-        .select('id, code, name, dp, closing_stock, gst')
-        .order('name', { ascending: true });
+      const fetchAllProducts = async (): Promise<Product[]> => {
+        const allProducts: Product[] = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
 
-      if (productsError) throw productsError;
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('products')
+            .select('id, code, name, dp, closing_stock, gst')
+            .order('name', { ascending: true })
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+
+          if (error) {
+            console.error("Error fetching a page of products:", error);
+            throw error;
+          }
+
+          if (data) {
+            allProducts.push(...data);
+          }
+
+          if (!data || data.length < pageSize) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        }
+        return allProducts;
+      };
+
+      const productsData = await fetchAllProducts();
       setProducts(productsData || []);
 
       const { data: orderRaw, error: orderError } = await supabase

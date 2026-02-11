@@ -117,12 +117,31 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   const fetchProducts = useCallback(async () => {
     try {
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
-        .select('id, code, name, dp, closing_stock, gst')
-        .order('name', { ascending: true });
-      if (productsError) throw productsError;
-      setProducts(productsData || []);
+      const allProducts: Product[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data: productsData, error: productsError } = await supabase
+          .from('products')
+          .select('id, code, name, dp, closing_stock, gst')
+          .order('name', { ascending: true })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        
+        if (productsError) throw productsError;
+
+        if (productsData) {
+          allProducts.push(...productsData);
+        }
+
+        if (!productsData || productsData.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
+      setProducts(allProducts);
     } catch (error: any) {
       console.error('fetchProducts Error:', error);
       showError(`Failed to load products: ${error.message}`);
