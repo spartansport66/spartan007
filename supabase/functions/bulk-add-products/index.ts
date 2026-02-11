@@ -52,10 +52,7 @@ serve(async (req: Request) => {
       .select();
 
     if (error) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      throw error;
     }
 
     return new Response(JSON.stringify({ message: `${data.length} products added successfully!`, products: data }), {

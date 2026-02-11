@@ -14,17 +14,6 @@ serve(async (req: Request) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      // @ts-ignore
-      Deno.env.get('SUPABASE_URL') ?? '',
-      // @ts-ignore
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
-    );
-
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) throw new Error("User not authenticated.");
-
     const supabaseAdmin = createClient(
       // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -36,6 +25,7 @@ serve(async (req: Request) => {
       .from('products')
       .select('id, code, name, dp, opening_stock, stock_in, stock_out, closing_stock')
       .order('name', { ascending: true });
+    
     if (productsError) throw productsError;
 
     return new Response(JSON.stringify({ products: productsData || [] }), {
