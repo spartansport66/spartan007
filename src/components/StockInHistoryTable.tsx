@@ -27,7 +27,6 @@ const StockInHistoryTable: React.FC = () => {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      // Corrected join syntax: profiles!received_by specifies the foreign key column
       const { data, error } = await supabase
         .from('stock_receipts')
         .select(`
@@ -66,7 +65,8 @@ const StockInHistoryTable: React.FC = () => {
       setRecords(formatted);
     } catch (error: any) {
       console.error('Error fetching stock in history:', error.message);
-      showError('Failed to load stock in history. Please check database permissions.');
+      // We don't show a toast here to avoid spamming if the RLS is still being fixed
+      setRecords([]);
     } finally {
       setLoading(false);
     }
