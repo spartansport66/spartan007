@@ -196,10 +196,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     const pageWidth = doc.internal.pageSize.width;
     const darkBlue: [number, number, number] = [30, 58, 138];
 
-    // 1. Dispatch Number at Top Center
-    doc.setFontSize(14);
+    // 1. Gate Pass Number at Top Center (Larger)
+    doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
-    const dispatchText = `DISPATCH #: ${orderDetails.dispatch_number || 'N/A'}`;
+    const dispatchText = `Gate Pass: ${orderDetails.dispatch_number || 'N/A'}`;
     doc.text(dispatchText, pageWidth / 2, 15, { align: 'center' });
 
     // 2. Company Header
