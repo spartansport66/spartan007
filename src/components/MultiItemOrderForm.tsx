@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
+const SEND_ORDER_NOTIFICATION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-order-notification";
+
 interface Product {
   id: string;
   code: string;
@@ -114,7 +116,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     if (['Card', 'Bank Transfer', 'UPI'].includes(paymentMethod)) {
       return !!transactionId;
     }
-    return true; // Cash or other methods where transactionId is optional
+    return true;
   }, [paymentMethod, chequeDdNo, chequeDdDate, transactionId]);
 
   const fetchProducts = useCallback(async () => {
@@ -295,7 +297,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
       await supabase.from('dealers').update({ last_billing_date: newOrder.order_date }).eq('id', selectedDealer);
       
-      // 2. Insert Sales Items (Database triggers will handle stock updates)
+      // 2. Insert Sales Items
       const salesWithOrderId = orderItems.map(item => ({
         order_id: newOrder.id,
         product_id: item.product_id,
@@ -321,6 +323,17 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       
       const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
       if (paymentInsertError) throw paymentInsertError;
+
+      // 4. Trigger Email Notification
+      try {
+        fetch(SEND_ORDER_NOTIFICATION_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: newOrder.id }),
+        });
+      } catch (emailErr) {
+        console.warn('Email notification trigger failed, but order was placed:', emailErr);
+      }
 
       showSuccess('Order placed successfully!');
       setSelectedDealer('');

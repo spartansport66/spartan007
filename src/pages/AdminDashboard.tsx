@@ -6,10 +6,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
+import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
+import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
+import AdminTotalPendingOrdersCard from '@/components/AdminTotalPendingOrdersCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -34,10 +37,8 @@ import SalesPersonTodayFollowupsReportDialog from '@/components/reports/SalesPer
 import LoginLogReportDialog from '@/components/reports/LoginLogReportDialog';
 import SalesPersonAccountStatementReportDialog from '@/components/reports/SalesPersonAccountStatementReportDialog';
 import OrderSummaryReportDialog from '@/components/reports/OrderSummaryReportDialog';
-import { updateAllDealerCreditDays } from '@/utils/supabase-actions';
-import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
-import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
-import AdminTotalPendingOrdersCard from '@/components/AdminTotalPendingOrdersCard';
+import NotificationEmailManager from '@/components/NotificationEmailManager';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -61,6 +62,7 @@ const AdminDashboard = () => {
   const [isLoginLogReportOpen, setIsLoginLogReportOpen] = useState(false);
   const [isSalesPersonAccountStatementReportOpen, setIsSalesPersonAccountStatementReportOpen] = useState(false);
   const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false);
+  const [isEmailManagerOpen, setIsEmailManagerOpen] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastActiveTime, setLastActiveTime] = useState<string | null>(null);
@@ -132,7 +134,6 @@ const AdminDashboard = () => {
       const { count: ordersCount, error: ordersError } = await supabase.from('orders').select('*', { count: 'exact', head: true });
       if (!ordersError) setTotalOrders(ordersCount || 0);
 
-      // --- UPDATED: Use RPC for Total Sales Value ---
       const { data: salesRpcData, error: salesRpcError } = await supabase
         .rpc('get_net_sales_value')
         .single();
@@ -141,11 +142,9 @@ const AdminDashboard = () => {
         console.error('Error fetching total sales via RPC:', salesRpcError);
         setTotalSalesValue(0);
       } else {
-        // The RPC returns a single row with a column named 'net_sales_value'
         const netSalesValue = (salesRpcData as any)?.net_sales_value || 0;
         setTotalSalesValue(netSalesValue);
       }
-      // --- END UPDATED SECTION ---
 
       const { data: monthlySalesRaw, error: monthlySalesError } = await supabase.from('sales').select('sale_date, total_price').order('sale_date', { ascending: true });
       if (!monthlySalesError && monthlySalesRaw && monthlySalesRaw.length > 0) {
@@ -240,7 +239,12 @@ const AdminDashboard = () => {
       <div className="flex justify-between items-center mb-6">
         <div className="text-left">{companyName && (<h2 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">{companyName}</h2>)}<p className="text-xs text-muted-foreground mt-1">Last Active: {lastActiveTime ? new Date(lastActiveTime).toLocaleString() : 'N/A'}</p></div>
         <h1 className="text-center text-3xl sm:text-4xl font-bold text-primary">Admin Dashboard</h1>
-        <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400"><Menu className="h-5 w-5" /></Button></SheetTrigger><SheetContent side="right" className="w-[250px] sm:w-[300px]"><SheetHeader><SheetTitle>Admin Navigation</SheetTitle></SheetHeader><AdminSidebar handleLogout={handleLogout} setIsOrdersAwaitingDispatchReportOpen={setIsOrdersAwaitingDispatchReportOpen} setIsDispatchedOrdersReportOpen={setIsDispatchedOrdersReportOpen} setIsDealerReportOpen={setIsDealerReportOpen} setIsPaymentsReportOpen={setIsPaymentsReportOpen} setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen} setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen} setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen} setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen} setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen} setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen} setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen} setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen} setIsLoginLogReportOpen={setIsLoginLogReportOpen} setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen} setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen} /></SheetContent></Sheet>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => setIsEmailManagerOpen(true)} title="Notification Settings">
+            <Mail className="h-5 w-5" />
+          </Button>
+          <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400"><Menu className="h-5 w-5" /></Button></SheetTrigger><SheetContent side="right" className="w-[250px] sm:w-[300px]"><SheetHeader><SheetTitle>Admin Navigation</SheetTitle></SheetHeader><AdminSidebar handleLogout={handleLogout} setIsOrdersAwaitingDispatchReportOpen={setIsOrdersAwaitingDispatchReportOpen} setIsDispatchedOrdersReportOpen={setIsDispatchedOrdersReportOpen} setIsDealerReportOpen={setIsDealerReportOpen} setIsPaymentsReportOpen={setIsPaymentsReportOpen} setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen} setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen} setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen} setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen} setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen} setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen} setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen} setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen} setIsLoginLogReportOpen={setIsLoginLogReportOpen} setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen} setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen} /></SheetContent></Sheet>
+        </div>
       </div>
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">{salesOverview.map((item, index) => (<Card key={index} className="bg-card text-card-foreground shadow-md h-full"><CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 p-4 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg`}><CardTitle className="text-base font-medium text-white">{item.title}</CardTitle>{item.icon}</CardHeader><CardContent className="p-4 pt-0"><div className={`text-3xl font-bold ${item.valueColor}`}>{item.value}</div><p className="text-xs text-muted-foreground mt-1">{item.change}</p></CardContent></Card>))}</div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"><AdminTodayFollowupsCard key={`admin-followups-${refreshKey}`} onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} /><AdminTodayVisitsCard key={`admin-visits-${refreshKey}`} onViewReport={() => setIsSalesPersonVisitReportOpen(true)} /><AdminTotalPendingOrdersCard key={`admin-pending-orders-${refreshKey}`} onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} /></div>
@@ -264,6 +268,16 @@ const AdminDashboard = () => {
       <SalesPersonTodayFollowupsReportDialog isOpen={isSalesPersonTodayFollowupsReportOpen} onOpenChange={setIsSalesPersonTodayFollowupsReportOpen} />
       <LoginLogReportDialog isOpen={isLoginLogReportOpen} onOpenChange={setIsLoginLogReportOpen} />
       <SalesPersonAccountStatementReportDialog isOpen={isSalesPersonAccountStatementReportOpen} onOpenChange={setIsSalesPersonAccountStatementReportOpen} />
+      
+      <Dialog open={isEmailManagerOpen} onOpenChange={setIsEmailManagerOpen}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle>Notification Settings</DialogTitle>
+            <DialogDescription>Configure email addresses for automated order notifications.</DialogDescription>
+          </DialogHeader>
+          <NotificationEmailManager />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
