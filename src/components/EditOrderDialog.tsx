@@ -67,6 +67,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
   const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
   const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<number>(0);
+  const [newItemGstPercent, setNewItemGstPercent] = useState<number>(0);
 
   const fetchOrderAndProducts = useCallback(async (id: string) => {
     setLoading(true);
@@ -162,15 +163,13 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   }, [preGlobalDiscountTotal, discountAmount]);
 
   const newItemCalculations = useMemo(() => {
-    const product = products.find(p => p.id === newItemProductId);
-    const gstPercent = parseFloat(product?.gst || "0") || 0;
     const taxableUnitPrice = newItemUnitPrice * (1 - newItemDiscountPercent / 100);
     const taxableValue = taxableUnitPrice * newItemQuantity;
-    const gstAmount = (taxableValue * gstPercent) / 100;
+    const gstAmount = (taxableValue * newItemGstPercent) / 100;
     const totalPrice = taxableValue + gstAmount;
 
-    return { gstPercent, taxableValue, gstAmount, totalPrice };
-  }, [newItemProductId, newItemUnitPrice, newItemDiscountPercent, newItemQuantity, products]);
+    return { taxableValue, gstAmount, totalPrice };
+  }, [newItemUnitPrice, newItemDiscountPercent, newItemQuantity, newItemGstPercent]);
 
   const addOrderItem = () => {
     if (!newItemProductId || newItemQuantity <= 0) {
@@ -188,7 +187,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       product_code: product.code,
       unit_dp: newItemUnitPrice,
       discount_percent: newItemDiscountPercent,
-      gst_percent: newItemCalculations.gstPercent,
+      gst_percent: newItemGstPercent,
       taxable_value: newItemCalculations.taxableValue,
       gst_amount: newItemCalculations.gstAmount,
       total_price: newItemCalculations.totalPrice,
@@ -198,14 +197,16 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     setNewItemQuantity(1);
     setNewItemUnitPrice(0);
     setNewItemDiscountPercent(0);
+    setNewItemGstPercent(0);
   };
 
   const updateOrderItem = (id: string, field: keyof OrderItem, value: number) => {
     setOrderItems(prev => prev.map(item => {
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
-        const taxableUnitPrice = updatedItem.unit_dp * (1 - updatedItem.discount_percent / 100);
-        updatedItem.taxable_value = taxableUnitPrice * updatedItem.quantity;
+        const discount = (updatedItem.unit_dp * updatedItem.discount_percent) / 100;
+        const discountedUnitPrice = Math.max(0, updatedItem.unit_dp - discount);
+        updatedItem.taxable_value = discountedUnitPrice * updatedItem.quantity;
         updatedItem.gst_amount = (updatedItem.taxable_value * updatedItem.gst_percent) / 100;
         updatedItem.total_price = updatedItem.taxable_value + updatedItem.gst_amount;
         return updatedItem;
@@ -342,6 +343,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                   onSelect={() => {
                                     setNewItemProductId(product.id);
                                     setNewItemUnitPrice(product.dp);
+                                    setNewItemGstPercent(parseFloat(product.gst) || 0);
                                     setIsProductPopoverOpen(false);
                                     setProductSearch('');
                                   }}
@@ -366,11 +368,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                     </PopoverContent>
                   </Popover>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-end">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 items-end">
                   <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
                   <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
                   <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(parseFloat(e.target.value) || 0)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
-                  <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total (Inc. Tax)</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemCalculations.totalPrice.toFixed(2)}</div></div>
+                  <div><Label>GST (%)</Label><Input type="number" step="0.1" value={newItemGstPercent} onChange={(e) => setNewItemGstPercent(parseFloat(e.target.value) || 0)} min="0" /></div>
+                  <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemCalculations.totalPrice.toFixed(2)}</div></div>
                 </div>
                 <Button type="button" onClick={addOrderItem} disabled={isSubmitting} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
               </div>
@@ -396,7 +399,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                           <TableCell><Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
                           <TableCell><Input type="number" step="0.01" value={item.unit_dp} onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
                           <TableCell><Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
-                          <TableCell className="text-center">{item.gst_percent}%</TableCell>
+                          <TableCell><Input type="number" step="0.1" value={item.gst_percent} onChange={(e) => updateOrderItem(item.id, 'gst_percent', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
                           <TableCell className="text-right font-bold text-green-600">₹{item.total_price.toFixed(2)}</TableCell>
                           <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
                         </TableRow>
