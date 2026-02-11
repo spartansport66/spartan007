@@ -8,21 +8,21 @@ import { Loader2, AlertTriangle, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import { useNavigate } from 'react-router-dom';
-import { useSession } from '@/contexts/SessionContext'; // Import useSession
+import { useSession } from '@/contexts/SessionContext';
 
 interface Product {
   id: string;
-  code: string; // New
+  code: string;
   name: string;
-  stock: number;
-  dp: number; // New
+  closing_stock: number;
+  dp: number;
 }
 
 interface LowStockProductsCardProps {
-  onProductAction?: () => void; // Callback for parent to refresh data if needed
+  onProductAction?: () => void;
 }
 
-const LOW_STOCK_THRESHOLD = 10; // Define what constitutes 'low stock'
+const LOW_STOCK_THRESHOLD = 10;
 
 const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAction }) => {
   const navigate = useNavigate();
@@ -42,9 +42,9 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
     setError(null);
     const { data, error } = await supabase
       .from('products')
-      .select('id, code, name, stock, dp') // Select new fields
-      .lte('stock', LOW_STOCK_THRESHOLD)
-      .order('stock', { ascending: true });
+      .select('id, code, name, closing_stock, dp')
+      .lte('closing_stock', LOW_STOCK_THRESHOLD)
+      .order('closing_stock', { ascending: true });
 
     if (error) {
       console.error('Error fetching low stock products:', error);
@@ -59,7 +59,7 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
 
   useEffect(() => {
     fetchLowStockProducts();
-  }, [fetchLowStockProducts, onProductAction]); // Re-fetch if parent action occurs
+  }, [fetchLowStockProducts, onProductAction]);
 
   if (!isAuthorized) {
     return null;
@@ -122,7 +122,7 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
                       <TableCell className="font-medium text-foreground flex items-center gap-2">
                         <AlertTriangle className="h-4 w-4 text-orange-500" /> {product.name}
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-right">{product.stock}</TableCell>
+                      <TableCell className="text-muted-foreground text-right">{product.closing_stock}</TableCell>
                       <TableCell className="text-muted-foreground text-right">₹{product.dp}</TableCell>
                     </TableRow>
                   ))}

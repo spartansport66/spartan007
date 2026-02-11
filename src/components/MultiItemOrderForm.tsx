@@ -20,7 +20,7 @@ interface Product {
   code: string;
   name: string;
   dp: number;
-  stock: number;
+  closing_stock: number;
 }
 
 interface Dealer {
@@ -110,7 +110,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     try {
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, code, name, dp, stock');
+        .select('id, code, name, dp, closing_stock');
       if (productsError) throw productsError;
       setProducts(productsData || []);
     } catch (error: any) {
@@ -291,7 +291,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
       await supabase.from('dealers').update({ last_billing_date: newOrder.order_date }).eq('id', selectedDealer);
       
-      // 2. Insert Sales Items and Manually Update Stock
+      // 2. Insert Sales Items and Update Stock via RPC
       const salesWithOrderId = orderItems.map(item => ({
         order_id: newOrder.id,
         product_id: item.product_id,
@@ -302,49 +302,48 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const { error: salesInsertError } = await supabase.from('sales').insert(salesWithOrderId);
       if (salesInsertError) throw salesInsertError;
 
-      // Manual Stock Update Loop
+      // Stock Update Loop using RPC to bypass RLS restrictions
       for (const item of orderItems) {
-        const { data: productData, error: productFetchError } = await supabase
+        const { error: stockError } = await supabase.rpc('decrement_stock', {
+          product_id_in: item.product_id,
+          quantity_in: item.quantity
+        });
+        
+        if (stockError) {
+          console.error(`Failed to decrement stock for ${item.product_name}:`, stockError.message);
+        }
+
+        // Check for production alerts
+        const { data: productData } = await supabase
           .from('products')
-          .select('stock')
+          .select('closing_stock')
           .eq('id', item.product_id)
           .single();
         
-        if (!productFetchError && productData) {
-          const newStock = productData.stock - item.quantity;
+        if (productData && productData.closing_stock < 0) {
+          const requiredQty = Math.abs(productData.closing_stock);
+          const { data: existingAlert } = await supabase
+            .from('production_alerts')
+            .select('id')
+            .eq('product_id', item.product_id)
+            .eq('resolved', false)
+            .single();
           
-          // Update Stock
-          await supabase
-            .from('products')
-            .update({ stock: newStock })
-            .eq('id', item.product_id);
-          
-          // Create Production Alert if stock is negative
-          if (newStock < 0) {
-            const requiredQty = Math.abs(newStock);
-            const { data: existingAlert } = await supabase
+          if (existingAlert) {
+            await supabase
               .from('production_alerts')
-              .select('id')
-              .eq('product_id', item.product_id)
-              .eq('resolved', false)
-              .single();
-            
-            if (existingAlert) {
-              await supabase
-                .from('production_alerts')
-                .update({ required_quantity: requiredQty, created_at: new Date().toISOString() })
-                .eq('id', existingAlert.id);
-            } else {
-              await supabase
-                .from('production_alerts')
-                .insert({
-                  product_id: item.product_id,
-                  required_quantity: requiredQty,
-                  resolved: false,
-                  created_by: user.id,
-                  dealer_id: selectedDealer
-                });
-            }
+              .update({ required_quantity: requiredQty, created_at: new Date().toISOString() })
+              .eq('id', existingAlert.id);
+          } else {
+            await supabase
+              .from('production_alerts')
+              .insert({
+                product_id: item.product_id,
+                required_quantity: requiredQty,
+                resolved: false,
+                created_by: user.id,
+                dealer_id: selectedDealer
+              });
           }
         }
       }
@@ -441,7 +440,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                     <ScrollArea className="h-[250px]">
                       <div className="p-1">
                         {filteredProducts.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>) : (
-                          filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start"><div className="flex items-center"><Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span>{product.name} ({product.code})</span></div><div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div></Button>))
+                          filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start"><div className="flex items-center"><Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span>{product.name} ({product.code})</span></div><div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - Stock: {product.closing_stock}</div></div></Button>))
                         )}
                       </div>
                     </ScrollArea>

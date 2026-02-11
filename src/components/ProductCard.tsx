@@ -7,14 +7,14 @@ import { Button } from '@/components/ui/button';
 interface ProductCardProps {
   product: {
     id: string;
-    code: string; // New
+    code: string;
     name: string;
     description: string;
-    size: string; // New
-    hsn: string; // New
-    gst: string; // Changed to string
-    dp: number; // New
-    stock: number;
+    size: string;
+    hsn: string;
+    gst: string;
+    dp: number;
+    closing_stock: number;
   };
   onAddToCart?: (productId: string) => void;
 }
@@ -29,9 +29,9 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart }) => {
       <CardContent className="flex-grow">
         <p className="text-lg text-muted-foreground">Size: {product.size || 'N/A'}</p>
         <p className="text-lg text-muted-foreground">HSN: {product.hsn || 'N/A'}</p>
-        <p className="text-lg text-muted-foreground">GST: {product.gst || 'N/A'}%</p> {/* Display GST as string */}
-        <p className="text-2xl font-bold text-accent-foreground mb-2">DP: ₹{product.dp}</p> {/* Display as integer */}
-        <p className="text-sm text-muted-foreground">In Stock: {product.stock}</p>
+        <p className="text-lg text-muted-foreground">GST: {product.gst || 'N/A'}%</p>
+        <p className="text-2xl font-bold text-accent-foreground mb-2">DP: ₹{product.dp}</p>
+        <p className="text-sm text-muted-foreground">In Stock: {product.closing_stock}</p>
       </CardContent>
       {onAddToCart && (
         <CardFooter>
