@@ -141,19 +141,19 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         .select('dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))')
         .eq('sales_person_id', user.id);
 
-      if (assignedDealersError) throw assignedDealersError;
-
-      const formattedDealers = (assignedDealersData || [])
-        .map((item: any) => {
-          if (!item.dealers) return null;
-          const opening_balance = item.dealers.dealer_balances?.opening_balance || 0;
-          const { dealer_balances, ...dealerData } = item.dealers;
-          return { ...dealerData, opening_balance };
-        })
-        .filter(Boolean) as Dealer[];
-      
-      formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
-      setDealers(formattedDealers);
+      if (assignedDealersData) {
+        const formattedDealers = assignedDealersData
+          .map((item: any) => {
+            if (!item.dealers) return null;
+            const opening_balance = item.dealers.dealer_balances?.opening_balance || 0;
+            const { dealer_balances, ...dealerData } = item.dealers;
+            return { ...dealerData, opening_balance };
+          })
+          .filter(Boolean) as Dealer[];
+        
+        formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
+        setDealers(formattedDealers);
+      }
 
       await fetchProducts();
 
@@ -324,15 +324,22 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
       if (paymentInsertError) throw paymentInsertError;
 
-      // 4. Trigger Email Notification
+      // 4. Trigger Email Notification with better logging
+      console.log("[MultiItemOrderForm] Triggering email notification for order:", newOrder.id);
       try {
-        fetch(SEND_ORDER_NOTIFICATION_URL, {
+        const emailResponse = await fetch(SEND_ORDER_NOTIFICATION_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ orderId: newOrder.id }),
         });
+        const emailResult = await emailResponse.json();
+        console.log("[MultiItemOrderForm] Email trigger result:", emailResult);
+        
+        if (!emailResponse.ok) {
+          console.warn("[MultiItemOrderForm] Email trigger failed:", emailResult.error);
+        }
       } catch (emailErr) {
-        console.warn('Email notification trigger failed, but order was placed:', emailErr);
+        console.error('[MultiItemOrderForm] Network error triggering email:', emailErr);
       }
 
       showSuccess('Order placed successfully!');
