@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Search, CalendarDays } from 'lucide-react';
+import { Loader2, Eye, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
@@ -28,10 +28,13 @@ interface DealerOption {
   label: string;
 }
 
+const PAGE_SIZE = 5;
+
 const DispatchedOrdersCard: React.FC = () => {
   const [orders, setOrders] = useState<DispatchedOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Format date as dd/mm/yyyy
   const formatDate = (dateString: string | null) => {
@@ -69,7 +72,6 @@ const DispatchedOrdersCard: React.FC = () => {
       }
 
       // Build the base query for dispatched orders
-      // We filter by dispatch_number not being null to show all orders in the dispatch process
       let query = supabase
         .from('orders')
         .select(`
@@ -122,10 +124,11 @@ const DispatchedOrdersCard: React.FC = () => {
           dispatch_date: order.dispatch_date,
         }));
         setOrders(formattedOrders);
+        setCurrentPage(1); // Reset to first page on new fetch
       }
     } catch (error: any) {
       console.error('Error in fetchOrdersAndDealers:', error.message);
-      showError('An unexpected error occurred while fetching orders.');
+      showError('An unexpected error occurred.');
     } finally {
       setLoading(false);
     }
@@ -145,6 +148,10 @@ const DispatchedOrdersCard: React.FC = () => {
     setFilterDealerId('');
     setFilterDispatchDate('');
   };
+
+  // Pagination logic
+  const totalPages = Math.ceil(orders.length / PAGE_SIZE);
+  const displayedOrders = orders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg mb-6">
@@ -210,47 +217,76 @@ const DispatchedOrdersCard: React.FC = () => {
           ) : orders.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No dispatched orders found matching your criteria.</p>
           ) : (
-            <div className="max-h-[250px] overflow-y-auto border rounded-md">
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
-                  <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground">Order No.</TableHead>
-                    <TableHead className="text-muted-foreground">Dispatch No.</TableHead>
-                    <TableHead className="text-muted-foreground">Bill No.</TableHead>
-                    <TableHead className="text-muted-foreground">Dealer Name</TableHead>
-                    <TableHead className="text-muted-foreground">Dispatch Date</TableHead>
-                    <TableHead className="text-muted-foreground">Gate Pass</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
-                    <TableHead className="text-muted-foreground text-center">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((order) => (
-                    <TableRow key={order.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{formatDate(order.dispatch_date)}</TableCell>
-                      <TableCell className="text-muted-foreground">{formatDate(order.gate_pass_dispatch_time)}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleViewOrderDetails(order.id)}
-                            title="View Order Details"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+            <>
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="text-muted-foreground">Order No.</TableHead>
+                      <TableHead className="text-muted-foreground">Dispatch No.</TableHead>
+                      <TableHead className="text-muted-foreground">Bill No.</TableHead>
+                      <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                      <TableHead className="text-muted-foreground">Dispatch Date</TableHead>
+                      <TableHead className="text-muted-foreground">Gate Pass</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
+                      <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {displayedOrders.map((order) => (
+                      <TableRow key={order.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatDate(order.dispatch_date)}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatDate(order.gate_pass_dispatch_time)}</TableCell>
+                        <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleViewOrderDetails(order.id)}
+                              title="View Order Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 px-2">
+                  <p className="text-sm text-muted-foreground">
+                    Showing page {currentPage} of {totalPages} ({orders.length} total orders)
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </CardContent>
