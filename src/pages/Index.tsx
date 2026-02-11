@@ -31,7 +31,7 @@ const Index = () => {
           } else if (userType === 'gate_keeper') {
             console.log('Redirecting to gate pass dashboard');
             navigate('/gate-pass-dashboard');
-          } else if (userType === 'inventory_manager') {
+          } else if (userType === 'inventory_manager' || userType === 'warehouse_keeper') {
             console.log('Redirecting to product dashboard');
             navigate('/product-dashboard');
           } else if (userType === 'manager') {
