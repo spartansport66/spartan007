@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Edit, Trash2, Loader2, Search } from 'lucide-react';
+import { Edit, Trash2, Loader2, Search, Info } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -36,6 +36,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const UPDATE_PRODUCT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/update-product";
@@ -214,7 +215,21 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
                 <TableHead className="text-right">Opening</TableHead>
                 <TableHead className="text-right">Stock In</TableHead>
                 <TableHead className="text-right">Stock Out</TableHead>
-                <TableHead className="text-right font-bold">Closing</TableHead>
+                <TableHead className="text-right font-bold">
+                  <div className="flex items-center justify-end gap-1">
+                    Closing
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 cursor-help text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Formula: Opening + In - Out</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>

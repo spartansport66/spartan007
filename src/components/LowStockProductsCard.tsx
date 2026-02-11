@@ -14,6 +14,9 @@ interface Product {
   id: string;
   code: string;
   name: string;
+  opening_stock: number;
+  stock_in: number;
+  stock_out: number;
   closing_stock: number;
   dp: number;
 }
@@ -41,15 +44,23 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
     setLoading(true);
     setError(null);
     try {
-      // Corrected: Using 'closing_stock' instead of 'stock'
+      // Fetch all products and filter in memory to ensure the formula is applied correctly
       const { data, error } = await supabase
         .from('products')
-        .select('id, code, name, closing_stock, dp')
-        .lte('closing_stock', LOW_STOCK_THRESHOLD)
-        .order('closing_stock', { ascending: true });
+        .select('id, code, name, opening_stock, stock_in, stock_out, closing_stock, dp');
 
       if (error) throw error;
-      setLowStockProducts(data || []);
+
+      const filtered = (data || []).filter(product => {
+        const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+        return calculatedClosing <= LOW_STOCK_THRESHOLD;
+      }).sort((a, b) => {
+        const calcA = (a.opening_stock || 0) + (a.stock_in || 0) - (a.stock_out || 0);
+        const calcB = (b.opening_stock || 0) + (b.stock_in || 0) - (b.stock_out || 0);
+        return calcA - calcB;
+      });
+
+      setLowStockProducts(filtered);
     } catch (error: any) {
       console.error('Error fetching low stock products:', error);
       setError(`Failed to load low stock products: ${error.message}`);
@@ -119,16 +130,19 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {lowStockProducts.map((product) => (
-                    <TableRow key={product.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{product.code}</TableCell>
-                      <TableCell className="font-medium text-foreground flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-orange-500" /> {product.name}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-right">{product.closing_stock}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{product.dp}</TableCell>
-                    </TableRow>
-                  ))}
+                  {lowStockProducts.map((product) => {
+                    const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+                    return (
+                      <TableRow key={product.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{product.code}</TableCell>
+                        <TableCell className="font-medium text-foreground flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-orange-500" /> {product.name}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-right">{calculatedClosing}</TableCell>
+                        <TableCell className="text-muted-foreground text-right">₹{product.dp}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
