@@ -205,7 +205,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const discountAmountValue = form.watch('discountAmount');
   const roundOffValue = form.watch('roundOff');
   const finalOrderValue = useMemo(() => {
-    return Math.max(0, preGlobalDiscountTotal - discountAmountValue + (roundOffValue || 0));
+    const discount = Number(discountAmountValue) || 0;
+    const roundOff = Number(roundOffValue) || 0;
+    return Math.max(0, preGlobalDiscountTotal - discount + roundOff);
   }, [preGlobalDiscountTotal, discountAmountValue, roundOffValue]);
 
   const newItemCalculations = useMemo(() => {
