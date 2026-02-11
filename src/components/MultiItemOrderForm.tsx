@@ -106,6 +106,17 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
   }, [finalOrderValue]);
 
+  const isPaymentDetailsValid = useMemo(() => {
+    if (!paymentMethod) return false;
+    if (paymentMethod === 'Cheque/DD') {
+      return !!chequeDdNo && !!chequeDdDate;
+    }
+    if (['Card', 'Bank Transfer', 'UPI'].includes(paymentMethod)) {
+      return !!transactionId;
+    }
+    return true; // Cash or other methods where transactionId is optional
+  }, [paymentMethod, chequeDdNo, chequeDdDate, transactionId]);
+
   const fetchProducts = useCallback(async () => {
     try {
       const { data: productsData, error: productsError } = await supabase
@@ -254,13 +265,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     setOrderItems(orderItems.filter(item => item.id !== id));
   };
 
-  const isPaymentDetailsValid = useMemo(() => {
-    if (!paymentMethod || paymentAmount <= 0) return false;
-    if (paymentMethod === 'Cheque/DD' && (!chequeDdNo || !chequeDdDate)) return false;
-    if (['Card', 'Bank Transfer', 'UPI'].includes(paymentMethod) && !transactionId) return false;
-    return true;
-  }, [paymentMethod, paymentAmount, chequeDdNo, chequeDdDate, transactionId]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedDealer || orderItems.length === 0 || discountAmount < 0 || discountAmount > preDiscountTotalOrderValue || !isPaymentDetailsValid) {
@@ -351,6 +355,13 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   }, [products, productSearch]);
 
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
+  
+  const currentProductDisplay = useMemo(() => {
+    if (!newItemProductId) return "Select product...";
+    const product = products.find(p => p.id === newItemProductId);
+    return product ? `${product.name} (${product.code})` : "Select product...";
+  }, [newItemProductId, products]);
+
   const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid;
 
   return (
@@ -387,7 +398,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Label>Product</Label>
                 <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0}>{newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
+                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0}>{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                     <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
@@ -415,7 +426,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Table>
                   <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Qty</TableHead><TableHead>DP</TableHead><TableHead>Disc %</TableHead><TableHead className="text-right">Total</TableHead><TableHead></TableHead></TableRow></TableHeader>
                   <TableBody>
-                    {orderItems.map(item => (<TableRow key={item.id}><TableCell className="max-w-[150px] truncate">{item.product_name}</TableCell><TableCell>{item.quantity}</TableCell><TableCell>₹{item.unit_dp.toFixed(2)}</TableCell><TableCell>{item.discount_percent}%</TableCell><TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell><TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}
+                    {orderItems.map(item => (<TableRow key={item.id}><TableCell className="max-w-[150px] truncate">{item.product_name} ({item.product_code})</TableCell><TableCell>{item.quantity}</TableCell><TableCell>₹{item.unit_dp.toFixed(2)}</TableCell><TableCell>{item.discount_percent}%</TableCell><TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell><TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}
                   </TableBody>
                 </Table>
               </div>

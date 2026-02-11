@@ -91,6 +91,11 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
     );
   }, [products, productSearchValue]);
 
+  const currentProductDisplay = useMemo(() => {
+    if (!selectedProduct) return "Select product...";
+    return `${selectedProduct.name} (${selectedProduct.code})`;
+  }, [selectedProduct]);
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!user) {
       showError('User not authenticated.');
@@ -169,7 +174,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>
-                          {selectedProduct?.name || "Select product..."}
+                          {currentProductDisplay}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </FormControl>

@@ -210,6 +210,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     return products.filter(p => p.name.toLowerCase().includes(search) || p.code.toLowerCase().includes(search));
   }, [products, productSearch]);
 
+  const currentProductDisplay = useMemo(() => {
+    if (!newItemProductId) return "Select product...";
+    const product = products.find(p => p.id === newItemProductId);
+    return product ? `${product.name} (${product.code})` : "Select product...";
+  }, [newItemProductId, products]);
+
   const handleSave = async () => {
     if (!orderData || orderItems.length === 0) {
       showError('Order must have at least one item.');
@@ -276,7 +282,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
           <DialogDescription>
@@ -292,14 +298,14 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           <div className="space-y-6 py-4">
             {/* Add New Item Section */}
             <div className="space-y-4">
-              <Label className="text-lg font-semibold">Add New Item</Label>
+              <Label className="text-lg font-semibold">Add/Modify Items</Label>
               <div className="flex flex-col gap-4 p-4 border rounded-md bg-muted/50">
                 <div className="w-full">
                   <Label>Product</Label>
                   <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>
-                        {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
+                        {currentProductDisplay}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
@@ -351,7 +357,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
               {/* Current Items Table */}
               {orderItems.length > 0 && (
-                <div className="max-h-[350px] overflow-y-auto border rounded-md">
+                <div className="max-h-[250px] overflow-y-auto border rounded-md">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -360,13 +366,13 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                         <TableHead className="w-32">DP (₹)</TableHead>
                         <TableHead className="w-24">Disc %</TableHead>
                         <TableHead className="text-right">Total</TableHead>
-                        <TableHead className="w-10"></TableHead>
+                        <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {orderItems.map(item => (
                         <TableRow key={item.id}>
-                          <TableCell className="max-w-[150px] truncate font-medium">{item.product_name}</TableCell>
+                          <TableCell className="max-w-[150px] truncate">{item.product_name} ({item.product_code})</TableCell>
                           <TableCell>
                             <Input 
                               type="number" 
@@ -396,7 +402,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                               disabled={isSubmitting}
                             />
                           </TableCell>
-                          <TableCell className="text-right font-bold text-green-600">₹{item.total_price.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
                           <TableCell>
                             <Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting}>
                               <Trash2 className="h-4 w-4 text-destructive" />
