@@ -228,7 +228,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     doc.setFontSize(12);
     doc.text(`TOTAL BILL AMOUNT: Rs. ${orderDetails.total_amount.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
 
-    doc.save(`Gate_Pass_${orderDetails.dispatch_number || orderDetails.order_number}.pdf`);
+    const gatePassNo = orderDetails.dispatch_number || 'NA';
+    const orderNo = orderDetails.order_number || 'NA';
+    const billNo = (orderDetails.bill_no || 'NA').replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `GatePass_${gatePassNo}_Order_${orderNo}_Bill_${billNo}.pdf`;
+    doc.save(fileName);
   };
 
   const handlePrintOrderDetails = () => {
