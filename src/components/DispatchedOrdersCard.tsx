@@ -48,7 +48,7 @@ const DispatchedOrdersCard: React.FC = () => {
   };
 
   // Filter states
-  const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
+  const [filterDispatchNumber, setFilterDispatchNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterDispatchDate, setFilterDispatchDate] = useState<string>('');
 
@@ -91,10 +91,10 @@ const DispatchedOrdersCard: React.FC = () => {
         .not('dispatch_number', 'is', null) 
         .order('dispatch_number', { ascending: false });
 
-      if (filterOrderNumber) {
-        const orderNum = parseInt(filterOrderNumber);
-        if (!isNaN(orderNum)) {
-          query = query.eq('order_number', orderNum);
+      if (filterDispatchNumber) {
+        const dispatchNum = parseInt(filterDispatchNumber);
+        if (!isNaN(dispatchNum)) {
+          query = query.eq('dispatch_number', dispatchNum);
         }
       }
 
@@ -135,7 +135,7 @@ const DispatchedOrdersCard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterOrderNumber, filterDealerId, filterDispatchDate]);
+  }, [filterDispatchNumber, filterDealerId, filterDispatchDate]);
 
   useEffect(() => {
     fetchOrdersAndDealers();
@@ -156,7 +156,7 @@ const DispatchedOrdersCard: React.FC = () => {
   };
 
   const handleClearFilters = () => {
-    setFilterOrderNumber('');
+    setFilterDispatchNumber('');
     setFilterDealerId('');
     setFilterDispatchDate('');
   };
@@ -176,13 +176,13 @@ const DispatchedOrdersCard: React.FC = () => {
       <CardContent className="p-4">
         <div className="flex flex-wrap items-end gap-4 mb-6">
           <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterOrderNumber">Order Number</Label>
+            <Label htmlFor="filterDispatchNumber">Gate Pass / Dispatch No.</Label>
             <Input
-              id="filterOrderNumber"
+              id="filterDispatchNumber"
               type="number"
-              placeholder="Filter by order no."
-              value={filterOrderNumber}
-              onChange={(e) => setFilterOrderNumber(e.target.value)}
+              placeholder="Filter by dispatch no."
+              value={filterDispatchNumber}
+              onChange={(e) => setFilterDispatchNumber(e.target.value)}
               className="w-full"
             />
           </div>
