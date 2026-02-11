@@ -64,22 +64,14 @@ serve(async (req) => {
     if (gst !== undefined) updateData.gst = gst;
     if (dp !== undefined) updateData.dp = Number(dp);
     
-    if (opening_stock !== undefined) {
-      const newOpening = Number(opening_stock);
-      updateData.opening_stock = newOpening;
-      updateData.closing_stock = newOpening + (currentProduct.stock_in || 0) - (currentProduct.stock_out || 0);
-    }
+    // Always recalculate closing stock based on the formula: Opening + In - Out
+    const newOpening = opening_stock !== undefined ? Number(opening_stock) : (currentProduct.opening_stock || 0);
+    updateData.opening_stock = newOpening;
+    updateData.closing_stock = newOpening + (currentProduct.stock_in || 0) - (currentProduct.stock_out || 0);
 
     if (!hasSales) {
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
-    }
-
-    if (Object.keys(updateData).length === 0) {
-      return new Response(JSON.stringify({ message: 'No valid fields provided for update.' }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
     const { data: updatedProduct, error: updateError } = await supabaseAdmin
@@ -94,6 +86,7 @@ serve(async (req) => {
       throw new Error(`Failed to update product: ${updateError.message}`);
     }
 
+    // Handle production alerts based on the new closing stock
     if (updatedProduct.closing_stock < 0) {
       const newRequiredQuantity = Math.abs(updatedProduct.closing_stock);
       const { data: existingAlert } = await supabaseAdmin

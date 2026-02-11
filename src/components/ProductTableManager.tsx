@@ -219,28 +219,33 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((product) => (
-                <TableRow key={product.id} className="hover:bg-accent/50">
-                  <TableCell className="font-medium">{product.code}</TableCell>
-                  <TableCell>{product.name}</TableCell>
-                  <TableCell className="text-right">{product.opening_stock}</TableCell>
-                  <TableCell className="text-right text-green-600">+{product.stock_in}</TableCell>
-                  <TableCell className="text-right text-red-600">-{product.stock_out}</TableCell>
-                  <TableCell className="text-right font-bold">{product.closing_stock}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={product.has_sales}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader><AlertDialogTitle>Delete Product?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-                          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(product.id)}>Delete</AlertDialogAction></AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {products.map((product) => {
+                // Calculate closing stock in UI to ensure it matches the formula: Opening + In - Out
+                const calculatedClosingStock = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+                
+                return (
+                  <TableRow key={product.id} className="hover:bg-accent/50">
+                    <TableCell className="font-medium">{product.code}</TableCell>
+                    <TableCell>{product.name}</TableCell>
+                    <TableCell className="text-right">{product.opening_stock}</TableCell>
+                    <TableCell className="text-right text-green-600">+{product.stock_in}</TableCell>
+                    <TableCell className="text-right text-red-600">-{product.stock_out}</TableCell>
+                    <TableCell className="text-right font-bold">{calculatedClosingStock}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={product.has_sales}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Delete Product?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(product.id)}>Delete</AlertDialogAction></AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -301,7 +306,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
                   </div>
                   <div className="flex justify-between border-t pt-2 font-bold">
                     <span>Current Closing Stock:</span>
-                    <span>{selectedProduct.closing_stock}</span>
+                    <span>{(form.watch('opening_stock') || 0) + selectedProduct.stock_in - selectedProduct.stock_out}</span>
                   </div>
                 </div>
               </form>
