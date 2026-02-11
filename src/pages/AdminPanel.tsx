@@ -12,16 +12,10 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { showSuccess, showError } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useSession } from '@/contexts/SessionContext';
 
-// IMPORTANT: Replace with the actual URL of your deployed Edge Function
-// Format: https://<PROJECT_REF>.supabase.co/functions/v1/create-user
 const CREATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-user";
-
-// The secret key known only to the admin (used for client-side validation in Login.tsx)
-// This is not directly used here, but kept for context if needed for other admin actions.
-const ADMIN_SECRET_KEY = "Param@1313"; 
 
 const formSchema = z.object({
   firstName: z.string().min(1, { message: 'First name is required.' }),
@@ -33,8 +27,9 @@ const formSchema = z.object({
 
 const AdminPanel = () => {
   const navigate = useNavigate();
-  const { isAdmin, loading: sessionLoading } = useSession();
+  const { isAdmin, loading: sessionLoading, session } = useSession();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -48,18 +43,14 @@ const AdminPanel = () => {
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    if (!session) return;
     setIsSubmitting(true);
     try {
       const response = await fetch(CREATE_USER_EDGE_FUNCTION_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // No Authorization header needed here for the Edge Function's internal logic,
-          // as the secret key is passed in the body and validated client-side in Login.tsx.
-          // If this AdminPanel were to create users directly, it would need a secure way
-          // to authenticate with the Edge Function, possibly using a service role key
-          // or an admin-specific JWT. For now, this panel is for *creating* users,
-          // and the user_type is passed directly.
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           email: values.email,
@@ -76,10 +67,9 @@ const AdminPanel = () => {
         throw new Error(data.error || 'Failed to create user');
       }
 
-      showSuccess(`User ${values.email} created successfully as ${values.userType}!`);
+      showSuccess(`User ${values.email} created successfully!`);
       form.reset();
     } catch (error: any) {
-      console.error('Error creating user:', error);
       showError(`Failed to create user: ${error.message}`);
     } finally {
       setIsSubmitting(false);
@@ -121,89 +111,27 @@ const AdminPanel = () => {
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>First Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="John" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Last Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Doe" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder="john.doe@example.com" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input type="password" placeholder="********" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="userType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>User Type</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a user type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="sales_person">Sales Person</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="gate_keeper">Gate Keeper</SelectItem>
-                          <SelectItem value="inventory_manager">Inventory Manager</SelectItem>
-                          <SelectItem value="manager">Manager</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    'Create User'
-                  )}
-                </Button>
+                <FormField control={form.control} name="firstName" render={({ field }) => (<FormItem><FormLabel>First Name</FormLabel><FormControl><Input placeholder="John" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="lastName" render={({ field }) => (<FormItem><FormLabel>Last Name</FormLabel><FormControl><Input placeholder="Doe" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" placeholder="john.doe@example.com" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="password" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input type={showPassword ? "text" : "password"} placeholder="********" {...field} />
+                        <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>
+                          {showPassword ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="userType" render={({ field }) => (
+                  <FormItem><FormLabel>User Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a user type" /></SelectTrigger></FormControl><SelectContent><SelectItem value="sales_person">Sales Person</SelectItem><SelectItem value="admin">Admin</SelectItem><SelectItem value="gate_keeper">Gate Keeper</SelectItem><SelectItem value="inventory_manager">Inventory Manager</SelectItem><SelectItem value="manager">Manager</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                )} />
+                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create User'}</Button>
               </form>
             </Form>
           </CardContent>

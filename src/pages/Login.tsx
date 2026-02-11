@@ -13,9 +13,8 @@ import { showError, showSuccess } from '@/utils/toast';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 
-// IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const RESOLVE_USER_IDENTIFIER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/resolve-user-identifier";
 
 const loginFormSchema = z.object({
@@ -27,6 +26,7 @@ const Login = () => {
   const navigate = useNavigate();
   const { session, loading } = useSession();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const loginForm = useForm<z.infer<typeof loginFormSchema>>({
     resolver: zodResolver(loginFormSchema),
@@ -38,7 +38,6 @@ const Login = () => {
 
   useEffect(() => {
     if (!loading && session) {
-      // This redirect will now go to the root, which then handles role-based redirection
       navigate('/');
     }
   }, [session, loading, navigate]);
@@ -48,21 +47,15 @@ const Login = () => {
     try {
       let emailToLoginWith = values.identifier;
 
-      // If the identifier is not an email, try to resolve it using the Edge Function
       if (!values.identifier.includes('@')) {
         const response = await fetch(RESOLVE_USER_IDENTIFIER_EDGE_FUNCTION_URL, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier: values.identifier }),
         });
 
         const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to resolve user identifier.');
-        }
+        if (!response.ok) throw new Error(data.error || 'Failed to resolve user identifier.');
         emailToLoginWith = data.email;
       }
 
@@ -72,27 +65,20 @@ const Login = () => {
       });
 
       if (error) {
-        // Log login failure
         await supabase.from('login_logs').insert({
-          user_id: (data as any)?.user?.id || '00000000-0000-0000-0000-000000000000', // Use dummy ID if user object is null
+          user_id: (data as any)?.user?.id || '00000000-0000-0000-0000-000000000000',
           success: false,
         });
         throw error;
       }
       
-      // --- LOG SUCCESSFUL LOGIN ---
       if (data.user) {
-        await supabase.from('login_logs').insert({
-          user_id: data.user.id,
-          success: true,
-        });
+        await supabase.from('login_logs').insert({ user_id: data.user.id, success: true });
       }
-      // --- END LOGGING ---
 
       showSuccess('Logged in successfully!');
-      navigate('/'); // Redirect to index which handles role-based redirection
+      navigate('/');
     } catch (error: any) {
-      console.error('Error logging in:', error);
       showError(`Login failed: ${error.message}`);
     } finally {
       setIsSubmitting(false);
@@ -111,51 +97,27 @@ const Login = () => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
       <div className="w-full max-w-md bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md">
-        <h1 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-6">
-          Login
-        </h1>
-        
+        <h1 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-6">Login</h1>
         <Card className="bg-card text-card-foreground shadow-lg border-none">
           <CardContent className="pt-6">
             <Form {...loginForm}>
               <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
-                <FormField
-                  control={loginForm.control}
-                  name="identifier"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email or Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="john.doe@example.com or John Doe" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={loginForm.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input type="password" placeholder="********" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button 
-                  type="submit" 
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    'Sign In'
-                  )}
-                </Button>
+                <FormField control={loginForm.control} name="identifier" render={({ field }) => (<FormItem><FormLabel>Email or Name</FormLabel><FormControl><Input placeholder="john.doe@example.com or John Doe" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={loginForm.control} name="password" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input type={showPassword ? "text" : "password"} placeholder="********" {...field} />
+                        <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>
+                          {showPassword ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Sign In'}</Button>
               </form>
             </Form>
           </CardContent>

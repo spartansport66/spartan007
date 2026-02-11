@@ -8,13 +8,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { userId, email, password, first_name, last_name, user_type, ban_and_unverify, assignedDealerIds, must_reset_password } = await req.json();
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
 
     const supabaseAdmin = createClient(
       // @ts-ignore
@@ -22,6 +25,21 @@ serve(async (req) => {
       // @ts-ignore
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    // Verify the caller is an admin
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user: caller }, error: callerError } = await supabaseAdmin.auth.getUser(token);
+    
+    if (callerError || !caller) {
+      return new Response(JSON.stringify({ error: 'Invalid session' }), { status: 401, headers: corsHeaders });
+    }
+
+    const { data: profile } = await supabaseAdmin.from('profiles').select('user_type').eq('id', caller.id).single();
+    if (profile?.user_type !== 'admin') {
+      return new Response(JSON.stringify({ error: 'Forbidden: Admin access required' }), { status: 403, headers: corsHeaders });
+    }
+
+    const { userId, email, password, first_name, last_name, user_type, ban_and_unverify, assignedDealerIds, must_reset_password } = await req.json();
 
     const userUpdateData: any = {};
     if (email) userUpdateData.email = email;
@@ -56,7 +74,7 @@ serve(async (req) => {
       const { data: currentAssignments, error: fetchError } = await supabaseAdmin.from('dealer_sales_persons').select('dealer_id').eq('sales_person_id', userId);
       if (fetchError) throw new Error(`Fetching assignments failed: ${fetchError.message}`);
       
-      const currentDealerIds = currentAssignments?.map(a => a.dealer_id) || [];
+      const currentDealerIds = currentAssignments?.map((a: any) => a.dealer_id) || [];
       const toAdd = assignedDealerIds.filter((id: string) => !currentDealerIds.includes(id));
       const toRemove = currentDealerIds.filter((id: string) => !assignedDealerIds.includes(id));
 
@@ -68,16 +86,13 @@ serve(async (req) => {
         const { error: removeError } = await supabaseAdmin.from('dealer_sales_persons').delete().eq('sales_person_id', userId).in('dealer_id', toRemove);
         if (removeError) throw new Error(`Unassigning dealers failed: ${removeError.message}`);
       }
-    } else if (user_type !== 'sales_person') {
-      const { error: unassignAllError } = await supabaseAdmin.from('dealer_sales_persons').delete().eq('sales_person_id', userId);
-      if (unassignAllError) throw new Error(`Unassigning all dealers failed: ${unassignAllError.message}`);
     }
 
     return new Response(JSON.stringify({ message: 'User updated successfully', user: authUser }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

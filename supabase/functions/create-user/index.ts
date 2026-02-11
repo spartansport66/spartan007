@@ -11,13 +11,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { email, password, first_name, last_name, user_type } = await req.json();
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
+    }
 
     const supabaseAdmin = createClient(
       // @ts-ignore
@@ -26,10 +29,25 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Verify the caller is an admin
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user: caller }, error: callerError } = await supabaseAdmin.auth.getUser(token);
+    
+    if (callerError || !caller) {
+      return new Response(JSON.stringify({ error: 'Invalid session' }), { status: 401, headers: corsHeaders });
+    }
+
+    const { data: profile } = await supabaseAdmin.from('profiles').select('user_type').eq('id', caller.id).single();
+    if (profile?.user_type !== 'admin') {
+      return new Response(JSON.stringify({ error: 'Forbidden: Admin access required' }), { status: 403, headers: corsHeaders });
+    }
+
+    const { email, password, first_name, last_name, user_type } = await req.json();
+
     const { data: allUsersData, error: listAllUsersError } = await supabaseAdmin.auth.admin.listUsers();
     if (listAllUsersError) throw new Error(`Failed to check for existing user: ${listAllUsersError.message}`);
 
-    const existingUser = allUsersData.users.find(u => u.email === email);
+    const existingUser = allUsersData.users.find((u: any) => u.email === email);
 
     if (existingUser) {
       const { data: updatedUserResponse, error: updateUserError } = await supabaseAdmin.auth.admin.updateUserById(
@@ -54,7 +72,7 @@ serve(async (req) => {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' });
 
-      return new Response(JSON.stringify({ message: `User ${email} reactivated/updated successfully as ${user_type}!`, user: updatedUserResponse.user }), {
+      return new Response(JSON.stringify({ message: `User ${email} reactivated/updated successfully!`, user: updatedUserResponse.user }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -73,7 +91,7 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
