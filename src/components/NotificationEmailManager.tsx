@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Plus, Trash2, Mail, Database, AlertTriangle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, Plus, Trash2, Mail, Database, RotateCcw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -16,6 +17,16 @@ interface NotificationEmail {
   department_name: string;
   email_address: string;
 }
+
+const DEPARTMENTS = [
+  "Accounts",
+  "Manager",
+  "Gate Keeper",
+  "Warehouse / Order Prep",
+  "Sales Head",
+  "Inventory Manager",
+  "General Admin"
+];
 
 const SQL_COMMAND = `
 CREATE TABLE IF NOT EXISTS public.notification_emails (
@@ -71,8 +82,8 @@ const NotificationEmailManager: React.FC = () => {
 
   const handleAddEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDept.trim() || !newEmail.trim()) {
-      showError('Please fill in both department and email.');
+    if (!newDept || !newEmail.trim()) {
+      showError('Please select a department and enter an email.');
       return;
     }
 
@@ -81,7 +92,7 @@ const NotificationEmailManager: React.FC = () => {
       const { error } = await supabase
         .from('notification_emails')
         .insert({
-          department_name: newDept.trim(),
+          department_name: newDept,
           email_address: newEmail.trim().toLowerCase(),
         });
 
@@ -140,13 +151,18 @@ const NotificationEmailManager: React.FC = () => {
         <form onSubmit={handleAddEmail} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end p-4 border rounded-md bg-muted/30">
           <div className="space-y-2">
             <Label htmlFor="dept">Department</Label>
-            <Input 
-              id="dept" 
-              placeholder="e.g., Accounts" 
-              value={newDept} 
-              onChange={(e) => setNewDept(e.target.value)}
-              disabled={isSubmitting}
-            />
+            <Select value={newDept} onValueChange={setNewDept} disabled={isSubmitting}>
+              <SelectTrigger id="dept">
+                <SelectValue placeholder="Select Dept" />
+              </SelectTrigger>
+              <SelectContent>
+                {DEPARTMENTS.map((dept) => (
+                  <SelectItem key={dept} value={dept}>
+                    {dept}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email Address</Label>
@@ -204,7 +220,5 @@ const NotificationEmailManager: React.FC = () => {
     </Card>
   );
 };
-
-import { RotateCcw } from 'lucide-react';
 
 export default NotificationEmailManager;
