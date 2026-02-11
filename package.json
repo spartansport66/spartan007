@@ -1,14 +1,16 @@
 {
-  "name": "vite_react_shadcn_ts",
-  "private": true,
+  "name": "spartan",
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "approve": "node scripts/run-approve.js",
+    "prepare": "npx husky install .husky"
   },
   "dependencies": {
     "@capacitor/android": "7.4.4",
@@ -49,7 +51,6 @@
     "@supabase/supabase-js": "^2.89.0",
     "@tanstack/react-query": "^5.56.2",
     "@types/file-saver": "^2.0.7",
-    "@types/xlsx": "^0.0.36",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
@@ -92,6 +93,7 @@
     "tailwindcss": "^3.4.11",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
-    "vite": "^6.3.4"
+    "vite": "^6.3.4",
+    "husky": "^8.0.0"
   }
 }
