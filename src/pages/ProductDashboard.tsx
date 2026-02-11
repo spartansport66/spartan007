@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { LogOut, Boxes, Package, FileUp, PlusCircle, Loader2, Menu, Lock, ShoppingCart } from 'lucide-react';
+import { LogOut, Boxes, Package, FileUp, PlusCircle, Loader2, Menu, Lock, ShoppingCart, Scale } from 'lucide-react';
 import LowStockProductsCard from '@/components/LowStockProductsCard';
 import ProductTableManager from '@/components/ProductTableManager';
 import { useSession } from '@/contexts/SessionContext';
@@ -98,6 +98,12 @@ const ProductDashboard = () => {
               >
                 <Package className="h-4 w-4" /> Record Stock Receipt
               </Button>
+              <Button
+                onClick={() => navigate('/stock-adjustment')}
+                className="w-full justify-start gap-2 bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                <Scale className="h-4 w-4" /> Manual Adjustment
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -123,7 +129,7 @@ const ProductDashboard = () => {
       </div>
 
       {/* Quick Actions / Low Stock */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {/* Add New Product Card */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
@@ -159,6 +165,19 @@ const ProductDashboard = () => {
           <CardContent className="p-4 flex-grow flex items-center justify-center">
             <Button onClick={() => navigate('/stock-receipts')} className="w-full bg-purple-600 hover:bg-purple-700 text-white">
               <Package className="h-5 w-5 mr-2" /> Record Receipt
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Manual Stock Adjustment Card */}
+        <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
+          <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold">Manual Adjustment</CardTitle>
+            <CardDescription className="text-blue-100 dark:text-blue-200">Correct stock levels manually.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 flex-grow flex items-center justify-center">
+            <Button onClick={() => navigate('/stock-adjustment')} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+              <Scale className="h-5 w-5 mr-2" /> Adjust Stock
             </Button>
           </CardContent>
         </Card>

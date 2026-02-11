@@ -20,12 +20,13 @@ import SheetConverterPage from "./pages/SheetConverterPage";
 import ForcePasswordReset from "./pages/ForcePasswordReset";
 import DailyVisitReport from "./pages/DailyVisitReport";
 import StockReceipts from "./pages/StockReceipts";
+import StockAdjustment from "./pages/StockAdjustment"; // New Import
 import ChangePassword from "./pages/ChangePassword";
 import GatePassDashboard from "./pages/GatePassDashboard";
 import ProductDashboard from "./pages/ProductDashboard";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import ManagerDashboard from "./pages/ManagerDashboard";
-import PurchaseDashboard from "./pages/PurchaseDashboard"; // New Import
+import PurchaseDashboard from "./pages/PurchaseDashboard";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -55,9 +56,10 @@ const AppContent = () => {
       <Route path="/force-password-reset" element={<ForcePasswordReset />} />
       <Route path="/daily-visit-report" element={<DailyVisitReport />} />
       <Route path="/stock-receipts" element={<StockReceipts />} />
+      <Route path="/stock-adjustment" element={<StockAdjustment />} /> {/* New Route */}
       <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/gate-pass-dashboard" element={<GatePassDashboard />} />
-      <Route path="/purchase-dashboard" element={<PurchaseDashboard />} /> {/* New Route */}
+      <Route path="/purchase-dashboard" element={<PurchaseDashboard />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>
