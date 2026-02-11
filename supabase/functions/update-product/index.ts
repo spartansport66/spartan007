@@ -1,21 +1,26 @@
 // @ts-ignore
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 // @ts-ignore
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+}
 
-serve(async (req: Request) => {
+// @ts-ignore
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
     const { productId, name, description, opening_stock, code, size, hsn, gst, dp } = await req.json();
+    
+    console.log(`[update-product] Updating product: ${productId}`);
+
     if (!productId) {
+      console.error("[update-product] Product ID is missing");
       return new Response(JSON.stringify({ error: 'Product ID is required.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -29,25 +34,30 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Fetch current product data to calculate new closing stock
     const { data: currentProduct, error: fetchError } = await supabaseAdmin
       .from('products')
       .select('*')
       .eq('id', productId)
       .single();
     
-    if (fetchError) throw new Error(`Failed to fetch product: ${fetchError.message}`);
+    if (fetchError) {
+      console.error("[update-product] Error fetching current product:", fetchError);
+      throw new Error(`Failed to fetch product: ${fetchError.message}`);
+    }
 
     const { count: salesCount, error: salesCountError } = await supabaseAdmin
       .from('sales')
       .select('id', { count: 'exact', head: true })
       .eq('product_id', productId);
-    if (salesCountError) throw new Error(`Failed to check product sales: ${salesCountError.message}`);
+    
+    if (salesCountError) {
+      console.error("[update-product] Error checking sales:", salesCountError);
+      throw new Error(`Failed to check product sales: ${salesCountError.message}`);
+    }
 
     const hasSales = (salesCount || 0) > 0;
     const updateData: any = {};
 
-    // Common fields
     if (code !== undefined) updateData.code = code;
     if (size !== undefined) updateData.size = size;
     if (hsn !== undefined) updateData.hsn = hsn;
@@ -57,11 +67,9 @@ serve(async (req: Request) => {
     if (opening_stock !== undefined) {
       const newOpening = Number(opening_stock);
       updateData.opening_stock = newOpening;
-      // Recalculate closing stock: Opening + In - Out
       updateData.closing_stock = newOpening + (currentProduct.stock_in || 0) - (currentProduct.stock_out || 0);
     }
 
-    // Fields only editable if no sales exist
     if (!hasSales) {
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
@@ -80,12 +88,21 @@ serve(async (req: Request) => {
       .eq('id', productId)
       .select()
       .single();
-    if (updateError) throw new Error(`Failed to update product: ${updateError.message}`);
 
-    // Handle production alerts based on new closing stock
+    if (updateError) {
+      console.error("[update-product] Error updating product:", updateError);
+      throw new Error(`Failed to update product: ${updateError.message}`);
+    }
+
     if (updatedProduct.closing_stock < 0) {
       const newRequiredQuantity = Math.abs(updatedProduct.closing_stock);
-      const { data: existingAlert } = await supabaseAdmin.from('production_alerts').select('id').eq('product_id', productId).eq('resolved', false).single();
+      const { data: existingAlert } = await supabaseAdmin
+        .from('production_alerts')
+        .select('id')
+        .eq('product_id', productId)
+        .eq('resolved', false)
+        .maybeSingle();
+
       if (existingAlert) {
         await supabaseAdmin.from('production_alerts').update({ required_quantity: newRequiredQuantity, created_at: new Date().toISOString() }).eq('id', existingAlert.id);
       } else {
@@ -95,14 +112,17 @@ serve(async (req: Request) => {
       await supabaseAdmin.from('production_alerts').update({ resolved: true }).eq('product_id', productId).eq('resolved', false);
     }
 
+    console.log(`[update-product] Successfully updated product: ${productId}`);
+
     return new Response(JSON.stringify({ message: 'Product updated successfully', product: updatedProduct }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
+    console.error("[update-product] Unexpected error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+})
