@@ -13,10 +13,14 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  const functionName = "send-order-notification";
+
   try {
     const { orderId } = await req.json();
+    console.log(`[${functionName}] Processing order:`, orderId);
 
     if (!orderId) {
+      console.error(`[${functionName}] Error: Order ID is missing`);
       return new Response(JSON.stringify({ error: 'Order ID is required.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -44,7 +48,10 @@ serve(async (req: Request) => {
       .eq('id', orderId)
       .single();
 
-    if (orderError || !order) throw new Error('Failed to fetch order details for email.');
+    if (orderError || !order) {
+      console.error(`[${functionName}] Error fetching order:`, orderError);
+      throw new Error('Failed to fetch order details for email.');
+    }
 
     const salespersonName = `${order.profiles.first_name} ${order.profiles.last_name}`.trim();
     const dealerName = order.dealers.name;
@@ -52,24 +59,45 @@ serve(async (req: Request) => {
     // 2. Fetch Notification Email List
     const { data: notificationEmails, error: emailError } = await supabaseAdmin
       .from('notification_emails')
-      .select('email_address, department_name');
+      .select('email_address');
 
-    if (emailError) throw new Error('Failed to fetch notification email list.');
+    if (emailError) {
+      console.error(`[${functionName}] Error fetching notification list:`, emailError);
+      throw new Error('Failed to fetch notification email list.');
+    }
 
     const recipientSet = new Set<string>();
-    (notificationEmails || []).forEach((e: any) => recipientSet.add(e.email_address));
-    if (order.dealers?.email) recipientSet.add(order.dealers.email);
+    (notificationEmails || []).forEach((e: any) => {
+      if (e.email_address) recipientSet.add(e.email_address.trim().toLowerCase());
+    });
+    
+    if (order.dealers?.email) {
+      recipientSet.add(order.dealers.email.trim().toLowerCase());
+    }
 
     const recipientEmails = Array.from(recipientSet);
+    console.log(`[${functionName}] Found ${recipientEmails.length} recipients:`, recipientEmails);
 
     if (recipientEmails.length === 0) {
-      return new Response(JSON.stringify({ message: 'No recipients found.' }), {
+      console.warn(`[${functionName}] No recipients found. Skipping email.`);
+      return new Response(JSON.stringify({ message: 'No recipients found. Please add emails in Notification Settings.' }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // 3. Construct Email
+    // 3. Check API Key
+    // @ts-ignore
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    if (!resendApiKey) {
+      console.error(`[${functionName}] CRITICAL: RESEND_API_KEY is not set in Supabase Secrets.`);
+      return new Response(JSON.stringify({ error: 'Email service API key is missing in Supabase secrets.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 4. Construct Email
     const emailSubject = `New Order: #${order.order_number} - ${salespersonName} - ${dealerName}`;
     const itemsList = (order.sales || []).map((s: any) => 
       `<li><strong>${s.products.name} (${s.products.code})</strong>: ${s.quantity} units (₹${s.total_price.toFixed(2)})</li>`
@@ -90,18 +118,8 @@ serve(async (req: Request) => {
       <p><small>This is an automated notification sent to configured departments.</small></p>
     `;
 
-    // 4. Send via Resend API
-    // @ts-ignore
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    
-    if (!resendApiKey) {
-      console.error("[send-order-notification] RESEND_API_KEY not set in Supabase Secrets.");
-      return new Response(JSON.stringify({ error: 'Email service not configured.' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
+    // 5. Send via Resend API
+    console.log(`[${functionName}] Sending request to Resend API...`);
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -109,7 +127,7 @@ serve(async (req: Request) => {
         'Authorization': `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from: 'Orders <onboarding@resend.dev>', // Replace with your verified domain later
+        from: 'Orders <onboarding@resend.dev>',
         to: recipientEmails,
         subject: emailSubject,
         html: htmlContent,
@@ -117,7 +135,11 @@ serve(async (req: Request) => {
     });
 
     const resData = await res.json();
-    console.log("[send-order-notification] Resend Response:", resData);
+    console.log(`[${functionName}] Resend API Response:`, resData);
+
+    if (!res.ok) {
+      throw new Error(resData.message || 'Resend API returned an error');
+    }
 
     return new Response(JSON.stringify({ message: 'Email sent successfully', data: resData }), {
       status: 200,
@@ -125,7 +147,7 @@ serve(async (req: Request) => {
     });
 
   } catch (error: any) {
-    console.error("[send-order-notification] Error:", error.message);
+    console.error(`[${functionName}] Final Catch Error:`, error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
