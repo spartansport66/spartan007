@@ -13,9 +13,12 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  const functionName = "update-user";
+
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.error(`[${functionName}] Unauthorized: No auth header`);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
 
@@ -31,23 +34,47 @@ serve(async (req: Request) => {
     const { data: { user: caller }, error: callerError } = await supabaseAdmin.auth.getUser(token);
     
     if (callerError || !caller) {
+      console.error(`[${functionName}] Invalid session:`, callerError);
       return new Response(JSON.stringify({ error: 'Invalid session' }), { status: 401, headers: corsHeaders });
     }
 
-    const { data: profile } = await supabaseAdmin.from('profiles').select('user_type').eq('id', caller.id).single();
-    if (profile?.user_type !== 'admin') {
+    const { data: profile, error: profileFetchError } = await supabaseAdmin
+      .from('profiles')
+      .select('user_type')
+      .eq('id', caller.id)
+      .single();
+
+    if (profileFetchError || profile?.user_type !== 'admin') {
+      console.error(`[${functionName}] Forbidden: User is not an admin`, profileFetchError);
       return new Response(JSON.stringify({ error: 'Forbidden: Admin access required' }), { status: 403, headers: corsHeaders });
     }
 
     const { userId, email, password, first_name, last_name, user_type, ban_and_unverify, assignedDealerIds, must_reset_password } = await req.json();
 
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'User ID is required' }), { status: 400, headers: corsHeaders });
+    }
+
+    console.log(`[${functionName}] Updating user: ${userId}`, { email, user_type, ban_and_unverify });
+
     const userUpdateData: any = {};
     if (email) userUpdateData.email = email;
     if (password) userUpdateData.password = password;
-    if (typeof ban_and_unverify === 'boolean') userUpdateData.ban_and_unverify = ban_and_unverify;
+    
+    // Use ban_duration instead of ban_and_unverify for API updates
+    if (typeof ban_and_unverify === 'boolean') {
+      userUpdateData.ban_duration = ban_and_unverify ? '87600h' : 'none'; // 10 years or none
+    }
 
-    const currentUserMetadata = (await supabaseAdmin.auth.admin.getUserById(userId)).data?.user?.user_metadata || {};
+    // Fetch current user to preserve metadata
+    const { data: userData, error: userFetchError } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (userFetchError) {
+      throw new Error(`Failed to fetch user: ${userFetchError.message}`);
+    }
+
+    const currentUserMetadata = userData?.user?.user_metadata || {};
     userUpdateData.user_metadata = { ...currentUserMetadata };
+    
     if (first_name !== undefined) userUpdateData.user_metadata.first_name = first_name;
     if (last_name !== undefined) userUpdateData.user_metadata.last_name = last_name;
     if (user_type !== undefined) {
@@ -56,8 +83,12 @@ serve(async (req: Request) => {
     }
 
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.updateUserById(userId, userUpdateData);
-    if (authError) throw new Error(`Auth update failed: ${authError.message}`);
+    if (authError) {
+      console.error(`[${functionName}] Auth update failed:`, authError);
+      throw new Error(`Auth update failed: ${authError.message}`);
+    }
 
+    // Update public.profiles table
     const profileUpdateData: any = { updated_at: new Date().toISOString() };
     if (first_name !== undefined) profileUpdateData.first_name = first_name;
     if (last_name !== undefined) profileUpdateData.last_name = last_name;
@@ -67,23 +98,41 @@ serve(async (req: Request) => {
     }
     if (must_reset_password !== undefined) profileUpdateData.must_reset_password = must_reset_password;
 
-    const { error: profileError } = await supabaseAdmin.from('profiles').update(profileUpdateData).eq('id', userId);
-    if (profileError) throw new Error(`Profile update failed: ${profileError.message}`);
+    const { error: profileUpdateError } = await supabaseAdmin
+      .from('profiles')
+      .update(profileUpdateData)
+      .eq('id', userId);
 
+    if (profileUpdateError) {
+      console.error(`[${functionName}] Profile update failed:`, profileUpdateError);
+      throw new Error(`Profile update failed: ${profileUpdateError.message}`);
+    }
+
+    // Handle dealer assignments if applicable
     if (user_type === 'sales_person' && Array.isArray(assignedDealerIds)) {
-      const { data: currentAssignments, error: fetchError } = await supabaseAdmin.from('dealer_sales_persons').select('dealer_id').eq('sales_person_id', userId);
-      if (fetchError) throw new Error(`Fetching assignments failed: ${fetchError.message}`);
+      const { data: currentAssignments, error: fetchAssignError } = await supabaseAdmin
+        .from('dealer_sales_persons')
+        .select('dealer_id')
+        .eq('sales_person_id', userId);
+
+      if (fetchAssignError) throw new Error(`Fetching assignments failed: ${fetchAssignError.message}`);
       
       const currentDealerIds = currentAssignments?.map((a: any) => a.dealer_id) || [];
       const toAdd = assignedDealerIds.filter((id: string) => !currentDealerIds.includes(id));
       const toRemove = currentDealerIds.filter((id: string) => !assignedDealerIds.includes(id));
 
       if (toAdd.length > 0) {
-        const { error: addError } = await supabaseAdmin.from('dealer_sales_persons').insert(toAdd.map((dealerId: string) => ({ dealer_id: dealerId, sales_person_id: userId })));
+        const { error: addError } = await supabaseAdmin
+          .from('dealer_sales_persons')
+          .insert(toAdd.map((dealerId: string) => ({ dealer_id: dealerId, sales_person_id: userId })));
         if (addError) throw new Error(`Assigning dealers failed: ${addError.message}`);
       }
       if (toRemove.length > 0) {
-        const { error: removeError } = await supabaseAdmin.from('dealer_sales_persons').delete().eq('sales_person_id', userId).in('dealer_id', toRemove);
+        const { error: removeError } = await supabaseAdmin
+          .from('dealer_sales_persons')
+          .delete()
+          .eq('sales_person_id', userId)
+          .in('dealer_id', toRemove);
         if (removeError) throw new Error(`Unassigning dealers failed: ${removeError.message}`);
       }
     }
@@ -93,6 +142,7 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
+    console.error(`[${functionName}] Unexpected error:`, error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
