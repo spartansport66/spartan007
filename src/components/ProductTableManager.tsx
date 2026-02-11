@@ -37,6 +37,9 @@ import * as z from 'zod';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
+// IMPORTANT: Replace with the actual URL of your deployed Edge Function
+const UPDATE_PRODUCT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/update-product";
+
 interface Product {
   id: string;
   code: string;
@@ -66,7 +69,7 @@ const formSchema = z.object({
 });
 
 const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onProductAction }) => {
-  const { user, loading: sessionLoading, userType } = useSession();
+  const { user, session, loading: sessionLoading, userType } = useSession();
   const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -75,6 +78,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [appliedSearchTerm, setAppliedSearchTerm] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -136,24 +140,36 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   };
 
   const handleUpdateProduct = async (values: z.infer<typeof formSchema>) => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || !session) return;
+    setIsSubmitting(true);
     try {
-      const { error } = await supabase
-        .from('products')
-        .update({
+      const response = await fetch(UPDATE_PRODUCT_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          productId: selectedProduct.id,
           ...values,
-          closing_stock: values.opening_stock + selectedProduct.stock_in - selectedProduct.stock_out
-        })
-        .eq('id', selectedProduct.id);
+        }),
+      });
 
-      if (error) throw error;
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update product');
+      }
       
       showSuccess('Product updated successfully!');
       setIsEditDialogOpen(false);
       fetchProducts();
       onProductAction?.();
     } catch (error: any) {
+      console.error('Error updating product:', error);
       showError(`Failed to update product: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -241,35 +257,35 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
               <form onSubmit={form.handleSubmit(handleUpdateProduct)} className="space-y-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="code" className="text-right">Code</Label>
-                  <Input id="code" {...form.register('code')} className="col-span-3" />
+                  <Input id="code" {...form.register('code')} className="col-span-3" disabled={isSubmitting} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="name" className="text-right">Name</Label>
-                  <Input id="name" {...form.register('name')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                  <Input id="name" {...form.register('name')} className="col-span-3" disabled={selectedProduct.has_sales || isSubmitting} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="description" className="text-right">Description</Label>
-                  <Textarea id="description" {...form.register('description')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                  <Textarea id="description" {...form.register('description')} className="col-span-3" disabled={selectedProduct.has_sales || isSubmitting} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="size" className="text-right">Size</Label>
-                  <Input id="size" {...form.register('size')} className="col-span-3" />
+                  <Input id="size" {...form.register('size')} className="col-span-3" disabled={isSubmitting} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="hsn" className="text-right">HSN</Label>
-                  <Input id="hsn" {...form.register('hsn')} className="col-span-3" />
+                  <Input id="hsn" {...form.register('hsn')} className="col-span-3" disabled={isSubmitting} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="gst" className="text-right">GST (%)</Label>
-                  <Input id="gst" {...form.register('gst')} className="col-span-3" />
+                  <Input id="gst" {...form.register('gst')} className="col-span-3" disabled={isSubmitting} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="dp" className="text-right">DP (₹)</Label>
-                  <Input id="dp" type="number" step="0.01" {...form.register('dp')} className="col-span-3" />
+                  <Input id="dp" type="number" step="0.01" {...form.register('dp')} className="col-span-3" disabled={isSubmitting} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="opening_stock" className="text-right">Opening Stock</Label>
-                  <Input id="opening_stock" type="number" {...form.register('opening_stock')} className="col-span-3" />
+                  <Input id="opening_stock" type="number" {...form.register('opening_stock')} className="col-span-3" disabled={isSubmitting} />
                 </div>
                 
                 <Separator />
@@ -291,8 +307,10 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
               </form>
             </ScrollArea>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
-              <Button type="submit" onClick={form.handleSubmit(handleUpdateProduct)}>Save changes</Button>
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} disabled={isSubmitting}>Cancel</Button>
+              <Button type="submit" onClick={form.handleSubmit(handleUpdateProduct)} disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save changes'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
