@@ -3,16 +3,17 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, Loader2, Package } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { showError } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
 import StockReceiptForm from '@/components/StockReceiptForm';
+import StockInHistoryTable from '@/components/StockInHistoryTable';
 
 const StockReceipts = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, userType } = useSession();
   const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
-  const [refreshKey, setRefreshKey] = useState(0); // Key to force re-fetch in related components
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!sessionLoading && !user) {
@@ -24,7 +25,7 @@ const StockReceipts = () => {
   }, [sessionLoading, user, isAuthorized, navigate]);
 
   const handleReceiptRecorded = () => {
-    setRefreshKey(prev => prev + 1); // Trigger refresh in related components (like LowStockProductsCard)
+    setRefreshKey(prev => prev + 1); // Trigger refresh in the history table
   };
 
   if (sessionLoading) {
@@ -42,7 +43,7 @@ const StockReceipts = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
-      <div className="w-full max-w-md sm:max-w-lg">
+      <div className="w-full max-w-4xl">
         <Button 
           variant="outline" 
           onClick={() => navigate(userType === 'admin' ? '/product-management-console' : '/product-dashboard')} 
@@ -52,9 +53,10 @@ const StockReceipts = () => {
           Back to Product Console
         </Button>
         
-        <StockReceiptForm key={refreshKey} onReceiptRecorded={handleReceiptRecorded} />
-        
-        {/* Optionally, add a table of recent receipts here */}
+        <div className="grid grid-cols-1 gap-6">
+          <StockReceiptForm onReceiptRecorded={handleReceiptRecorded} />
+          <StockInHistoryTable key={refreshKey} />
+        </div>
       </div>
       <MadeWithDyad />
     </div>
