@@ -291,7 +291,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
       await supabase.from('dealers').update({ last_billing_date: newOrder.order_date }).eq('id', selectedDealer);
       
-      // 2. Insert Sales Items and Update Stock via RPC
+      // 2. Insert Sales Items (Database triggers will handle stock updates)
       const salesWithOrderId = orderItems.map(item => ({
         order_id: newOrder.id,
         product_id: item.product_id,
@@ -301,52 +301,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       
       const { error: salesInsertError } = await supabase.from('sales').insert(salesWithOrderId);
       if (salesInsertError) throw salesInsertError;
-
-      // Stock Update Loop using RPC to bypass RLS restrictions
-      for (const item of orderItems) {
-        const { error: stockError } = await supabase.rpc('decrement_stock', {
-          product_id_in: item.product_id,
-          quantity_in: item.quantity
-        });
-        
-        if (stockError) {
-          console.error(`Failed to decrement stock for ${item.product_name}:`, stockError.message);
-        }
-
-        // Check for production alerts
-        const { data: productData } = await supabase
-          .from('products')
-          .select('closing_stock')
-          .eq('id', item.product_id)
-          .single();
-        
-        if (productData && productData.closing_stock < 0) {
-          const requiredQty = Math.abs(productData.closing_stock);
-          const { data: existingAlert } = await supabase
-            .from('production_alerts')
-            .select('id')
-            .eq('product_id', item.product_id)
-            .eq('resolved', false)
-            .single();
-          
-          if (existingAlert) {
-            await supabase
-              .from('production_alerts')
-              .update({ required_quantity: requiredQty, created_at: new Date().toISOString() })
-              .eq('id', existingAlert.id);
-          } else {
-            await supabase
-              .from('production_alerts')
-              .insert({
-                product_id: item.product_id,
-                required_quantity: requiredQty,
-                resolved: false,
-                created_by: user.id,
-                dealer_id: selectedDealer
-              });
-          }
-        }
-      }
 
       // 3. Record Payment
       const paymentData = {

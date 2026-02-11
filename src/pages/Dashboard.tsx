@@ -284,36 +284,13 @@ const Dashboard = () => {
   const handleDeleteOrder = async (order: OrderDisplay) => {
     setLoadingOrders(true);
     try {
-      // 1. Restore stock levels using RPC to bypass RLS restrictions
-      for (const item of order.items) {
-        const { error: stockError } = await supabase.rpc('revert_stock_out', {
-          product_id_in: item.product_id,
-          quantity_in: item.quantity
-        });
-        
-        if (stockError) {
-          console.error(`Failed to revert stock for ${item.product_name}:`, stockError.message);
-        }
-
-        // Check if stock is now positive to resolve alerts
-        const { data: productData } = await supabase
-          .from('products')
-          .select('closing_stock')
-          .eq('id', item.product_id)
-          .single();
-        
-        if (productData && productData.closing_stock >= 0) {
-          await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', item.product_id).eq('resolved', false);
-        }
-      }
-
-      // 2. Remove associated payments
+      // 1. Remove associated payments
       await supabase.from('payments').delete().eq('order_id', order.id);
 
-      // 3. Remove associated sales items
+      // 2. Remove associated sales items (Database triggers will handle stock restoration)
       await supabase.from('sales').delete().eq('order_id', order.id);
 
-      // 4. Delete the order
+      // 3. Delete the order
       const { error: deleteError } = await supabase.from('orders').delete().eq('id', order.id);
       if (deleteError) throw deleteError;
 
@@ -472,7 +449,7 @@ const Dashboard = () => {
       </Card>
       <MadeWithDyad />
       <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} />
-      <EditOrderDialog orderId={selectedOrderIdForEdit} isOpen={isEditOrderDialogOpen} onOpenChange={setIsEditOrderDialogOpen} onOrderUpdated={handleOrderUpdated} />
+      <EditOrderDialog orderId={selectedOrderIdForEdit} isOpen={isEditOrderDialogOpen} onOrderUpdated={handleOrderUpdated} onOpenChange={setIsEditOrderDialogOpen} />
       <SalesPersonSalesReport isOpen={isSalesPersonSalesReportOpen} onOpenChange={setIsSalesPersonSalesReportOpen} />
       <SalesPersonDealerReport isOpen={isSalesPersonDealerReportOpen} onOpenChange={setIsSalesPersonDealerReportOpen} />
       <SalesPersonPaymentsReport isOpen={isSalesPersonPaymentsReportOpen} onOpenChange={setIsSalesPersonPaymentsReportOpen} />

@@ -50,7 +50,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [originalOrderItems, setOriginalOrderItems] = useState<OrderItem[]>([]); // Track original items for stock adjustment
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [orderData, setOrderData] = useState<OrderToEdit | null>(null);
 
@@ -90,7 +89,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         items: fetchedItems,
       });
       setOrderItems(fetchedItems);
-      setOriginalOrderItems(JSON.parse(JSON.stringify(fetchedItems))); // Deep copy for comparison
       setDiscountAmount(orderRaw.discount_amount || 0);
 
       // 2. Fetch all products
@@ -117,7 +115,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     } else if (!isOpen) {
       setOrderData(null);
       setOrderItems([]);
-      setOriginalOrderItems([]);
       setDiscountAmount(0);
     }
   }, [isOpen, orderId, fetchOrderAndProducts]);
@@ -201,50 +198,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     setIsSubmitting(true);
 
     try {
-      // --- 1. Restore Stock for Original Items using RPC ---
-      for (const item of originalOrderItems) {
-        await supabase.rpc('revert_stock_out', {
-          product_id_in: item.product_id,
-          quantity_in: item.quantity
-        });
-      }
-
-      // --- 2. Subtract Stock for New Items using RPC ---
-      for (const item of orderItems) {
-        await supabase.rpc('decrement_stock', {
-          product_id_in: item.product_id,
-          quantity_in: item.quantity
-        });
-        
-        // Handle production alerts
-        const { data: productData } = await supabase
-          .from('products')
-          .select('closing_stock')
-          .eq('id', item.product_id)
-          .single();
-        
-        if (productData) {
-          if (productData.closing_stock < 0) {
-            const requiredQty = Math.abs(productData.closing_stock);
-            const { data: existingAlert } = await supabase
-              .from('production_alerts')
-              .select('id')
-              .eq('product_id', item.product_id)
-              .eq('resolved', false)
-              .single();
-            
-            if (existingAlert) {
-              await supabase.from('production_alerts').update({ required_quantity: requiredQty, created_at: new Date().toISOString() }).eq('id', existingAlert.id);
-            } else {
-              await supabase.from('production_alerts').insert({ product_id: item.product_id, required_quantity: requiredQty, resolved: false });
-            }
-          } else {
-            await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', item.product_id).eq('resolved', false);
-          }
-        }
-      }
-
-      // 3. Update the main order record
+      // 1. Update the main order record
       const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
       const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
 
@@ -258,7 +212,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
       if (orderUpdateError) throw orderUpdateError;
 
-      // 4. Update sales items
+      // 2. Update sales items (Database triggers will handle stock restoration and subtraction)
       await supabase.from('sales').delete().eq('order_id', orderData.id);
       const salesToInsert = orderItems.map(item => ({
         order_id: orderData.id,
