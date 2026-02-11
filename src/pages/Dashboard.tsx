@@ -1,9 +1,9 @@
 "use client";
 import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, Search, Eye, FileText, Lock, Edit, PlusCircle, Trash2 } from 'lucide-react';
@@ -284,7 +284,7 @@ const Dashboard = () => {
   const handleDeleteOrder = async (order: OrderDisplay) => {
     setLoadingOrders(true);
     try {
-      // 1. Manually restore stock levels
+      // 1. Manually restore stock levels for all items in the order
       for (const item of order.items) {
         const { data: productData, error: productFetchError } = await supabase
           .from('products')
@@ -295,49 +295,34 @@ const Dashboard = () => {
         if (!productFetchError && productData) {
           const restoredStock = productData.stock + item.quantity;
           await supabase.from('products').update({ stock: restoredStock }).eq('id', item.product_id);
+          
+          // If stock is now positive, resolve any pending production alerts
           if (restoredStock >= 0) {
             await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', item.product_id).eq('resolved', false);
           }
         }
       }
 
-      // 2. FIRST: Remove associated payments
-      // We fetch IDs first to ensure RLS doesn't block the filter-based delete
-      const { data: paymentsToDelete, error: fetchPaymentsError } = await supabase
+      // 2. FIRST: Remove associated payments to satisfy foreign key constraint
+      const { error: paymentDeleteError } = await supabase
         .from('payments')
-        .select('id')
+        .delete()
         .eq('order_id', order.id);
-      
-      if (fetchPaymentsError) throw fetchPaymentsError;
 
-      if (paymentsToDelete && paymentsToDelete.length > 0) {
-        const { error: paymentDeleteError } = await supabase
-          .from('payments')
-          .delete()
-          .in('id', paymentsToDelete.map(p => p.id));
-
-        if (paymentDeleteError) {
-          throw new Error(`Failed to delete associated payments: ${paymentDeleteError.message}. You may need to update database permissions.`);
-        }
+      if (paymentDeleteError) {
+        console.error('Error deleting associated payments:', paymentDeleteError);
+        throw new Error(`Failed to delete associated payments: ${paymentDeleteError.message}`);
       }
 
       // 3. SECOND: Remove associated sales items
-      const { data: salesToDelete, error: fetchSalesError } = await supabase
+      const { error: salesDeleteError } = await supabase
         .from('sales')
-        .select('id')
+        .delete()
         .eq('order_id', order.id);
-      
-      if (fetchSalesError) throw fetchSalesError;
-
-      if (salesToDelete && salesToDelete.length > 0) {
-        const { error: salesDeleteError } = await supabase
-          .from('sales')
-          .delete()
-          .in('id', salesToDelete.map(s => s.id));
-          
-        if (salesDeleteError) {
-          throw new Error(`Failed to delete associated sales items: ${salesDeleteError.message}`);
-        }
+        
+      if (salesDeleteError) {
+        console.error('Error deleting associated sales:', salesDeleteError);
+        throw new Error(`Failed to delete associated sales items: ${salesDeleteError.message}`);
       }
 
       // 4. FINALLY: Delete the order
@@ -350,6 +335,7 @@ const Dashboard = () => {
 
       showSuccess(`Order #${order.order_number} deleted and stock restored.`);
       fetchRecentOrders();
+      handleRefreshData(); // Refresh other cards (performance, etc.)
     } catch (error: any) {
       console.error('Error deleting order:', error);
       showError(`Failed to delete order: ${error.message}`);

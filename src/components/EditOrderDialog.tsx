@@ -50,6 +50,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [originalOrderItems, setOriginalOrderItems] = useState<OrderItem[]>([]); // Track original items for stock adjustment
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [orderData, setOrderData] = useState<OrderToEdit | null>(null);
 
@@ -89,6 +90,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         items: fetchedItems,
       });
       setOrderItems(fetchedItems);
+      setOriginalOrderItems(JSON.parse(JSON.stringify(fetchedItems))); // Deep copy for comparison
       setDiscountAmount(orderRaw.discount_amount || 0);
 
       // 2. Fetch all products
@@ -115,6 +117,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     } else if (!isOpen) {
       setOrderData(null);
       setOrderItems([]);
+      setOriginalOrderItems([]);
       setDiscountAmount(0);
     }
   }, [isOpen, orderId, fetchOrderAndProducts]);
@@ -154,20 +157,15 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         let updatedItem = { ...item };
         
         if (field === 'quantity') {
-          // Ensure quantity is stored as a number (integer)
           updatedItem.quantity = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : value);
         } else if (field === 'product_id') {
-          // Ensure product_id is stored as a string (UUID)
           updatedItem.product_id = String(value);
         } else {
-          // For other fields (like total_price, which is calculated), assign directly
           updatedItem = { ...item, [field]: value };
         }
 
-        // Recalculate total_price if quantity or product_id changed
         if (field === 'quantity' || field === 'product_id') {
           const product = products.find(p => p.id === updatedItem.product_id);
-          // Use the now guaranteed number type for quantity
           updatedItem.total_price = product ? updatedItem.quantity * product.dp : 0;
         }
         return updatedItem;
@@ -199,60 +197,87 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       showError('Invalid discount amount.');
       return;
     }
-    if (orderItems.length === 0) {
-        showError('Order must contain at least one item.');
-        return;
-    }
 
     setIsSubmitting(true);
 
     try {
-      // 1. Calculate final amounts
+      // --- 1. Restore Stock for Original Items ---
+      for (const item of originalOrderItems) {
+        const { data: productData } = await supabase
+          .from('products')
+          .select('stock')
+          .eq('id', item.product_id)
+          .single();
+        
+        if (productData) {
+          await supabase
+            .from('products')
+            .update({ stock: productData.stock + item.quantity })
+            .eq('id', item.product_id);
+        }
+      }
+
+      // --- 2. Subtract Stock for New Items ---
+      for (const item of orderItems) {
+        const { data: productData } = await supabase
+          .from('products')
+          .select('stock')
+          .eq('id', item.product_id)
+          .single();
+        
+        if (productData) {
+          const newStock = productData.stock - item.quantity;
+          await supabase
+            .from('products')
+            .update({ stock: newStock })
+            .eq('id', item.product_id);
+          
+          // Handle production alerts
+          if (newStock < 0) {
+            const requiredQty = Math.abs(newStock);
+            const { data: existingAlert } = await supabase
+              .from('production_alerts')
+              .select('id')
+              .eq('product_id', item.product_id)
+              .eq('resolved', false)
+              .single();
+            
+            if (existingAlert) {
+              await supabase.from('production_alerts').update({ required_quantity: requiredQty, created_at: new Date().toISOString() }).eq('id', existingAlert.id);
+            } else {
+              await supabase.from('production_alerts').insert({ product_id: item.product_id, required_quantity: requiredQty, resolved: false });
+            }
+          } else {
+            await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', item.product_id).eq('resolved', false);
+          }
+        }
+      }
+
+      // 3. Update the main order record
       const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
       const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
 
-      // 2. Update the main order record
       const { error: orderUpdateError } = await supabase
         .from('orders')
         .update({
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
-          // Removed updated_at: new Date().toISOString(), to avoid schema cache error
         })
         .eq('id', orderData.id);
 
-      if (orderUpdateError) throw new Error(`Failed to update order: ${orderUpdateError.message}`);
+      if (orderUpdateError) throw orderUpdateError;
 
-      // 3. Manage sales items (delete existing, insert new)
-      
-      // A. Delete existing sales items for this order
-      const { error: deleteSalesError } = await supabase
-        .from('sales')
-        .delete()
-        .eq('order_id', orderData.id);
-        
-      if (deleteSalesError) throw new Error(`Failed to delete old sales items: ${deleteSalesError.message}`);
+      // 4. Update sales items
+      await supabase.from('sales').delete().eq('order_id', orderData.id);
+      const salesToInsert = orderItems.map(item => ({
+        order_id: orderData.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        total_price: item.total_price,
+      }));
+      await supabase.from('sales').insert(salesToInsert);
 
-      // B. Prepare new sales items
-      const salesToInsert = [];
-      
-      for (const item of orderItems) {
-        salesToInsert.push({
-          order_id: orderData.id,
-          product_id: item.product_id,
-          quantity: item.quantity,
-          total_price: item.total_price, // Use the calculated total price
-        });
-      }
-
-      // C. Insert new sales items
-      const { error: salesInsertError } = await supabase
-        .from('sales')
-        .insert(salesToInsert);
-        
-      if (salesInsertError) throw new Error(`Failed to insert new sales items: ${salesInsertError.message}`);
-
-      showSuccess(`Order #${orderData.order_number} updated successfully!`);
+      showSuccess(`Order #${orderData.order_number} updated and stock adjusted.`);
       onOrderUpdated();
       onOpenChange(false);
 
@@ -279,44 +304,26 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     );
   }
 
-  if (!orderData) {
-    return (
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[600px]">
-          <p className="text-center text-red-500 py-8">Failed to load order data.</p>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Order #{orderData.order_number}</DialogTitle>
+          <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
           <DialogDescription>
-            Modify items and discount for the order placed by {orderData.dealer_name}.
+            Modify items and discount. Stock will be adjusted automatically.
           </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-6 py-4">
-          {/* Order Items Section */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <Label className="text-lg font-semibold">Order Items</Label>
-              <Button
-                type="button"
-                onClick={addOrderItem}
-                size="sm"
-                className="flex items-center gap-1"
-                disabled={isSubmitting}
-              >
-                <Plus className="h-4 w-4" />
-                Add Item
+              <Button type="button" onClick={addOrderItem} size="sm" className="flex items-center gap-1" disabled={isSubmitting}>
+                <Plus className="h-4 w-4" /> Add Item
               </Button>
             </div>
 
-            {orderItems.map((item, index) => {
+            {orderItems.map((item) => {
               const product = products.find(p => p.id === item.product_id);
               const itemTotal = calculateItemTotal(item);
               
@@ -329,30 +336,18 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                         open={popoverOpenStates[item.id]} 
                         onOpenChange={(openState) => {
                           setPopoverOpenStates(prev => ({ ...prev, [item.id]: openState }));
-                          if (openState) {
-                            setSearchValue("");
-                          }
+                          if (openState) setSearchValue("");
                         }}
                       >
                         <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={popoverOpenStates[item.id]}
-                            className="w-full justify-between"
-                            disabled={products.length === 0 || loading || isSubmitting}
-                          >
+                          <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>
                             {product?.name || "Select product..."}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                           <Command>
-                            <CommandInput
-                              placeholder="Search product..."
-                              value={searchValue}
-                              onValueChange={setSearchValue}
-                            />
+                            <CommandInput placeholder="Search product..." value={searchValue} onValueChange={setSearchValue} />
                             <CommandList className="max-h-[300px] overflow-y-auto">
                               {filteredProducts.length === 0 ? (
                                 <CommandEmpty>No product found.</CommandEmpty>
@@ -365,20 +360,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                       onSelect={() => {
                                         updateOrderItem(item.id, 'product_id', p.id);
                                         setPopoverOpenStates(prev => ({ ...prev, [item.id]: false }));
-                                        setSearchValue("");
                                       }}
                                     >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          item.product_id === p.id ? "opacity-100" : "opacity-0"
-                                        )}
-                                      />
+                                      <Check className={cn("mr-2 h-4 w-4", item.product_id === p.id ? "opacity-100" : "opacity-0")} />
                                       <div>
                                         <div>{p.name} ({p.code})</div>
-                                        <div className="text-xs text-muted-foreground">
-                                          DP: ₹{p.dp.toFixed(2)} - Stock: {p.stock}
-                                        </div>
+                                        <div className="text-xs text-muted-foreground">DP: ₹{p.dp.toFixed(2)} - Stock: {p.stock}</div>
                                       </div>
                                     </CommandItem>
                                   ))}
@@ -390,33 +377,16 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                       </Popover>
                     </div>
                     {orderItems.length > 1 && (
-                      <div className="flex-shrink-0">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeOrderItem(item.id)}
-                          className="h-9 w-9"
-                          disabled={isSubmitting}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     )}
                   </div>
 
                   <div className="grid grid-cols-3 gap-4 items-end">
                     <div>
-                      <Label htmlFor={`quantity-${item.id}`}>Quantity</Label>
-                      <Input
-                        id={`quantity-${item.id}`}
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
-                        min="1"
-                        className="w-full"
-                        disabled={isSubmitting}
-                      />
+                      <Label>Quantity</Label>
+                      <Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 1)} min="1" disabled={isSubmitting} />
                     </div>
                     <div>
                       <Label>Unit Price (DP)</Label>
@@ -432,42 +402,19 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
             })}
           </div>
 
-          {/* Summary and Discount */}
           <div className="p-4 bg-muted rounded-md space-y-2">
-            <div className="flex justify-between text-base font-medium">
-              <span>Subtotal (Pre-Discount):</span>
-              <span>₹{preDiscountTotalOrderValue.toFixed(2)}</span>
-            </div>
-            
+            <div className="flex justify-between text-base font-medium"><span>Subtotal:</span><span>₹{preDiscountTotalOrderValue.toFixed(2)}</span></div>
             <div className="flex justify-between items-center">
-              <Label htmlFor="discountAmount" className="text-base font-medium">Discount (₹)</Label>
-              <Input
-                id="discountAmount"
-                type="number"
-                step="0.01"
-                value={discountAmount}
-                onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
-                className="w-32 text-right"
-                min="0"
-                max={preDiscountTotalOrderValue}
-                disabled={isSubmitting}
-              />
+              <Label htmlFor="discountAmount">Discount (₹)</Label>
+              <Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} disabled={isSubmitting} />
             </div>
-            {discountAmount > preDiscountTotalOrderValue && (
-              <p className="text-sm text-destructive">Discount cannot exceed subtotal.</p>
-            )}
-            
             <Separator className="my-2" />
-            
-            <div className="flex justify-between text-lg font-bold">
-              <span>Total Order Value (Final):</span>
-              <span>₹{finalOrderValue.toFixed(2)}</span>
-            </div>
+            <div className="flex justify-between text-lg font-bold"><span>Total:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
           </div>
         </div>
 
         <DialogFooter>
-          <Button onClick={handleSave} disabled={isSubmitting || orderItems.length === 0 || discountAmount < 0 || discountAmount > preDiscountTotalOrderValue}>
+          <Button onClick={handleSave} disabled={isSubmitting || orderItems.length === 0}>
             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}
           </Button>
         </DialogFooter>
