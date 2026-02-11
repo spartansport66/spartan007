@@ -6,9 +6,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, Search, Eye, FileText, Lock, Edit, PlusCircle } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, Search, Eye, FileText, Lock, Edit, PlusCircle, Trash2 } from 'lucide-react';
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -22,13 +22,14 @@ import SalesPersonSalesReport from '@/components/reports/SalesPersonSalesReport'
 import SalesPersonDealerReport from '@/components/reports/SalesPersonDealerReport';
 import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsReport';
 import DailyVisitProgressCard from '@/components/DailyVisitProgressCard';
-import SalesPersonFollowupsCard from '@/components/SalesPersonFollowupsCard'; // New Import
-import EditOrderDialog from '@/components/EditOrderDialog'; // NEW IMPORT
+import SalesPersonFollowupsCard from '@/components/SalesPersonFollowupsCard';
+import EditOrderDialog from '@/components/EditOrderDialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface Product {
   id: string;
   name: string;
-  dp: number; // Changed from 'price' to 'dp'
+  dp: number;
   stock: number;
   description: string;
 }
@@ -54,10 +55,9 @@ interface OrderDisplay {
   dealer_name: string;
   payment_status: string;
   items: OrderItemDisplay[];
-  dispatched: boolean; // Added dispatched status
+  dispatched: boolean;
 }
 
-// Format date as dd/mm/yyyy
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   const day = String(date.getDate()).padStart(2, '0');
@@ -68,15 +68,15 @@ const formatDate = (dateString: string) => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, isAdmin, session } = useSession(); // Added session here
+  const { user, loading: sessionLoading, isAdmin } = useSession();
   const [orders, setOrders] = useState<OrderDisplay[]>([]);
   const [loadingData, setLoadingData] = useState(true);
-  const [loadingOrders, setLoadingOrders] = useState(true); // New state for orders loading
+  const [loadingOrders, setLoadingOrders] = useState(true);
   const [salesPersonName, setSalesPersonName] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>(() => {
     const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29); // Go back 29 days to include today, making it 30 days total
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
     const day = String(thirtyDaysAgo.getDate()).padStart(2, '0');
     const month = String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0');
     const year = thirtyDaysAgo.getFullYear();
@@ -94,21 +94,17 @@ const Dashboard = () => {
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
   
-  // NEW EDIT STATE
   const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false);
   const [selectedOrderIdForEdit, setSelectedOrderIdForEdit] = useState<string | null>(null);
 
-  // New states for salesperson reports
   const [isSalesPersonSalesReportOpen, setIsSalesPersonSalesReportOpen] = useState(false);
   const [isSalesPersonDealerReportOpen, setIsSalesPersonDealerReportOpen] = useState(false);
   const [isSalesPersonPaymentsReportOpen, setIsSalesPersonPaymentsReportOpen] = useState(false);
   
-  // State to force explicit refresh of dashboard data
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleRefreshData = useCallback(() => {
     setRefreshKey(prev => prev + 1);
-    // Also trigger order fetch explicitly if needed, although useEffect below handles it
   }, []);
 
   const fetchInitialData = useCallback(async () => {
@@ -117,7 +113,6 @@ const Dashboard = () => {
       return;
     }
 
-    // Fetch sales person name
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select('first_name, last_name')
@@ -128,7 +123,6 @@ const Dashboard = () => {
       setSalesPersonName(`${profileData.first_name || ''} ${profileData.last_name || ''}`.trim());
     }
 
-    // Fetch all dealers assigned to the current user for the filter dropdown
     const { data: assignedDealersData, error: assignedDealersError } = await supabase
       .from('dealer_sales_persons')
       .select('dealers(id, name)')
@@ -153,7 +147,6 @@ const Dashboard = () => {
     }
     setLoadingOrders(true);
 
-    // Fetch orders and their associated sales items
     let ordersQuery = supabase
       .from('orders')
       .select(`
@@ -165,6 +158,7 @@ const Dashboard = () => {
         dispatched,
         dealers (name),
         sales (
+          product_id,
           quantity,
           total_price,
           products (id, name, dp)
@@ -173,7 +167,6 @@ const Dashboard = () => {
       .eq('user_id', user.id)
       .order('order_date', { ascending: false });
 
-    // Apply filters
     if (filterDealerId) {
       ordersQuery = ordersQuery.eq('dealer_id', filterDealerId);
     }
@@ -200,9 +193,9 @@ const Dashboard = () => {
         total_amount: order.total_amount,
         dealer_name: order.dealers?.name || 'N/A',
         payment_status: order.payment_status,
-        dispatched: order.dispatched, // Include dispatched status
+        dispatched: order.dispatched,
         items: (order.sales || []).map((sale: any) => ({
-          product_id: sale.products?.id || '',
+          product_id: sale.product_id || '',
           product_name: sale.products?.name || 'N/A',
           quantity: sale.quantity,
           unit_dp: sale.products?.dp || 0,
@@ -214,9 +207,8 @@ const Dashboard = () => {
     }
 
     setLoadingOrders(false);
-  }, [user, filterDealerId, filterFromDate, filterToDate, refreshKey]); // Added refreshKey dependency
+  }, [user, filterDealerId, filterFromDate, filterToDate, refreshKey]);
 
-  // Effect for initial data load (runs once)
   useEffect(() => {
     if (!sessionLoading) {
       if (!user) {
@@ -229,7 +221,6 @@ const Dashboard = () => {
     }
   }, [user, sessionLoading, isAdmin, fetchInitialData, navigate]);
   
-  // Effect for fetching orders (runs when filters or refreshKey change)
   useEffect(() => {
     if (user && !isAdmin) {
       fetchRecentOrders();
@@ -239,24 +230,19 @@ const Dashboard = () => {
   const handleLogout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
-      
       if (error && error.message !== 'Auth session missing!') {
-        console.warn('Logout API call failed:', error.message);
-        showError(`Logout failed: ${error.message}. You are being redirected.`);
+        showError(`Logout failed: ${error.message}.`);
       } else {
         showSuccess('Logged out successfully!');
       }
-      // Always navigate to login to clear client-side state
       navigate('/login');
     } catch (error: any) {
-      console.error('Unexpected error during logout:', error);
-      showError(`An unexpected error occurred during logout: ${error.message}. Redirecting.`);
+      showError(`An unexpected error occurred during logout: ${error.message}.`);
       navigate('/login');
     }
   };
 
   const handleApplyOrderFilters = () => {
-    // Trigger fetchRecentOrders by updating the refreshKey
     setRefreshKey(prev => prev + 1);
   };
 
@@ -275,10 +261,8 @@ const Dashboard = () => {
     const thirtyDaysAgoYear = thirtyDaysAgo.getFullYear();
     const thirtyDaysAgoString = `${thirtyDaysAgoYear}-${thirtyDaysAgoMonth}-${thirtyDaysAgoDay}`;
 
-    setFilterFromDate(thirtyDaysAgoString); // Reset to 30 days ago
-    setFilterToDate(todayString); // Reset to today
-    
-    // Trigger fetchRecentOrders
+    setFilterFromDate(thirtyDaysAgoString);
+    setFilterToDate(todayString);
     setRefreshKey(prev => prev + 1);
   };
 
@@ -287,17 +271,74 @@ const Dashboard = () => {
     setIsOrderDetailsDialogOpen(true);
   };
   
-  // NEW HANDLER
   const handleEditOrder = (orderId: string) => {
     setSelectedOrderIdForEdit(orderId);
     setIsEditOrderDialogOpen(true);
   };
   
-  // NEW HANDLER
   const handleOrderUpdated = () => {
-    // Close edit dialog and refresh data
     setIsEditOrderDialogOpen(false);
     handleRefreshData();
+  };
+
+  const handleDeleteOrder = async (order: OrderDisplay) => {
+    setLoadingOrders(true);
+    try {
+      // 1. Manually restore stock levels
+      for (const item of order.items) {
+        const { data: productData, error: productFetchError } = await supabase
+          .from('products')
+          .select('stock')
+          .eq('id', item.product_id)
+          .single();
+        
+        if (!productFetchError && productData) {
+          const restoredStock = productData.stock + item.quantity;
+          await supabase.from('products').update({ stock: restoredStock }).eq('id', item.product_id);
+          if (restoredStock >= 0) {
+            await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', item.product_id).eq('resolved', false);
+          }
+        }
+      }
+
+      // 2. FIRST: Remove associated payments to satisfy foreign key constraint
+      const { error: paymentDeleteError } = await supabase
+        .from('payments')
+        .delete()
+        .eq('order_id', order.id);
+
+      if (paymentDeleteError) {
+        console.error('Error deleting associated payments:', paymentDeleteError);
+        throw new Error(`Failed to delete associated payments: ${paymentDeleteError.message}`);
+      }
+
+      // 3. SECOND: Remove associated sales items
+      const { error: salesDeleteError } = await supabase
+        .from('sales')
+        .delete()
+        .eq('order_id', order.id);
+        
+      if (salesDeleteError) {
+        console.error('Error deleting associated sales:', salesDeleteError);
+        throw new Error(`Failed to delete associated sales items: ${salesDeleteError.message}`);
+      }
+
+      // 4. FINALLY: Delete the order
+      const { error: deleteError } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', order.id);
+
+      if (deleteError) throw deleteError;
+
+      showSuccess(`Order #${order.order_number} deleted and stock restored.`);
+      fetchRecentOrders();
+    } catch (error: any) {
+      console.error('Error deleting order:', error);
+      showError(`Failed to delete order: ${error.message}`);
+    } finally {
+      setLoadingOrders(false);
+    }
   };
 
   if (sessionLoading || loadingData) {
@@ -359,28 +400,23 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Sales Person Performance Card and Daily Visit Progress Card */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <SalesPersonPerformanceCard key={`performance-${refreshKey}`} />
         <DailyVisitProgressCard key={`visits-${refreshKey}`} />
       </div>
       
-      {/* Dealer Follow-ups Card - New Row */}
       <div className="grid grid-cols-1 mb-6">
         <SalesPersonFollowupsCard key={`followups-${refreshKey}`} />
       </div>
 
-      {/* Multi-Item Order Form - Full Width */}
       <div className="mb-6">
         <MultiItemOrderForm onOrderPlaced={handleRefreshData} />
       </div>
 
-      {/* Payment Status Card */}
       <div className="mb-6">
         <PaymentStatusCard key={`payment-status-${refreshKey}`} />
       </div>
 
-      {/* Recent Activities (Orders) */}
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
         <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
           <CardTitle className="text-xl font-semibold">My Recent Orders</CardTitle>
@@ -473,16 +509,40 @@ const Dashboard = () => {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            {/* NEW EDIT BUTTON - Only allow editing if not yet dispatched */}
                             {!order.dispatched && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEditOrder(order.id)}
-                                title="Edit Order"
-                              >
-                                <Edit className="h-4 w-4 text-orange-600" />
-                              </Button>
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEditOrder(order.id)}
+                                  title="Edit Order"
+                                >
+                                  <Edit className="h-4 w-4 text-orange-600" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      title="Delete Order"
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Order?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to delete Order #{order.order_number}? This will restore the product stock levels.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDeleteOrder(order)}>Delete</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </>
                             )}
                           </div>
                         </TableCell>
@@ -496,20 +556,17 @@ const Dashboard = () => {
         </CardContent>
       </Card>
       <MadeWithDyad />
-      {/* Order Details Dialog */}
       <OrderDetailsDialog
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}
         onOpenChange={setIsOrderDetailsDialogOpen}
       />
-      {/* NEW EDIT ORDER DIALOG */}
       <EditOrderDialog
         orderId={selectedOrderIdForEdit}
         isOpen={isEditOrderDialogOpen}
         onOpenChange={setIsEditOrderDialogOpen}
         onOrderUpdated={handleOrderUpdated}
       />
-      {/* Salesperson Reports Dialogs */}
       <SalesPersonSalesReport
         isOpen={isSalesPersonSalesReportOpen}
         onOpenChange={setIsSalesPersonSalesReportOpen}

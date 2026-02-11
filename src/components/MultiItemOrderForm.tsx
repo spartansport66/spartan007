@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,15 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react';
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Search, Percent } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Product {
   id: string;
@@ -35,20 +32,14 @@ interface Dealer {
 }
 
 interface OrderItem {
-  id: string; // Unique ID for React list key
+  id: string;
   product_id: string;
   quantity: number;
   product_name: string;
   product_code: string;
   unit_dp: number;
+  discount_percent: number;
   total_price: number;
-}
-
-interface PendingPayment {
-  order_number: number;
-  total_amount: number;
-  payment_status: string;
-  payment_due_date: string | null;
 }
 
 interface MultiItemOrderFormProps {
@@ -66,25 +57,24 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
-  const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
-  const [totalPendingAmount, setTotalPendingAmount] = useState<number>(0);
   const [dealerOpeningBalance, setDealerOpeningBalance] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
-  const isPaidAtOrderTime = true;
+  const [gstPercent, setGstPercent] = useState<number>(5);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
   
-  // Search states for manual filtering
   const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
-  const [dealerSearch, setDealerSearch] = useState("");
+  const [dealerSearch, setDealerSearch] = useState('');
   
   const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
-  const [productSearch, setProductSearch] = useState("");
+  const [productSearch, setProductSearch] = useState('');
   const [newItemProductId, setNewItemProductId] = useState<string>('');
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
+  const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
+  const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<number>(0);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -100,89 +90,71 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     return orderItems.reduce((total, item) => total + item.total_price, 0);
   }, [orderItems]);
 
-  const finalOrderValue = useMemo(() => {
+  const taxableValue = useMemo(() => {
     return Math.max(0, preDiscountTotalOrderValue - discountAmount);
   }, [preDiscountTotalOrderValue, discountAmount]);
 
+  const gstAmount = useMemo(() => {
+    return (taxableValue * gstPercent) / 100;
+  }, [taxableValue, gstPercent]);
+
+  const finalOrderValue = useMemo(() => {
+    return taxableValue + gstAmount;
+  }, [taxableValue, gstAmount]);
+
   useEffect(() => {
-    if (isPaidAtOrderTime) {
-      setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
+    setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
+  }, [finalOrderValue]);
+
+  const fetchProducts = useCallback(async () => {
+    try {
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, code, name, dp, stock');
+      if (productsError) throw productsError;
+      setProducts(productsData || []);
+    } catch (error: any) {
+      console.error('fetchProducts Error:', error);
+      showError(`Failed to load products: ${error.message}`);
     }
-  }, [finalOrderValue, isPaidAtOrderTime]);
+  }, []);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      if (!user || !session) {
-        setDealers([]);
-        setProducts([]);
-        setLoading(false);
-        return;
-      }
-      try {
-        const { data: assignedDealersData, error: assignedDealersError } = await supabase
-          .from('dealer_sales_persons')
-          .select('dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))')
-          .eq('sales_person_id', user.id);
+  const fetchData = useCallback(async () => {
+    if (!user || !session) return;
+    setLoading(true);
+    try {
+      const { data: assignedDealersData, error: assignedDealersError } = await supabase
+        .from('dealer_sales_persons')
+        .select('dealers(id, name, credit_limit, allotted_credit_days, dealer_balances(opening_balance))')
+        .eq('sales_person_id', user.id);
 
-        if (assignedDealersError) throw assignedDealersError;
+      if (assignedDealersError) throw assignedDealersError;
 
-        const formattedDealers = (assignedDealersData || [])
-          .map((item: any) => {
-            if (!item.dealers) return null;
-            const opening_balance = item.dealers.dealer_balances?.opening_balance || 0;
-            const { dealer_balances, ...dealerData } = item.dealers;
-            return { ...dealerData, opening_balance };
-          })
-          .filter(Boolean) as Dealer[];
-        
-        formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
-        setDealers(formattedDealers);
+      const formattedDealers = (assignedDealersData || [])
+        .map((item: any) => {
+          if (!item.dealers) return null;
+          const opening_balance = item.dealers.dealer_balances?.opening_balance || 0;
+          const { dealer_balances, ...dealerData } = item.dealers;
+          return { ...dealerData, opening_balance };
+        })
+        .filter(Boolean) as Dealer[];
+      
+      formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
+      setDealers(formattedDealers);
 
-        const { data: productsData, error: productsError } = await supabase
-          .from('products')
-          .select('id, code, name, dp, stock');
-        if (productsError) throw productsError;
-        setProducts(productsData || []);
+      await fetchProducts();
 
-      } catch (error: any) {
-        console.error('[MultiItemOrderForm] fetchData Error:', error);
-        showError(`Failed to load data: ${error.message}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (!sessionLoading && user) {
-      fetchData();
+    } catch (error: any) {
+      console.error('fetchData Error:', error);
+      showError(`Failed to load data: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
-  }, [user, session, sessionLoading]);
+  }, [user, session, fetchProducts]);
 
   useEffect(() => {
-    const checkPendingPayments = async () => {
-      if (!selectedDealer || !user) {
-        setPendingPayments([]);
-        setTotalPendingAmount(0);
-        return;
-      }
-      try {
-        const todayISOString = new Date().toISOString();
-        const { data, error } = await supabase
-          .from('orders')
-          .select('order_number, total_amount, payment_status, payment_due_date')
-          .eq('dealer_id', selectedDealer)
-          .eq('user_id', user.id)
-          .eq('payment_status', 'pending')
-          .lte('payment_due_date', todayISOString);
-        if (error) throw error;
-        const pendingData = data || [];
-        setPendingPayments(pendingData);
-        setTotalPendingAmount(pendingData.reduce((sum, order) => sum + order.total_amount, 0));
-      } catch (error: any) {
-        console.error('[MultiItemOrderForm] checkPendingPayments Error:', error);
-      }
-    };
-    checkPendingPayments();
-  }, [selectedDealer, user]);
+    if (!sessionLoading && user) fetchData();
+  }, [user, session, sessionLoading, fetchData]);
 
   useEffect(() => {
     const calculateBalanceAndDueDate = async () => {
@@ -204,53 +176,54 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         dueDate.setDate(today.getDate() + selectedDealerData.allotted_credit_days);
         setPaymentDueDate(dueDate.toISOString().split('T')[0]);
       }
+      
       const currentMonthDate = new Date();
       const currentMonthYear = new Date(Date.UTC(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1)).toISOString().split('T')[0];
+      
       try {
-        const { data: monthlyLimitData, error: monthlyLimitError } = await supabase
+        const { data: monthlyLimitData } = await supabase
           .from('dealer_monthly_credit_limits')
           .select('credit_limit')
           .eq('dealer_id', selectedDealer)
           .eq('month_year', currentMonthYear)
           .single();
         
-        if (monthlyLimitData) {
-          setDealerCreditLimit(monthlyLimitData.credit_limit);
-        } else {
-          setDealerCreditLimit(selectedDealerData?.credit_limit || 0);
-        }
+        setDealerCreditLimit(monthlyLimitData?.credit_limit || selectedDealerData?.credit_limit || 0);
 
-        const { data: orders, error: ordersError } = await supabase
+        const { data: orders } = await supabase
           .from('orders')
           .select('id, total_amount')
-          .eq('dealer_id', selectedDealer)
-          .eq('user_id', user.id);
-        if (ordersError) throw ordersError;
+          .eq('dealer_id', selectedDealer);
+        
         const totalOrderValue = (orders || []).reduce((sum, o) => sum + o.total_amount, 0);
-
         const orderIds = (orders || []).map(o => o.id);
+        
         let totalPaymentsValue = 0;
         if (orderIds.length > 0) {
-          const { data: paymentsData, error: paymentsError } = await supabase
+          const { data: paymentsData } = await supabase
             .from('payments')
             .select('amount')
             .in('order_id', orderIds)
             .eq('status', 'completed');
-          if (paymentsError) throw paymentsError;
           totalPaymentsValue = (paymentsData || []).reduce((sum, p) => sum + p.amount, 0);
         }
         
         setDealerBalance(totalOrderValue - totalPaymentsValue);
       } catch (error: any) {
-        console.error('[MultiItemOrderForm] calculateBalance Error:', error);
+        console.error('calculateBalance Error:', error);
       }
     };
     calculateBalanceAndDueDate();
   }, [selectedDealer, dealers, user]);
 
-  const usedCredit = dealerBalance !== null ? dealerBalance + dealerOpeningBalance : null;
-  const availableCredit = dealerBalance !== null ? dealerCreditLimit - (dealerBalance + dealerOpeningBalance) : null;
-  const remainingCredit = availableCredit !== null ? availableCredit - finalOrderValue : null;
+  const newItemFinalUnitPrice = useMemo(() => {
+    const discount = (newItemUnitPrice * newItemDiscountPercent) / 100;
+    return Math.max(0, newItemUnitPrice - discount);
+  }, [newItemUnitPrice, newItemDiscountPercent]);
+
+  const newItemTotalPrice = useMemo(() => {
+    return newItemQuantity * newItemFinalUnitPrice;
+  }, [newItemQuantity, newItemFinalUnitPrice]);
 
   const addOrderItem = () => {
     if (!newItemProductId || newItemQuantity <= 0) {
@@ -258,23 +231,23 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       return;
     }
     const product = products.find(p => p.id === newItemProductId);
-    if (!product) {
-      showError("Selected product not found.");
-      return;
-    }
+    if (!product) return;
+
     const newOrderItem: OrderItem = {
       id: Date.now().toString(),
       product_id: product.id,
       quantity: newItemQuantity,
       product_name: product.name,
       product_code: product.code,
-      unit_dp: product.dp,
-      total_price: newItemQuantity * product.dp,
+      unit_dp: newItemUnitPrice,
+      discount_percent: newItemDiscountPercent,
+      total_price: newItemTotalPrice,
     };
     setOrderItems(prevItems => [newOrderItem, ...prevItems]);
     setNewItemProductId('');
     setNewItemQuantity(1);
-    setProductSearch("");
+    setNewItemUnitPrice(0);
+    setNewItemDiscountPercent(0);
   };
 
   const removeOrderItem = (id: string) => {
@@ -282,12 +255,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   };
 
   const isPaymentDetailsValid = useMemo(() => {
-    if (!isPaidAtOrderTime) return true;
     if (!paymentMethod || paymentAmount <= 0) return false;
     if (paymentMethod === 'Cheque/DD' && (!chequeDdNo || !chequeDdDate)) return false;
     if (['Card', 'Bank Transfer', 'UPI'].includes(paymentMethod) && !transactionId) return false;
     return true;
-  }, [isPaidAtOrderTime, paymentMethod, paymentAmount, chequeDdNo, chequeDdDate, transactionId]);
+  }, [paymentMethod, paymentAmount, chequeDdNo, chequeDdDate, transactionId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -299,16 +271,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     try {
       const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
       const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
-      const salesToInsert = orderItems.map(item => ({
-        product_id: item.product_id,
-        quantity: item.quantity,
-        total_price: item.total_price,
-      }));
-      const stockUpdates = orderItems.map(item => ({
-        id: item.product_id,
-        quantitySold: item.quantity,
-      }));
 
+      // 1. Create the Order
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -322,16 +286,70 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         })
         .select('id, order_number, order_date')
         .single();
-      if (orderError) throw new Error(`Failed to create order: ${orderError.message}`);
-      if (!newOrder) throw new Error('Order creation failed.');
+
+      if (orderError) throw orderError;
 
       await supabase.from('dealers').update({ last_billing_date: newOrder.order_date }).eq('id', selectedDealer);
-      const salesWithOrderId = salesToInsert.map(sale => ({ ...sale, order_id: newOrder.id }));
+      
+      // 2. Insert Sales Items and Manually Update Stock
+      const salesWithOrderId = orderItems.map(item => ({
+        order_id: newOrder.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        total_price: item.total_price,
+      }));
+      
       const { error: salesInsertError } = await supabase.from('sales').insert(salesWithOrderId);
-      if (salesInsertError) throw new Error(`Failed to insert sales items: ${salesInsertError.message}`);
+      if (salesInsertError) throw salesInsertError;
 
-      let transactionIdValue = null;
-      if (['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod)) transactionIdValue = transactionId;
+      // Manual Stock Update Loop
+      for (const item of orderItems) {
+        const { data: productData, error: productFetchError } = await supabase
+          .from('products')
+          .select('stock')
+          .eq('id', item.product_id)
+          .single();
+        
+        if (!productFetchError && productData) {
+          const newStock = productData.stock - item.quantity;
+          
+          // Update Stock
+          await supabase
+            .from('products')
+            .update({ stock: newStock })
+            .eq('id', item.product_id);
+          
+          // Create Production Alert if stock is negative
+          if (newStock < 0) {
+            const requiredQty = Math.abs(newStock);
+            const { data: existingAlert } = await supabase
+              .from('production_alerts')
+              .select('id')
+              .eq('product_id', item.product_id)
+              .eq('resolved', false)
+              .single();
+            
+            if (existingAlert) {
+              await supabase
+                .from('production_alerts')
+                .update({ required_quantity: requiredQty, created_at: new Date().toISOString() })
+                .eq('id', existingAlert.id);
+            } else {
+              await supabase
+                .from('production_alerts')
+                .insert({
+                  product_id: item.product_id,
+                  required_quantity: requiredQty,
+                  resolved: false,
+                  created_by: user.id,
+                  dealer_id: selectedDealer
+                });
+            }
+          }
+        }
+      }
+
+      // 3. Record Payment
       const paymentData = {
         order_id: newOrder.id,
         dealer_id: selectedDealer,
@@ -341,60 +359,36 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         status: 'pending_approval',
         cheque_dd_no: paymentMethod === 'Cheque/DD' ? chequeDdNo : null,
         cheque_dd_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : null,
-        transaction_id: transactionIdValue,
+        transaction_id: ['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod) ? transactionId : null,
       };
+      
       const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
-      if (paymentInsertError) throw new Error(`Failed to record payment details: ${paymentInsertError.message}`);
-
-      for (const update of stockUpdates) {
-        const product = products.find(p => p.id === update.id);
-        if (!product) continue;
-        const newStockLevel = product.stock - update.quantitySold;
-        const { data: updatedProduct, error: stockUpdateError } = await supabase
-          .from('products').update({ stock: newStockLevel }).eq('id', update.id).select('id, stock').single();
-        if (stockUpdateError) console.error(`Failed to update stock for product ${update.id}: ${stockUpdateError.message}`);
-        if (updatedProduct && updatedProduct.stock < 0) {
-          const newRequiredQuantity = Math.abs(updatedProduct.stock);
-          const { data: existingAlert } = await supabase.from('production_alerts').select('id').eq('product_id', update.id).eq('resolved', false).single();
-          const alertData = { product_id: update.id, required_quantity: newRequiredQuantity, created_by: user.id, dealer_id: selectedDealer, resolved: false, created_at: new Date().toISOString() };
-          if (existingAlert) {
-            await supabase.from('production_alerts').update(alertData).eq('id', existingAlert.id);
-          } else {
-            await supabase.from('production_alerts').insert(alertData);
-          }
-        } else if (product.stock < 0 && updatedProduct && updatedProduct.stock >= 0) {
-          await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', update.id).eq('resolved', false);
-        }
-      }
-
-      const { count: orderCount } = await supabase.from('orders').select('count', { count: 'exact' }).eq('dealer_id', selectedDealer);
-      if (orderCount === 1 && dealerOpeningBalance > 0) {
-        await supabase.from('dealer_balances').update({ opening_balance: 0 }).eq('dealer_id', selectedDealer);
-      }
+      if (paymentInsertError) throw paymentInsertError;
 
       showSuccess('Order placed successfully!');
       setSelectedDealer('');
       setOrderItems([]);
       setDiscountAmount(0);
+      setGstPercent(5);
       setPaymentMethod('');
       setPaymentAmount(0);
       setChequeDdNo('');
       setChequeDdDate('');
       setTransactionId('');
+      
+      await fetchProducts();
       onOrderPlaced();
     } catch (error: any) {
-      console.error('[MultiItemOrderForm] Submit Error:', error);
+      console.error('Submit Error:', error);
       showError(`Failed to place order: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Manual filtering logic to bypass cmdk's internal filtering
   const filteredDealers = useMemo(() => {
     if (!dealerSearch) return dealers;
-    const search = dealerSearch.toLowerCase();
-    return dealers.filter(d => d.name.toLowerCase().includes(search));
+    return dealers.filter(d => d.name.toLowerCase().includes(dealerSearch.toLowerCase()));
   }, [dealers, dealerSearch]);
 
   const filteredProducts = useMemo(() => {
@@ -404,21 +398,13 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   }, [products, productSearch]);
 
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
-  const calculatedPaymentStatus = isPaidAtOrderTime ? 'Pending Approval' : 'Pending';
-  
-  const isSubmitDisabled = useMemo(() => {
-    const baseChecks = loading || !selectedDealer || orderItems.length === 0 || (orderItems.some(item => !item.product_id || item.quantity <= 0)) || discountAmount < 0 || discountAmount > preDiscountTotalOrderValue;
-    if (baseChecks) return true;
-    return !(isPaidAtOrderTime && isPaymentDetailsValid);
-  }, [loading, selectedDealer, orderItems, discountAmount, preDiscountTotalOrderValue, isPaidAtOrderTime, isPaymentDetailsValid]);
+  const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
       <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold text-white">Place New Order</CardTitle>
-        <CardDescription className="text-blue-100 dark:text-blue-200">
-          Create an order with multiple items for a registered dealer.
-        </CardDescription>
+        <CardDescription className="text-blue-100 dark:text-blue-200">Create an order with multiple items for a registered dealer.</CardDescription>
       </CardHeader>
       <CardContent className="p-4">
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -426,119 +412,57 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             <Label htmlFor="dealer">Dealer</Label>
             <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
               <PopoverTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  role="combobox" 
-                  aria-expanded={isDealerPopoverOpen} 
-                  className="w-full justify-between" 
-                >
-                  {currentDealerName}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
+                <Button variant="outline" role="combobox" className="w-full justify-between" disabled={dealers.length === 0}>{currentDealerName}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" onOpenAutoFocus={(e) => e.preventDefault()}>
-                <Command shouldFilter={false}>
-                  <CommandInput 
-                    placeholder="Search dealer..." 
-                    value={dealerSearch} 
-                    onValueChange={setDealerSearch}
-                  />
-                  <CommandList className="max-h-[300px] overflow-y-auto">
-                    {filteredDealers.length === 0 ? <CommandEmpty>No dealer found.</CommandEmpty> : (
-                      <CommandGroup>
-                        {filteredDealers.map((dealer) => (
-                          <CommandItem 
-                            key={dealer.id} 
-                            value={dealer.id}
-                            onSelect={() => {
-                              setSelectedDealer(dealer.id);
-                              setIsDealerPopoverOpen(false);
-                              setDealerSearch("");
-                            }}
-                            className="cursor-pointer pointer-events-auto"
-                          >
-                            <Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />
-                            {dealer.name}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search dealer..." value={dealerSearch} onChange={(e) => setDealerSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
+                <ScrollArea className="h-[200px]">
+                  <div className="p-1">
+                    {filteredDealers.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No dealer found.</div>) : (
+                      filteredDealers.map((dealer) => (<Button key={dealer.id} variant="ghost" className="w-full justify-start font-normal" onClick={() => { setSelectedDealer(dealer.id); setIsDealerPopoverOpen(false); setDealerSearch(''); }}><Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />{dealer.name}</Button>))
                     )}
-                  </CommandList>
-                </Command>
+                  </div>
+                </ScrollArea>
               </PopoverContent>
             </Popover>
-            {selectedDealer && <div className="mt-2 p-3 bg-muted rounded-md"><div className="flex justify-between text-sm"><span>Opening Balance:</span><span className="font-medium">₹{dealerOpeningBalance.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Net Transaction Balance (Orders - Payments):</span><span className="font-medium">₹{dealerBalance !== null ? dealerBalance.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm font-semibold"><span>Total Outstanding Balance (Ledger):</span><span className={usedCredit !== null && usedCredit > dealerCreditLimit ? "text-destructive" : "text-primary"}>₹{usedCredit !== null ? usedCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Credit Limit (Current Month):</span><span className="font-medium">₹{dealerCreditLimit.toFixed(2)}</span></div><div className="flex justify-between text-sm"><span>Available Credit:</span><span className={availableCredit !== null && availableCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{availableCredit !== null ? availableCredit.toFixed(2) : '0.00'}</span></div><div className="flex justify-between text-sm"><span>Allotted Credit Days:</span><span className="font-medium">{allottedCreditDays} days</span></div>{paymentDueDate && <div className="flex justify-between text-sm"><span>Calculated Payment Due Date:</span><span className="font-medium">{formatDate(paymentDueDate)}</span></div>}<div className="flex justify-between text-sm font-bold mt-2"><span>Calculated Order Payment Status:</span><span className={calculatedPaymentStatus === 'Pending Approval' ? 'text-blue-600' : 'text-yellow-600'}>{calculatedPaymentStatus}</span></div></div>}
           </div>
 
           <div className="space-y-4">
             <Label>Order Items</Label>
-            <div className="flex items-end gap-2 p-4 border rounded-md bg-muted/50">
-              <div className="flex-grow">
+            <div className="flex flex-col gap-4 p-4 border rounded-md bg-muted/50">
+              <div className="w-full">
                 <Label>Product</Label>
                 <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                   <PopoverTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      role="combobox" 
-                      className="w-full justify-between" 
-                    >
-                      {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
+                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0}>{newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" onOpenAutoFocus={(e) => e.preventDefault()}>
-                    <Command shouldFilter={false}>
-                      <CommandInput 
-                        placeholder="Search product..." 
-                        value={productSearch} 
-                        onValueChange={setProductSearch}
-                      />
-                      <CommandList className="max-h-[300px] overflow-y-auto">
-                        {filteredProducts.length === 0 ? <CommandEmpty>No product found.</CommandEmpty> : (
-                          <CommandGroup>
-                            {filteredProducts.map((product) => (
-                              <CommandItem 
-                                key={product.id} 
-                                value={product.id}
-                                onSelect={() => {
-                                  setNewItemProductId(product.id);
-                                  setIsProductPopoverOpen(false);
-                                  setProductSearch("");
-                                }}
-                                className="cursor-pointer pointer-events-auto"
-                              >
-                                <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                                <div><div>{product.name} ({product.code})</div><div className="text-xs text-muted-foreground">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
+                    <ScrollArea className="h-[250px]">
+                      <div className="p-1">
+                        {filteredProducts.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>) : (
+                          filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start"><div className="flex items-center"><Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span>{product.name} ({product.code})</span></div><div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - Stock: {product.stock}</div></div></Button>))
                         )}
-                      </CommandList>
-                    </Command>
+                      </div>
+                    </ScrollArea>
                   </PopoverContent>
                 </Popover>
               </div>
-              <div className="w-24">
-                <Label>Quantity</Label>
-                <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-end">
+                <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
+                <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
+                <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(parseFloat(e.target.value) || 0)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
+                <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Final Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemTotalPrice.toFixed(2)}</div></div>
               </div>
-              <Button type="button" onClick={addOrderItem} disabled={loading}><Plus className="h-4 w-4" /></Button>
+              <Button type="button" onClick={addOrderItem} disabled={loading} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
             </div>
 
             {orderItems.length > 0 && (
               <div className="max-h-[250px] overflow-y-auto border rounded-md">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Qty</TableHead><TableHead>Unit DP</TableHead><TableHead className="text-right">Total</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Qty</TableHead><TableHead>DP</TableHead><TableHead>Disc %</TableHead><TableHead className="text-right">Total</TableHead><TableHead></TableHead></TableRow></TableHeader>
                   <TableBody>
-                    {orderItems.map(item => (
-                      <TableRow key={item.id}>
-                        <TableCell>{item.product_name} ({item.product_code})</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>₹{item.unit_dp.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">₹{item.total_price.toFixed(2)}</TableCell>
-                        <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
-                      </TableRow>
-                    ))}
+                    {orderItems.map(item => (<TableRow key={item.id}><TableCell className="max-w-[150px] truncate">{item.product_name}</TableCell><TableCell>{item.quantity}</TableCell><TableCell>₹{item.unit_dp.toFixed(2)}</TableCell><TableCell>{item.discount_percent}%</TableCell><TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell><TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}
                   </TableBody>
                 </Table>
               </div>
@@ -547,28 +471,26 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
           {orderItems.length > 0 && (
             <div className="p-4 bg-muted rounded-md space-y-2">
-              <div className="flex justify-between text-base font-medium"><span>Subtotal (Pre-Discount):</span><span>₹{preDiscountTotalOrderValue.toFixed(2)}</span></div>
-              <div className="flex justify-between items-center"><Label htmlFor="discountAmount" className="text-base font-medium">Discount (₹)</Label><Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} /></div>
-              {discountAmount > preDiscountTotalOrderValue && <p className="text-sm text-destructive">Discount cannot exceed subtotal.</p>}
+              <div className="flex justify-between text-base font-medium"><span>Subtotal:</span><span>₹{preDiscountTotalOrderValue.toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><Label htmlFor="discountAmount" className="text-base font-medium">Additional Discount (₹)</Label><Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} /></div>
+              <div className="flex justify-between text-base font-medium"><span>Taxable Value:</span><span>₹{taxableValue.toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><div className="flex items-center gap-2"><Label htmlFor="gstPercent" className="text-base font-medium">GST (%)</Label><Input id="gstPercent" type="number" step="0.1" value={gstPercent} onChange={(e) => setGstPercent(parseFloat(e.target.value) || 0)} className="w-20 text-right" min="0" /></div><span className="text-sm text-muted-foreground">₹{gstAmount.toFixed(2)}</span></div>
               <Separator className="my-2" />
-              <div className="flex justify-between text-lg font-bold"><span>Total Order Value (Final):</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
-              {selectedDealer && dealerBalance !== null && (<><Separator className="my-2" /><div className="flex justify-between text-sm"><span>Remaining Credit After Order:</span><span className={remainingCredit !== null && remainingCredit < 0 ? "text-destructive font-semibold" : "font-medium"}>₹{remainingCredit !== null ? remainingCredit.toFixed(2) : '0.00'}</span></div></>)}
+              <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
             </div>
           )}
 
           <div className="space-y-4 p-4 border rounded-md">
-            <div className="flex items-center space-x-2"><Check className="h-5 w-5 text-green-600" /><Label className="text-base font-medium text-green-600">Payment Received at Order Time (Mandatory)</Label></div>
+            <div className="flex items-center space-x-2"><Check className="h-5 w-5 text-green-600" /><Label className="text-base font-medium text-green-600">Payment Received at Order Time</Label></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div><Label htmlFor="paymentMethod">Payment Method</Label><Select value={paymentMethod} onValueChange={setPaymentMethod}><SelectTrigger id="paymentMethod" className="w-full"><SelectValue placeholder="Select payment method" /></SelectTrigger><SelectContent>{paymentMethodsOptions.map((method) => (<SelectItem key={method} value={method}>{method}</SelectItem>))}</SelectContent></Select></div>
-              <div><Label htmlFor="paymentAmount">Amount Paid</Label><Input id="paymentAmount" type="number" step="0.01" value={paymentAmount} onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)} className="w-full bg-muted" readOnly /></div>
-              {paymentMethod === 'Cheque/DD' && (<><div><Label htmlFor="chequeDdNo">Cheque/DD Number</Label><Input id="chequeDdNo" type="text" value={chequeDdNo} onChange={(e) => setChequeDdNo(e.target.value)} className="w-full" /></div><div><Label htmlFor="chequeDdDate">Cheque/DD Date</Label><Input id="chequeDdDate" type="date" value={chequeDdDate} onChange={(e) => setChequeDdDate(e.target.value)} className="w-full" /></div></>)}
-              {(['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod)) && (<div><Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label><Input id="transactionId" type="text" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} className="w-full" placeholder={paymentMethod === 'Cash' ? 'Cash transaction reference' : 'e.g., TXN123456789'} /></div>)}
+              <div><Label htmlFor="paymentMethod">Payment Method</Label><Select value={paymentMethod} onValueChange={setPaymentMethod}><SelectTrigger id="paymentMethod"><SelectValue placeholder="Select method" /></SelectTrigger><SelectContent>{paymentMethodsOptions.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
+              <div><Label htmlFor="paymentAmount">Amount Paid</Label><Input id="paymentAmount" type="number" value={paymentAmount} readOnly className="bg-muted" /></div>
+              {paymentMethod === 'Cheque/DD' && (<><div><Label htmlFor="chequeDdNo">Cheque/DD No</Label><Input id="chequeDdNo" value={chequeDdNo} onChange={e => setChequeDdNo(e.target.value)} /></div><div><Label htmlFor="chequeDdDate">Cheque/DD Date</Label><Input id="chequeDdDate" type="date" value={chequeDdDate} onChange={e => setChequeDdDate(e.target.value)} /></div></>)}
+              {['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod) && (<div><Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label><Input id="transactionId" value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="e.g., TXN123456" /></div>)}
             </div>
           </div>
 
-          <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSubmitDisabled}>
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}
-          </Button>
+          <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSubmitDisabled}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}</Button>
         </form>
       </CardContent>
     </Card>
