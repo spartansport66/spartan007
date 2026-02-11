@@ -301,27 +301,43 @@ const Dashboard = () => {
         }
       }
 
-      // 2. FIRST: Remove associated payments to satisfy foreign key constraint
-      // We use the order UUID (order.id) to find and delete linked payments
-      const { error: paymentDeleteError } = await supabase
+      // 2. FIRST: Remove associated payments
+      // We fetch IDs first to ensure RLS doesn't block the filter-based delete
+      const { data: paymentsToDelete, error: fetchPaymentsError } = await supabase
         .from('payments')
-        .delete()
+        .select('id')
         .eq('order_id', order.id);
+      
+      if (fetchPaymentsError) throw fetchPaymentsError;
 
-      if (paymentDeleteError) {
-        console.error('Error deleting associated payments:', paymentDeleteError);
-        throw new Error(`Failed to delete associated payments: ${paymentDeleteError.message}`);
+      if (paymentsToDelete && paymentsToDelete.length > 0) {
+        const { error: paymentDeleteError } = await supabase
+          .from('payments')
+          .delete()
+          .in('id', paymentsToDelete.map(p => p.id));
+
+        if (paymentDeleteError) {
+          throw new Error(`Failed to delete associated payments: ${paymentDeleteError.message}. You may need to update database permissions.`);
+        }
       }
 
       // 3. SECOND: Remove associated sales items
-      const { error: salesDeleteError } = await supabase
+      const { data: salesToDelete, error: fetchSalesError } = await supabase
         .from('sales')
-        .delete()
+        .select('id')
         .eq('order_id', order.id);
-        
-      if (salesDeleteError) {
-        console.error('Error deleting associated sales:', salesDeleteError);
-        throw new Error(`Failed to delete associated sales items: ${salesDeleteError.message}`);
+      
+      if (fetchSalesError) throw fetchSalesError;
+
+      if (salesToDelete && salesToDelete.length > 0) {
+        const { error: salesDeleteError } = await supabase
+          .from('sales')
+          .delete()
+          .in('id', salesToDelete.map(s => s.id));
+          
+        if (salesDeleteError) {
+          throw new Error(`Failed to delete associated sales items: ${salesDeleteError.message}`);
+        }
       }
 
       // 4. FINALLY: Delete the order
