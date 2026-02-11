@@ -368,7 +368,7 @@ const DailyVisitReport: React.FC = () => {
                               form.setValue('photoFile', file, { shouldValidate: true });
                               setSelectedFileName(file.name);
                             } else {
-                              form.setValue('photoFile', undefined, { shouldValidate: true });
+                              form.setValue('photoFile', null as any, { shouldValidate: true });
                               setSelectedFileName(null);
                             }
                           }}

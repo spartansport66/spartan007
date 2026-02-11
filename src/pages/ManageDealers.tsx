@@ -357,10 +357,10 @@ const ManageDealers = () => {
     
     try {
       // Update dealer information
-      const updateData: Partial<Omit<Dealer, 'assigned_sales_persons' | 'current_month_credit_limit' | 'opening_balance' | 'current_balance'>> = {
+      const updateData: any = {
         name: values.name,
-        contact_person: values.contactPerson || null, // Pass null if optional and empty
-        email: values.email || null, // Pass null if optional and empty
+        contact_person: values.contactPerson ?? undefined, // Use undefined for optional fields
+        email: values.email ?? undefined, // Use undefined for optional fields
         phone: values.phone,
         address: values.address,
         city: values.city,
@@ -368,7 +368,7 @@ const ManageDealers = () => {
         country: values.country,
         credit_limit: values.creditLimit,
         allotted_credit_days: values.allottedCreditDays,
-        last_billing_date: values.lastBillingDate || null, // New: Update last_billing_date
+        last_billing_date: values.lastBillingDate ?? undefined, // Use undefined for optional fields
       };
       
       const { error: dealerUpdateError } = await supabase
@@ -848,6 +848,7 @@ const ManageDealers = () => {
                     id="contactPerson"
                     {...form.register('contactPerson')}
                     className="col-span-3"
+                    value={form.watch('contactPerson') ?? ''}
                   />
                   {form.formState.errors.contactPerson && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.contactPerson.message}</p>}
                 </div>
@@ -860,6 +861,7 @@ const ManageDealers = () => {
                     type="email"
                     {...form.register('email')}
                     className="col-span-3"
+                    value={form.watch('email') ?? ''}
                   />
                   {form.formState.errors.email && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.email.message}</p>}
                 </div>
@@ -968,7 +970,7 @@ const ManageDealers = () => {
                         Last Billing Date (Optional)
                       </FormLabel>
                       <FormControl className="col-span-3">
-                        <Input type="date" {...field} />
+                        <Input type="date" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage className="col-span-4 text-right" />
                     </FormItem>

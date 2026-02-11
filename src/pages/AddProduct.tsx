@@ -181,7 +181,7 @@ const AddProduct = () => {
                     <FormItem>
                       <FormLabel>Description (Optional)</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="e.g., High-performance laptop for professionals." {...field} />
+                        <Textarea placeholder="e.g., High-performance laptop for professionals." {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -195,7 +195,7 @@ const AddProduct = () => {
                       <FormItem>
                         <FormLabel>Size (Optional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., 15 inch" {...field} />
+                          <Input placeholder="e.g., 15 inch" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -208,7 +208,7 @@ const AddProduct = () => {
                       <FormItem>
                         <FormLabel>HSN (Optional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., 8471" {...field} />
+                          <Input placeholder="e.g., 8471" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -221,7 +221,7 @@ const AddProduct = () => {
                       <FormItem>
                         <FormLabel>GST (%)</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., 18" {...field} />
+                          <Input placeholder="e.g., 18" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

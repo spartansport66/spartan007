@@ -74,7 +74,7 @@ const Login = () => {
       if (error) {
         // Log login failure
         await supabase.from('login_logs').insert({
-          user_id: data.user?.id || '00000000-0000-0000-0000-000000000000', // Use dummy ID if user object is null
+          user_id: (data as any)?.user?.id || '00000000-0000-0000-0000-000000000000', // Use dummy ID if user object is null
           success: false,
         });
         throw error;

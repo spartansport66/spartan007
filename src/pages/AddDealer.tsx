@@ -239,7 +239,7 @@ const AddDealer = () => {
                     <FormItem>
                       <FormLabel>Contact Person (Optional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Jane Doe" {...field} />
+                        <Input placeholder="e.g., Jane Doe" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -253,7 +253,7 @@ const AddDealer = () => {
                     <FormItem>
                       <FormLabel>Email (Optional)</FormLabel>
                       <FormControl>
-                        <Input type="email" placeholder="e.g., jane.doe@example.com" {...field} />
+                        <Input type="email" placeholder="e.g., jane.doe@example.com" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -379,7 +379,7 @@ const AddDealer = () => {
                     <FormItem>
                       <FormLabel>Last Billing Date (Optional)</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <Input type="date" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

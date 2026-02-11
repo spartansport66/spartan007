@@ -554,7 +554,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
 
           if (entry.type === 'order') {
             statusDetails = entry.payment_status === 'pending' ? 'Pending' : entry.payment_status === 'pending_approval' ? 'Pending Approval' : 'Paid';
-            if (entry.days_overdue !== null && entry.days_overdue > 0) {
+            if (entry.days_overdue != null && entry.days_overdue > 0) {
               daysOverdueDisplay = entry.days_overdue.toString();
             }
           } else if (entry.type === 'payment') {

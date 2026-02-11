@@ -442,7 +442,7 @@ const OpeningBalanceReportDialog: React.FC<OpeningBalanceReportDialogProps> = ({
                                 render={({ field }) => (
                                   <FormItem className="mb-0">
                                     <FormControl>
-                                      <Input type="date" {...field} className="w-32 text-center" disabled={isUpdatingBillingDate} />
+                                      <Input type="date" {...field} value={field.value ?? ''} className="w-32 text-center" disabled={isUpdatingBillingDate} />
                                     </FormControl>
                                     <FormMessage />
                                   </FormItem>
