@@ -13,9 +13,9 @@ import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { Loader2, Package, Check, ChevronsUpDown, Search } from 'lucide-react';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Product {
   id: string;
@@ -151,7 +151,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
     }
   };
 
-  if (loadingProducts) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  if (loadingProducts) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -185,43 +185,43 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
                       </FormControl>
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command shouldFilter={false}>
-                        <div className="flex items-center border-b px-3">
-                          <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                          <Input
-                            placeholder="Search product..."
-                            value={productSearchValue}
-                            onChange={(e) => setProductSearchValue(e.target.value)}
-                            className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none border-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
-                          />
-                        </div>
-                        <CommandList className="max-h-[300px] overflow-y-auto">
+                      <div className="p-2 border-b flex items-center gap-2">
+                        <Search className="h-4 w-4 text-muted-foreground" />
+                        <Input 
+                          placeholder="Search product..." 
+                          value={productSearchValue} 
+                          onChange={(e) => setProductSearchValue(e.target.value)} 
+                          className="h-8 border-none focus-visible:ring-0" 
+                        />
+                      </div>
+                      <ScrollArea className="h-[300px]">
+                        <div className="p-1">
                           {filteredProducts.length === 0 ? (
-                            <CommandEmpty>No product found.</CommandEmpty>
+                            <div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>
                           ) : (
-                            <CommandGroup>
-                              {filteredProducts.map((product) => (
-                                <CommandItem
-                                  key={product.id}
-                                  value={`${product.name}-${product.code}-${product.id}`}
-                                  onSelect={() => {
-                                    field.onChange(product.id);
-                                    setIsProductPopoverOpen(false);
-                                    setProductSearchValue("");
-                                  }}
-                                  className="cursor-pointer"
-                                >
-                                  <Check className={cn("mr-2 h-4 w-4", field.value === product.id ? "opacity-100" : "opacity-0")} />
-                                  <div className="flex flex-col">
+                            filteredProducts.map((product) => (
+                              <Button
+                                key={product.id}
+                                variant="ghost"
+                                className="w-full justify-start font-normal h-auto py-2"
+                                onClick={() => {
+                                  field.onChange(product.id);
+                                  setIsProductPopoverOpen(false);
+                                  setProductSearchValue("");
+                                }}
+                              >
+                                <div className="flex flex-col items-start w-full">
+                                  <div className="flex items-center">
+                                    <Check className={cn("mr-2 h-4 w-4", field.value === product.id ? "opacity-100" : "opacity-0")} />
                                     <span className="font-medium">{product.name} ({product.code})</span>
-                                    <span className="text-xs text-muted-foreground">Current Stock: {product.closing_stock}</span>
                                   </div>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
+                                  <div className="text-xs text-muted-foreground ml-6">Current Stock: {product.closing_stock}</div>
+                                </div>
+                              </Button>
+                            ))
                           )}
-                        </CommandList>
-                      </Command>
+                        </div>
+                      </ScrollArea>
                     </PopoverContent>
                   </Popover>
                   <FormMessage />
