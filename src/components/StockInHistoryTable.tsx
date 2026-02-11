@@ -27,6 +27,7 @@ const StockInHistoryTable: React.FC = () => {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
+      // Corrected join syntax: profiles!received_by specifies the foreign key column
       const { data, error } = await supabase
         .from('stock_receipts')
         .select(`
@@ -35,27 +36,37 @@ const StockInHistoryTable: React.FC = () => {
           quantity,
           remarks,
           products (name, code),
-          profiles:received_by (first_name, last_name)
+          received_by_profile:profiles!received_by (first_name, last_name)
         `)
         .order('receipt_date', { ascending: false })
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[StockInHistoryTable] Supabase error:', error);
+        throw error;
+      }
 
-      const formatted: StockInRecord[] = (data || []).map((r: any) => ({
-        id: r.id,
-        receipt_date: r.receipt_date,
-        quantity: r.quantity,
-        remarks: r.remarks,
-        product_name: r.products?.name || 'N/A',
-        product_code: r.products?.code || 'N/A',
-        received_by_name: `${r.profiles?.first_name || ''} ${r.profiles?.last_name || ''}`.trim() || 'N/A',
-      }));
+      const formatted: StockInRecord[] = (data || []).map((r: any) => {
+        const profile = r.received_by_profile;
+        const name = profile 
+          ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() 
+          : 'Unknown User';
+
+        return {
+          id: r.id,
+          receipt_date: r.receipt_date,
+          quantity: r.quantity,
+          remarks: r.remarks,
+          product_name: r.products?.name || 'N/A',
+          product_code: r.products?.code || 'N/A',
+          received_by_name: name || 'N/A',
+        };
+      });
 
       setRecords(formatted);
     } catch (error: any) {
       console.error('Error fetching stock in history:', error.message);
-      showError('Failed to load stock in history.');
+      showError('Failed to load stock in history. Please check database permissions.');
     } finally {
       setLoading(false);
     }
