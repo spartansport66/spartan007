@@ -5,14 +5,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown } from 'lucide-react';
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Percent, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface Product {
   id: string;
@@ -23,10 +23,14 @@ interface Product {
 }
 
 interface OrderItem {
-  id: string; // Unique ID for React list key
+  id: string;
   product_id: string;
   quantity: number;
-  total_price: number; // Price at time of order (quantity * DP)
+  product_name: string;
+  product_code: string;
+  unit_dp: number;
+  discount_percent: number;
+  total_price: number;
 }
 
 interface OrderToEdit {
@@ -35,6 +39,7 @@ interface OrderToEdit {
   dealer_name: string;
   total_amount: number;
   discount_amount: number;
+  gst_percent: number;
   items: OrderItem[];
 }
 
@@ -51,22 +56,36 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [products, setProducts] = useState<Product[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const [gstPercent, setGstPercent] = useState<number>(5);
   const [orderData, setOrderData] = useState<OrderToEdit | null>(null);
 
   // Searchable product dropdown states
-  const [popoverOpenStates, setPopoverOpenStates] = useState<Record<string, boolean>>({});
-  const [searchValue, setSearchValue] = useState("");
+  const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [newItemProductId, setNewItemProductId] = useState<string>('');
+  const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
+  const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
+  const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<number>(0);
 
   const fetchOrderAndProducts = useCallback(async (id: string) => {
     setLoading(true);
     try {
-      // 1. Fetch Order Details
+      // 1. Fetch all products first for lookup
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, code, name, dp, closing_stock')
+        .order('name', { ascending: true });
+
+      if (productsError) throw productsError;
+      setProducts(productsData || []);
+
+      // 2. Fetch Order Details
       const { data: orderRaw, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, total_amount, discount_amount,
+          id, order_number, total_amount, discount_amount, gst_percent,
           dealers (name),
-          sales (product_id, quantity, total_price, products (dp))
+          sales (product_id, quantity, total_price, unit_price, discount_percent, products (name, code, dp))
         `)
         .eq('id', id)
         .single();
@@ -74,9 +93,13 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       if (orderError) throw orderError;
 
       const fetchedItems: OrderItem[] = (orderRaw.sales || []).map((sale: any, index: number) => ({
-        id: `${sale.product_id}-${index}`, // Use a unique ID for the list
+        id: `${sale.product_id}-${index}`,
         product_id: sale.product_id,
         quantity: sale.quantity,
+        product_name: sale.products?.name || 'N/A',
+        product_code: sale.products?.code || 'N/A',
+        unit_dp: sale.unit_price || sale.products?.dp || 0,
+        discount_percent: sale.discount_percent || 0,
         total_price: sale.total_price,
       }));
 
@@ -86,19 +109,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         dealer_name: (orderRaw.dealers as any)?.name || 'N/A',
         total_amount: orderRaw.total_amount,
         discount_amount: orderRaw.discount_amount || 0,
+        gst_percent: orderRaw.gst_percent || 5,
         items: fetchedItems,
       });
       setOrderItems(fetchedItems);
       setDiscountAmount(orderRaw.discount_amount || 0);
-
-      // 2. Fetch all products
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
-        .select('id, code, name, dp, closing_stock')
-        .order('name', { ascending: true });
-
-      if (productsError) throw productsError;
-      setProducts(productsData || []);
+      setGstPercent(orderRaw.gst_percent || 5);
 
     } catch (error: any) {
       console.error('Error fetching order details for edit:', error.message);
@@ -116,113 +132,121 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       setOrderData(null);
       setOrderItems([]);
       setDiscountAmount(0);
+      setGstPercent(5);
     }
   }, [isOpen, orderId, fetchOrderAndProducts]);
 
-  const calculateItemTotal = (item: OrderItem) => {
-    const product = products.find(p => p.id === item.product_id);
-    return product ? item.quantity * product.dp : 0;
-  };
+  const preDiscountTotalOrderValue = useMemo(() => {
+    return orderItems.reduce((total, item) => total + item.total_price, 0);
+  }, [orderItems]);
 
-  const calculateTotalOrderValue = (items: OrderItem[]) => {
-    return items.reduce((total, item) => total + calculateItemTotal(item), 0);
-  };
+  const taxableValue = useMemo(() => {
+    return Math.max(0, preDiscountTotalOrderValue - discountAmount);
+  }, [preDiscountTotalOrderValue, discountAmount]);
 
-  const preDiscountTotalOrderValue = calculateTotalOrderValue(orderItems);
-  const finalOrderValue = Math.max(0, preDiscountTotalOrderValue - discountAmount);
+  const gstAmount = useMemo(() => {
+    return (taxableValue * gstPercent) / 100;
+  }, [taxableValue, gstPercent]);
+
+  const finalOrderValue = useMemo(() => {
+    return taxableValue + gstAmount;
+  }, [taxableValue, gstAmount]);
+
+  const newItemFinalUnitPrice = useMemo(() => {
+    const discount = (newItemUnitPrice * newItemDiscountPercent) / 100;
+    return Math.max(0, newItemUnitPrice - discount);
+  }, [newItemUnitPrice, newItemDiscountPercent]);
+
+  const newItemTotalPrice = useMemo(() => {
+    return newItemQuantity * newItemFinalUnitPrice;
+  }, [newItemQuantity, newItemFinalUnitPrice]);
 
   const addOrderItem = () => {
-    const newId = Date.now().toString();
-    setOrderItems([...orderItems, { id: newId, product_id: '', quantity: 1, total_price: 0 }]);
-    setPopoverOpenStates(prev => ({ ...prev, [newId]: false }));
+    if (!newItemProductId || newItemQuantity <= 0) {
+      showError("Please select a product and enter a valid quantity.");
+      return;
+    }
+    const product = products.find(p => p.id === newItemProductId);
+    if (!product) return;
+
+    const newOrderItem: OrderItem = {
+      id: Date.now().toString(),
+      product_id: product.id,
+      quantity: newItemQuantity,
+      product_name: product.name,
+      product_code: product.code,
+      unit_dp: newItemUnitPrice,
+      discount_percent: newItemDiscountPercent,
+      total_price: newItemTotalPrice,
+    };
+    setOrderItems(prevItems => [newOrderItem, ...prevItems]);
+    setNewItemProductId('');
+    setNewItemQuantity(1);
+    setNewItemUnitPrice(0);
+    setNewItemDiscountPercent(0);
   };
 
   const removeOrderItem = (id: string) => {
-    if (orderItems.length > 1) {
-      setOrderItems(orderItems.filter(item => item.id !== id));
-      setPopoverOpenStates(prev => {
-        const newState = { ...prev };
-        delete newState[id];
-        return newState;
-      });
-    }
-  };
-
-  const updateOrderItem = (id: string, field: keyof OrderItem, value: string | number) => {
-    setOrderItems(prevItems => prevItems.map(item => {
-      if (item.id === id) {
-        let updatedItem = { ...item };
-        
-        if (field === 'quantity') {
-          updatedItem.quantity = Math.round(typeof value === 'string' ? parseFloat(value) || 0 : value);
-        } else if (field === 'product_id') {
-          updatedItem.product_id = String(value);
-        } else {
-          updatedItem = { ...item, [field]: value };
-        }
-
-        if (field === 'quantity' || field === 'product_id') {
-          const product = products.find(p => p.id === updatedItem.product_id);
-          updatedItem.total_price = product ? updatedItem.quantity * product.dp : 0;
-        }
-        return updatedItem;
-      }
-      return item;
-    }));
+    setOrderItems(orderItems.filter(item => item.id !== id));
   };
 
   const filteredProducts = useMemo(() => {
-    if (!searchValue) return products;
-    const lowerCaseSearchValue = searchValue.toLowerCase();
-    const searchWords = lowerCaseSearchValue.split(' ').filter(word => word.length > 0);
-
-    return products.filter(product => {
-      const productName = product.name.toLowerCase();
-      const productCode = product.code.toLowerCase();
-      return searchWords.some(word => 
-        productName.includes(word) || productCode.includes(word)
-      );
-    });
-  }, [products, searchValue]);
+    if (!productSearch) return products;
+    const search = productSearch.toLowerCase();
+    return products.filter(p => p.name.toLowerCase().includes(search) || p.code.toLowerCase().includes(search));
+  }, [products, productSearch]);
 
   const handleSave = async () => {
-    if (!orderData || orderItems.some(item => !item.product_id || item.quantity <= 0)) {
-      showError('Please ensure all order items have a selected product and positive quantity.');
+    if (!orderData || orderItems.length === 0) {
+      showError('Order must have at least one item.');
       return;
     }
-    if (discountAmount < 0 || discountAmount > preDiscountTotalOrderValue) {
-      showError('Invalid discount amount.');
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
-      // 1. Update the main order record
       const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
       const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
 
+      // 1. Update the main order record
       const { error: orderUpdateError } = await supabase
         .from('orders')
         .update({
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
+          gst_percent: gstPercent,
         })
         .eq('id', orderData.id);
 
       if (orderUpdateError) throw orderUpdateError;
 
-      // 2. Update sales items (Database triggers will handle stock restoration and subtraction)
+      // 2. Update sales items
       await supabase.from('sales').delete().eq('order_id', orderData.id);
       const salesToInsert = orderItems.map(item => ({
         order_id: orderData.id,
         product_id: item.product_id,
         quantity: item.quantity,
+        unit_price: item.unit_dp,
+        discount_percent: item.discount_percent,
         total_price: item.total_price,
       }));
       await supabase.from('sales').insert(salesToInsert);
 
-      showSuccess(`Order #${orderData.order_number} updated and stock adjusted.`);
+      // 3. Update associated payment if it exists and is pending approval
+      const { data: payment } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('order_id', orderData.id)
+        .eq('status', 'pending_approval')
+        .maybeSingle();
+
+      if (payment) {
+        await supabase
+          .from('payments')
+          .update({ amount: finalOrderAmount })
+          .eq('id', payment.id);
+      }
+
+      showSuccess(`Order #${orderData.order_number} updated successfully.`);
       onOrderUpdated();
       onOpenChange(false);
 
@@ -236,129 +260,167 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   if (!orderId || !isOpen) return null;
 
-  if (loading) {
-    return (
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[600px]">
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading order details...</p>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
           <DialogDescription>
-            Modify items and discount. Stock will be adjusted automatically.
+            Modify items, discounts, and tax settings for this order.
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-6 py-4">
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <Label className="text-lg font-semibold">Order Items</Label>
-              <Button type="button" onClick={addOrderItem} size="sm" className="flex items-center gap-1" disabled={isSubmitting}>
-                <Plus className="h-4 w-4" /> Add Item
-              </Button>
-            </div>
-
-            {orderItems.map((item) => {
-              const product = products.find(p => p.id === item.product_id);
-              const itemTotal = calculateItemTotal(item);
-              
-              return (
-                <div key={item.id} className="space-y-3 p-4 border rounded-md bg-muted/50">
-                  <div className="flex items-end gap-2">
-                    <div className="flex-grow">
-                      <Label>Product Selection</Label>
-                      <Popover 
-                        open={popoverOpenStates[item.id]} 
-                        onOpenChange={(openState) => {
-                          setPopoverOpenStates(prev => ({ ...prev, [item.id]: openState }));
-                          if (openState) setSearchValue("");
-                        }}
-                      >
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>
-                            {product?.name || "Select product..."}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                          <Command>
-                            <CommandInput placeholder="Search product..." value={searchValue} onValueChange={setSearchValue} />
-                            <CommandList className="max-h-[300px] overflow-y-auto">
-                              {filteredProducts.length === 0 ? (
-                                <CommandEmpty>No product found.</CommandEmpty>
-                              ) : (
-                                <CommandGroup>
-                                  {filteredProducts.map((p) => (
-                                    <CommandItem
-                                      key={p.id}
-                                      value={`${p.name} ${p.code}`} 
-                                      onSelect={() => {
-                                        updateOrderItem(item.id, 'product_id', p.id);
-                                        setPopoverOpenStates(prev => ({ ...prev, [item.id]: false }));
-                                      }}
-                                    >
-                                      <Check className={cn("mr-2 h-4 w-4", item.product_id === p.id ? "opacity-100" : "opacity-0")} />
-                                      <div>
-                                        <div>{p.name} ({p.code})</div>
-                                        <div className="text-xs text-muted-foreground">DP: ₹{p.dp.toFixed(2)} - Stock: {p.closing_stock}</div>
-                                      </div>
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              )}
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    {orderItems.length > 1 && (
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="space-y-6 py-4">
+            {/* Add New Item Section */}
+            <div className="space-y-4">
+              <Label className="text-lg font-semibold">Add/Modify Items</Label>
+              <div className="flex flex-col gap-4 p-4 border rounded-md bg-muted/50">
+                <div className="w-full">
+                  <Label>Product</Label>
+                  <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>
+                        {newItemProductId ? products.find(p => p.id === newItemProductId)?.name : "Select product..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4 items-end">
-                    <div>
-                      <Label>Quantity</Label>
-                      <Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 1)} min="1" disabled={isSubmitting} />
-                    </div>
-                    <div>
-                      <Label>Unit Price (DP)</Label>
-                      <div className="font-medium text-lg">₹{product?.dp.toFixed(2) || '0.00'}</div>
-                    </div>
-                    <div>
-                      <Label>Item Total</Label>
-                      <div className="font-medium text-lg">₹{itemTotal.toFixed(2)}</div>
-                    </div>
-                  </div>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <div className="p-2 border-b flex items-center gap-2">
+                        <Search className="h-4 w-4 text-muted-foreground" />
+                        <Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" />
+                      </div>
+                      <CommandList className="max-h-[250px] overflow-y-auto">
+                        {filteredProducts.length === 0 ? (
+                          <CommandEmpty>No product found.</CommandEmpty>
+                        ) : (
+                          <CommandGroup>
+                            {filteredProducts.map((product) => (
+                              <Button 
+                                key={product.id} 
+                                variant="ghost" 
+                                className="w-full justify-start font-normal h-auto py-2" 
+                                onClick={() => { 
+                                  setNewItemProductId(product.id); 
+                                  setNewItemUnitPrice(product.dp); 
+                                  setIsProductPopoverOpen(false); 
+                                  setProductSearch(''); 
+                                }}
+                              >
+                                <div className="flex flex-col items-start">
+                                  <div className="flex items-center">
+                                    <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                    <span>{product.name} ({product.code})</span>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - Stock: {product.closing_stock}</div>
+                                </div>
+                              </Button>
+                            ))}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </PopoverContent>
+                  </Popover>
                 </div>
-              );
-            })}
-          </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 items-end">
+                  <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
+                  <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
+                  <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(parseFloat(e.target.value) || 0)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
+                  <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Final Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemTotalPrice.toFixed(2)}</div></div>
+                </div>
+                <Button type="button" onClick={addOrderItem} disabled={isSubmitting} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
+              </div>
 
-          <div className="p-4 bg-muted rounded-md space-y-2">
-            <div className="flex justify-between text-base font-medium"><span>Subtotal:</span><span>₹{preDiscountTotalOrderValue.toFixed(2)}</span></div>
-            <div className="flex justify-between items-center">
-              <Label htmlFor="discountAmount">Discount (₹)</Label>
-              <Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preDiscountTotalOrderValue} disabled={isSubmitting} />
+              {/* Current Items Table */}
+              {orderItems.length > 0 && (
+                <div className="max-h-[250px] overflow-y-auto border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Qty</TableHead>
+                        <TableHead>DP</TableHead>
+                        <TableHead>Disc %</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {orderItems.map(item => (
+                        <TableRow key={item.id}>
+                          <TableCell className="max-w-[150px] truncate">{item.product_name}</TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>₹{item.unit_dp.toFixed(2)}</TableCell>
+                          <TableCell>{item.discount_percent}%</TableCell>
+                          <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </div>
-            <Separator className="my-2" />
-            <div className="flex justify-between text-lg font-bold"><span>Total:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
+
+            {/* Totals and Tax Section */}
+            <div className="p-4 bg-muted rounded-md space-y-2">
+              <div className="flex justify-between text-base font-medium">
+                <span>Subtotal:</span>
+                <span>₹{preDiscountTotalOrderValue.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <Label htmlFor="discountAmount" className="text-base font-medium">Additional Discount (₹)</Label>
+                <Input 
+                  id="discountAmount" 
+                  type="number" 
+                  step="0.01" 
+                  value={discountAmount} 
+                  onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} 
+                  className="w-32 text-right" 
+                  min="0" 
+                  max={preDiscountTotalOrderValue} 
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div className="flex justify-between text-base font-medium">
+                <span>Taxable Value:</span>
+                <span>₹{taxableValue.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="gstPercent" className="text-base font-medium">GST (%)</Label>
+                  <Input 
+                    id="gstPercent" 
+                    type="number" 
+                    step="0.1" 
+                    value={gstPercent} 
+                    onChange={(e) => setGstPercent(parseFloat(e.target.value) || 0)} 
+                    className="w-20 text-right" 
+                    min="0" 
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <span className="text-sm text-muted-foreground">₹{gstAmount.toFixed(2)}</span>
+              </div>
+              <Separator className="my-2" />
+              <div className="flex justify-between text-lg font-bold">
+                <span>Total Order Value:</span>
+                <span>₹{finalOrderValue.toFixed(2)}</span>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
           <Button onClick={handleSave} disabled={isSubmitting || orderItems.length === 0}>
             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}
           </Button>
