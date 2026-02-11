@@ -34,6 +34,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 interface Product {
   id: string;
@@ -101,7 +103,6 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     }
     setLoading(true);
     try {
-      // Corrected: Using 'closing_stock' instead of 'stock'
       let query = supabase
         .from('products')
         .select('id, code, name, description, size, hsn, gst, dp, opening_stock, stock_in, stock_out, closing_stock, user_id, sales(count)');
@@ -231,29 +232,68 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
 
       {selectedProduct && (
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle>Edit Product</DialogTitle>
+              <DialogTitle>Edit Product: {selectedProduct.name}</DialogTitle>
+              <DialogDescription>Update product details. Stock movements (In/Out) are managed by orders and receipts.</DialogDescription>
             </DialogHeader>
-            <form onSubmit={form.handleSubmit(handleUpdateProduct)} className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="code" className="text-right">Code</Label>
-                <Input id="code" {...form.register('code')} className="col-span-3" />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name" className="text-right">Name</Label>
-                <Input id="name" {...form.register('name')} className="col-span-3" disabled={selectedProduct.has_sales} />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="opening_stock" className="text-right">Opening</Label>
-                <Input id="opening_stock" type="number" {...form.register('opening_stock')} className="col-span-3" />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="dp" className="text-right">DP</Label>
-                <Input id="dp" type="number" step="0.01" {...form.register('dp')} className="col-span-3" />
-              </div>
-              <DialogFooter><Button type="submit">Save changes</Button></DialogFooter>
-            </form>
+            <ScrollArea className="max-h-[70vh] pr-4">
+              <form onSubmit={form.handleSubmit(handleUpdateProduct)} className="space-y-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="code" className="text-right">Code</Label>
+                  <Input id="code" {...form.register('code')} className="col-span-3" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="name" className="text-right">Name</Label>
+                  <Input id="name" {...form.register('name')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="description" className="text-right">Description</Label>
+                  <Textarea id="description" {...form.register('description')} className="col-span-3" disabled={selectedProduct.has_sales} />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="size" className="text-right">Size</Label>
+                  <Input id="size" {...form.register('size')} className="col-span-3" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="hsn" className="text-right">HSN</Label>
+                  <Input id="hsn" {...form.register('hsn')} className="col-span-3" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="gst" className="text-right">GST (%)</Label>
+                  <Input id="gst" {...form.register('gst')} className="col-span-3" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="dp" className="text-right">DP (₹)</Label>
+                  <Input id="dp" type="number" step="0.01" {...form.register('dp')} className="col-span-3" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="opening_stock" className="text-right">Opening Stock</Label>
+                  <Input id="opening_stock" type="number" {...form.register('opening_stock')} className="col-span-3" />
+                </div>
+                
+                <Separator />
+                
+                <div className="bg-muted p-3 rounded-md space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Stock In (Receipts):</span>
+                    <span className="font-medium text-green-600">+{selectedProduct.stock_in}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Stock Out (Sales):</span>
+                    <span className="font-medium text-red-600">-{selectedProduct.stock_out}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2 font-bold">
+                    <span>Current Closing Stock:</span>
+                    <span>{selectedProduct.closing_stock}</span>
+                  </div>
+                </div>
+              </form>
+            </ScrollArea>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+              <Button type="submit" onClick={form.handleSubmit(handleUpdateProduct)}>Save changes</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
