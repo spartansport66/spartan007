@@ -110,10 +110,10 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
         quantity_in: values.quantity
       });
 
-      if (stockError) throw stockError;
+      if (stockError) throw new Error(`Stock update failed: ${stockError.message}`);
 
       // 2. Insert stock receipt log
-      await supabase
+      const { error: logError } = await supabase
         .from('stock_receipts')
         .insert({
           product_id: values.productId,
@@ -122,6 +122,8 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
           received_by: user.id,
           remarks: values.remarks,
         });
+
+      if (logError) throw new Error(`Failed to save history log: ${logError.message}`);
 
       // 3. Resolve alerts if stock is now positive
       const { data: productData } = await supabase
@@ -145,7 +147,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
       fetchProducts();
     } catch (error: any) {
       console.error('Error recording stock receipt:', error);
-      showError(`Failed to record stock receipt: ${error.message}`);
+      showError(error.message || 'An unexpected error occurred.');
     } finally {
       setIsSubmitting(false);
     }

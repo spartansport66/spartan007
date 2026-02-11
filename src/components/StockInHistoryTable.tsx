@@ -65,7 +65,7 @@ const StockInHistoryTable: React.FC = () => {
       setRecords(formatted);
     } catch (error: any) {
       console.error('Error fetching stock in history:', error.message);
-      // We don't show a toast here to avoid spamming if the RLS is still being fixed
+      showError(`Failed to load history: ${error.message}`);
       setRecords([]);
     } finally {
       setLoading(false);
