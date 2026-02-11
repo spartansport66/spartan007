@@ -269,7 +269,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     doc.setFontSize(12);
     doc.text(`TOTAL BILL AMOUNT: Rs. ${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, finalY, { align: 'right' });
 
-    doc.save(`dispatch_slip_${orderDetails.order_number}.pdf`);
+    // Updated filename to use Gate Pass number
+    const fileName = `Gate_Pass_${orderDetails.dispatch_number || orderDetails.order_number}.pdf`;
+    doc.save(fileName);
   };
 
   return (
