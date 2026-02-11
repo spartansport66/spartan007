@@ -180,8 +180,12 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
                       </FormControl>
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                      <Command>
-                        <CommandInput placeholder="Search product..." value={productSearchValue} onValueChange={setProductSearchValue} />
+                      <Command shouldFilter={false}>
+                        <CommandInput 
+                          placeholder="Search product..." 
+                          value={productSearchValue} 
+                          onValueChange={setProductSearchValue} 
+                        />
                         <CommandList className="max-h-[300px] overflow-y-auto">
                           {filteredProducts.length === 0 ? (
                             <CommandEmpty>No product found.</CommandEmpty>
@@ -190,7 +194,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
                               {filteredProducts.map((product) => (
                                 <CommandItem
                                   key={product.id}
-                                  value={product.name}
+                                  value={product.id}
                                   onSelect={() => {
                                     field.onChange(product.id);
                                     setIsProductPopoverOpen(false);

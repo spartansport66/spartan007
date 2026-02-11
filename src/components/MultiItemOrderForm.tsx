@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 
 const SEND_ORDER_NOTIFICATION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-order-notification";
 
@@ -79,7 +80,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
   const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
   const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<number>(0);
-  const [newItemGstPercent, setNewItemGstPercent] = useState<number>(0); // New state for editable GST
+  const [newItemGstPercent, setNewItemGstPercent] = useState<number>(0);
 
   const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
 
@@ -412,14 +413,35 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Button variant="outline" role="combobox" className="w-full justify-between" disabled={dealers.length === 0}>{currentDealerName}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
               </PopoverTrigger>
               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search dealer..." value={dealerSearch} onChange={(e) => setDealerSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
-                <ScrollArea className="h-[200px]">
-                  <div className="p-1">
-                    {filteredDealers.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No dealer found.</div>) : (
-                      filteredDealers.map((dealer) => (<Button key={dealer.id} variant="ghost" className="w-full justify-start font-normal" onClick={() => { setSelectedDealer(dealer.id); setIsDealerPopoverOpen(false); setDealerSearch(''); }}><Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />{dealer.name}</Button>))
+                <Command shouldFilter={false}>
+                  <CommandInput 
+                    placeholder="Search dealer..." 
+                    value={dealerSearch} 
+                    onValueChange={setDealerSearch} 
+                  />
+                  <CommandList className="max-h-[200px] overflow-y-auto">
+                    {filteredDealers.length === 0 ? (
+                      <CommandEmpty>No dealer found.</CommandEmpty>
+                    ) : (
+                      <CommandGroup>
+                        {filteredDealers.map((dealer) => (
+                          <CommandItem
+                            key={dealer.id}
+                            value={dealer.id}
+                            onSelect={() => {
+                              setSelectedDealer(dealer.id);
+                              setIsDealerPopoverOpen(false);
+                              setDealerSearch('');
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", selectedDealer === dealer.id ? "opacity-100" : "opacity-0")} />
+                            {dealer.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
                     )}
-                  </div>
-                </ScrollArea>
+                  </CommandList>
+                </Command>
               </PopoverContent>
             </Popover>
           </div>
@@ -434,14 +456,42 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                     <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0}>{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                    <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
-                    <ScrollArea className="h-[250px]">
-                      <div className="p-1">
-                        {filteredProducts.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>) : (
-                          filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setNewItemGstPercent(parseFloat(product.gst) || 0); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start"><div className="flex items-center"><Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span>{product.name} ({product.code})</span></div><div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - GST: {product.gst}% - Stock: {product.closing_stock}</div></div></Button>))
+                    <Command shouldFilter={false}>
+                      <CommandInput 
+                        placeholder="Search product..." 
+                        value={productSearch} 
+                        onValueChange={setProductSearch} 
+                      />
+                      <CommandList className="max-h-[250px] overflow-y-auto">
+                        {filteredProducts.length === 0 ? (
+                          <CommandEmpty>No product found.</CommandEmpty>
+                        ) : (
+                          <CommandGroup>
+                            {filteredProducts.map((product) => (
+                              <CommandItem
+                                key={product.id}
+                                value={product.id}
+                                onSelect={() => {
+                                  setNewItemProductId(product.id);
+                                  setNewItemUnitPrice(product.dp);
+                                  setNewItemGstPercent(parseFloat(product.gst) || 0);
+                                  setIsProductPopoverOpen(false);
+                                  setProductSearch('');
+                                }}
+                              >
+                                <div className="flex flex-col items-start">
+                                  <div className="flex items-center">
+                                    <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                    <span>{product.name} ({product.code})</span>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - GST: {product.gst}% - Stock: {product.closing_stock}</div>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
                         )}
-                      </div>
-                    </ScrollArea>
+                      </CommandList>
+                    </Command>
                   </PopoverContent>
                 </Popover>
               </div>
