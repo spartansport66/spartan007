@@ -282,7 +282,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
           <DialogDescription>
@@ -310,39 +310,49 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <div className="p-2 border-b flex items-center gap-2">
-                        <Search className="h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" />
-                      </div>
-                      <CommandList className="max-h-[250px] overflow-y-auto">
-                        {filteredProducts.length === 0 ? (
-                          <CommandEmpty>No product found.</CommandEmpty>
-                        ) : (
-                          <CommandGroup>
-                            {filteredProducts.map((product) => (
-                              <Button 
-                                key={product.id} 
-                                variant="ghost" 
-                                className="w-full justify-start font-normal h-auto py-2" 
-                                onClick={() => { 
-                                  setNewItemProductId(product.id); 
-                                  setNewItemUnitPrice(product.dp); 
-                                  setIsProductPopoverOpen(false); 
-                                  setProductSearch(''); 
-                                }}
-                              >
-                                <div className="flex flex-col items-start">
-                                  <div className="flex items-center">
-                                    <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                                    <span>{product.name} ({product.code})</span>
+                      <Command>
+                        <div className="p-2 border-b flex items-center gap-2">
+                          <Search className="h-4 w-4 text-muted-foreground" />
+                          <Input 
+                            placeholder="Search product..." 
+                            value={productSearch} 
+                            onChange={(e) => setProductSearch(e.target.value)} 
+                            className="h-8 border-none focus-visible:ring-0" 
+                          />
+                        </div>
+                        <CommandList className="max-h-[250px] overflow-y-auto">
+                          {filteredProducts.length === 0 ? (
+                            <CommandEmpty>No product found.</CommandEmpty>
+                          ) : (
+                            <CommandGroup>
+                              {filteredProducts.map((product) => (
+                                <CommandItem
+                                  key={product.id}
+                                  value={`${product.name} ${product.code}`}
+                                  onSelect={() => {
+                                    setNewItemProductId(product.id);
+                                    setNewItemUnitPrice(product.dp);
+                                    setIsProductPopoverOpen(false);
+                                    setProductSearch('');
+                                  }}
+                                  className="cursor-pointer"
+                                >
+                                  <div className="flex flex-col items-start w-full">
+                                    <div className="flex items-center justify-between w-full">
+                                      <div className="flex items-center">
+                                        <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                        <span className="font-medium">{product.name} ({product.code})</span>
+                                      </div>
+                                      <span className="text-xs font-bold text-primary">₹{product.dp.toFixed(2)}</span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground ml-6">Stock: {product.closing_stock}</div>
                                   </div>
-                                  <div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - Stock: {product.closing_stock}</div>
-                                </div>
-                              </Button>
-                            ))}
-                          </CommandGroup>
-                        )}
-                      </CommandList>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
                     </PopoverContent>
                   </Popover>
                 </div>
@@ -357,7 +367,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
               {/* Current Items Table */}
               {orderItems.length > 0 && (
-                <div className="max-h-[250px] overflow-y-auto border rounded-md">
+                <div className="max-h-[350px] overflow-y-auto border rounded-md">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -366,13 +376,13 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                         <TableHead className="w-32">DP (₹)</TableHead>
                         <TableHead className="w-24">Disc %</TableHead>
                         <TableHead className="text-right">Total</TableHead>
-                        <TableHead></TableHead>
+                        <TableHead className="w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {orderItems.map(item => (
                         <TableRow key={item.id}>
-                          <TableCell className="max-w-[150px] truncate">{item.product_name} ({item.product_code})</TableCell>
+                          <TableCell className="max-w-[150px] truncate font-medium">{item.product_name} ({item.product_code})</TableCell>
                           <TableCell>
                             <Input 
                               type="number" 
@@ -402,7 +412,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                               disabled={isSubmitting}
                             />
                           </TableCell>
-                          <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-bold text-green-600">₹{item.total_price.toFixed(2)}</TableCell>
                           <TableCell>
                             <Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting}>
                               <Trash2 className="h-4 w-4 text-destructive" />
