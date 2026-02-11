@@ -49,6 +49,7 @@ interface OrderToEdit {
   dealer_city: string;
   total_amount: number;
   discount_amount: number;
+  round_off: number;
   bill_no: string | null;
   dispatch_date: string | null;
   items: OrderItem[];
@@ -109,7 +110,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const { data: orderRaw, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, total_amount, discount_amount, bill_no, dispatch_date,
+          id, order_number, total_amount, discount_amount, round_off, bill_no, dispatch_date,
           dealers (name, address, phone, city),
           sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst))
         `)
@@ -144,11 +145,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
       const dealer = (orderRaw.dealers as any);
 
-      const calculatedSubtotal = fetchedItems.reduce((sum, item) => sum + item.total_price, 0);
-      const discountFromDb = orderRaw.discount_amount || 0;
-      const totalFromDb = orderRaw.total_amount;
-      const calculatedRoundOff = parseFloat((totalFromDb - (calculatedSubtotal - discountFromDb)).toFixed(2));
-
       setOrderData({
         id: orderRaw.id,
         order_number: orderRaw.order_number,
@@ -158,6 +154,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         dealer_city: dealer?.city || 'N/A',
         total_amount: orderRaw.total_amount,
         discount_amount: orderRaw.discount_amount || 0,
+        round_off: orderRaw.round_off || 0,
         bill_no: orderRaw.bill_no,
         dispatch_date: orderRaw.dispatch_date,
         items: fetchedItems,
@@ -169,7 +166,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         discountAmount: orderRaw.discount_amount || 0,
         billNo: orderRaw.bill_no || '',
         dispatchDate: orderRaw.dispatch_date ? orderRaw.dispatch_date.split('T')[0] : '',
-        roundOff: calculatedRoundOff,
+        roundOff: orderRaw.round_off || 0,
       });
 
     } catch (error: any) {
@@ -296,6 +293,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           order_number: values.orderNumber,
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
+          round_off: values.roundOff,
           bill_no: values.billNo || null,
           dispatch_date: values.dispatchDate || null,
         })

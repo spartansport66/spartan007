@@ -64,6 +64,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const [roundOff, setRoundOff] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
@@ -96,8 +97,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   }, [orderItems]);
 
   const finalOrderValue = useMemo(() => {
-    return Math.max(0, preGlobalDiscountTotal - discountAmount);
-  }, [preGlobalDiscountTotal, discountAmount]);
+    return Math.max(0, preGlobalDiscountTotal - discountAmount + roundOff);
+  }, [preGlobalDiscountTotal, discountAmount, roundOff]);
 
   useEffect(() => {
     setPaymentAmount(parseFloat(finalOrderValue.toFixed(2)));
@@ -304,6 +305,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           user_id: user.id,
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
+          round_off: roundOff,
           status: 'completed',
           payment_status: 'pending_approval',
           payment_due_date: paymentDueDate,
@@ -360,6 +362,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setSelectedDealer('');
       setOrderItems([]);
       setDiscountAmount(0);
+      setRoundOff(0);
       setPaymentMethod('');
       setPaymentAmount(0);
       setChequeDdNo('');
@@ -484,6 +487,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               <Separator className="my-1" />
               <div className="flex justify-between text-base font-medium"><span>Subtotal (Incl. GST):</span><span>₹{preGlobalDiscountTotal.toFixed(2)}</span></div>
               <div className="flex justify-between items-center"><Label htmlFor="discountAmount" className="text-base font-medium">Additional Global Discount (₹)</Label><Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} /></div>
+              <div className="flex justify-between items-center">
+                <Label htmlFor="roundOff" className="text-base font-medium">Round Off (+/-)</Label>
+                <Input id="roundOff" type="number" step="0.01" value={roundOff} onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)} className="w-32 text-right" />
+              </div>
               <Separator className="my-2" />
               <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
             </div>
