@@ -79,8 +79,13 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  
+  // Filter states
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [appliedSearchTerm, setAppliedSearchTerm] = useState<string>('');
+  const [stockFilter, setStockFilter] = useState<string>('');
+  const [appliedStockFilter, setAppliedStockFilter] = useState<number | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
 
@@ -155,6 +160,18 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     }
   }, [sessionLoading, user, isAuthorized, fetchProducts, fetchCompanyInfo]);
 
+  const handleApplyFilters = () => {
+    setAppliedSearchTerm(searchTerm);
+    setAppliedStockFilter(stockFilter ? Number(stockFilter) : null);
+  };
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setAppliedSearchTerm('');
+    setStockFilter('');
+    setAppliedStockFilter(null);
+  };
+
   const handleEdit = (product: Product) => {
     setSelectedProduct(product);
     setIsEditDialogOpen(true);
@@ -222,13 +239,17 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
       doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 32, { align: 'center' });
 
-      if (appliedSearchTerm) {
+      let filterDetails = [];
+      if (appliedSearchTerm) filterDetails.push(`Search: "${appliedSearchTerm}"`);
+      if (appliedStockFilter !== null) filterDetails.push(`Stock <= ${appliedStockFilter}`);
+
+      if (filterDetails.length > 0) {
         doc.setFontSize(9);
-        doc.text(`Filter: "${appliedSearchTerm}"`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
+        doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' });
       }
 
       const tableColumn = ["Code", "Product Name", "Opening", "Stock In", "Stock Out", "Closing", "DP (₹)"];
-      const tableRows = products.map(product => {
+      const tableRows = filteredProductsList.map(product => {
         const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
         return [
           product.code,
@@ -279,6 +300,12 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     }
   };
 
+  const filteredProductsList = products.filter(product => {
+    if (appliedStockFilter === null) return true;
+    const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+    return calculatedClosing <= appliedStockFilter;
+  });
+
   if (!isAuthorized) return null;
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
@@ -301,8 +328,12 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
             <Label htmlFor="productSearch">Search</Label>
             <Input id="productSearch" placeholder="Name or Code" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
-          <Button onClick={() => setAppliedSearchTerm(searchTerm)}><Search className="h-4 w-4 mr-2" /> Filter</Button>
-          <Button variant="outline" onClick={() => { setSearchTerm(''); setAppliedSearchTerm(''); }}>Clear</Button>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="stockFilter">Closing Stock Less Than</Label>
+            <Input id="stockFilter" type="number" placeholder="e.g. 50" value={stockFilter} onChange={(e) => setStockFilter(e.target.value)} />
+          </div>
+          <Button onClick={handleApplyFilters}><Search className="h-4 w-4 mr-2" /> Apply Filters</Button>
+          <Button variant="outline" onClick={handleClearFilters}>Clear</Button>
         </div>
         
         <div className="overflow-x-auto border rounded-md">
@@ -333,33 +364,40 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((product) => {
-                // Calculate closing stock in UI to ensure it matches the formula: Opening + In - Out
-                const calculatedClosingStock = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
-                
-                return (
-                  <TableRow key={product.id} className="hover:bg-accent/50">
-                    <TableCell className="font-medium">{product.code}</TableCell>
-                    <TableCell>{product.name}</TableCell>
-                    <TableCell className="text-right">{product.opening_stock}</TableCell>
-                    <TableCell className="text-right text-green-600">+{product.stock_in}</TableCell>
-                    <TableCell className="text-right text-red-600">-{product.stock_out}</TableCell>
-                    <TableCell className="text-right font-bold">{calculatedClosingStock}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={product.has_sales}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>Delete Product?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(product.id)}>Delete</AlertDialogAction></AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              {filteredProductsList.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    No products found matching your filters.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredProductsList.map((product) => {
+                  const calculatedClosingStock = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+                  
+                  return (
+                    <TableRow key={product.id} className="hover:bg-accent/50">
+                      <TableCell className="font-medium">{product.code}</TableCell>
+                      <TableCell>{product.name}</TableCell>
+                      <TableCell className="text-right">{product.opening_stock}</TableCell>
+                      <TableCell className="text-right text-green-600">+{product.stock_in}</TableCell>
+                      <TableCell className="text-right text-red-600">-{product.stock_out}</TableCell>
+                      <TableCell className="text-right font-bold">{calculatedClosingStock}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={product.has_sales}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader><AlertDialogTitle>Delete Product?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+                              <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(product.id)}>Delete</AlertDialogAction></AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </div>
