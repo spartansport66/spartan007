@@ -284,7 +284,7 @@ const Dashboard = () => {
   const handleDeleteOrder = async (order: OrderDisplay) => {
     setLoadingOrders(true);
     try {
-      // 1. Manually restore stock levels since triggers are not active
+      // 1. Manually restore stock levels
       for (const item of order.items) {
         const { data: productData, error: productFetchError } = await supabase
           .from('products')
@@ -312,7 +312,7 @@ const Dashboard = () => {
         }
       }
 
-      // 2. Manually delete associated payments first to avoid foreign key constraint violation
+      // 2. Delete associated payments first to satisfy foreign key constraints
       const { error: paymentDeleteError } = await supabase
         .from('payments')
         .delete()
@@ -323,9 +323,18 @@ const Dashboard = () => {
         throw new Error(`Failed to delete associated payments: ${paymentDeleteError.message}`);
       }
 
-      // 3. Delete the order (associated sales will be deleted via cascade if configured, or we can delete them manually)
-      await supabase.from('sales').delete().eq('order_id', order.id);
+      // 3. Delete associated sales records
+      const { error: salesDeleteError } = await supabase
+        .from('sales')
+        .delete()
+        .eq('order_id', order.id);
 
+      if (salesDeleteError) {
+        console.error('Error deleting associated sales:', salesDeleteError);
+        throw new Error(`Failed to delete associated sales items: ${salesDeleteError.message}`);
+      }
+
+      // 4. Finally, delete the order
       const { error: deleteError } = await supabase
         .from('orders')
         .delete()
