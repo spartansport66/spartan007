@@ -69,7 +69,7 @@ serve(async (req: Request) => {
       recipientSet.add(order.dealers.email.trim().toLowerCase());
     }
 
-    const recipientEmails = Array.from(recipientSet);
+    const recipientEmails = Array.from(recipientSet).map(email => ({ email }));
     
     if (recipientEmails.length === 0) {
       console.warn(`[${functionName}] No recipients found. Skipping email.`);
@@ -79,15 +79,15 @@ serve(async (req: Request) => {
       });
     }
 
-    // 3. Check API Key
+    // 3. Check Brevo API Key
     // @ts-ignore
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    if (!resendApiKey) {
-      console.error(`[${functionName}] CRITICAL: RESEND_API_KEY is missing.`);
+    const brevoApiKey = Deno.env.get('BREVO_API_KEY');
+    if (!brevoApiKey) {
+      console.error(`[${functionName}] CRITICAL: BREVO_API_KEY is missing.`);
       throw new Error('Email service API key is missing.');
     }
 
-    // 4. Construct Email
+    // 4. Construct Email Content
     const emailSubject = `New Order: #${order.order_number} - ${salespersonName} - ${dealerName}`;
     const itemsList = (order.sales || []).map((s: any) => 
       `<li><strong>${s.products.name} (${s.products.code})</strong>: ${s.quantity} units (₹${s.total_price.toFixed(2)})</li>`
@@ -105,40 +105,31 @@ serve(async (req: Request) => {
       <ul>${itemsList}</ul>
     `;
 
-    // 5. Send via Resend API
+    // 5. Send via Brevo API
     console.log(`[${functionName}] Sending to:`, recipientEmails);
-    const res = await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${resendApiKey}`,
+        'api-key': brevoApiKey,
       },
       body: JSON.stringify({
-        from: 'Spartan Orders <onboarding@resend.dev>',
+        sender: { name: "Spartan Orders", email: "paramcomputerzone@gmail.com" }, // Must be your verified Brevo email
         to: recipientEmails,
         subject: emailSubject,
-        html: htmlContent,
+        htmlContent: htmlContent,
       }),
     });
 
     const resData = await res.json();
 
     if (!res.ok) {
-      console.error(`[${functionName}] Resend API Error:`, resData);
-      // Provide a helpful message for the common 403 error
-      if (res.status === 403 && resData.message?.includes('testing emails')) {
-        return new Response(JSON.stringify({ 
-          error: 'Resend is in testing mode. You can only send emails to paramcomputerzone@gmail.com until you verify a domain.' 
-        }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      throw new Error(resData.message || 'Resend API error');
+      console.error(`[${functionName}] Brevo API Error:`, resData);
+      throw new Error(resData.message || 'Brevo API error');
     }
 
-    console.log(`[${functionName}] Email sent successfully!`);
-    return new Response(JSON.stringify({ message: 'Email sent successfully', id: resData.id }), {
+    console.log(`[${functionName}] Email sent successfully via Brevo!`);
+    return new Response(JSON.stringify({ message: 'Email sent successfully', id: resData.messageId }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
