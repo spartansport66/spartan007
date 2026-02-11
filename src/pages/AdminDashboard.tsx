@@ -46,7 +46,6 @@ const AdminDashboard = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
-  const [shouldPrintOrderDetails, setShouldPrintOrderDetails] = useState(false);
   const [isOrdersAwaitingDispatchReportOpen, setIsOrdersAwaitingDispatchReportOpen] = useState(false);
   const [isDispatchedOrdersReportOpen, setIsDispatchedOrdersReportOpen] = useState(false);
   const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
@@ -197,7 +196,6 @@ const AdminDashboard = () => {
   const handleDispatchSuccess = (dispatchedOrderId: string) => {
     setSelectedOrderIdForDetails(dispatchedOrderId);
     setIsOrderDetailsDialogOpen(true);
-    setShouldPrintOrderDetails(false);
     setRefreshKey(prev => prev + 1);
     fetchDashboardData();
   };
@@ -252,7 +250,7 @@ const AdminDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><ProductionAlertsCard key={`production-alerts-${refreshKey}`} /><Card className="bg-card text-card-foreground shadow-lg h-[350px]"><CardHeader className="bg-pink-500 dark:bg-pink-700 text-white rounded-t-lg p-4"><CardTitle className="text-xl font-semibold">Monthly Sales Trend</CardTitle><CardDescription className="text-pink-100 dark:text-pink-200">Sales performance over the last 12 months.</CardDescription></CardHeader><CardContent className="p-4 h-[280px]">{loadingData ? (<div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>) : (<SalesChart data={monthlySalesData} />)}</CardContent></Card></div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} /><AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} /></div>
       <MadeWithDyad />
-      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} shouldPrintOnLoad={shouldPrintOrderDetails} />
+      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} />
       <OrdersAwaitingDispatchReportDialog isOpen={isOrdersAwaitingDispatchReportOpen} onOpenChange={setIsOrdersAwaitingDispatchReportOpen} />
       <DispatchedOrdersReportDialog isOpen={isDispatchedOrdersReportOpen} onOpenChange={setIsDispatchedOrdersReportOpen} />
       <DealerReportDialog isOpen={isDealerReportOpen} onOpenChange={setIsDealerReportOpen} />

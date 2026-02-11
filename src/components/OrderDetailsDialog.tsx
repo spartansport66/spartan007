@@ -4,9 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, Download, Printer, Eye } from 'lucide-react';
+import { Loader2, Printer, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { showError, showSuccess } from '@/utils/toast';
+import { showError } from '@/utils/toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -42,28 +42,12 @@ interface OrderDetail {
   dispatch_number: number | null;
   dispatched: boolean;
   payment_status: string;
-  payment_due_date: string | null;
-  payment_method: string | null;
-  payment_amount: number | null;
-  cheque_dd_no: string | null;
-  cheque_dd_date: string | null;
-  card_number: string | null;
-  card_holder_name: string | null;
-  expiry_date: string | null;
-  cvv: string | null;
-  bank_name: string | null;
-  account_number: string | null;
-  ifsc_code: string | null;
-  upi_id: string | null;
-  transaction_id: string | null;
-  payment_date: string | null;
 }
 
 interface OrderDetailsDialogProps {
   orderId: string | null;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  shouldPrintOnLoad?: boolean;
 }
 
 const formatDate = (dateString: string | null) => {
@@ -78,12 +62,10 @@ const formatDate = (dateString: string | null) => {
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   orderId,
   isOpen,
-  onOpenChange,
-  shouldPrintOnLoad = false
+  onOpenChange
 }) => {
   const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
 
   const fetchCompanyInfo = useCallback(async () => {
@@ -102,9 +84,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, order_date, total_amount, discount_amount, status, payment_status, payment_due_date, user_id, bill_no, dispatch_date, dispatch_number, dispatched,
-          dealers (id, name, address, phone, city, state, country),
-          payments (amount, payment_method, cheque_dd_no, cheque_dd_date, card_number, card_holder_name, expiry_date, cvv, bank_name, account_number, ifsc_code, upi_id, transaction_id, payment_date)
+          id, order_number, order_date, total_amount, discount_amount, status, payment_status, user_id, bill_no, dispatch_date, dispatch_number, dispatched,
+          dealers (id, name, address, phone, city, state, country)
         `)
         .eq('id', id)
         .single();
@@ -136,7 +117,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         discount_percent: item.discount_percent || 0,
       }));
 
-      const paymentInfo = orderData.payments && orderData.payments.length > 0 ? orderData.payments[0] : null;
       const dealer = (orderData.dealers as any);
 
       setOrderDetails({
@@ -159,21 +139,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         dispatch_number: orderData.dispatch_number,
         dispatched: orderData.dispatched,
         payment_status: orderData.payment_status,
-        payment_due_date: orderData.payment_due_date,
-        payment_method: paymentInfo?.payment_method || null,
-        payment_amount: paymentInfo?.amount || null,
-        cheque_dd_no: paymentInfo?.cheque_dd_no || null,
-        cheque_dd_date: paymentInfo?.cheque_dd_date || null,
-        card_number: paymentInfo?.card_number || null,
-        card_holder_name: paymentInfo?.card_holder_name || null,
-        expiry_date: paymentInfo?.expiry_date || null,
-        cvv: paymentInfo?.cvv || null,
-        bank_name: paymentInfo?.bank_name || null,
-        account_number: paymentInfo?.account_number || null,
-        ifsc_code: paymentInfo?.ifsc_code || null,
-        upi_id: paymentInfo?.upi_id || null,
-        transaction_id: paymentInfo?.transaction_id || null,
-        payment_date: paymentInfo?.payment_date || null,
       });
     } catch (error: any) {
       showError(`Failed to load order details: ${error.message}`);
@@ -189,45 +154,36 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     }
   }, [isOpen, orderId, fetchOrderDetails, fetchCompanyInfo]);
 
-  const handlePrint = () => {
+  const handlePrintGatePass = () => {
     if (!orderDetails) return;
     const doc = new jsPDF();
     const margin = 15;
     const pageWidth = doc.internal.pageSize.width;
     const darkBlue: [number, number, number] = [30, 58, 138];
 
-    // 1. Gate Pass Number at Top Center (Larger)
     doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
-    const dispatchText = `Gate Pass: ${orderDetails.dispatch_number || 'N/A'}`;
-    doc.text(dispatchText, pageWidth / 2, 15, { align: 'center' });
+    doc.text(`Gate Pass: ${orderDetails.dispatch_number || 'N/A'}`, pageWidth / 2, 15, { align: 'center' });
 
-    // 2. Company Header
     doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
     doc.rect(0, 22, pageWidth, 12, 'F');
     doc.setFontSize(16);
     doc.setTextColor(255, 255, 255);
     doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", pageWidth / 2, 30, { align: 'center' });
     
-    // 3. Party and Order Details
     doc.setTextColor(0);
     doc.setFontSize(10);
     let y = 45;
     
-    // Left Column: Party Details
     doc.setFont("helvetica", "bold");
     doc.text("PARTY DETAILS:", margin, y);
     doc.setFont("helvetica", "normal");
     y += 5;
     doc.text(orderDetails.dealer_name, margin, y);
     y += 5;
-    const addressLines = doc.splitTextToSize(
-      `${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`,
-      pageWidth / 2 - margin
-    );
+    const addressLines = doc.splitTextToSize(`${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`, pageWidth / 2 - margin);
     doc.text(addressLines, margin, y);
     
-    // Right Column: Order Details
     let rightY = 45;
     const rightColX = pageWidth / 2 + 10;
     doc.setFont("helvetica", "bold");
@@ -242,36 +198,111 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
     y = Math.max(y + (addressLines.length * 5), rightY + 10);
 
-    // 4. Simplified Item Table (Code, Product, Qty)
     const tableColumn = ["Code", "Product Name", "Quantity"];
-    const tableRows = orderDetails.items.map(item => [
-      item.product_code,
-      item.product_name,
-      item.quantity.toString()
-    ]);
+    const tableRows = orderDetails.items.map(item => [item.product_code, item.product_name, item.quantity.toString()]);
 
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: y,
       headStyles: { fillColor: darkBlue, halign: 'center' },
-      columnStyles: {
-        0: { cellWidth: 40, halign: 'center' },
-        1: { cellWidth: 'auto' },
-        2: { cellWidth: 30, halign: 'center' }
-      },
+      columnStyles: { 0: { cellWidth: 40, halign: 'center' }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 30, halign: 'center' } },
       styles: { fontSize: 9, cellPadding: 3 }
     });
 
-    // 5. Footer: Total Bill Amount Only
     const finalY = (doc as any).lastAutoTable.finalY + 15;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.text(`TOTAL BILL AMOUNT: Rs. ${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, finalY, { align: 'right' });
 
-    // Updated filename to use Gate Pass number
-    const fileName = `Gate_Pass_${orderDetails.dispatch_number || orderDetails.order_number}.pdf`;
-    doc.save(fileName);
+    doc.save(`Gate_Pass_${orderDetails.dispatch_number || orderDetails.order_number}.pdf`);
+  };
+
+  const handlePrintOrderDetails = () => {
+    if (!orderDetails) return;
+    const doc = new jsPDF();
+    const margin = 15;
+    const pageWidth = doc.internal.pageSize.width;
+    const darkBlue: [number, number, number] = [30, 58, 138];
+
+    doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]);
+    doc.rect(0, 10, pageWidth, 15, 'F');
+    doc.setFontSize(18);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.text(companyName?.toUpperCase() || "ORDER INVOICE", pageWidth / 2, 20, { align: 'center' });
+
+    doc.setTextColor(0);
+    doc.setFontSize(10);
+    let y = 35;
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("PARTY DETAILS:", margin, y);
+    doc.setFont("helvetica", "normal");
+    y += 5;
+    doc.text(orderDetails.dealer_name, margin, y);
+    y += 5;
+    const addressLines = doc.splitTextToSize(`${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`, pageWidth / 2 - margin);
+    doc.text(addressLines, margin, y);
+    
+    let rightY = 35;
+    const rightColX = pageWidth / 2 + 10;
+    doc.setFont("helvetica", "bold");
+    doc.text("ORDER SUMMARY:", rightColX, rightY);
+    doc.setFont("helvetica", "normal");
+    rightY += 5;
+    doc.text(`Order No: #${orderDetails.order_number}`, rightColX, rightY);
+    rightY += 5;
+    doc.text(`Date: ${formatDate(orderDetails.order_date)}`, rightColX, rightY);
+    rightY += 5;
+    doc.text(`Phone: ${orderDetails.dealer_phone}`, rightColX, rightY);
+
+    y = Math.max(y + (addressLines.length * 5), rightY + 10);
+
+    const tableColumn = ["Code", "Product", "Qty", "Unit Price", "Disc %", "GST %", "Total"];
+    const tableRows = orderDetails.items.map(item => [
+      item.product_code,
+      item.product_name,
+      item.quantity.toString(),
+      `₹${item.unit_price.toFixed(2)}`,
+      `${item.discount_percent}%`,
+      `${item.product_gst}%`,
+      `₹${item.total_price.toFixed(2)}`
+    ]);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: y,
+      headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 20, halign: 'center' },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 15, halign: 'center' },
+        3: { cellWidth: 25, halign: 'right' },
+        4: { cellWidth: 15, halign: 'center' },
+        5: { cellWidth: 15, halign: 'center' },
+        6: { cellWidth: 25, halign: 'right' }
+      },
+      styles: { fontSize: 8, cellPadding: 2 }
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    const subtotal = orderDetails.items.reduce((sum, s) => sum + s.total_price, 0);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth - margin, finalY, { align: 'right' });
+    
+    if (orderDetails.discount_amount > 0) {
+      doc.text(`Global Discount: -₹${orderDetails.discount_amount.toFixed(2)}`, pageWidth - margin, finalY + 5, { align: 'right' });
+    }
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text(`FINAL TOTAL: ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, finalY + 12, { align: 'right' });
+
+    doc.save(`Order_Details_${orderDetails.order_number}.pdf`);
   };
 
   return (
@@ -279,7 +310,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Order Details #{orderDetails?.order_number}</DialogTitle>
-          <DialogDescription>Item-wise GST calculation applied after discounts.</DialogDescription>
+          <DialogDescription>View full order information and items.</DialogDescription>
         </DialogHeader>
         {loading ? (
           <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>
@@ -330,9 +361,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             </div>
           </div>
         ) : null}
-        <DialogFooter>
-          <Button variant="outline" onClick={handlePrint} disabled={!orderDetails}>
-            <Printer className="mr-2 h-4 w-4" /> Print Dispatch Slip
+        <DialogFooter className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={handlePrintGatePass} disabled={!orderDetails}>
+            <Printer className="mr-2 h-4 w-4" /> Print Gate Pass
+          </Button>
+          <Button variant="outline" onClick={handlePrintOrderDetails} disabled={!orderDetails}>
+            <FileText className="mr-2 h-4 w-4" /> Print Order Details
           </Button>
           <Button onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
