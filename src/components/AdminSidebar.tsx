@@ -78,6 +78,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         onClick={() => navigate('/admin-dashboard')}
       />
       <NavButton
+        icon={<DollarSign className="h-4 w-4" />}
+        label="Receive Payment"
+        onClick={() => navigate('/receive-payment')}
+      />
+      <NavButton
         icon={<ShoppingCart className="h-4 w-4" />}
         label="Manage Purchases"
         onClick={() => navigate('/purchase-dashboard')}

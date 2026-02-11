@@ -245,10 +245,23 @@ const AdminDashboard = () => {
         </div>
       </div>
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">{salesOverview.map((item, index) => (<Card key={index} className="bg-card text-card-foreground shadow-md h-full"><CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 p-4 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg`}><CardTitle className="text-base font-medium text-white">{item.title}</CardTitle>{item.icon}</CardHeader><CardContent className="p-4 pt-0"><div className={`text-3xl font-bold ${item.valueColor}`}>{item.value}</div><p className="text-xs text-muted-foreground mt-1">{item.change}</p></CardContent></Card>))}</div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"><AdminTodayFollowupsCard key={`admin-followups-${refreshKey}`} onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} /><AdminTodayVisitsCard key={`admin-visits-${refreshKey}`} onViewReport={() => setIsSalesPersonVisitReportOpen(true)} /><AdminTotalPendingOrdersCard key={`admin-pending-orders-${refreshKey}`} onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} /></div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} /><DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} /></div>
       
-      {/* Production Alerts and Monthly Sales Trend hidden as requested */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between cursor-pointer hover:bg-accent" onClick={() => navigate('/receive-payment')}>
+          <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold">Receive Payment</CardTitle>
+            <CardDescription className="text-green-100 dark:text-green-200">Log new incoming payments.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 flex-grow flex items-center justify-center">
+            <DollarSign className="h-12 w-12 text-green-500" />
+          </CardContent>
+        </Card>
+        <AdminTodayFollowupsCard key={`admin-followups-${refreshKey}`} onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} />
+        <AdminTodayVisitsCard key={`admin-visits-${refreshKey}`} onViewReport={() => setIsSalesPersonVisitReportOpen(true)} />
+        <AdminTotalPendingOrdersCard key={`admin-pending-orders-${refreshKey}`} onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} /><DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} /></div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} /><AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} /></div>
       <MadeWithDyad />
