@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import { Loader2, Package, Check, ChevronsUpDown, Search } from 'lucide-react';
+import { Loader2, Package, Check, ChevronsUpDown } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -168,37 +168,21 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
               control={form.control}
               name="productId"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
+                <FormItem>
                   <FormLabel>Product</FormLabel>
                   <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                     <PopoverTrigger asChild>
                       <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          className={cn(
-                            "w-full justify-between",
-                            !field.value && "text-muted-foreground"
-                          )}
-                          disabled={isSubmitting}
-                        >
+                        <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>
                           {currentProductDisplay}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </FormControl>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command shouldFilter={false}>
-                        <div className="flex items-center border-b px-3">
-                          <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                          <Input
-                            placeholder="Search product name or code..."
-                            value={productSearchValue}
-                            onChange={(e) => setProductSearchValue(e.target.value)}
-                            className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none border-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
-                          />
-                        </div>
-                        <CommandList>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                      <Command>
+                        <CommandInput placeholder="Search product..." value={productSearchValue} onValueChange={setProductSearchValue} />
+                        <CommandList className="max-h-[300px] overflow-y-auto">
                           {filteredProducts.length === 0 ? (
                             <CommandEmpty>No product found.</CommandEmpty>
                           ) : (
@@ -206,23 +190,17 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
                               {filteredProducts.map((product) => (
                                 <CommandItem
                                   key={product.id}
-                                  value={`${product.name} ${product.code}`}
+                                  value={product.name}
                                   onSelect={() => {
-                                    form.setValue("productId", product.id, { shouldValidate: true });
+                                    field.onChange(product.id);
                                     setIsProductPopoverOpen(false);
                                     setProductSearchValue("");
                                   }}
-                                  className="cursor-pointer"
                                 >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      product.id === field.value ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  <div className="flex flex-col">
-                                    <span>{product.name} ({product.code})</span>
-                                    <span className="text-xs text-muted-foreground">Current Stock: {product.closing_stock}</span>
+                                  <Check className={cn("mr-2 h-4 w-4", field.value === product.id ? "opacity-100" : "opacity-0")} />
+                                  <div>
+                                    <div>{product.name} ({product.code})</div>
+                                    <div className="text-xs text-muted-foreground">Closing Stock: {product.closing_stock}</div>
                                   </div>
                                 </CommandItem>
                               ))}
