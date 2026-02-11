@@ -98,24 +98,38 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         if (profileData) salesPersonName = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
       }
 
+      // Fetch sales items with explicit selection of unit_price and discount_percent
       const { data: salesItems, error: salesError } = await supabase
         .from('sales')
-        .select(`quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, size, hsn, gst)`)
+        .select(`
+          quantity, 
+          total_price, 
+          unit_price, 
+          discount_percent, 
+          gst_percent, 
+          products (name, code, size, hsn, gst, dp)
+        `)
         .eq('order_id', id);
 
       if (salesError) throw salesError;
 
-      const items: OrderItemDetail[] = (salesItems || []).map((item: any) => ({
-        product_name: item.products?.name || 'N/A',
-        quantity: item.quantity,
-        unit_price: item.unit_price || 0,
-        total_price: item.total_price,
-        product_code: item.products?.code || 'N/A',
-        product_size: item.products?.size || 'N/A',
-        product_hsn: item.products?.hsn || 'N/A',
-        product_gst: item.gst_percent?.toString() || item.products?.gst || '0',
-        discount_percent: item.discount_percent || 0,
-      }));
+      const items: OrderItemDetail[] = (salesItems || []).map((item: any) => {
+        // Fallback logic: if unit_price is 0 or null in sales table, try to use product's current DP
+        const unitPrice = item.unit_price || item.products?.dp || 0;
+        const discountPercent = item.discount_percent || 0;
+        
+        return {
+          product_name: item.products?.name || 'N/A',
+          quantity: item.quantity,
+          unit_price: unitPrice,
+          total_price: item.total_price,
+          product_code: item.products?.code || 'N/A',
+          product_size: item.products?.size || 'N/A',
+          product_hsn: item.products?.hsn || 'N/A',
+          product_gst: item.gst_percent?.toString() || item.products?.gst || '0',
+          discount_percent: discountPercent,
+        };
+      });
 
       const dealer = (orderData.dealers as any);
 
@@ -141,6 +155,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         payment_status: orderData.payment_status,
       });
     } catch (error: any) {
+      console.error('Error fetching order details:', error);
       showError(`Failed to load order details: ${error.message}`);
     } finally {
       setLoading(false);
