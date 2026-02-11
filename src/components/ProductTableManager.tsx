@@ -87,6 +87,8 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   const [appliedSearchTerm, setAppliedSearchTerm] = useState<string>('');
   const [stockFilter, setStockFilter] = useState<string>('');
   const [appliedStockFilter, setAppliedStockFilter] = useState<number | null>(null);
+  const [stockFilterGreater, setStockFilterGreater] = useState<string>('');
+  const [appliedStockFilterGreater, setAppliedStockFilterGreater] = useState<number | null>(null);
 
   // Sort states
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -169,6 +171,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   const handleApplyFilters = () => {
     setAppliedSearchTerm(searchTerm);
     setAppliedStockFilter(stockFilter ? Number(stockFilter) : null);
+    setAppliedStockFilterGreater(stockFilterGreater ? Number(stockFilterGreater) : null);
   };
 
   const handleClearFilters = () => {
@@ -176,6 +179,8 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     setAppliedSearchTerm('');
     setStockFilter('');
     setAppliedStockFilter(null);
+    setStockFilterGreater('');
+    setAppliedStockFilterGreater(null);
   };
 
   const handleSort = (key: SortKey) => {
@@ -241,9 +246,12 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
 
   const sortedAndFilteredProducts = useMemo(() => {
     let filtered = products.filter(product => {
-      if (appliedStockFilter === null) return true;
       const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
-      return calculatedClosing <= appliedStockFilter;
+      
+      const matchesLess = appliedStockFilter === null || calculatedClosing <= appliedStockFilter;
+      const matchesGreater = appliedStockFilterGreater === null || calculatedClosing >= appliedStockFilterGreater;
+      
+      return matchesLess && matchesGreater;
     });
 
     return filtered.sort((a, b) => {
@@ -266,7 +274,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
         return sortDirection === 'asc' ? comparison : -comparison;
       }
     });
-  }, [products, appliedStockFilter, sortKey, sortDirection]);
+  }, [products, appliedStockFilter, appliedStockFilterGreater, sortKey, sortDirection]);
 
   const handlePrint = () => {
     try {
@@ -286,6 +294,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
       let filterDetails = [];
       if (appliedSearchTerm) filterDetails.push(`Search: "${appliedSearchTerm}"`);
       if (appliedStockFilter !== null) filterDetails.push(`Stock <= ${appliedStockFilter}`);
+      if (appliedStockFilterGreater !== null) filterDetails.push(`Stock >= ${appliedStockFilterGreater}`);
 
       if (filterDetails.length > 0) {
         doc.setFontSize(9);
@@ -350,7 +359,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   };
 
   if (!isAuthorized) return null;
-  if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
@@ -370,6 +379,10 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
           <div className="flex-1 min-w-[200px]">
             <Label htmlFor="productSearch">Search</Label>
             <Input id="productSearch" placeholder="Name or Code" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="stockFilterGreater">Closing Stock Greater Than</Label>
+            <Input id="stockFilterGreater" type="number" placeholder="e.g. 10" value={stockFilterGreater} onChange={(e) => setStockFilterGreater(e.target.value)} />
           </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="stockFilter">Closing Stock Less Than</Label>
