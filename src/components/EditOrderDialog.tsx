@@ -66,6 +66,7 @@ const formSchema = z.object({
   discountAmount: z.preprocess((val) => Number(val), z.number().min(0)),
   billNo: z.string().nullable().optional(),
   dispatchDate: z.string().nullable().optional(),
+  roundOff: z.preprocess((val) => Number(val), z.number().default(0)),
 });
 
 const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated }) => {
@@ -90,6 +91,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       discountAmount: 0,
       billNo: '',
       dispatchDate: '',
+      roundOff: 0,
     },
   });
 
@@ -142,6 +144,11 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
       const dealer = (orderRaw.dealers as any);
 
+      const calculatedSubtotal = fetchedItems.reduce((sum, item) => sum + item.total_price, 0);
+      const discountFromDb = orderRaw.discount_amount || 0;
+      const totalFromDb = orderRaw.total_amount;
+      const calculatedRoundOff = parseFloat((totalFromDb - (calculatedSubtotal - discountFromDb)).toFixed(2));
+
       setOrderData({
         id: orderRaw.id,
         order_number: orderRaw.order_number,
@@ -162,6 +169,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         discountAmount: orderRaw.discount_amount || 0,
         billNo: orderRaw.bill_no || '',
         dispatchDate: orderRaw.dispatch_date ? orderRaw.dispatch_date.split('T')[0] : '',
+        roundOff: calculatedRoundOff,
       });
 
     } catch (error: any) {
@@ -195,9 +203,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   }, [orderItems]);
 
   const discountAmountValue = form.watch('discountAmount');
+  const roundOffValue = form.watch('roundOff');
   const finalOrderValue = useMemo(() => {
-    return Math.max(0, preGlobalDiscountTotal - discountAmountValue);
-  }, [preGlobalDiscountTotal, discountAmountValue]);
+    return Math.max(0, preGlobalDiscountTotal - discountAmountValue + (roundOffValue || 0));
+  }, [preGlobalDiscountTotal, discountAmountValue, roundOffValue]);
 
   const newItemCalculations = useMemo(() => {
     const taxableUnitPrice = newItemUnitPrice * (1 - newItemDiscountPercent / 100);
@@ -524,6 +533,17 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                   className="w-32 text-right" 
                   min="0" 
                   max={preGlobalDiscountTotal} 
+                  disabled={isSubmitting} 
+                />
+              </div>
+              <div className="flex justify-between items-center">
+                <Label htmlFor="roundOff" className="text-base font-medium">Round Off (+/-)</Label>
+                <Input 
+                  id="roundOff" 
+                  type="number" 
+                  step="0.01" 
+                  {...form.register('roundOff')} 
+                  className="w-32 text-right" 
                   disabled={isSubmitting} 
                 />
               </div>
