@@ -15,7 +15,6 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 
-// Zod schema for product validation
 const productSchema = z.object({
   code: z.string().min(1, { message: 'Product Code is required.' }).trim(),
   name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }).trim(),
@@ -38,7 +37,7 @@ const productSchema = z.object({
       .transform(val => Math.round(val))
       .default(0)
   ),
-  stock: z.preprocess(
+  opening_stock: z.preprocess(
     (val) => {
       if (typeof val === 'string') {
         const trimmedVal = val.trim();
@@ -49,7 +48,7 @@ const productSchema = z.object({
       return val;
     },
     z.coerce.number()
-      .min(0, { message: 'Stock cannot be negative.' })
+      .min(0, { message: 'Opening Stock cannot be negative.' })
       .transform(val => Math.round(val))
       .default(0)
   ),
@@ -70,7 +69,7 @@ const AddProduct = () => {
       hsn: '',
       gst: '',
       dp: 0,
-      stock: 0,
+      opening_stock: 0,
     },
   });
 
@@ -102,7 +101,8 @@ const AddProduct = () => {
           hsn: values.hsn,
           gst: values.gst,
           dp: values.dp,
-          stock: values.stock,
+          opening_stock: values.opening_stock,
+          closing_stock: values.opening_stock, // Initially closing equals opening
         },
       ])
       .select();
@@ -113,7 +113,6 @@ const AddProduct = () => {
     } else {
       showSuccess('Product added successfully!');
       form.reset();
-      console.log('New Product Data:', data);
       navigate(userType === 'admin' ? '/product-management-console' : '/product-dashboard');
     }
   };
@@ -127,9 +126,7 @@ const AddProduct = () => {
       );
   }
 
-  if (!isAuthorized) {
-    return null;
-  }
+  if (!isAuthorized) return null;
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -143,54 +140,54 @@ const AddProduct = () => {
           Back to Product Console
         </Button>
         
-        <div className="grid grid-cols-1 gap-6">
-          <Card className="bg-card text-card-foreground shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-2xl font-semibold text-primary">Add New Product</CardTitle>
-              <CardDescription className="text-muted-foreground">Enter the details for a new product.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="code"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Product Code</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., P001" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Product Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g., Laptop Pro X" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description (Optional)</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="e.g., High-performance laptop for professionals." {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+        <Card className="bg-card text-card-foreground shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-2xl font-semibold text-primary">Add New Product</CardTitle>
+            <CardDescription className="text-muted-foreground">Enter the details for a new product.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="code"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Product Code</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., P001" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Product Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Laptop Pro X" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="e.g., High-performance laptop for professionals." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
                     name="size"
@@ -224,12 +221,14 @@ const AddProduct = () => {
                       <FormItem>
                         <FormLabel>GST (%)</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., 18 or Exempt" {...field} />
+                          <Input placeholder="e.g., 18" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
                     name="dp"
@@ -245,10 +244,10 @@ const AddProduct = () => {
                   />
                   <FormField
                     control={form.control}
-                    name="stock"
+                    name="opening_stock"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Stock Quantity</FormLabel>
+                        <FormLabel>Opening Stock</FormLabel>
                         <FormControl>
                           <Input type="number" placeholder="e.g., 50" {...field} />
                         </FormControl>
@@ -256,14 +255,14 @@ const AddProduct = () => {
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                    Add Product
-                  </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
-        </div>
+                </div>
+                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                  Add Product
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
       </div>
       <MadeWithDyad />
     </div>

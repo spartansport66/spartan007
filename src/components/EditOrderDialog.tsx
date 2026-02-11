@@ -19,7 +19,7 @@ interface Product {
   code: string;
   name: string;
   dp: number;
-  stock: number;
+  closing_stock: number;
 }
 
 interface OrderItem {
@@ -96,7 +96,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       // 2. Fetch all products
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, code, name, dp, stock')
+        .select('id, code, name, dp, closing_stock')
         .order('name', { ascending: true });
 
       if (productsError) throw productsError;
@@ -201,40 +201,31 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     setIsSubmitting(true);
 
     try {
-      // --- 1. Restore Stock for Original Items ---
+      // --- 1. Restore Stock for Original Items using RPC ---
       for (const item of originalOrderItems) {
-        const { data: productData } = await supabase
-          .from('products')
-          .select('stock')
-          .eq('id', item.product_id)
-          .single();
-        
-        if (productData) {
-          await supabase
-            .from('products')
-            .update({ stock: productData.stock + item.quantity })
-            .eq('id', item.product_id);
-        }
+        await supabase.rpc('revert_stock_out', {
+          product_id_in: item.product_id,
+          quantity_in: item.quantity
+        });
       }
 
-      // --- 2. Subtract Stock for New Items ---
+      // --- 2. Subtract Stock for New Items using RPC ---
       for (const item of orderItems) {
+        await supabase.rpc('decrement_stock', {
+          product_id_in: item.product_id,
+          quantity_in: item.quantity
+        });
+        
+        // Handle production alerts
         const { data: productData } = await supabase
           .from('products')
-          .select('stock')
+          .select('closing_stock')
           .eq('id', item.product_id)
           .single();
         
         if (productData) {
-          const newStock = productData.stock - item.quantity;
-          await supabase
-            .from('products')
-            .update({ stock: newStock })
-            .eq('id', item.product_id);
-          
-          // Handle production alerts
-          if (newStock < 0) {
-            const requiredQty = Math.abs(newStock);
+          if (productData.closing_stock < 0) {
+            const requiredQty = Math.abs(productData.closing_stock);
             const { data: existingAlert } = await supabase
               .from('production_alerts')
               .select('id')
@@ -365,7 +356,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                       <Check className={cn("mr-2 h-4 w-4", item.product_id === p.id ? "opacity-100" : "opacity-0")} />
                                       <div>
                                         <div>{p.name} ({p.code})</div>
-                                        <div className="text-xs text-muted-foreground">DP: ₹{p.dp.toFixed(2)} - Stock: {p.stock}</div>
+                                        <div className="text-xs text-muted-foreground">DP: ₹{p.dp.toFixed(2)} - Stock: {p.closing_stock}</div>
                                       </div>
                                     </CommandItem>
                                   ))}

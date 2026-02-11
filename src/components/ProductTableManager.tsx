@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { ArrowLeft, Edit, Trash2, Eye, Loader2, PlusCircle, Search } from 'lucide-react';
+import { Edit, Trash2, Loader2, Search } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -37,20 +37,19 @@ import * as z from 'zod';
 
 interface Product {
   id: string;
-  code: string; // New
+  code: string;
   name: string;
   description: string;
-  size: string; // New
-  hsn: string; // New
-  gst: string; // Changed to string
-  dp: number; // New
-  stock: number;
+  size: string;
+  hsn: string;
+  gst: string;
+  dp: number;
+  opening_stock: number;
+  stock_in: number;
+  stock_out: number;
+  closing_stock: number;
   user_id: string;
   has_sales: boolean;
-}
-
-interface ProductTableManagerProps {
-  onProductAction?: () => void; // Callback for parent to refresh data if needed
 }
 
 const formSchema = z.object({
@@ -59,47 +58,25 @@ const formSchema = z.object({
   description: z.string().optional(),
   size: z.string().optional(),
   hsn: z.string().optional(),
-  gst: z.string().optional(), // Changed to string
-  dp: z.preprocess(
-    (val) => Number(val), // Convert input to number
-    z.number()
-      .min(0, { message: 'Dealer Price cannot be negative.' })
-  ),
-  stock: z.preprocess(
-    (val) => Number(val),
-    z.number().int().min(0, { message: 'Stock cannot be negative.' })
-  ),
+  gst: z.string().optional(),
+  dp: z.preprocess((val) => Number(val), z.number().min(0)),
+  opening_stock: z.preprocess((val) => Number(val), z.number().int().min(0)),
 });
 
-// IMPORTANT: Replace with the actual URL of your deployed Edge Function
-const UPDATE_PRODUCT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/update-product";
-
-const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductAction }) => {
+const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onProductAction }) => {
   const { user, loading: sessionLoading, userType } = useSession();
   const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  
-  // New state for search filter
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [appliedSearchTerm, setAppliedSearchTerm] = useState<string>('');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      code: '',
-      name: '',
-      description: '',
-      size: '',
-      hsn: '',
-      gst: '', // Default to empty string
-      dp: 0,
-      stock: 0,
-    },
+    defaultValues: { code: '', name: '', description: '', size: '', hsn: '', gst: '', dp: 0, opening_stock: 0 },
   });
 
   useEffect(() => {
@@ -110,9 +87,9 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
         description: selectedProduct.description || '',
         size: selectedProduct.size || '',
         hsn: selectedProduct.hsn || '',
-        gst: selectedProduct.gst || '', // Handle as string
+        gst: selectedProduct.gst || '',
         dp: selectedProduct.dp,
-        stock: selectedProduct.stock,
+        opening_stock: selectedProduct.opening_stock,
       });
     }
   }, [selectedProduct, form]);
@@ -123,62 +100,25 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
       return;
     }
     setLoading(true);
-    setError(null);
-
-    let query = supabase
-      .from('products')
-      .select(`
-        id,
-        code,
-        name,
-        description,
-        size,
-        hsn,
-        gst,
-        dp,
-        stock,
-        user_id,
-        sales(count)
-      `);
-      
-    // Apply search filter if present
+    let query = supabase.from('products').select('*, sales(count)');
     if (appliedSearchTerm) {
-      const search = `%${appliedSearchTerm}%`;
-      // Filter by name OR code
-      query = query.or(`name.ilike.${search},code.ilike.${search}`);
+      query = query.or(`name.ilike.%${appliedSearchTerm}%,code.ilike.%${appliedSearchTerm}%`);
     }
-
     const { data, error } = await query;
-
     if (error) {
-      console.error('Error fetching products:', error);
-      setError(`Failed to load products: ${error.message}`);
       showError(`Failed to load products: ${error.message}`);
-      setProducts([]);
     } else {
-      const productsWithSalesStatus: Product[] = (data || []).map((p: any) => ({
+      setProducts((data || []).map((p: any) => ({
         ...p,
-        has_sales: (p.sales?.[0]?.count || 0) > 0, // Determine has_sales based on count
-      }));
-      setProducts(productsWithSalesStatus);
+        has_sales: (p.sales?.[0]?.count || 0) > 0,
+      })));
     }
     setLoading(false);
   }, [user, appliedSearchTerm, isAuthorized]);
 
   useEffect(() => {
-    if (!sessionLoading && user && isAuthorized) {
-      fetchProducts();
-    }
+    if (!sessionLoading && user && isAuthorized) fetchProducts();
   }, [sessionLoading, user, isAuthorized, fetchProducts]);
-
-  const handleApplySearch = () => {
-    setAppliedSearchTerm(searchTerm);
-  };
-  
-  const handleClearSearch = () => {
-    setSearchTerm('');
-    setAppliedSearchTerm('');
-  };
 
   const handleEdit = (product: Product) => {
     setSelectedProduct(product);
@@ -186,174 +126,93 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
   };
 
   const handleUpdateProduct = async (values: z.infer<typeof formSchema>) => {
-    if (!selectedProduct || !user) return;
+    if (!selectedProduct) return;
+    const { error } = await supabase
+      .from('products')
+      .update({
+        ...values,
+        closing_stock: values.opening_stock + selectedProduct.stock_in - selectedProduct.stock_out
+      })
+      .eq('id', selectedProduct.id);
 
-    try {
-      const payload = {
-        productId: selectedProduct.id,
-        code: values.code,
-        name: values.name,
-        description: values.description,
-        size: values.size,
-        hsn: values.hsn,
-        gst: values.gst,
-        dp: values.dp,
-        stock: values.stock,
-        userId: user.id, // Pass user ID for potential admin check in Edge Function
-      };
-
-      const response = await fetch(UPDATE_PRODUCT_EDGE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // No Authorization header needed here as Edge Function uses service_role_key
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update product');
-      }
-
+    if (error) {
+      showError(`Failed to update product: ${error.message}`);
+    } else {
       showSuccess('Product updated successfully!');
       setIsEditDialogOpen(false);
       fetchProducts();
-      onProductAction?.(); // Notify parent
-    } catch (error: any) {
-      console.error('Error updating product:', error);
-      showError(`Failed to update product: ${error.message}`);
+      onProductAction?.();
     }
   };
 
   const handleDelete = async (productId: string) => {
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', productId);
-
+    const { error } = await supabase.from('products').delete().eq('id', productId);
     if (error) {
-      console.error('Error deleting product:', error);
-      showError(`Failed to delete product: ${error.message}. A product with sales cannot be deleted.`);
+      showError(`Failed to delete product: ${error.message}`);
     } else {
       showSuccess('Product deleted successfully!');
       fetchProducts();
-      onProductAction?.(); // Notify parent
+      onProductAction?.();
     }
   };
 
-  if (!isAuthorized) {
-    return null;
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading products...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center p-4">
-        <p className="text-lg text-red-600 dark:text-red-400 mb-4">{error}</p>
-      </div>
-    );
-  }
+  if (!isAuthorized) return null;
+  if (loading) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold">Manage All Products</CardTitle>
-        <CardDescription className="text-blue-100 dark:text-blue-200">View, edit, or delete your registered products.</CardDescription>
+        <CardDescription className="text-blue-100 dark:text-blue-200">Inventory tracking: Opening + In - Out = Closing</CardDescription>
       </CardHeader>
       <CardContent className="p-4">
-        {/* Search Filter Section */}
         <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
           <div className="flex-1 min-w-[200px]">
-            <Label htmlFor="productSearch">Search by Name or Code</Label>
-            <Input
-              id="productSearch"
-              placeholder="Enter product name or code"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full"
-            />
+            <Label htmlFor="productSearch">Search</Label>
+            <Input id="productSearch" placeholder="Name or Code" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
-          <Button onClick={handleApplySearch} className="flex items-center gap-2">
-            <Search className="h-4 w-4" /> Apply Filter
-          </Button>
-          <Button variant="outline" onClick={handleClearSearch} className="flex items-center gap-2">
-            Clear Filter
-          </Button>
+          <Button onClick={() => setAppliedSearchTerm(searchTerm)}><Search className="h-4 w-4 mr-2" /> Filter</Button>
+          <Button variant="outline" onClick={() => { setSearchTerm(''); setAppliedSearchTerm(''); }}>Clear</Button>
         </div>
         
-        <div className="overflow-x-auto">
-          {products.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              {appliedSearchTerm ? `No products found matching "${appliedSearchTerm}".` : 'No products found. Add a new product to get started!'}
-            </p>
-          ) : (
-            <div className="max-h-[400px] overflow-y-auto border rounded-md">
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
-                  <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground">Code</TableHead>
-                    <TableHead className="text-muted-foreground">Name</TableHead>
-                    <TableHead className="text-muted-foreground">Size</TableHead>
-                    <TableHead className="text-muted-foreground">HSN</TableHead>
-                    <TableHead className="text-muted-foreground">GST (%)</TableHead>
-                    <TableHead className="text-muted-foreground">DP</TableHead>
-                    <TableHead className="text-muted-foreground">Stock</TableHead>
-                    <TableHead className="text-muted-foreground">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.map((product) => (
-                    <TableRow key={product.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{product.code}</TableCell>
-                      <TableCell className="font-medium text-foreground">{product.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{product.size || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{product.hsn || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">{product.gst || 'N/A'}</TableCell>
-                      <TableCell className="text-muted-foreground">₹{product.dp.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground">{product.stock}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(product)} title="Edit Product">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" title="Delete Product" disabled={product.has_sales}>
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This action cannot be undone. This will permanently delete the product.
-                                  Note: Products with associated sales cannot be deleted.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(product.id)}>Continue</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+        <div className="overflow-x-auto border rounded-md">
+          <Table>
+            <TableHeader className="sticky top-0 bg-background z-10">
+              <TableRow className="bg-muted">
+                <TableHead>Code</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead className="text-right">Opening</TableHead>
+                <TableHead className="text-right">Stock In</TableHead>
+                <TableHead className="text-right">Stock Out</TableHead>
+                <TableHead className="text-right font-bold">Closing</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {products.map((product) => (
+                <TableRow key={product.id} className="hover:bg-accent/50">
+                  <TableCell className="font-medium">{product.code}</TableCell>
+                  <TableCell>{product.name}</TableCell>
+                  <TableCell className="text-right">{product.opening_stock}</TableCell>
+                  <TableCell className="text-right text-green-600">+{product.stock_in}</TableCell>
+                  <TableCell className="text-right text-red-600">-{product.stock_out}</TableCell>
+                  <TableCell className="text-right font-bold">{product.closing_stock}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={product.has_sales}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader><AlertDialogTitle>Delete Product?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+                          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(product.id)}>Delete</AlertDialogAction></AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       </CardContent>
 
@@ -362,75 +221,25 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Edit Product</DialogTitle>
-              <DialogDescription>
-                Make changes to the product here. Click save when you're done.
-                {selectedProduct.has_sales && (
-                  <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-2">
-                    Note: This product has associated sales. Only 'Stock', 'Code', 'Size', 'HSN', 'GST', and 'Dealer Price (DP)' can be updated.
-                  </p>
-                )}
-              </DialogDescription>
             </DialogHeader>
             <form onSubmit={form.handleSubmit(handleUpdateProduct)} className="grid gap-4 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="code" className="text-right">
-                  Code
-                </Label>
+                <Label htmlFor="code" className="text-right">Code</Label>
                 <Input id="code" {...form.register('code')} className="col-span-3" />
-                {form.formState.errors.code && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.code.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name" className="text-right">
-                  Name
-                </Label>
+                <Label htmlFor="name" className="text-right">Name</Label>
                 <Input id="name" {...form.register('name')} className="col-span-3" disabled={selectedProduct.has_sales} />
-                {form.formState.errors.name && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.name.message}</p>}
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="description" className="text-right">
-                  Description
-                </Label>
-                <Textarea id="description" {...form.register('description')} className="col-span-3" disabled={selectedProduct.has_sales} />
-                {form.formState.errors.description && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.description.message}</p>}
+                <Label htmlFor="opening_stock" className="text-right">Opening</Label>
+                <Input id="opening_stock" type="number" {...form.register('opening_stock')} className="col-span-3" />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="size" className="text-right">
-                  Size
-                </Label>
-                <Input id="size" {...form.register('size')} className="col-span-3" />
-                {form.formState.errors.size && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.size.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="hsn" className="text-right">
-                  HSN
-                </Label>
-                <Input id="hsn" {...form.register('hsn')} className="col-span-3" />
-                {form.formState.errors.hsn && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.hsn.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="gst" className="text-right">
-                  GST (%)
-                </Label>
-                <Input id="gst" {...form.register('gst')} className="col-span-3" />
-                {form.formState.errors.gst && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.gst.message}</p>}
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="dp" className="text-right">
-                  Dealer Price (DP)
-                </Label>
+                <Label htmlFor="dp" className="text-right">DP</Label>
                 <Input id="dp" type="number" step="0.01" {...form.register('dp')} className="col-span-3" />
-                {form.formState.errors.dp && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.dp.message}</p>}
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="stock" className="text-right">
-                  Stock
-                </Label>
-                <Input id="stock" type="number" {...form.register('stock')} className="col-span-3" />
-                {form.formState.errors.stock && <p className="col-span-4 text-right text-sm text-destructive">{form.formState.errors.stock.message}</p>}
-              </div>
-              <DialogFooter>
-                <Button type="submit">Save changes</Button>
-              </DialogFooter>
+              <DialogFooter><Button type="submit">Save changes</Button></DialogFooter>
             </form>
           </DialogContent>
         </Dialog>

@@ -21,7 +21,7 @@ interface Product {
   id: string;
   code: string;
   name: string;
-  stock: number;
+  closing_stock: number;
 }
 
 interface StockReceiptFormProps {
@@ -44,7 +44,6 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Searchable product dropdown states
   const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
   const [productSearchValue, setProductSearchValue] = useState("");
 
@@ -54,7 +53,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
       productId: '',
       quantity: 1,
       remarks: '',
-      receiptDate: new Date().toISOString().split('T')[0], // Default to today
+      receiptDate: new Date().toISOString().split('T')[0],
     },
   });
 
@@ -66,7 +65,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('id, code, name, stock')
+        .select('id, code, name, closing_stock')
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -84,20 +83,12 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
   }, [fetchProducts]);
 
   const filteredProducts = useMemo(() => {
-    if (!productSearchValue) {
-      return products;
-    }
+    if (!productSearchValue) return products;
     const lowerCaseSearchValue = productSearchValue.toLowerCase();
-    const searchWords = lowerCaseSearchValue.split(' ').filter(word => word.length > 0);
-
-    return products.filter(product => {
-      const productName = product.name.toLowerCase();
-      const productCode = product.code.toLowerCase();
-
-      return searchWords.some(word => 
-        productName.includes(word) || productCode.includes(word)
-      );
-    });
+    return products.filter(product => 
+      product.name.toLowerCase().includes(lowerCaseSearchValue) || 
+      product.code.toLowerCase().includes(lowerCaseSearchValue)
+    );
   }, [products, productSearchValue]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
@@ -108,27 +99,16 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
     setIsSubmitting(true);
 
     try {
-      // 1. Fetch current stock to calculate new stock
-      const { data: currentProduct, error: fetchError } = await supabase
-        .from('products')
-        .select('stock')
-        .eq('id', values.productId)
-        .single();
+      // 1. Update stock via RPC
+      const { error: stockError } = await supabase.rpc('increment_stock', {
+        product_id_in: values.productId,
+        quantity_in: values.quantity
+      });
 
-      if (fetchError) throw fetchError;
-      
-      const newStock = (currentProduct?.stock || 0) + values.quantity;
+      if (stockError) throw stockError;
 
-      // 2. Update product stock
-      const { error: updateError } = await supabase
-        .from('products')
-        .update({ stock: newStock })
-        .eq('id', values.productId);
-
-      if (updateError) throw updateError;
-
-      // 3. Insert stock receipt log (assuming table exists)
-      const { error: logError } = await supabase
+      // 2. Insert stock receipt log
+      await supabase
         .from('stock_receipts')
         .insert({
           product_id: values.productId,
@@ -138,33 +118,26 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
           remarks: values.remarks,
         });
 
-      if (logError) {
-        console.warn('Failed to log stock receipt, but stock was updated:', logError.message);
-        // Do not throw, as the critical stock update succeeded
-      }
+      // 3. Resolve alerts if stock is now positive
+      const { data: productData } = await supabase
+        .from('products')
+        .select('closing_stock')
+        .eq('id', values.productId)
+        .single();
       
-      // 4. Check and resolve production alerts if stock is now positive
-      if (newStock >= 0) {
-        const { error: resolveAlertsError } = await supabase
-          .from('production_alerts')
-          .update({ resolved: true })
-          .eq('product_id', values.productId)
-          .eq('resolved', false);
-        
-        if (resolveAlertsError) {
-          console.warn('Failed to resolve production alerts:', resolveAlertsError.message);
-        }
+      if (productData && productData.closing_stock >= 0) {
+        await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', values.productId).eq('resolved', false);
       }
 
-      showSuccess(`Stock updated successfully! Added ${values.quantity} units to ${selectedProduct?.name || 'product'}. New stock: ${newStock}.`);
+      showSuccess(`Stock updated successfully! Added ${values.quantity} units to ${selectedProduct?.name}.`);
       form.reset({
         productId: '',
         quantity: 1,
         remarks: '',
         receiptDate: new Date().toISOString().split('T')[0],
       });
-      onReceiptRecorded(); // Notify parent to refresh tables/alerts
-      fetchProducts(); // Refresh local product list to show updated stock
+      onReceiptRecorded();
+      fetchProducts();
     } catch (error: any) {
       console.error('Error recording stock receipt:', error);
       showError(`Failed to record stock receipt: ${error.message}`);
@@ -173,14 +146,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
     }
   };
 
-  if (loadingProducts) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading products...</p>
-      </div>
-    );
-  }
+  if (loadingProducts) return <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -188,9 +154,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
         <CardTitle className="text-2xl font-semibold text-primary flex items-center gap-2">
           <Package className="h-6 w-6" /> Record Stock Receipt
         </CardTitle>
-        <CardDescription className="text-muted-foreground">
-          Log new inventory received for a product.
-        </CardDescription>
+        <CardDescription className="text-muted-foreground">Log new inventory received for a product.</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -204,13 +168,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
                   <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                     <PopoverTrigger asChild>
                       <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={isProductPopoverOpen}
-                          className="w-full justify-between"
-                          disabled={products.length === 0 || isSubmitting}
-                        >
+                        <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>
                           {selectedProduct?.name || "Select product..."}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
@@ -218,11 +176,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                       <Command>
-                        <CommandInput
-                          placeholder="Search product..."
-                          value={productSearchValue}
-                          onValueChange={setProductSearchValue}
-                        />
+                        <CommandInput placeholder="Search product..." value={productSearchValue} onValueChange={setProductSearchValue} />
                         <CommandList className="max-h-[300px] overflow-y-auto">
                           {filteredProducts.length === 0 ? (
                             <CommandEmpty>No product found.</CommandEmpty>
@@ -238,17 +192,10 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
                                     setProductSearchValue("");
                                   }}
                                 >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      field.value === product.id ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
+                                  <Check className={cn("mr-2 h-4 w-4", field.value === product.id ? "opacity-100" : "opacity-0")} />
                                   <div>
                                     <div>{product.name} ({product.code})</div>
-                                    <div className="text-xs text-muted-foreground">
-                                      Current Stock: {product.stock}
-                                    </div>
+                                    <div className="text-xs text-muted-foreground">Closing Stock: {product.closing_stock}</div>
                                   </div>
                                 </CommandItem>
                               ))}
@@ -262,55 +209,11 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
                 </FormItem>
               )}
             />
-
-            <FormField
-              control={form.control}
-              name="quantity"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Quantity Received</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="e.g., 100" {...field} min={1} disabled={isSubmitting} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="receiptDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Receipt Date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} disabled={isSubmitting} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="remarks"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Remarks (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Source, batch number, etc." {...field} disabled={isSubmitting} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting || !form.formState.isValid}>
-              {isSubmitting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                'Record Stock Receipt'
-              )}
+            <FormField control={form.control} name="quantity" render={({ field }) => (<FormItem><FormLabel>Quantity Received</FormLabel><FormControl><Input type="number" {...field} min={1} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
+            <FormField control={form.control} name="receiptDate" render={({ field }) => (<FormItem><FormLabel>Receipt Date</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
+            <FormField control={form.control} name="remarks" render={({ field }) => (<FormItem><FormLabel>Remarks (Optional)</FormLabel><FormControl><Textarea {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
+            <Button type="submit" className="w-full" disabled={isSubmitting || !form.formState.isValid}>
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Record Stock Receipt'}
             </Button>
           </form>
         </Form>

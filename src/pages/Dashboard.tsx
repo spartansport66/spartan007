@@ -30,7 +30,7 @@ interface Product {
   id: string;
   name: string;
   dp: number;
-  stock: number;
+  closing_stock: number;
   description: string;
 }
 
@@ -284,58 +284,42 @@ const Dashboard = () => {
   const handleDeleteOrder = async (order: OrderDisplay) => {
     setLoadingOrders(true);
     try {
-      // 1. Manually restore stock levels for all items in the order
+      // 1. Restore stock levels using RPC to bypass RLS restrictions
       for (const item of order.items) {
-        const { data: productData, error: productFetchError } = await supabase
+        const { error: stockError } = await supabase.rpc('revert_stock_out', {
+          product_id_in: item.product_id,
+          quantity_in: item.quantity
+        });
+        
+        if (stockError) {
+          console.error(`Failed to revert stock for ${item.product_name}:`, stockError.message);
+        }
+
+        // Check if stock is now positive to resolve alerts
+        const { data: productData } = await supabase
           .from('products')
-          .select('stock')
+          .select('closing_stock')
           .eq('id', item.product_id)
           .single();
         
-        if (!productFetchError && productData) {
-          const restoredStock = productData.stock + item.quantity;
-          await supabase.from('products').update({ stock: restoredStock }).eq('id', item.product_id);
-          
-          // If stock is now positive, resolve any pending production alerts
-          if (restoredStock >= 0) {
-            await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', item.product_id).eq('resolved', false);
-          }
+        if (productData && productData.closing_stock >= 0) {
+          await supabase.from('production_alerts').update({ resolved: true }).eq('product_id', item.product_id).eq('resolved', false);
         }
       }
 
-      // 2. FIRST: Remove associated payments to satisfy foreign key constraint
-      const { error: paymentDeleteError } = await supabase
-        .from('payments')
-        .delete()
-        .eq('order_id', order.id);
+      // 2. Remove associated payments
+      await supabase.from('payments').delete().eq('order_id', order.id);
 
-      if (paymentDeleteError) {
-        console.error('Error deleting associated payments:', paymentDeleteError);
-        throw new Error(`Failed to delete associated payments: ${paymentDeleteError.message}`);
-      }
+      // 3. Remove associated sales items
+      await supabase.from('sales').delete().eq('order_id', order.id);
 
-      // 3. SECOND: Remove associated sales items
-      const { error: salesDeleteError } = await supabase
-        .from('sales')
-        .delete()
-        .eq('order_id', order.id);
-        
-      if (salesDeleteError) {
-        console.error('Error deleting associated sales:', salesDeleteError);
-        throw new Error(`Failed to delete associated sales items: ${salesDeleteError.message}`);
-      }
-
-      // 4. FINALLY: Delete the order
-      const { error: deleteError } = await supabase
-        .from('orders')
-        .delete()
-        .eq('id', order.id);
-
+      // 4. Delete the order
+      const { error: deleteError } = await supabase.from('orders').delete().eq('id', order.id);
       if (deleteError) throw deleteError;
 
       showSuccess(`Order #${order.order_number} deleted and stock restored.`);
       fetchRecentOrders();
-      handleRefreshData(); // Refresh other cards (performance, etc.)
+      handleRefreshData();
     } catch (error: any) {
       console.error('Error deleting order:', error);
       showError(`Failed to delete order: ${error.message}`);
@@ -353,9 +337,7 @@ const Dashboard = () => {
     );
   }
 
-  if (!user || isAdmin) {
-    return null;
-  }
+  if (!user || isAdmin) return null;
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
@@ -375,26 +357,14 @@ const Dashboard = () => {
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>My Reports</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsSalesPersonSalesReportOpen(true)}>
-                Sales Detail Report
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsSalesPersonDealerReportOpen(true)}>
-                My Dealer Report
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsSalesPersonPaymentsReportOpen(true)}>
-                My Payments Report
-              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonSalesReportOpen(true)}>Sales Detail Report</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonDealerReportOpen(true)}>My Dealer Report</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonPaymentsReportOpen(true)}>My Payments Report</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/add-dealer')}>
-                <PlusCircle className="h-4 w-4 mr-2" /> Add New Dealer
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/manage-dealers')}>
-                <Building className="h-4 w-4 mr-2" /> Manage Dealers
-              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/add-dealer')}><PlusCircle className="h-4 w-4 mr-2" /> Add New Dealer</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/manage-dealers')}><Building className="h-4 w-4 mr-2" /> Manage Dealers</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/change-password')}>
-                <Lock className="h-4 w-4 mr-2" /> Change Password
-              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/change-password')}><Lock className="h-4 w-4 mr-2" /> Change Password</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button onClick={handleLogout} variant="ghost" size="icon" className="text-black hover:text-black p-2">
@@ -423,62 +393,34 @@ const Dashboard = () => {
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
         <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
           <CardTitle className="text-xl font-semibold">My Recent Orders</CardTitle>
-          <CardDescription className="text-teal-100 dark:text-teal-200">
-            A list of your recent orders.
-          </CardDescription>
+          <CardDescription className="text-teal-100 dark:text-teal-200">A list of your recent orders.</CardDescription>
         </CardHeader>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
             <div className="flex-1 min-w-[150px]">
               <Label htmlFor="filterDealer">Dealer Name</Label>
-              <Select
-                value={filterDealerId || "all"}
-                onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}
-              >
-                <SelectTrigger id="filterDealer" className="w-full">
-                  <SelectValue placeholder="Filter by dealer" />
-                </SelectTrigger>
+              <Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}>
+                <SelectTrigger id="filterDealer"><SelectValue placeholder="Filter by dealer" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Dealers</SelectItem>
-                  {allDealers.map(dealer => (
-                    <SelectItem key={dealer.id} value={dealer.id}>{dealer.name}</SelectItem>
-                  ))}
+                  {allDealers.map(dealer => (<SelectItem key={dealer.id} value={dealer.id}>{dealer.name}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex-1 min-w-[150px]">
               <Label htmlFor="filterFromDate">From Date</Label>
-              <Input
-                id="filterFromDate"
-                type="date"
-                value={filterFromDate}
-                onChange={(e) => setFilterFromDate(e.target.value)}
-                className="w-full"
-              />
+              <Input id="filterFromDate" type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} className="w-full" />
             </div>
             <div className="flex-1 min-w-[150px]">
               <Label htmlFor="filterToDate">To Date</Label>
-              <Input
-                id="filterToDate"
-                type="date"
-                value={filterToDate}
-                onChange={(e) => setFilterToDate(e.target.value)}
-                className="w-full"
-              />
+              <Input id="filterToDate" type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} className="w-full" />
             </div>
-            <Button onClick={handleApplyOrderFilters} className="flex items-center gap-2">
-              <Search className="h-4 w-4" /> Apply Filters
-            </Button>
-            <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
-              Clear Filters
-            </Button>
+            <Button onClick={handleApplyOrderFilters} className="flex items-center gap-2"><Search className="h-4 w-4" /> Apply Filters</Button>
+            <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">Clear Filters</Button>
           </div>
           <div className="overflow-x-auto">
             {loadingOrders ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading orders...</p>
-              </div>
+              <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading orders...</p></div>
             ) : orders.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">No orders recorded yet or matching your filters.</p>
             ) : (
@@ -504,45 +446,15 @@ const Dashboard = () => {
                         <TableCell className="text-muted-foreground">{order.payment_status || 'N/A'}</TableCell>
                         <TableCell className="text-center">
                           <div className="flex justify-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleViewOrderDetails(order.id)}
-                              title="View Order Details"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Order Details"><Eye className="h-4 w-4" /></Button>
                             {!order.dispatched && (
                               <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleEditOrder(order.id)}
-                                  title="Edit Order"
-                                >
-                                  <Edit className="h-4 w-4 text-orange-600" />
-                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleEditOrder(order.id)} title="Edit Order"><Edit className="h-4 w-4 text-orange-600" /></Button>
                                 <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      title="Delete Order"
-                                    >
-                                      <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  </AlertDialogTrigger>
+                                  <AlertDialogTrigger asChild><Button variant="ghost" size="icon" title="Delete Order"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
                                   <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete Order?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Are you sure you want to delete Order #{order.order_number}? This will restore the product stock levels.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleDeleteOrder(order)}>Delete</AlertDialogAction>
-                                    </AlertDialogFooter>
+                                    <AlertDialogHeader><AlertDialogTitle>Delete Order?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete Order #{order.order_number}? This will restore the product stock levels.</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteOrder(order)}>Delete</AlertDialogAction></AlertDialogFooter>
                                   </AlertDialogContent>
                                 </AlertDialog>
                               </>
@@ -559,29 +471,11 @@ const Dashboard = () => {
         </CardContent>
       </Card>
       <MadeWithDyad />
-      <OrderDetailsDialog
-        orderId={selectedOrderIdForDetails}
-        isOpen={isOrderDetailsDialogOpen}
-        onOpenChange={setIsOrderDetailsDialogOpen}
-      />
-      <EditOrderDialog
-        orderId={selectedOrderIdForEdit}
-        isOpen={isEditOrderDialogOpen}
-        onOpenChange={setIsEditOrderDialogOpen}
-        onOrderUpdated={handleOrderUpdated}
-      />
-      <SalesPersonSalesReport
-        isOpen={isSalesPersonSalesReportOpen}
-        onOpenChange={setIsSalesPersonSalesReportOpen}
-      />
-      <SalesPersonDealerReport
-        isOpen={isSalesPersonDealerReportOpen}
-        onOpenChange={setIsSalesPersonDealerReportOpen}
-      />
-      <SalesPersonPaymentsReport
-        isOpen={isSalesPersonPaymentsReportOpen}
-        onOpenChange={setIsSalesPersonPaymentsReportOpen}
-      />
+      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} />
+      <EditOrderDialog orderId={selectedOrderIdForEdit} isOpen={isEditOrderDialogOpen} onOpenChange={setIsEditOrderDialogOpen} onOrderUpdated={handleOrderUpdated} />
+      <SalesPersonSalesReport isOpen={isSalesPersonSalesReportOpen} onOpenChange={setIsSalesPersonSalesReportOpen} />
+      <SalesPersonDealerReport isOpen={isSalesPersonDealerReportOpen} onOpenChange={setIsSalesPersonDealerReportOpen} />
+      <SalesPersonPaymentsReport isOpen={isSalesPersonPaymentsReportOpen} onOpenChange={setIsSalesPersonPaymentsReportOpen} />
     </div>
   );
 };
