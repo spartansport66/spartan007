@@ -321,12 +321,16 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command shouldFilter={false}>
-                        <CommandInput 
-                          placeholder="Search product..." 
-                          value={productSearch} 
-                          onValueChange={setProductSearch} 
-                        />
+                      <Command>
+                        <div className="p-2 border-b flex items-center gap-2">
+                          <Search className="h-4 w-4 text-muted-foreground" />
+                          <Input 
+                            placeholder="Search product..." 
+                            value={productSearch} 
+                            onChange={(e) => setProductSearch(e.target.value)} 
+                            className="h-8 border-none focus-visible:ring-0" 
+                          />
+                        </div>
                         <CommandList className="max-h-[250px] overflow-y-auto">
                           {filteredProducts.length === 0 ? (
                             <CommandEmpty>No product found.</CommandEmpty>
@@ -335,7 +339,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                               {filteredProducts.map((product) => (
                                 <CommandItem
                                   key={product.id}
-                                  value={product.id}
+                                  value={`${product.name} ${product.code}`}
                                   onSelect={() => {
                                     setNewItemProductId(product.id);
                                     setNewItemUnitPrice(product.dp);
