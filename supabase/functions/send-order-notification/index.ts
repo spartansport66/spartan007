@@ -30,7 +30,7 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Fetch Order Details with Salesperson and Dealer info
+    // 1. Fetch Order Details
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .select(`
@@ -49,75 +49,77 @@ serve(async (req: Request) => {
     const salespersonName = `${order.profiles.first_name} ${order.profiles.last_name}`.trim();
     const dealerName = order.dealers.name;
 
-    // 2. Fetch Notification Email List (All departments including Warehouse / Order Prep)
+    // 2. Fetch Notification Email List
     const { data: notificationEmails, error: emailError } = await supabaseAdmin
       .from('notification_emails')
       .select('email_address, department_name');
 
     if (emailError) throw new Error('Failed to fetch notification email list.');
 
-    // Collect all unique recipient emails
     const recipientSet = new Set<string>();
-    
-    // Add all configured department emails
-    (notificationEmails || []).forEach((e: any) => {
-      recipientSet.add(e.email_address);
-    });
-
-    // Also add dealer email if available
-    if (order.dealers?.email) {
-      recipientSet.add(order.dealers.email);
-    }
+    (notificationEmails || []).forEach((e: any) => recipientSet.add(e.email_address));
+    if (order.dealers?.email) recipientSet.add(order.dealers.email);
 
     const recipientEmails = Array.from(recipientSet);
 
     if (recipientEmails.length === 0) {
-      console.log("[send-order-notification] No recipients found. Email skipped.");
-      return new Response(JSON.stringify({ message: 'No recipients found. Email skipped.' }), {
+      return new Response(JSON.stringify({ message: 'No recipients found.' }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // 3. Construct Email Content as requested
-    // Subject: Order No, Salesperson Name, Dealer Name
+    // 3. Construct Email
     const emailSubject = `New Order: #${order.order_number} - ${salespersonName} - ${dealerName}`;
-    
     const itemsList = (order.sales || []).map((s: any) => 
-      `- ${s.products.name} (${s.products.code}): ${s.quantity} units (Total: ₹${s.total_price.toFixed(2)})`
-    ).join('\n');
+      `<li><strong>${s.products.name} (${s.products.code})</strong>: ${s.quantity} units (₹${s.total_price.toFixed(2)})</li>`
+    ).join('');
 
-    const emailBody = `
-      A new order has been placed and requires processing.
-
-      Order Summary:
-      --------------
-      Order Number: #${order.order_number}
-      Sales Person: ${salespersonName}
-      Dealer: ${dealerName} (${order.dealers.phone || 'N/A'})
-      Date: ${new Date(order.order_date).toLocaleString()}
-      Total Amount: ₹${order.total_amount.toFixed(2)}
-
-      Items:
-      ------
-      ${itemsList}
-
-      This notification has been sent to the following departments:
-      ${[...new Set(notificationEmails.map((e: any) => e.department_name))].join(', ')}
-
-      Please log in to the dashboard to view the full details and generate the official PDF.
+    const htmlContent = `
+      <h2>New Order Notification</h2>
+      <p>A new order has been placed and requires processing.</p>
+      <hr/>
+      <p><strong>Order Number:</strong> #${order.order_number}</p>
+      <p><strong>Sales Person:</strong> ${salespersonName}</p>
+      <p><strong>Dealer:</strong> ${dealerName} (${order.dealers.phone || 'N/A'})</p>
+      <p><strong>Date:</strong> ${new Date(order.order_date).toLocaleString()}</p>
+      <p><strong>Total Amount:</strong> ₹${order.total_amount.toFixed(2)}</p>
+      <h3>Items:</h3>
+      <ul>${itemsList}</ul>
+      <hr/>
+      <p><small>This is an automated notification sent to configured departments.</small></p>
     `;
 
-    // Log the attempt (Real sending requires an API key for Resend/SendGrid)
-    console.log(`[send-order-notification] Triggering email for Order #${order.order_number}`);
-    console.log(`[send-order-notification] Recipients: ${recipientEmails.join(', ')}`);
-    console.log(`[send-order-notification] Subject: ${emailSubject}`);
+    // 4. Send via Resend API
+    // @ts-ignore
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    
+    if (!resendApiKey) {
+      console.error("[send-order-notification] RESEND_API_KEY not set in Supabase Secrets.");
+      return new Response(JSON.stringify({ error: 'Email service not configured.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-    return new Response(JSON.stringify({ 
-      message: 'Notification process triggered.',
-      subject: emailSubject,
-      recipients: recipientEmails 
-    }), {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${resendApiKey}`,
+      },
+      body: JSON.stringify({
+        from: 'Orders <onboarding@resend.dev>', // Replace with your verified domain later
+        to: recipientEmails,
+        subject: emailSubject,
+        html: htmlContent,
+      }),
+    });
+
+    const resData = await res.json();
+    console.log("[send-order-notification] Resend Response:", resData);
+
+    return new Response(JSON.stringify({ message: 'Email sent successfully', data: resData }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
