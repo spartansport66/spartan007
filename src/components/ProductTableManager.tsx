@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Edit, Trash2, Loader2, Search, Info, Printer, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
+import { Edit, Trash2, Loader2, Search, Info, Printer, ArrowUp, ArrowDown, ChevronsUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
@@ -73,6 +73,8 @@ const formSchema = z.object({
 
 type SortKey = 'code' | 'name' | 'opening_stock' | 'stock_in' | 'stock_out' | 'calculated_closing';
 
+const PAGE_SIZE = 10;
+
 const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onProductAction }) => {
   const { user, session, loading: sessionLoading, userType } = useSession();
   const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
@@ -93,6 +95,9 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
   // Sort states
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
@@ -172,6 +177,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     setAppliedSearchTerm(searchTerm);
     setAppliedStockFilter(stockFilter ? Number(stockFilter) : null);
     setAppliedStockFilterGreater(stockFilterGreater ? Number(stockFilterGreater) : null);
+    setCurrentPage(1); // Reset to first page on filter change
   };
 
   const handleClearFilters = () => {
@@ -181,6 +187,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     setAppliedStockFilter(null);
     setStockFilterGreater('');
     setAppliedStockFilterGreater(null);
+    setCurrentPage(1); // Reset to first page on clear
   };
 
   const handleSort = (key: SortKey) => {
@@ -190,6 +197,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
       setSortKey(key);
       setSortDirection('asc');
     }
+    setCurrentPage(1); // Reset to first page on sort change
   };
 
   const handleEdit = (product: Product) => {
@@ -275,6 +283,15 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
       }
     });
   }, [products, appliedStockFilter, appliedStockFilterGreater, sortKey, sortDirection]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(sortedAndFilteredProducts.length / PAGE_SIZE);
+  const paginatedProducts = useMemo(() => {
+    return sortedAndFilteredProducts.slice(
+      (currentPage - 1) * PAGE_SIZE,
+      currentPage * PAGE_SIZE
+    );
+  }, [sortedAndFilteredProducts, currentPage]);
 
   const handlePrint = () => {
     try {
@@ -430,14 +447,14 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedAndFilteredProducts.length === 0 ? (
+              {paginatedProducts.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No products found matching your filters.
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedAndFilteredProducts.map((product) => {
+                paginatedProducts.map((product) => {
                   const calculatedClosingStock = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
                   
                   return (
@@ -467,6 +484,33 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
             </TableBody>
           </Table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 px-2">
+            <p className="text-sm text-muted-foreground">
+              Showing page {currentPage} of {totalPages} ({sortedAndFilteredProducts.length} total products)
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
 
       {selectedProduct && (
