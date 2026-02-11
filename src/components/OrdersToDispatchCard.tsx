@@ -207,8 +207,32 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         rightY += 5; doc.text(`Phone: ${(orderData.dealers as any).phone || 'N/A'}`, rightColX, rightY);
 
         y = Math.max(y + (addressLines.length * 5), rightY + 10);
-        const tableRows = (orderData.sales || []).map((sale: any) => [sale.products?.code || 'N/A', sale.products?.name || 'N/A', sale.quantity.toString(), `₹${(sale.unit_price || 0).toFixed(2)}`, `${(sale.discount_percent || 0)}%`, `${(sale.gst_percent || 0)}%`, `₹${(sale.total_price || 0).toFixed(2)}`]);
-        autoTable(doc, { head: [["Code", "Product", "Qty", "Unit Price", "Disc %", "GST %", "Total"]], body: tableRows, startY: y, headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 }, styles: { fontSize: 8, cellPadding: 2 } });
+        const tableRows = (orderData.sales || []).map((sale: any) => [
+          sale.products?.code || 'N/A', 
+          sale.products?.name || 'N/A', 
+          sale.quantity.toString(), 
+          `₹${(sale.unit_price || 0).toFixed(2)}`, 
+          `${(sale.discount_percent || 0)}%`, 
+          `${(sale.gst_percent || 0)}%`, 
+          `₹${(sale.total_price || 0).toFixed(2)}`
+        ]);
+
+        autoTable(doc, { 
+          head: [["Code", "Product", "Qty", "Unit Price", "Disc %", "GST %", "Total"]], 
+          body: tableRows, 
+          startY: y, 
+          headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 }, 
+          columnStyles: {
+            0: { cellWidth: 20, halign: 'center' },
+            1: { cellWidth: 'auto' },
+            2: { cellWidth: 15, halign: 'center' },
+            3: { cellWidth: 25, halign: 'right' },
+            4: { cellWidth: 15, halign: 'center' },
+            5: { cellWidth: 15, halign: 'center' },
+            6: { cellWidth: 25, halign: 'right' }
+          },
+          styles: { fontSize: 8, cellPadding: 2 } 
+        });
         
         const finalY = (doc as any).lastAutoTable.finalY + 10;
         const subtotal = (orderData.sales || []).reduce((sum: number, s: any) => sum + s.total_price, 0);
