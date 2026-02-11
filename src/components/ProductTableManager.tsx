@@ -101,7 +101,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
     }
     setLoading(true);
     try {
-      // Explicitly using 'closing_stock' in the select query
+      // Corrected: Using 'closing_stock' instead of 'stock'
       let query = supabase
         .from('products')
         .select('id, code, name, description, size, hsn, gst, dp, opening_stock, stock_in, stock_out, closing_stock, user_id, sales(count)');

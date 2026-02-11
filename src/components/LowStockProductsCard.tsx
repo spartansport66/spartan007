@@ -41,7 +41,7 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
     setLoading(true);
     setError(null);
     try {
-      // Explicitly using 'closing_stock' for selection, filtering, and ordering
+      // Corrected: Using 'closing_stock' instead of 'stock'
       const { data, error } = await supabase
         .from('products')
         .select('id, code, name, closing_stock, dp')
