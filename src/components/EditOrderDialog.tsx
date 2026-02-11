@@ -186,6 +186,20 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     setNewItemDiscountPercent(0);
   };
 
+  const updateOrderItem = (id: string, field: keyof OrderItem, value: number) => {
+    setOrderItems(prev => prev.map(item => {
+      if (item.id === id) {
+        const updatedItem = { ...item, [field]: value };
+        // Recalculate total_price for this item
+        const discount = (updatedItem.unit_dp * updatedItem.discount_percent) / 100;
+        const finalUnitPrice = Math.max(0, updatedItem.unit_dp - discount);
+        updatedItem.total_price = updatedItem.quantity * finalUnitPrice;
+        return updatedItem;
+      }
+      return item;
+    }));
+  };
+
   const removeOrderItem = (id: string) => {
     setOrderItems(orderItems.filter(item => item.id !== id));
   };
@@ -262,7 +276,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
           <DialogDescription>
@@ -278,7 +292,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           <div className="space-y-6 py-4">
             {/* Add New Item Section */}
             <div className="space-y-4">
-              <Label className="text-lg font-semibold">Add/Modify Items</Label>
+              <Label className="text-lg font-semibold">Add New Item</Label>
               <div className="flex flex-col gap-4 p-4 border rounded-md bg-muted/50">
                 <div className="w-full">
                   <Label>Product</Label>
@@ -337,26 +351,52 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
               {/* Current Items Table */}
               {orderItems.length > 0 && (
-                <div className="max-h-[250px] overflow-y-auto border rounded-md">
+                <div className="max-h-[350px] overflow-y-auto border rounded-md">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Product</TableHead>
-                        <TableHead>Qty</TableHead>
-                        <TableHead>DP</TableHead>
-                        <TableHead>Disc %</TableHead>
+                        <TableHead className="w-24">Qty</TableHead>
+                        <TableHead className="w-32">DP (₹)</TableHead>
+                        <TableHead className="w-24">Disc %</TableHead>
                         <TableHead className="text-right">Total</TableHead>
-                        <TableHead></TableHead>
+                        <TableHead className="w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {orderItems.map(item => (
                         <TableRow key={item.id}>
-                          <TableCell className="max-w-[150px] truncate">{item.product_name}</TableCell>
-                          <TableCell>{item.quantity}</TableCell>
-                          <TableCell>₹{item.unit_dp.toFixed(2)}</TableCell>
-                          <TableCell>{item.discount_percent}%</TableCell>
-                          <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
+                          <TableCell className="max-w-[150px] truncate font-medium">{item.product_name}</TableCell>
+                          <TableCell>
+                            <Input 
+                              type="number" 
+                              value={item.quantity} 
+                              onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} 
+                              className="h-8"
+                              disabled={isSubmitting}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input 
+                              type="number" 
+                              step="0.01" 
+                              value={item.unit_dp} 
+                              onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} 
+                              className="h-8"
+                              disabled={isSubmitting}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input 
+                              type="number" 
+                              step="0.1" 
+                              value={item.discount_percent} 
+                              onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} 
+                              className="h-8"
+                              disabled={isSubmitting}
+                            />
+                          </TableCell>
+                          <TableCell className="text-right font-bold text-green-600">₹{item.total_price.toFixed(2)}</TableCell>
                           <TableCell>
                             <Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting}>
                               <Trash2 className="h-4 w-4 text-destructive" />
