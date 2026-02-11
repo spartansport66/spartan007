@@ -1,6 +1,9 @@
+// @ts-ignore
 /// <reference lib="deno.ns" />
 
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -24,21 +27,27 @@ serve(async (req) => {
     }
 
     const supabaseAdmin = createClient(
+      // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
+      // @ts-ignore
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const productsToInsert = productData.map((product: any) => ({
-      name: product.name,
-      description: product.description || null,
-      stock: parseInt(product.stock),
-      user_id: product.user_id,
-      code: product.code,
-      size: product.size || null,
-      hsn: product.hsn || null,
-      gst: product.gst || null,
-      dp: parseInt(product.dp),
-    }));
+    const productsToInsert = productData.map((product: any) => {
+      const openingStock = parseInt(product.opening_stock || 0);
+      return {
+        name: product.name,
+        description: product.description || null,
+        opening_stock: openingStock,
+        closing_stock: openingStock, // Initially closing equals opening
+        user_id: product.user_id,
+        code: product.code,
+        size: product.size || null,
+        hsn: product.hsn || null,
+        gst: product.gst || null,
+        dp: parseInt(product.dp || 0),
+      };
+    });
 
     const { data, error } = await supabaseAdmin
       .from('products')

@@ -16,7 +16,7 @@ serve(async (req) => {
   }
 
   try {
-    const { productId, name, description, stock, code, size, hsn, gst, dp } = await req.json();
+    const { productId, name, description, opening_stock, code, size, hsn, gst, dp } = await req.json();
     if (!productId) {
       return new Response(JSON.stringify({ error: 'Product ID is required.' }), {
         status: 400,
@@ -31,6 +31,15 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Fetch current product data to calculate new closing stock
+    const { data: currentProduct, error: fetchError } = await supabaseAdmin
+      .from('products')
+      .select('*')
+      .eq('id', productId)
+      .single();
+    
+    if (fetchError) throw new Error(`Failed to fetch product: ${fetchError.message}`);
+
     const { count: salesCount, error: salesCountError } = await supabaseAdmin
       .from('sales')
       .select('id', { count: 'exact', head: true })
@@ -40,22 +49,24 @@ serve(async (req) => {
     const hasSales = (salesCount || 0) > 0;
     const updateData: any = {};
 
-    if (hasSales) {
-      if (stock !== undefined) updateData.stock = parseInt(stock);
-      if (code !== undefined) updateData.code = code;
-      if (size !== undefined) updateData.size = size;
-      if (hsn !== undefined) updateData.hsn = hsn;
-      if (gst !== undefined) updateData.gst = gst;
-      if (dp !== undefined) updateData.dp = parseInt(dp);
-    } else {
+    // Common fields
+    if (code !== undefined) updateData.code = code;
+    if (size !== undefined) updateData.size = size;
+    if (hsn !== undefined) updateData.hsn = hsn;
+    if (gst !== undefined) updateData.gst = gst;
+    if (dp !== undefined) updateData.dp = parseInt(dp);
+    
+    if (opening_stock !== undefined) {
+      const newOpening = parseInt(opening_stock);
+      updateData.opening_stock = newOpening;
+      // Recalculate closing stock: Opening + In - Out
+      updateData.closing_stock = newOpening + currentProduct.stock_in - currentProduct.stock_out;
+    }
+
+    // Fields only editable if no sales exist
+    if (!hasSales) {
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
-      if (stock !== undefined) updateData.stock = parseInt(stock);
-      if (code !== undefined) updateData.code = code;
-      if (size !== undefined) updateData.size = size;
-      if (hsn !== undefined) updateData.hsn = hsn;
-      if (gst !== undefined) updateData.gst = gst;
-      if (dp !== undefined) updateData.dp = parseInt(dp);
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -73,18 +84,17 @@ serve(async (req) => {
       .single();
     if (updateError) throw new Error(`Failed to update product: ${updateError.message}`);
 
-    if (updateData.stock !== undefined) {
-      if (updatedProduct.stock < 0) {
-        const newRequiredQuantity = Math.abs(updatedProduct.stock);
-        const { data: existingAlert } = await supabaseAdmin.from('production_alerts').select('id').eq('product_id', productId).eq('resolved', false).single();
-        if (existingAlert) {
-          await supabaseAdmin.from('production_alerts').update({ required_quantity: newRequiredQuantity, created_at: new Date().toISOString() }).eq('id', existingAlert.id);
-        } else {
-          await supabaseAdmin.from('production_alerts').insert({ product_id: productId, required_quantity: newRequiredQuantity, resolved: false });
-        }
+    // Handle production alerts based on new closing stock
+    if (updatedProduct.closing_stock < 0) {
+      const newRequiredQuantity = Math.abs(updatedProduct.closing_stock);
+      const { data: existingAlert } = await supabaseAdmin.from('production_alerts').select('id').eq('product_id', productId).eq('resolved', false).single();
+      if (existingAlert) {
+        await supabaseAdmin.from('production_alerts').update({ required_quantity: newRequiredQuantity, created_at: new Date().toISOString() }).eq('id', existingAlert.id);
       } else {
-        await supabaseAdmin.from('production_alerts').update({ resolved: true }).eq('product_id', productId).eq('resolved', false);
+        await supabaseAdmin.from('production_alerts').insert({ product_id: productId, required_quantity: newRequiredQuantity, resolved: false });
       }
+    } else {
+      await supabaseAdmin.from('production_alerts').update({ resolved: true }).eq('product_id', productId).eq('resolved', false);
     }
 
     return new Response(JSON.stringify({ message: 'Product updated successfully', product: updatedProduct }), {

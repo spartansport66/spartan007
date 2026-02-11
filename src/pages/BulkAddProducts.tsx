@@ -16,41 +16,41 @@ const BULK_ADD_PRODUCTS_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supaba
 
 // Zod schema for product validation
 const productSchema = z.object({
-  code: z.string().min(1, { message: 'Product Code is required.' }).trim(), // Added .trim()
-  name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }).trim(), // Added .trim()
-  description: z.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
-  size: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
-  hsn: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
-  gst: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null), // Added .trim()
+  code: z.string().min(1, { message: 'Product Code is required.' }).trim(),
+  name: z.string().min(2, { message: 'Product name must be at least 2 characters.' }).trim(),
+  description: z.string().nullable().optional().transform(val => val ? val.trim() : null),
+  size: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null),
+  hsn: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null),
+  gst: z.coerce.string().nullable().optional().transform(val => val ? val.trim() : null),
   dp: z.preprocess(
     (val) => {
       if (typeof val === 'string') {
         const trimmedVal = val.trim();
         if (trimmedVal === '') return undefined;
         const num = parseFloat(trimmedVal);
-        return isNaN(num) ? trimmedVal : num; // Pass number if valid, else original string for Zod to error on
+        return isNaN(num) ? trimmedVal : num;
       }
       return val;
     },
     z.coerce.number()
-      .min(0, { message: 'Dealer Price cannot be negative.' }) // Apply min before transform
-      .transform(val => Math.round(val)) // Round to nearest integer first
-      .default(0) // Default to 0
+      .min(0, { message: 'Dealer Price cannot be negative.' })
+      .transform(val => Math.round(val))
+      .default(0)
   ),
-  stock: z.preprocess(
+  opening_stock: z.preprocess(
     (val) => {
       if (typeof val === 'string') {
         const trimmedVal = val.trim();
         if (trimmedVal === '') return undefined;
         const num = parseFloat(trimmedVal);
-        return isNaN(num) ? trimmedVal : num; // Pass number if valid, else original string for Zod to error on
+        return isNaN(num) ? trimmedVal : num;
       }
       return val;
     },
     z.coerce.number()
-      .min(0, { message: 'Stock cannot be negative.' }) // Apply min before transform
-      .transform(val => Math.round(val)) // Round to nearest integer first
-      .default(0) // Default to 0
+      .min(0, { message: 'Opening Stock cannot be negative.' })
+      .transform(val => Math.round(val))
+      .default(0)
   ),
 });
 
@@ -63,7 +63,7 @@ const productDisplayHeaders = [
   { key: 'hsn', label: 'HSN' },
   { key: 'gst', label: 'GST (%)' },
   { key: 'dp', label: 'Dealer Price (DP)' },
-  { key: 'stock', label: 'Stock' },
+  { key: 'opening_stock', label: 'Opening Stock' },
 ];
 
 // Sample data for the ExcelUpload component
@@ -75,8 +75,8 @@ const productSampleData = [
     "Size": '15 inch',
     "HSN": '8471',
     "GST (%)": "18", 
-    "Dealer Price (DP)": 1000, // Changed to integer
-    "Stock": 50
+    "Dealer Price (DP)": 1000,
+    "Opening Stock": 50
   },
   {
     "Product Code": 'P002',
@@ -85,8 +85,8 @@ const productSampleData = [
     "Size": 'Small',
     "HSN": '8471',
     "GST (%)": "Exempt", 
-    "Dealer Price (DP)": 15, // Changed to integer
-    "Stock": 200
+    "Dealer Price (DP)": 15,
+    "Opening Stock": 200
   }
 ];
 
@@ -94,7 +94,7 @@ const BulkAddProducts = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, userType } = useSession();
   const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
-  const [loadingUpload, setLoadingUpload] = useState(false); // Renamed to avoid conflict with ExcelUpload's internal loading
+  const [loadingUpload, setLoadingUpload] = useState(false);
 
   useEffect(() => {
     if (!sessionLoading && !user) {
@@ -123,7 +123,7 @@ const BulkAddProducts = () => {
           products: productsToUpload.map(p => ({
             name: p.name,
             description: p.description,
-            stock: p.stock,
+            opening_stock: p.opening_stock,
             user_id: user.id,
             code: p.code,
             size: p.size,
@@ -141,7 +141,7 @@ const BulkAddProducts = () => {
       }
       
       showSuccess(data.message);
-      navigate(userType === 'admin' ? '/product-management-console' : '/product-dashboard'); // Navigate after successful bulk upload
+      navigate(userType === 'admin' ? '/product-management-console' : '/product-dashboard');
     } catch (error: any) {
       console.error('Error uploading products:', error);
       showError(`Failed to upload products: ${error.message}`);
@@ -181,7 +181,6 @@ const BulkAddProducts = () => {
           uploadButtonText="Upload Products"
           displayHeaders={productDisplayHeaders}
           validationSchema={productSchema}
-          // Exclude 'MRP' from mapping
           excludedSourceHeaders={['MRP']}
         />
       </div>

@@ -37,7 +37,7 @@ serve(async (req) => {
 
     const { data: productsData, error: productsError } = await supabaseAdmin
       .from('products')
-      .select('id, code, name, dp, stock')
+      .select('id, code, name, dp, opening_stock, stock_in, stock_out, closing_stock')
       .order('name', { ascending: true });
     if (productsError) throw productsError;
 

@@ -40,21 +40,23 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
     }
     setLoading(true);
     setError(null);
-    const { data, error } = await supabase
-      .from('products')
-      .select('id, code, name, closing_stock, dp')
-      .lte('closing_stock', LOW_STOCK_THRESHOLD)
-      .order('closing_stock', { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, code, name, closing_stock, dp')
+        .lte('closing_stock', LOW_STOCK_THRESHOLD)
+        .order('closing_stock', { ascending: true });
 
-    if (error) {
+      if (error) throw error;
+      setLowStockProducts(data || []);
+    } catch (error: any) {
       console.error('Error fetching low stock products:', error);
       setError(`Failed to load low stock products: ${error.message}`);
       showError(`Failed to load low stock products: ${error.message}`);
       setLowStockProducts([]);
-    } else {
-      setLowStockProducts(data || []);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [isAuthorized]);
 
   useEffect(() => {

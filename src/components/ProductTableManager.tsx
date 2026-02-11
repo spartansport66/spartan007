@@ -100,20 +100,29 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
       return;
     }
     setLoading(true);
-    let query = supabase.from('products').select('*, sales(count)');
-    if (appliedSearchTerm) {
-      query = query.or(`name.ilike.%${appliedSearchTerm}%,code.ilike.%${appliedSearchTerm}%`);
-    }
-    const { data, error } = await query;
-    if (error) {
-      showError(`Failed to load products: ${error.message}`);
-    } else {
+    try {
+      // Explicitly select columns to avoid "stock" column error
+      let query = supabase
+        .from('products')
+        .select('id, code, name, description, size, hsn, gst, dp, opening_stock, stock_in, stock_out, closing_stock, user_id, sales(count)');
+      
+      if (appliedSearchTerm) {
+        query = query.or(`name.ilike.%${appliedSearchTerm}%,code.ilike.%${appliedSearchTerm}%`);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
       setProducts((data || []).map((p: any) => ({
         ...p,
         has_sales: (p.sales?.[0]?.count || 0) > 0,
       })));
+    } catch (error: any) {
+      console.error('Error fetching products:', error);
+      showError(`Failed to load products: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [user, appliedSearchTerm, isAuthorized]);
 
   useEffect(() => {
@@ -127,32 +136,36 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
 
   const handleUpdateProduct = async (values: z.infer<typeof formSchema>) => {
     if (!selectedProduct) return;
-    const { error } = await supabase
-      .from('products')
-      .update({
-        ...values,
-        closing_stock: values.opening_stock + selectedProduct.stock_in - selectedProduct.stock_out
-      })
-      .eq('id', selectedProduct.id);
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({
+          ...values,
+          closing_stock: values.opening_stock + selectedProduct.stock_in - selectedProduct.stock_out
+        })
+        .eq('id', selectedProduct.id);
 
-    if (error) {
-      showError(`Failed to update product: ${error.message}`);
-    } else {
+      if (error) throw error;
+      
       showSuccess('Product updated successfully!');
       setIsEditDialogOpen(false);
       fetchProducts();
       onProductAction?.();
+    } catch (error: any) {
+      showError(`Failed to update product: ${error.message}`);
     }
   };
 
   const handleDelete = async (productId: string) => {
-    const { error } = await supabase.from('products').delete().eq('id', productId);
-    if (error) {
-      showError(`Failed to delete product: ${error.message}`);
-    } else {
+    try {
+      const { error } = await supabase.from('products').delete().eq('id', productId);
+      if (error) throw error;
+      
       showSuccess('Product deleted successfully!');
       fetchProducts();
       onProductAction?.();
+    } catch (error: any) {
+      showError(`Failed to delete product: ${error.message}`);
     }
   };
 
