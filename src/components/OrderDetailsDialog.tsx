@@ -98,7 +98,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         if (profileData) salesPersonName = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
       }
 
-      // Fetch sales items with explicit selection of unit_price and discount_percent
       const { data: salesItems, error: salesError } = await supabase
         .from('sales')
         .select(`
@@ -114,7 +113,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       if (salesError) throw salesError;
 
       const items: OrderItemDetail[] = (salesItems || []).map((item: any) => {
-        // Fallback logic: if unit_price is 0 or null in sales table, try to use product's current DP
         const unitPrice = item.unit_price || item.products?.dp || 0;
         const discountPercent = item.discount_percent || 0;
         
@@ -228,7 +226,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     const finalY = (doc as any).lastAutoTable.finalY + 15;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text(`TOTAL BILL AMOUNT: Rs. ${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, finalY, { align: 'right' });
+    doc.text(`TOTAL BILL AMOUNT: Rs. ${orderDetails.total_amount.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
 
     doc.save(`Gate_Pass_${orderDetails.dispatch_number || orderDetails.order_number}.pdf`);
   };
@@ -307,15 +305,18 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth - margin, finalY, { align: 'right' });
+    doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
     
+    let currentY = finalY;
     if (orderDetails.discount_amount > 0) {
-      doc.text(`Global Discount: -₹${orderDetails.discount_amount.toFixed(2)}`, pageWidth - margin, finalY + 5, { align: 'right' });
+      currentY += 5;
+      doc.text(`Global Discount: -₹${orderDetails.discount_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
     }
     
+    currentY += 7;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text(`FINAL TOTAL: ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth - margin, finalY + 12, { align: 'right' });
+    doc.text(`FINAL TOTAL: ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
 
     doc.save(`Order_Details_${orderDetails.order_number}.pdf`);
   };

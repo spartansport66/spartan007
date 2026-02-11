@@ -168,7 +168,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         const tableRows = (orderData.sales || []).map((sale: any) => [sale.products?.code || 'N/A', sale.products?.name || 'N/A', sale.quantity.toString()]);
         autoTable(doc, { head: [["Code", "Product Name", "Quantity"]], body: tableRows, startY: y, headStyles: { fillColor: darkBlue, halign: 'center' }, styles: { fontSize: 9, cellPadding: 3 } });
         doc.setFont("helvetica", "bold"); doc.setFontSize(12);
-        doc.text(`TOTAL BILL AMOUNT: Rs. ${orderData.total_amount.toFixed(2)}`, pageWidth - margin, (doc as any).lastAutoTable.finalY + 15, { align: 'right' });
+        doc.text(`TOTAL BILL AMOUNT: Rs. ${orderData.total_amount.toFixed(2)}`, pageWidth / 2, (doc as any).lastAutoTable.finalY + 15, { align: 'center' });
       }
       doc.save(`Bulk_Gate_Passes_${new Date().getTime()}.pdf`);
       showSuccess(`Generated ${selectedOrderIds.length} Gate Passes.`);
@@ -236,10 +236,17 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         
         const finalY = (doc as any).lastAutoTable.finalY + 10;
         const subtotal = (orderData.sales || []).reduce((sum: number, s: any) => sum + s.total_price, 0);
-        doc.setFontSize(10); doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth - margin, finalY, { align: 'right' });
-        if (orderData.discount_amount > 0) doc.text(`Global Discount: -₹${orderData.discount_amount.toFixed(2)}`, pageWidth - margin, finalY + 5, { align: 'right' });
+        doc.setFontSize(10); doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
+        
+        let currentY = finalY;
+        if (orderData.discount_amount > 0) {
+          currentY += 5;
+          doc.text(`Global Discount: -₹${orderData.discount_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+        }
+        
+        currentY += 7;
         doc.setFont("helvetica", "bold"); doc.setFontSize(12);
-        doc.text(`FINAL TOTAL: ₹${orderData.total_amount.toFixed(2)}`, pageWidth - margin, finalY + 12, { align: 'right' });
+        doc.text(`FINAL TOTAL: ₹${orderData.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
       }
       doc.save(`Bulk_Order_Details_${new Date().getTime()}.pdf`);
       showSuccess(`Generated ${selectedOrderIds.length} Order Detail PDFs.`);
