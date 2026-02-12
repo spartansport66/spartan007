@@ -160,6 +160,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         expiry_date: values.paymentMethod === 'Card' ? values.expiryDate : null,
         cvv: values.paymentMethod === 'Card' ? values.cvv : null,
         upi_id: values.paymentMethod === 'UPI' ? values.upiTransactionId : null,
+        source: 'order_payment', // Set the source
       };
 
       const { data: newPayment, error: paymentInsertError } = await supabase

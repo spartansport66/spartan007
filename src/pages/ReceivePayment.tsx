@@ -233,6 +233,7 @@ const ReceivePayment = () => {
           cheque_dd_date: values.chequeDdDate,
           transaction_id: values.transactionId,
           recorded_by: user.id,
+          source: 'voucher', // Set the source
         })
         .select('id')
         .single();
