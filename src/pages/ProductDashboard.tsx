@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,14 +13,11 @@ import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import AdminTotalPendingOrdersCard from '@/components/AdminTotalPendingOrdersCard';
-import OrdersAwaitingDispatchReportDialog from '@/components/reports/OrdersAwaitingDispatchReportDialog';
 
 const ProductDashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, userType } = useSession();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [isOrdersAwaitingDispatchReportOpen, setIsOrdersAwaitingDispatchReportOpen] = useState(false);
 
   const handleProductAction = useCallback(() => {
     setRefreshKey(prev => prev + 1);
@@ -45,17 +42,6 @@ const ProductDashboard = () => {
     }
   };
 
-  useEffect(() => {
-    if (!sessionLoading) {
-      if (!user) {
-        navigate('/login');
-      } else if (userType !== 'inventory_manager' && userType !== 'warehouse_keeper') {
-        showError('Access Denied: You do not have permission to view this page.');
-        navigate('/dashboard');
-      }
-    }
-  }, [sessionLoading, user, userType, navigate]);
-
   if (sessionLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -65,7 +51,7 @@ const ProductDashboard = () => {
     );
   }
 
-  if (userType !== 'inventory_manager' && userType !== 'warehouse_keeper') {
+  if (userType !== 'inventory_manager') {
     showError('Access Denied: You do not have permission to view this page.');
     navigate('/');
     return null;
@@ -177,10 +163,6 @@ const ProductDashboard = () => {
           </CardContent>
         </Card>
 
-        {userType === 'warehouse_keeper' && (
-          <AdminTotalPendingOrdersCard key={`pending-orders-${refreshKey}`} onViewReport={() => setIsOrdersAwaitingDispatchReportOpen(true)} />
-        )}
-
         {/* Low Stock Products Card */}
         <LowStockProductsCard key={`low-stock-${refreshKey}`} onProductAction={handleProductAction} />
       </div>
@@ -191,11 +173,6 @@ const ProductDashboard = () => {
       </div>
 
       <MadeWithDyad />
-
-      <OrdersAwaitingDispatchReportDialog 
-        isOpen={isOrdersAwaitingDispatchReportOpen} 
-        onOpenChange={setIsOrdersAwaitingDispatchReportOpen} 
-      />
     </div>
   );
 };
