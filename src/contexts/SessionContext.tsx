@@ -23,47 +23,36 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [userType, setUserType] = useState<'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null>(null);
   const [mustResetPassword, setMustResetPassword] = useState(false); // Initialize mustResetPassword
 
-  const fetchProfile = async (userId: string) => {
-    try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('user_type, must_reset_password')
-        .eq('id', userId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found
-        throw error;
-      }
-
-      if (profile) {
-        const isAdminUser = profile.user_type === 'admin';
-        setIsAdmin(isAdminUser);
-        setUserType(profile.user_type as SessionContextType['userType']);
-        setMustResetPassword(profile.must_reset_password === true);
-      } else {
-        // No profile found for this user
-        setIsAdmin(false);
-        setUserType(null);
-        setMustResetPassword(false);
-      }
-    } catch (error: any) {
-      console.error('SessionContext: Error fetching profile:', error.message);
-      showError(`Error fetching user profile: ${error.message}`);
-      setIsAdmin(false);
-      setUserType(null);
-      setMustResetPassword(false);
-    }
-  };
-
   useEffect(() => {
-    const initializeSession = async () => {
+    const checkSession = async () => {
       try {
         const { data: { session: initialSession } } = await supabase.auth.getSession();
         setSession(initialSession);
         setUser(initialSession?.user || null);
         
         if (initialSession?.user?.id) {
-          await fetchProfile(initialSession.user.id);
+          // Fetch user profile
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('is_admin, user_type, must_reset_password') // Fetch must_reset_password
+            .eq('id', initialSession.user.id)
+            .single();
+            
+          if (!error && profile) {
+            console.log('Profile data:', profile);
+            const isAdminUser = profile.user_type === 'admin';
+            setIsAdmin(isAdminUser);
+            setUserType(profile.user_type as 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null);
+            setMustResetPassword(profile.must_reset_password === true); // Set mustResetPassword
+            console.log('isAdmin set to:', isAdminUser);
+            console.log('userType set to:', profile.user_type);
+            console.log('mustResetPassword set to:', profile.must_reset_password === true);
+          } else {
+            console.log('Error fetching profile or no profile found:', error);
+            setIsAdmin(false);
+            setUserType(null);
+            setMustResetPassword(false);
+          }
         }
       } catch (error) {
         console.error('SessionContext: Error checking session:', error);
@@ -72,14 +61,37 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
       }
     };
 
-    initializeSession();
+    checkSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('Auth state changed:', _event);
       setSession(session);
       setUser(session?.user || null);
       
       if (session?.user?.id) {
-        await fetchProfile(session.user.id);
+        // Fetch user profile
+        supabase
+          .from('profiles')
+          .select('is_admin, user_type, must_reset_password') // Fetch must_reset_password
+          .eq('id', session.user.id)
+          .single()
+          .then(({ data: profile, error }) => {
+            if (!error && profile) {
+              console.log('Profile updated:', profile);
+              const isAdminUser = profile.user_type === 'admin';
+              setIsAdmin(isAdminUser);
+              setUserType(profile.user_type as 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null);
+              setMustResetPassword(profile.must_reset_password === true); // Set mustResetPassword
+              console.log('isAdmin updated to:', isAdminUser);
+              console.log('userType updated to:', profile.user_type);
+              console.log('mustResetPassword updated to:', profile.must_reset_password === true);
+            } else {
+              console.log('Error fetching updated profile or no profile found:', error);
+              setIsAdmin(false);
+              setUserType(null);
+              setMustResetPassword(false);
+            }
+          });
       } else {
         setIsAdmin(false);
         setUserType(null);
