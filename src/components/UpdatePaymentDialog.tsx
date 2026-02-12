@@ -200,7 +200,8 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         amount: values.amount,
         payment_method: values.paymentMethod,
         payment_date: values.paymentDate,
-        status: 'pending_approval',
+        status: 'completed', // Changed from 'pending_approval'
+        approved_at: new Date().toISOString(), // Set approval time now
         cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
         cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
         transaction_id: transactionId,
@@ -213,17 +214,6 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         cvv: values.paymentMethod === 'Card' ? values.cvv : null,
         upi_id: values.paymentMethod === 'UPI' ? values.upiTransactionId : null,
       };
-
-      if (!isGeneralBalancePayment) {
-        const { error: orderUpdateError } = await supabase
-          .from('orders')
-          .update({ payment_status: 'pending_approval' })
-          .eq('id', orderToUpdate.id);
-        
-        if (orderUpdateError) {
-          throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
-        }
-      }
 
       const { data: newPayment, error: paymentInsertError } = await supabase
         .from('payments')
@@ -253,7 +243,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         throw allocationError;
       }
 
-      showSuccess(`Payment of ₹${values.amount.toFixed(2)} submitted for approval for ${orderToUpdate.order_number === 0 ? 'General Balance' : `Order #${orderToUpdate.order_number}`}.`);
+      showSuccess(`Payment of ₹${values.amount.toFixed(2)} recorded and approved for ${orderToUpdate.order_number === 0 ? 'General Balance' : `Order #${orderToUpdate.order_number}`}.`);
       
       onPaymentUpdated();
       onOpenChange(false);
