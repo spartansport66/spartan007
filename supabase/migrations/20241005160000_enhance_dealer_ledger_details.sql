@@ -1,11 +1,11 @@
 CREATE OR REPLACE FUNCTION public.get_dealer_ledger(
     dealer_id_param uuid,
-    p_show_pending_only BOOLEAN DEFAULT false -- New parameter to control filtering
+    p_show_pending_only BOOLEAN DEFAULT false
 )
 RETURNS TABLE(transaction_date date, details text, debit numeric, credit numeric)
 LANGUAGE sql
 AS $function$
-    -- Opening Balance (conditionally shown if it has a remaining balance)
+    -- Opening Balance
     SELECT
         COALESCE(d.last_billing_date, '1970-01-01'::date) as transaction_date,
         'Opening Balance' as details,
@@ -31,7 +31,7 @@ AS $function$
 
     UNION ALL
 
-    -- Dispatched Orders (Invoices) (conditionally filtered if not fully paid)
+    -- Dispatched Orders (Invoices)
     SELECT
         o.dispatch_date::date as transaction_date,
         'Order #' || o.order_number || ' / Bill #' || COALESCE(o.bill_no, 'N/A') || ' / Gatepass #' || COALESCE(o.dispatch_number::text, 'N/A') as details,
@@ -58,7 +58,7 @@ AS $function$
 
     UNION ALL
 
-    -- Completed Payments (conditionally excluded if filtering for pending)
+    -- Completed Payments
     SELECT
         p.payment_date::date as transaction_date,
         'Payment Received (' || p.payment_method || ') - Ref: ' || COALESCE(p.transaction_id, p.cheque_dd_no, 'N/A') as details,
@@ -67,5 +67,18 @@ AS $function$
     FROM public.payments p
     WHERE p.dealer_id = dealer_id_param
     AND p.status = 'completed'
-    AND p_show_pending_only = false; -- This line excludes payments when filtering
+    AND p_show_pending_only = false
+
+    UNION ALL
+
+    -- Pending Approval Payments
+    SELECT
+        p.payment_date::date as transaction_date,
+        'Payment Pending Approval (' || p.payment_method || ') - Ref: ' || COALESCE(p.transaction_id, p.cheque_dd_no, 'N/A') || ' - Due: ' || TO_CHAR(p.cheque_dd_date, 'DD/MM/YYYY') as details,
+        0 as debit,
+        p.amount as credit
+    FROM public.payments p
+    WHERE p.dealer_id = dealer_id_param
+    AND p.status = 'pending_approval'
+    AND p_show_pending_only = false;
 $function$;

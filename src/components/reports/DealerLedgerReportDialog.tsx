@@ -42,34 +42,15 @@ interface DealerLedgerReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface FetchedPayment {
-  id: string;
-  amount: number;
-  payment_date: string;
-  payment_method: string;
-  transaction_id: string | null;
-  order_id: string | null; // Now nullable
-  dealer_id: string | null; // New
-  orders: {
-    dealer_id: string;
-    order_number: number;
-  } | null;
-}
-
 const calculateDaysDifference = (dateString: string): number | null => {
   if (!dateString || new Date(dateString).getFullYear() <= 1970) return null;
   const targetDate = new Date(dateString);
   const today = new Date();
-  
   targetDate.setUTCHours(0, 0, 0, 0);
   today.setUTCHours(0, 0, 0, 0);
-
   if (targetDate > today) return 0;
-
   const diffTime = today.getTime() - targetDate.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  
-  return diffDays;
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
 };
 
 const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isOpen, onOpenChange }) => {
@@ -82,8 +63,8 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const [filterToDate, setFilterToDate] = useState<string>('');
   const [showPendingOnly, setShowPendingOnly] = useState(false); // New state for the filter
   const [companyName, setCompanyName] = useState<string | null>(null);
-  const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null);
-  const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null);
+  const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null); // New state for dealer phone
+  const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null); // New state for dealer name
   const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
   const [dealerSearch, setDealerSearch] = useState('');
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
@@ -106,13 +87,6 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       setLoading(false);
       return;
     }
-    if (!user?.id) {
-      showError("User not authenticated. Please log in again.");
-      setTransactions([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     try {
       const dealerId = filterDealerId;
@@ -145,7 +119,9 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
             if (entry.details === 'Opening Balance') {
                 currentBalance = debit - credit;
             } else {
-                currentBalance = currentBalance + debit - credit;
+                if (!entry.details.includes('Pending Approval')) {
+                    currentBalance = currentBalance + debit - credit;
+                }
             }
             const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
             return { ...entry, balance: currentBalance, days_elapsed };

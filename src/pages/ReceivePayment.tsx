@@ -215,6 +215,11 @@ const ReceivePayment = () => {
 
     setIsSubmitting(true);
     try {
+      const effectivePaymentDate = values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : values.paymentDate;
+      const isPostDated = effectivePaymentDate && new Date(effectivePaymentDate) > new Date();
+      const paymentStatus = isPostDated ? 'pending_approval' : 'completed';
+      const approvedAt = isPostDated ? null : new Date().toISOString();
+
       const { data: payment, error: paymentError } = await supabase
         .from('payments')
         .insert({
@@ -222,8 +227,8 @@ const ReceivePayment = () => {
           amount: values.amount,
           payment_method: values.paymentMethod,
           payment_date: values.paymentDate,
-          status: 'completed',
-          approved_at: new Date().toISOString(),
+          status: paymentStatus,
+          approved_at: approvedAt,
           cheque_dd_no: values.chequeDdNo,
           cheque_dd_date: values.chequeDdDate,
           transaction_id: values.transactionId,
@@ -234,26 +239,28 @@ const ReceivePayment = () => {
 
       if (paymentError) throw paymentError;
 
-      const allocationsToInsert = allocations
-        .filter(a => a.amount > 0)
-        .map(a => {
-          const liability = liabilities.find(l => l.id === a.liabilityId);
-          if (!liability) {
-            throw new Error(`Could not find liability with ID ${a.liabilityId}`);
-          }
-          return {
-            payment_id: payment.id,
-            liability_id: a.liabilityId,
-            allocated_amount: a.amount,
-            allocation_type: liability.type,
-          };
-        });
+      if (paymentStatus === 'completed') {
+        const allocationsToInsert = allocations
+          .filter(a => a.amount > 0)
+          .map(a => {
+            const liability = liabilities.find(l => l.id === a.liabilityId);
+            if (!liability) throw new Error(`Could not find liability with ID ${a.liabilityId}`);
+            return {
+              payment_id: payment.id,
+              liability_id: a.liabilityId,
+              allocated_amount: a.amount,
+              allocation_type: liability.type,
+            };
+          });
 
-      const { error: allocationError } = await supabase.from('payment_allocations').insert(allocationsToInsert);
-      if (allocationError) throw allocationError;
+        if (allocationsToInsert.length > 0) {
+          const { error: allocationError } = await supabase.from('payment_allocations').insert(allocationsToInsert);
+          if (allocationError) throw allocationError;
+        }
+      }
 
-      showSuccess('Payment recorded and approved!');
-      setSelectedDealerId(null); // Reset the form
+      showSuccess(`Payment recorded. Status: ${paymentStatus.replace('_', ' ')}.`);
+      setSelectedDealerId(null);
     } catch (error: any) {
       showError(`Failed to record payment: ${error.message}`);
     } finally {

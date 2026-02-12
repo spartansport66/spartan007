@@ -34,76 +34,70 @@ export const updateAllDealerCreditDays = async (days: number) => {
 export const approveRejectPayment = async ({ paymentId, orderId, dealerId, action }: { paymentId: string, orderId: string | null, dealerId: string, action: 'approve' | 'reject' }) => {
   try {
     if (action === 'approve') {
-      // 1. Update payment status to 'completed' and set approved_at timestamp
+      const { data: payment, error: fetchError } = await supabase
+        .from('payments')
+        .select('id, amount, order_id, dealer_id')
+        .eq('id', paymentId)
+        .single();
+      if (fetchError || !payment) throw new Error('Payment not found');
+
       const { error: paymentUpdateError } = await supabase
         .from('payments')
         .update({ status: 'completed', approved_at: new Date().toISOString() })
         .eq('id', paymentId);
+      if (paymentUpdateError) throw paymentUpdateError;
 
-      if (paymentUpdateError) {
-        throw new Error(`Failed to update payment status: ${paymentUpdateError.message}`);
-      }
+      const isGeneral = !payment.order_id;
+      const allocationData = {
+        payment_id: payment.id,
+        allocated_amount: payment.amount,
+        liability_id: isGeneral ? payment.dealer_id : payment.order_id,
+        allocation_type: isGeneral ? 'opening_balance' : 'order',
+      };
+      const { error: allocationError } = await supabase.from('payment_allocations').insert(allocationData);
+      if (allocationError) throw allocationError;
 
-      if (orderId) {
-        // 2a. Order Payment: Check if the order is now fully paid
+      if (!isGeneral) {
         const { data: orderData, error: orderFetchError } = await supabase
           .from('orders')
           .select('total_amount')
-          .eq('id', orderId)
+          .eq('id', payment.order_id)
           .single();
-        
-        if (orderFetchError) throw new Error(`Failed to fetch order total: ${orderFetchError.message}`);
+        if (orderFetchError) throw orderFetchError;
 
-        // Sum all allocated amounts for this order from COMPLETED payments
         const { data: allocations, error: allocFetchError } = await supabase
           .from('payment_allocations')
           .select('allocated_amount, payments(status)')
-          .eq('liability_id', orderId)
+          .eq('liability_id', payment.order_id)
           .eq('allocation_type', 'order')
           .eq('payments.status', 'completed');
-
-        if (allocFetchError) throw new Error(`Failed to fetch allocations: ${allocFetchError.message}`);
+        if (allocFetchError) throw allocFetchError;
 
         const totalPaid = (allocations || []).reduce((sum, alloc) => sum + alloc.allocated_amount, 0);
-
         const newPaymentStatus = totalPaid >= orderData.total_amount ? 'paid' : 'pending';
 
         const { error: orderUpdateError } = await supabase
           .from('orders')
           .update({ payment_status: newPaymentStatus })
-          .eq('id', orderId);
-
-        if (orderUpdateError) {
-          throw new Error(`Failed to update order payment status: ${orderUpdateError.message}`);
-        }
-        showSuccess('Order payment approved and status updated.');
-      } else {
-        // 2b. General Payment: Only mark payment as completed.
-        showSuccess('General payment approved successfully.');
+          .eq('id', payment.order_id);
+        if (orderUpdateError) throw orderUpdateError;
       }
+      showSuccess('Payment approved and allocated.');
 
     } else if (action === 'reject') {
-      // For rejection, we delete the payment, and CASCADE will handle the allocation.
-      // The order status (if any) should be reverted to 'pending'.
       if (orderId) {
         const { error: orderUpdateError } = await supabase
           .from('orders')
           .update({ payment_status: 'pending' })
           .eq('id', orderId);
-
-        if (orderUpdateError) {
-          throw new Error(`Failed to revert order payment status: ${orderUpdateError.message}`);
-        }
+        if (orderUpdateError) throw orderUpdateError;
       }
       
       const { error: paymentDeleteError } = await supabase
         .from('payments')
         .delete()
         .eq('id', paymentId);
-
-      if (paymentDeleteError) {
-        throw new Error(`Failed to delete payment record: ${paymentDeleteError.message}`);
-      }
+      if (paymentDeleteError) throw paymentDeleteError;
       showSuccess(`Payment rejected and record deleted. ${orderId ? 'Order reverted to pending.' : ''}`);
     }
     return true;

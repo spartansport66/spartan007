@@ -12,7 +12,6 @@ import { showSuccess, showError } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
-import PaymentDetailsDialog from '@/components/PaymentDetailsDialog'; // Ensure this is imported correctly
 
 interface PendingOrderPayment {
   id: string; // Order ID (or Dealer ID if order_number is 0)
@@ -35,20 +34,16 @@ const formSchema = z.object({
     (val) => Number(val),
     z.number().min(0.01, { message: 'Amount must be a positive number.' })
   ),
-  paymentDate: z.string().min(1, { message: 'Payment date is required.' }), // New field for effective payment date
-  // Cheque/DD fields
+  paymentDate: z.string().min(1, { message: 'Payment date is required.' }),
   chequeDdNo: z.string().optional(),
   chequeDdDate: z.string().optional(),
-  // Transaction ID fields (consolidated)
   cardTransactionId: z.string().optional(),
   bankTransactionId: z.string().optional(),
   upiTransactionId: z.string().optional(),
   cashTransactionId: z.string().optional(),
-  // New fields for Bank Transfer details (required by schema but optional in form)
   bankName: z.string().optional(),
   accountNumber: z.string().optional(),
   ifscCode: z.string().optional(),
-  // New fields for Card details (required by schema but optional in form)
   cardNumber: z.string().optional(),
   cardHolderName: z.string().optional(),
   expiryDate: z.string().optional(),
@@ -56,62 +51,25 @@ const formSchema = z.object({
 }).superRefine((data, ctx) => {
   if (data.paymentMethod === 'Cheque/DD') {
     if (!data.chequeDdNo) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Cheque/DD Number is required for Cheque/DD payment.',
-        path: ['chequeDdNo'],
-      });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Cheque/DD Number is required.', path: ['chequeDdNo'] });
     }
-    // For Cheque/DD, paymentDate must be the cheque date (chequeDdDate)
-    if (data.paymentDate !== data.chequeDdDate) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Payment Date must match Cheque/DD Date.',
-            path: ['paymentDate'],
-        });
-    }
-  } else if (data.paymentMethod === 'Card') {
-    if (!data.cardTransactionId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Transaction ID is required for Card payment.',
-        path: ['cardTransactionId'],
-      });
-    }
-  } else if (data.paymentMethod === 'Bank Transfer') {
-    if (!data.bankTransactionId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Transaction ID is required for Bank Transfer.',
-        path: ['bankTransactionId'],
-      });
-    }
-  } else if (data.paymentMethod === 'UPI') {
-    if (!data.upiTransactionId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Transaction ID is required for UPI payment.',
-        path: ['upiTransactionId'],
-      });
+    if (!data.chequeDdDate) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Cheque/DD Date is required.', path: ['chequeDdDate'] });
     }
   }
-  // Cash transaction ID is optional
 });
 
 const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
 
 const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate, isOpen, onOpenChange, onPaymentUpdated }) => {
   const [loading, setLoading] = useState(false);
-  // State for PaymentDetailsDialog (used if we need to view details after submission, though usually handled by parent)
-  const [isPaymentDetailsDialogOpen, setIsPaymentDetailsDialogOpen] = useState(false);
-  const [selectedPaymentIdForDetails, setSelectedPaymentIdForDetails] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       paymentMethod: '',
       amount: 0,
-      paymentDate: new Date().toISOString().split('T')[0], // Default to today
+      paymentDate: new Date().toISOString().split('T')[0],
       chequeDdNo: '',
       chequeDdDate: '',
       cardTransactionId: '',
@@ -129,25 +87,13 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
   });
 
   const selectedPaymentMethod = form.watch('paymentMethod');
-  const selectedChequeDdDate = form.watch('chequeDdDate');
-
-  useEffect(() => {
-    if (selectedPaymentMethod === 'Cheque/DD' && selectedChequeDdDate) {
-        // If Cheque/DD is selected and date is set, force paymentDate to match chequeDdDate
-        form.setValue('paymentDate', selectedChequeDdDate, { shouldValidate: true });
-    } else if (selectedPaymentMethod !== 'Cheque/DD' && form.getValues('paymentDate') === selectedChequeDdDate) {
-        // If method changes away from Cheque/DD, reset paymentDate to today if it was previously set to cheque date
-        form.setValue('paymentDate', new Date().toISOString().split('T')[0], { shouldValidate: true });
-    }
-  }, [selectedPaymentMethod, selectedChequeDdDate, form]);
 
   useEffect(() => {
     if (orderToUpdate && isOpen) {
       form.reset({
         paymentMethod: '',
-        // Set amount to total_amount if it's an order, or keep it editable if it's a general balance payment (Order #0)
         amount: orderToUpdate.order_number === 0 ? 0 : orderToUpdate.total_amount,
-        paymentDate: new Date().toISOString().split('T')[0], // Default to today
+        paymentDate: new Date().toISOString().split('T')[0],
         chequeDdNo: '',
         chequeDdDate: '',
         cardTransactionId: '',
@@ -173,20 +119,21 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
     let dealerId = orderToUpdate.order_number === 0 ? orderToUpdate.id : null;
 
     try {
-        if (!dealerId) {
-            const { data: orderData, error: orderFetchError } = await supabase
-                .from('orders')
-                .select('dealer_id')
-                .eq('id', orderToUpdate.id)
-                .single();
-            
-            if (orderFetchError) throw new Error(`Failed to fetch dealer ID for order: ${orderFetchError.message}`);
-            dealerId = orderData.dealer_id;
-        }
+      if (!dealerId) {
+        const { data: orderData, error: orderFetchError } = await supabase
+          .from('orders')
+          .select('dealer_id')
+          .eq('id', orderToUpdate.id)
+          .single();
+        if (orderFetchError) throw new Error(`Failed to fetch dealer ID: ${orderFetchError.message}`);
+        dealerId = orderData.dealer_id;
+      }
+      if (!dealerId) throw new Error('Could not determine dealer ID.');
 
-        if (!dealerId) {
-            throw new Error('Could not determine dealer ID.');
-        }
+      const effectivePaymentDate = values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : values.paymentDate;
+      const isPostDated = effectivePaymentDate && new Date(effectivePaymentDate) > new Date();
+      const paymentStatus = isPostDated ? 'pending_approval' : 'completed';
+      const approvedAt = isPostDated ? null : new Date().toISOString();
 
       let transactionId = null;
       if (values.paymentMethod === 'Card') transactionId = values.cardTransactionId;
@@ -200,8 +147,8 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
         amount: values.amount,
         payment_method: values.paymentMethod,
         payment_date: values.paymentDate,
-        status: 'completed', // Changed from 'pending_approval'
-        approved_at: new Date().toISOString(), // Set approval time now
+        status: paymentStatus,
+        approved_at: approvedAt,
         cheque_dd_no: values.paymentMethod === 'Cheque/DD' ? values.chequeDdNo : null,
         cheque_dd_date: values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : null,
         transaction_id: transactionId,
@@ -224,27 +171,22 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
       if (paymentInsertError) throw paymentInsertError;
       if (!newPayment) throw new Error("Failed to get new payment ID.");
 
-      const allocationData = {
-        payment_id: newPayment.id,
-        allocated_amount: values.amount,
-        liability_id: isGeneralBalancePayment ? dealerId : orderToUpdate.id,
-        allocation_type: isGeneralBalancePayment ? 'opening_balance' : 'order',
-      };
-
-      const { error: allocationError } = await supabase
-        .from('payment_allocations')
-        .insert(allocationData);
-
-      if (allocationError) {
-        await supabase.from('payments').delete().eq('id', newPayment.id);
-        if (!isGeneralBalancePayment) {
-          await supabase.from('orders').update({ payment_status: 'pending' }).eq('id', orderToUpdate.id);
-        }
-        throw allocationError;
+      if (paymentStatus === 'completed') {
+        const allocationData = {
+          payment_id: newPayment.id,
+          allocated_amount: values.amount,
+          liability_id: isGeneralBalancePayment ? dealerId : orderToUpdate.id,
+          allocation_type: isGeneralBalancePayment ? 'opening_balance' : 'order',
+        };
+        const { error: allocationError } = await supabase.from('payment_allocations').insert(allocationData);
+        if (allocationError) throw allocationError;
       }
 
-      showSuccess(`Payment of ₹${values.amount.toFixed(2)} recorded and approved for ${orderToUpdate.order_number === 0 ? 'General Balance' : `Order #${orderToUpdate.order_number}`}.`);
-      
+      if (!isGeneralBalancePayment) {
+        await supabase.from('orders').update({ payment_status: paymentStatus }).eq('id', orderToUpdate.id);
+      }
+
+      showSuccess(`Payment of ₹${values.amount.toFixed(2)} recorded. Status: ${paymentStatus.replace('_', ' ')}.`);
       onPaymentUpdated();
       onOpenChange(false);
     } catch (error: any) {
@@ -267,9 +209,7 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
               : `Update Payment for Order #${orderToUpdate?.order_number}`}
           </DialogTitle>
           <DialogDescription>
-            {orderToUpdate?.order_number === 0 
-              ? `Record a payment against the dealer's general outstanding balance. This payment requires Admin approval.`
-              : `Mark this order as paid and record the payment details. This payment requires Admin approval.`}
+            Record payment details. Future-dated payments will be marked as 'Pending Approval'.
           </DialogDescription>
         </DialogHeader>
         {orderToUpdate ? (
@@ -336,22 +276,19 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                 )}
               />
               
-              {/* Payment Date Field (Effective Date) */}
-              {selectedPaymentMethod !== 'Cheque/DD' && (
-                <FormField
-                  control={form.control}
-                  name="paymentDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Label htmlFor="paymentDate">Payment Date (Date Received)</Label>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
+              <FormField
+                control={form.control}
+                name="paymentDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <Label htmlFor="paymentDate">Payment Date (Date Received)</Label>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               {selectedPaymentMethod === 'Cheque/DD' && (
                 <>
@@ -376,19 +313,6 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
                         <Label htmlFor="chequeDdDate">Cheque/DD Date (Effective Date)</Label>
                         <FormControl>
                           <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="paymentDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label htmlFor="paymentDate">Payment Date (Must match Cheque/DD Date)</Label>
-                        <FormControl>
-                          <Input type="date" {...field} readOnly className="bg-muted" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -562,7 +486,6 @@ const UpdatePaymentDialog: React.FC<UpdatePaymentDialogProps> = ({ orderToUpdate
           <p className="text-center text-muted-foreground py-8">No order selected for payment update.</p>
         )}
       </DialogContent>
-      {/* Removed the nested PaymentDetailsDialog reference */}
     </Dialog>
   );
 };
