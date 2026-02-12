@@ -359,8 +359,8 @@ const ManageDealers = () => {
       // Update dealer information
       const updateData: any = {
         name: values.name,
-        contact_person: values.contactPerson ?? undefined, // Use undefined for optional fields
-        email: values.email ?? undefined, // Use undefined for optional fields
+        contact_person: values.contactPerson || null,
+        email: values.email || null,
         phone: values.phone,
         address: values.address,
         city: values.city,
@@ -368,7 +368,7 @@ const ManageDealers = () => {
         country: values.country,
         credit_limit: values.creditLimit,
         allotted_credit_days: values.allottedCreditDays,
-        last_billing_date: values.lastBillingDate ?? undefined, // Use undefined for optional fields
+        last_billing_date: values.lastBillingDate || null,
       };
       
       const { error: dealerUpdateError } = await supabase
