@@ -40,10 +40,11 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             
           if (!error && profile) {
             console.log('Profile data:', profile);
-            setIsAdmin(profile.is_admin === true);
+            const isAdminUser = profile.user_type === 'admin';
+            setIsAdmin(isAdminUser);
             setUserType(profile.user_type as 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null);
             setMustResetPassword(profile.must_reset_password === true); // Set mustResetPassword
-            console.log('isAdmin set to:', profile.is_admin === true);
+            console.log('isAdmin set to:', isAdminUser);
             console.log('userType set to:', profile.user_type);
             console.log('mustResetPassword set to:', profile.must_reset_password === true);
           } else {
@@ -77,10 +78,11 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
           .then(({ data: profile, error }) => {
             if (!error && profile) {
               console.log('Profile updated:', profile);
-              setIsAdmin(profile.is_admin === true);
+              const isAdminUser = profile.user_type === 'admin';
+              setIsAdmin(isAdminUser);
               setUserType(profile.user_type as 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null);
               setMustResetPassword(profile.must_reset_password === true); // Set mustResetPassword
-              console.log('isAdmin updated to:', profile.is_admin === true);
+              console.log('isAdmin updated to:', isAdminUser);
               console.log('userType updated to:', profile.user_type);
               console.log('mustResetPassword updated to:', profile.must_reset_password === true);
             } else {
