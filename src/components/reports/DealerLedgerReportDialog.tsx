@@ -28,6 +28,7 @@ interface LedgerEntry {
 
 interface FormattedLedgerEntry extends LedgerEntry {
   balance: number;
+  days_elapsed: number | null;
 }
 
 interface FilterOption {
@@ -53,6 +54,22 @@ interface FetchedPayment {
     order_number: number;
   } | null;
 }
+
+const calculateDaysDifference = (dateString: string): number | null => {
+  if (!dateString || new Date(dateString).getFullYear() <= 1970) return null;
+  const targetDate = new Date(dateString);
+  const today = new Date();
+  
+  targetDate.setUTCHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
+
+  if (targetDate > today) return 0;
+
+  const diffTime = today.getTime() - targetDate.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  return diffDays;
+};
 
 const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const { user } = useSession();
@@ -127,7 +144,8 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
             } else {
                 currentBalance = currentBalance + debit - credit;
             }
-            return { ...entry, balance: currentBalance };
+            const days_elapsed = calculateDaysDifference(entry.transaction_date);
+            return { ...entry, balance: currentBalance, days_elapsed };
         });
         setTransactions(formattedData);
       }
@@ -193,22 +211,29 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       doc.text(`Dealer: ${dealerNameForPdf}`, 14, 40);
       doc.text(`Period: ${filterFromDate || 'Start'} to ${filterToDate || 'End'}`, 14, 45);
 
-      const tableColumn = ["Date", "Description", "Debit (₹)", "Credit (₹)", "Balance (₹)"];
-      const tableRows = transactions.map(entry => [entry.transaction_date, entry.details, entry.debit?.toFixed(2) || '0.00', entry.credit?.toFixed(2) || '0.00', entry.balance.toFixed(2)]);
+      const tableColumn = ["Date", "Description", "Days", "Debit (₹)", "Credit (₹)", "Balance (₹)"];
+      const tableRows = transactions.map(entry => [
+        entry.transaction_date, 
+        entry.details, 
+        entry.days_elapsed !== null ? entry.days_elapsed.toString() : 'N/A',
+        entry.debit?.toFixed(2) || '0.00', 
+        entry.credit?.toFixed(2) || '0.00', 
+        entry.balance.toFixed(2)
+      ]);
       const totalDebit = transactions.reduce((sum, entry) => sum + (entry.debit || 0), 0);
       const totalCredit = transactions.reduce((sum, entry) => sum + (entry.credit || 0), 0);
 
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        foot: [[{ content: 'Totals', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalDebit.toFixed(2)}`, `₹${totalCredit.toFixed(2)}`, '']],
+        foot: [[{ content: 'Totals', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalDebit.toFixed(2)}`, `₹${totalCredit.toFixed(2)}`, '']],
         startY: 55,
         styles: { fontSize: 8, cellPadding: 2, valign: 'middle', overflow: 'linebreak' },
         headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
         bodyStyles: { textColor: [0, 0, 0] },
         footStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 8 },
         margin: { top: 10, left: 10, right: 10 },
-        columnStyles: { 0: { cellWidth: 25, halign: 'center' }, 1: { cellWidth: 100 }, 2: { cellWidth: 30, halign: 'right' }, 3: { cellWidth: 30, halign: 'right' }, 4: { cellWidth: 30, halign: 'right' } }
+        columnStyles: { 0: { cellWidth: 25, halign: 'center' }, 1: { cellWidth: 90 }, 2: { cellWidth: 15, halign: 'center' }, 3: { cellWidth: 30, halign: 'right' }, 4: { cellWidth: 30, halign: 'right' }, 5: { cellWidth: 30, halign: 'right' } }
       });
 
       doc.save(`dealer_ledger_report_${dealerNameForPdf.replace(/\s/g, '_')}.pdf`);
@@ -258,12 +283,13 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           {loading ? (<div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-lg text-foreground">Loading ledger data...</p></div>) : transactions.length === 0 ? (<p className="text-center text-muted-foreground py-8">No ledger data found for the selected criteria.</p>) : (
             <div className="max-h-[400px] overflow-y-auto border rounded-md">
               <Table>
-                <TableHeader className="sticky top-0 bg-muted"><TableRow className="bg-muted hover:bg-muted/90"><TableHead className="text-muted-foreground font-bold">Date</TableHead><TableHead className="text-muted-foreground font-bold">Description</TableHead><TableHead className="text-muted-foreground font-bold text-right">Debit (₹)</TableHead><TableHead className="text-muted-foreground font-bold text-right">Credit (₹)</TableHead><TableHead className="text-muted-foreground font-bold text-right">Balance (₹)</TableHead></TableRow></TableHeader>
+                <TableHeader className="sticky top-0 bg-muted"><TableRow className="bg-muted hover:bg-muted/90"><TableHead className="text-muted-foreground font-bold">Date</TableHead><TableHead className="text-muted-foreground font-bold">Description</TableHead><TableHead className="text-muted-foreground font-bold text-center">Days</TableHead><TableHead className="text-muted-foreground font-bold text-right">Debit (₹)</TableHead><TableHead className="text-muted-foreground font-bold text-right">Credit (₹)</TableHead><TableHead className="text-muted-foreground font-bold text-right">Balance (₹)</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {transactions.map((entry, index) => (
                     <TableRow key={index} className="hover:bg-accent/50">
                       <TableCell className="font-medium text-foreground">{entry.transaction_date}</TableCell>
                       <TableCell className="text-foreground">{entry.details}</TableCell>
+                      <TableCell className="text-center text-muted-foreground">{entry.days_elapsed !== null ? entry.days_elapsed : ''}</TableCell>
                       <TableCell className="text-foreground text-right">{entry.debit && entry.debit > 0 ? entry.debit.toFixed(2) : ''}</TableCell>
                       <TableCell className="text-foreground text-right">{entry.credit && entry.credit > 0 ? entry.credit.toFixed(2) : ''}</TableCell>
                       <TableCell className="text-foreground text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
@@ -272,7 +298,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                 </TableBody>
                 <UiTableFooter>
                   <TableRow>
-                    <TableCell colSpan={2} className="text-right font-bold">Totals</TableCell>
+                    <TableCell colSpan={3} className="text-right font-bold">Totals</TableCell>
                     <TableCell className="text-right font-bold">₹{totalDebit.toFixed(2)}</TableCell>
                     <TableCell className="text-right font-bold">₹{totalCredit.toFixed(2)}</TableCell>
                     <TableCell className="text-right font-bold">₹{finalBalance.toFixed(2)}</TableCell>
