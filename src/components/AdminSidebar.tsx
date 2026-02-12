@@ -25,6 +25,7 @@ interface AdminSidebarProps {
   setIsLoginLogReportOpen: (isOpen: boolean) => void;
   setIsSalesPersonAccountStatementReportOpen: (isOpen: boolean) => void;
   setIsOrderSummaryReportOpen: (isOpen: boolean) => void;
+  setIsSalesPersonLedgerReportOpen: (isOpen: boolean) => void; // New Prop
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -44,6 +45,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsLoginLogReportOpen,
   setIsSalesPersonAccountStatementReportOpen,
   setIsOrderSummaryReportOpen,
+  setIsSalesPersonLedgerReportOpen, // New Prop
 }) => {
   const navigate = useNavigate();
 
@@ -158,6 +160,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsSalesPersonAccountStatementReportOpen(true)}>
               Sales Person Account Statement
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsSalesPersonLedgerReportOpen(true)}>
+              Sales Person Ledger Report
             </DropdownMenuItem>
           </SheetClose>
           <DropdownMenuSeparator />
