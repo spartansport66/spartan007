@@ -171,7 +171,7 @@ const AdminDashboard = () => {
     if (!sessionLoading) {
       if (!user) {
         navigate('/login');
-      } else if (userType !== 'admin') {
+      } else if (!isAdmin) {
         showError('Access Denied: Only administrators can view this page.');
         navigate('/dashboard');
       } else {
@@ -179,7 +179,7 @@ const AdminDashboard = () => {
         fetchCompanyInfo();
       }
     }
-  }, [sessionLoading, user, userType, isAdmin, fetchDashboardData, fetchCompanyInfo, navigate]);
+  }, [sessionLoading, user, isAdmin, fetchDashboardData, fetchCompanyInfo, navigate]);
 
   const handleLogout = async () => {
     try {
@@ -225,7 +225,7 @@ const AdminDashboard = () => {
     );
   }
 
-  if (userType !== 'admin') return null;
+  if (!isAdmin) return null;
 
   const salesOverview = [
     { title: "Total Sales Value", value: `₹${totalSalesValue.toFixed(2)}`, change: "Net revenue (All Time)", icon: <DollarSign className="h-4 w-4 text-white" />, valueColor: "text-blue-800 dark:text-blue-200" },
