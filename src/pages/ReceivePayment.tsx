@@ -222,7 +222,8 @@ const ReceivePayment = () => {
           amount: values.amount,
           payment_method: values.paymentMethod,
           payment_date: values.paymentDate,
-          status: 'pending_approval',
+          status: 'completed',
+          approved_at: new Date().toISOString(),
           cheque_dd_no: values.chequeDdNo,
           cheque_dd_date: values.chequeDdDate,
           transaction_id: values.transactionId,
@@ -251,7 +252,7 @@ const ReceivePayment = () => {
       const { error: allocationError } = await supabase.from('payment_allocations').insert(allocationsToInsert);
       if (allocationError) throw allocationError;
 
-      showSuccess('Payment recorded and submitted for approval!');
+      showSuccess('Payment recorded and approved!');
       setSelectedDealerId(null); // Reset the form
     } catch (error: any) {
       showError(`Failed to record payment: ${error.message}`);
