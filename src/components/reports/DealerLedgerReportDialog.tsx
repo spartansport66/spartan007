@@ -123,12 +123,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       }
 
       const ledgerEntries: Omit<LedgerEntry, 'balance'>[] = [];
-      if (!fromDateISO) {
-        ledgerEntries.push({ date: new Date().toISOString().split('T')[0], description: 'Opening Balance', debit: initialBalance > 0 ? initialBalance : 0, credit: initialBalance < 0 ? -initialBalance : 0, type: 'opening_balance' });
-      } else {
-        ledgerEntries.push({ date: filterFromDate, description: 'Opening Balance', debit: initialBalance > 0 ? initialBalance : 0, credit: initialBalance < 0 ? -initialBalance : 0, type: 'opening_balance' });
-      }
-
+      
       let ordersQuery = supabase.from('orders').select('id, order_number, order_date, total_amount, payment_status, payment_due_date').eq('dealer_id', dealerId);
       if (fromDateISO) ordersQuery = ordersQuery.gte('order_date', fromDateISO);
       if (toDateISO) ordersQuery = ordersQuery.lte('order_date', toDateISO);
@@ -148,14 +143,21 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
       ledgerEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-      let currentBalance = 0;
-      const finalLedger = ledgerEntries.map(entry => {
-        if (entry.type === 'opening_balance') {
-          currentBalance = entry.debit - entry.credit;
-        } else {
-          currentBalance = currentBalance + entry.debit - entry.credit;
-        }
-        return { ...entry, balance: currentBalance };
+      let currentBalance = initialBalance;
+      const finalLedger: LedgerEntry[] = [];
+
+      finalLedger.push({
+        date: fromDateISO ? filterFromDate : 'N/A',
+        description: fromDateISO ? `Balance as of ${new Date(filterFromDate).toLocaleDateString()}` : 'Opening Balance',
+        debit: 0,
+        credit: 0,
+        balance: initialBalance,
+        type: 'opening_balance'
+      });
+
+      ledgerEntries.forEach(entry => {
+        currentBalance += entry.debit - entry.credit;
+        finalLedger.push({ ...entry, balance: currentBalance });
       });
 
       setTransactions(finalLedger);
@@ -264,13 +266,13 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         </DialogHeader>
 
         <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
-          <div className="flex-1 min-w-[180px]">
+          <div className="flex-1 min-w-[180px] md:w-[400px]">
             <Label htmlFor="filterDealer">Select Dealer</Label>
             <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
               <PopoverTrigger asChild>
                 <Button variant="outline" role="combobox" className="w-full justify-between">{selectedDealerName}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+              <PopoverContent className="w-[400px] p-0">
                 <div className="p-2 border-b"><Input placeholder="Search dealer..." value={dealerSearch} onChange={(e) => setDealerSearch(e.target.value)} className="h-8" /></div>
                 <ScrollArea className="h-[200px]"><div className="p-1">{filteredDealers.map((d) => (<Button key={d.value} variant="ghost" className="w-full justify-start font-normal" onClick={() => { setFilterDealerId(d.value); setIsDealerPopoverOpen(false); }}><Check className={cn("mr-2 h-4 w-4", filterDealerId === d.value ? "opacity-100" : "opacity-0")} />{d.label}</Button>))}</div></ScrollArea>
               </PopoverContent>
