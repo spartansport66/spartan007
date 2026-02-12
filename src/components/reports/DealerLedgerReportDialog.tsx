@@ -46,8 +46,8 @@ interface FetchedPayment {
   payment_date: string;
   payment_method: string;
   transaction_id: string | null;
-  order_id: string | null;
-  dealer_id: string | null;
+  order_id: string | null; // Now nullable
+  dealer_id: string | null; // New
   orders: {
     dealer_id: string;
     order_number: number;
@@ -97,9 +97,6 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     setLoading(true);
     try {
       const dealerId = filterDealerId;
-      const fromDateISO = filterFromDate ? `${filterFromDate}T00:00:00.000Z` : null;
-      const toDateISO = filterToDate ? `${filterToDate}T23:59:59.999Z` : null;
-
       const { data: dealerDetails, error: dealerDetailsError } = await supabase.from('dealers').select('name, phone').eq('id', dealerId).single();
       if (dealerDetailsError) throw dealerDetailsError;
       setSelectedDealerPhone(dealerDetails?.phone || null);
@@ -114,12 +111,23 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         console.error('Error fetching ledger:', error);
         setTransactions([]);
       } else {
+        const openingBalanceEntry = (data || []).find((e: LedgerEntry) => e.details === 'Opening Balance');
+        const otherEntries = (data || []).filter((e: LedgerEntry) => e.details !== 'Opening Balance');
+
+        otherEntries.sort((a: LedgerEntry, b: LedgerEntry) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
+
+        const sortedEntries = openingBalanceEntry ? [openingBalanceEntry, ...otherEntries] : otherEntries;
+
         let currentBalance = 0;
-        const formattedData = (data || []).map((entry: LedgerEntry) => {
-          const debit = entry.debit || 0;
-          const credit = entry.credit || 0;
-          currentBalance = currentBalance + debit - credit;
-          return { ...entry, balance: currentBalance };
+        const formattedData = sortedEntries.map((entry: LedgerEntry) => {
+            const debit = entry.debit || 0;
+            const credit = entry.credit || 0;
+            if (entry.details === 'Opening Balance') {
+                currentBalance = debit - credit;
+            } else {
+                currentBalance = currentBalance + debit - credit;
+            }
+            return { ...entry, balance: currentBalance };
         });
         setTransactions(formattedData);
       }

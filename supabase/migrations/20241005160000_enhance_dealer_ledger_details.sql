@@ -36,6 +36,4 @@ AS $$
     FROM public.payments p
     WHERE p.dealer_id = dealer_id_param
     AND p.status = 'completed'
-
-    ORDER BY transaction_date;
 $$;
