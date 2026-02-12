@@ -31,6 +31,7 @@ interface LedgerEntry {
 interface FormattedLedgerEntry extends LedgerEntry {
   balance: number;
   days_elapsed: number | null;
+  type: 'opening_balance' | 'order' | 'payment';
 }
 
 interface DealerLedger {
@@ -71,6 +72,7 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
   const [showPendingOnly, setShowPendingOnly] = useState(false);
+  const [filterDaysOverdue, setFilterDaysOverdue] = useState<string>('');
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null);
   const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null);
@@ -123,9 +125,11 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
         const sortedEntries = openingBalanceEntry ? [openingBalanceEntry, ...otherEntries] : otherEntries;
 
         let currentBalance = 0;
-        const formattedData = sortedEntries.map((entry: LedgerEntry) => {
+        const formattedData: FormattedLedgerEntry[] = sortedEntries.map((entry: LedgerEntry) => {
           const debit = entry.debit || 0;
           const credit = entry.credit || 0;
+          const type = entry.details === 'Opening Balance' ? 'opening_balance' : (debit > 0 ? 'order' : 'payment');
+          
           if (entry.details === 'Opening Balance') {
             currentBalance = debit - credit;
           } else {
@@ -134,16 +138,31 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
             }
           }
           const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
-          return { ...entry, balance: currentBalance, days_elapsed };
+          return { ...entry, type, balance: currentBalance, days_elapsed };
         });
         
+        let entriesToDisplay: FormattedLedgerEntry[] = formattedData;
+        if (filterDaysOverdue) {
+            const days = parseInt(filterDaysOverdue, 10);
+            if (!isNaN(days)) {
+                entriesToDisplay = formattedData.filter((entry) => {
+                    if (entry.type === 'opening_balance') return true;
+                    if (entry.type === 'payment' || entry.details.includes('Pending Approval')) return true;
+                    if (entry.type === 'order') {
+                        return entry.days_elapsed !== null && entry.days_elapsed >= days;
+                    }
+                    return false;
+                });
+            }
+        }
+
         const finalRunningBalance = formattedData.length > 0 ? formattedData[formattedData.length - 1].balance : 0;
 
-        if (finalRunningBalance !== 0) {
+        if (finalRunningBalance !== 0 || entriesToDisplay.length > 0) {
           finalReport.push({
             dealer_id: dealer.id,
             dealer_name: dealer.name,
-            entries: formattedData,
+            entries: entriesToDisplay,
             final_balance: finalRunningBalance,
           });
         }
@@ -154,7 +173,7 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
     } finally {
       setLoading(false);
     }
-  }, [filterSalesPersonId, showPendingOnly]);
+  }, [filterSalesPersonId, showPendingOnly, filterDaysOverdue]);
 
   useEffect(() => {
     if (isOpen) {
@@ -172,7 +191,7 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
     if (filterSalesPersonId) {
       fetchReportData();
     }
-  }, [filterSalesPersonId, showPendingOnly, fetchReportData]);
+  }, [filterSalesPersonId, showPendingOnly, fetchReportData, filterDaysOverdue]);
 
   const handleClearFilters = () => {
     setFilterSalesPersonId('');
@@ -180,6 +199,7 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
     setFilterFromDate('');
     setFilterToDate('');
     setShowPendingOnly(false);
+    setFilterDaysOverdue('');
     setReportData([]);
   };
 
@@ -208,7 +228,12 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
 
       const salesPersonLabel = allSalesPersons.find(sp => sp.value === filterSalesPersonId)?.label || 'N/A';
       doc.text(`Sales Person: ${salesPersonLabel}`, margin, yPos);
-      doc.text(`Period: ${filterFromDate || 'Start'} to ${filterToDate || 'End'}`, pageWidth - margin, yPos, { align: 'right' });
+      
+      let filterText = `Period: ${filterFromDate || 'Start'} to ${filterToDate || 'End'}`;
+      if (filterDaysOverdue) {
+        filterText += ` | Days Overdue >= ${filterDaysOverdue}`;
+      }
+      doc.text(filterText, pageWidth - margin, yPos, { align: 'right' });
       yPos += 5;
       doc.setTextColor(0);
 
@@ -283,6 +308,16 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
         <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
           <div className="flex-1 min-w-[200px]"><Label>Sales Person</Label><Select value={filterSalesPersonId} onValueChange={setFilterSalesPersonId}><SelectTrigger><SelectValue placeholder="Select a sales person" /></SelectTrigger><SelectContent>{allSalesPersons.map(sp => (<SelectItem key={sp.value} value={sp.value}>{sp.label}</SelectItem>))}</SelectContent></Select></div>
           <div className="flex-1 min-w-[200px]"><Label>Dealer Name</Label><Input placeholder="Filter by dealer name" value={filterDealerName} onChange={(e) => setFilterDealerName(e.target.value)} /></div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterDaysOverdue">Days Overdue {'>='}</Label>
+            <Input
+              id="filterDaysOverdue"
+              type="number"
+              placeholder="e.g., 30"
+              value={filterDaysOverdue}
+              onChange={(e) => setFilterDaysOverdue(e.target.value)}
+            />
+          </div>
           <div className="flex items-center space-x-2"><Checkbox id="showPendingOnly-sp" checked={showPendingOnly} onCheckedChange={(checked) => setShowPendingOnly(!!checked)} /><Label htmlFor="showPendingOnly-sp">Show Pending Only</Label></div>
           <Button onClick={fetchReportData} disabled={!filterSalesPersonId || loading}><Search className="h-4 w-4 mr-2" /> Generate Report</Button>
           <Button variant="outline" onClick={handleClearFilters}>Clear</Button>
