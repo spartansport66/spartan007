@@ -4,17 +4,22 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as UiTableFooter } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer } from 'lucide-react';
+import { Loader2, Search, Printer, MessageCircle, Check, ChevronsUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
+
+const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
 
 interface LedgerEntry {
   transaction_date: string;
@@ -67,6 +72,11 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
   const [filterToDate, setFilterToDate] = useState<string>('');
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null);
+  const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null);
+  const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
+  const [dealerSearch, setDealerSearch] = useState('');
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -116,17 +126,27 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
         const formattedData = sortedEntries.map((entry: LedgerEntry) => {
           const debit = entry.debit || 0;
           const credit = entry.credit || 0;
-          currentBalance = (entry.details === 'Opening Balance') ? (debit - credit) : (currentBalance + debit - credit);
+          if (entry.details === 'Opening Balance') {
+            currentBalance = debit - credit;
+          } else {
+            if (!entry.details.includes('Pending Approval')) {
+              currentBalance = currentBalance + debit - credit;
+            }
+          }
           const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
           return { ...entry, balance: currentBalance, days_elapsed };
         });
+        
+        const finalRunningBalance = formattedData.length > 0 ? formattedData[formattedData.length - 1].balance : 0;
 
-        finalReport.push({
-          dealer_id: dealer.id,
-          dealer_name: dealer.name,
-          entries: formattedData,
-          final_balance: currentBalance,
-        });
+        if (finalRunningBalance !== 0) {
+          finalReport.push({
+            dealer_id: dealer.id,
+            dealer_name: dealer.name,
+            entries: formattedData,
+            final_balance: finalRunningBalance,
+          });
+        }
       }
       setReportData(finalReport);
     } catch (error: any) {
@@ -148,6 +168,12 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
     }
   }, [isOpen, fetchCompanyInfo]);
 
+  useEffect(() => {
+    if (filterSalesPersonId) {
+      fetchReportData();
+    }
+  }, [filterSalesPersonId, showPendingOnly, fetchReportData]);
+
   const handleClearFilters = () => {
     setFilterSalesPersonId('');
     setFilterDealerName('');
@@ -158,8 +184,87 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
   };
 
   const handlePrint = () => {
-    // Print logic will be complex, for now, let's keep it simple
-    showSuccess("Print functionality for this report is under development.");
+    if (filteredReportData.length === 0) {
+      showError("No data to print.");
+      return;
+    }
+    try {
+      const doc = new jsPDF({ orientation: 'landscape' });
+      let yPos = 15;
+      const margin = 10;
+      const pageWidth = doc.internal.pageSize.width;
+
+      const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+      doc.setFontSize(18);
+      doc.text(companyNameText, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 8;
+      doc.setFontSize(14);
+      doc.text("Sales Person Account Statement Report", pageWidth / 2, yPos, { align: 'center' });
+      yPos += 6;
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 6;
+
+      const salesPersonLabel = allSalesPersons.find(sp => sp.value === filterSalesPersonId)?.label || 'N/A';
+      doc.text(`Sales Person: ${salesPersonLabel}`, margin, yPos);
+      doc.text(`Period: ${filterFromDate || 'Start'} to ${filterToDate || 'End'}`, pageWidth - margin, yPos, { align: 'right' });
+      yPos += 5;
+      doc.setTextColor(0);
+
+      for (const dealerStatement of filteredReportData) {
+        if (yPos + 10 > doc.internal.pageSize.height - margin) {
+          doc.addPage();
+          yPos = margin;
+        }
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Dealer: ${dealerStatement.dealer_name}`, margin, yPos);
+        yPos += 5;
+
+        const tableColumn = ["Date", "Description", "Days", "Debit (₹)", "Credit (₹)", "Balance (₹)"];
+        const tableRows = dealerStatement.entries.map(entry => [
+          entry.transaction_date,
+          entry.details,
+          entry.days_elapsed !== null ? entry.days_elapsed.toString() : '',
+          entry.debit?.toFixed(2) || '',
+          entry.credit?.toFixed(2) || '',
+          entry.balance.toFixed(2),
+        ]);
+
+        const totalDebit = dealerStatement.entries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
+        const totalCredit = dealerStatement.entries.reduce((sum, entry) => sum + (entry.credit || 0), 0);
+
+        autoTable(doc, {
+          head: [tableColumn],
+          body: tableRows,
+          foot: [[{ content: 'Totals', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalDebit.toFixed(2)}`, `₹${totalCredit.toFixed(2)}`, `₹${dealerStatement.final_balance.toFixed(2)}`]],
+          startY: yPos,
+          styles: { fontSize: 8, cellPadding: 1.5, valign: 'middle', overflow: 'linebreak' },
+          headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+          bodyStyles: { textColor: [0, 0, 0] },
+          footStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 8 },
+          margin: { top: 0, left: margin, right: margin },
+          columnStyles: {
+            0: { cellWidth: 25, halign: 'center' }, // Date
+            1: { cellWidth: 'auto' }, // Description
+            2: { cellWidth: 15, halign: 'center' }, // Days
+            3: { cellWidth: 25, halign: 'right' }, // Debit
+            4: { cellWidth: 25, halign: 'right' }, // Credit
+            5: { cellWidth: 25, halign: 'right' }, // Balance
+          }
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 10;
+      }
+
+      doc.save('sales_person_account_statement.pdf');
+      showSuccess('Account Statement Report generated successfully!');
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`);
+    }
   };
 
   const filteredReportData = useMemo(() => {
@@ -186,31 +291,38 @@ const SalesPersonLedgerReportDialog: React.FC<SalesPersonLedgerReportDialogProps
         <ScrollArea className="max-h-[500px] overflow-y-auto">
           {loading ? (<div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>) : filteredReportData.length === 0 ? (<p className="text-center text-muted-foreground py-8">No data for selected criteria.</p>) : (
             <div className="space-y-6">
-              {filteredReportData.map(dealerLedger => (
-                <div key={dealerLedger.dealer_id} className="border p-4 rounded-lg">
-                  <h3 className="text-lg font-bold mb-2">{dealerLedger.dealer_name}</h3>
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Description</TableHead><TableHead className="text-right">Debit</TableHead><TableHead className="text-right">Credit</TableHead><TableHead className="text-right">Balance</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {dealerLedger.entries.map((entry, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{entry.transaction_date}</TableCell>
-                          <TableCell>{entry.details}</TableCell>
-                          <TableCell className="text-right">{entry.debit?.toFixed(2)}</TableCell>
-                          <TableCell className="text-right">{entry.credit?.toFixed(2)}</TableCell>
-                          <TableCell className="text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
+              {filteredReportData.map(dealerLedger => {
+                const totalDebit = dealerLedger.entries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
+                const totalCredit = dealerLedger.entries.reduce((sum, entry) => sum + (entry.credit || 0), 0);
+                return (
+                  <div key={dealerLedger.dealer_id} className="border p-4 rounded-lg">
+                    <h3 className="text-lg font-bold mb-2">{dealerLedger.dealer_name}</h3>
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Description</TableHead><TableHead className="text-center">Days</TableHead><TableHead className="text-right">Debit</TableHead><TableHead className="text-right">Credit</TableHead><TableHead className="text-right">Balance</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {dealerLedger.entries.map((entry, index) => (
+                          <TableRow key={index}>
+                            <TableCell>{entry.transaction_date}</TableCell>
+                            <TableCell>{entry.details}</TableCell>
+                            <TableCell className="text-center">{entry.days_elapsed !== null ? entry.days_elapsed : ''}</TableCell>
+                            <TableCell className="text-right">{entry.debit?.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">{entry.credit?.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                      <UiTableFooter>
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-right font-bold">Totals</TableCell>
+                          <TableCell className="text-right font-bold">₹{totalDebit.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-bold">₹{totalCredit.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-bold">₹{dealerLedger.final_balance.toFixed(2)}</TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                    <UiTableFooter>
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-right font-bold">Final Balance</TableCell>
-                        <TableCell className="text-right font-bold">₹{dealerLedger.final_balance.toFixed(2)}</TableCell>
-                      </TableRow>
-                    </UiTableFooter>
-                  </Table>
-                </div>
-              ))}
+                      </UiTableFooter>
+                    </Table>
+                  </div>
+                );
+              })}
             </div>
           )}
         </ScrollArea>
