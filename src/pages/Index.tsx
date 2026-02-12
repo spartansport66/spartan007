@@ -28,23 +28,27 @@ const Index = () => {
           if (mustResetPassword && userType === 'sales_person') {
             console.log('Redirecting sales person to force password reset.');
             navigate('/force-password-reset');
+          } else if (userType === 'super_admin') {
+            console.log('Redirecting to super admin dashboard');
+            navigate('/super-admin-dashboard');
+          } else if (userType === 'admin') {
+            console.log('Redirecting to admin dashboard');
+            navigate('/admin-dashboard');
+          } else if (userType === 'manager') {
+            console.log('Redirecting to manager dashboard');
+            navigate('/manager-dashboard');
           } else if (userType === 'gate_keeper') {
             console.log('Redirecting to gate pass dashboard');
             navigate('/gate-pass-dashboard');
           } else if (userType === 'inventory_manager' || userType === 'warehouse_keeper') {
             console.log('Redirecting to product dashboard');
             navigate('/product-dashboard');
-          } else if (userType === 'manager') {
-            console.log('Redirecting to manager dashboard');
-            navigate('/manager-dashboard'); // Keep Manager Dashboard as primary
-          } else if (userType === 'super_admin') {
-            console.log('Redirecting to super admin dashboard');
-            navigate('/super-admin-dashboard');
-          } else if (isAdmin) {
-            console.log('Redirecting to admin dashboard');
-            navigate('/admin-dashboard');
-          } else {
+          } else if (userType === 'sales_person') {
             console.log('Redirecting to user dashboard');
+            navigate('/dashboard');
+          } else {
+            // Fallback for any other user type, or if logic is incomplete
+            console.log('Redirecting to default user dashboard as a fallback.');
             navigate('/dashboard');
           }
         }
