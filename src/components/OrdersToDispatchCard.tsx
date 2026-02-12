@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Truck, Search, Edit, Printer, FileText } from 'lucide-react';
+import { Loader2, Eye, Truck, Search, Edit, Printer, FileText, RotateCcw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { cn } from '@/lib/utils';
 
 interface OrderToDispatch {
   id: string;
@@ -41,6 +42,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isBulkPrinting, setIsBulkPrinting] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [viewedOrderIds, setViewedOrderIds] = useState<Set<string>>(new Set());
 
   const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
@@ -130,6 +132,15 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
 
   const handleOrderUpdated = () => {
     fetchOrdersAndDealers();
+  };
+
+  const handleOrderPrinted = (orderId: string) => {
+    setViewedOrderIds(prev => new Set(prev).add(orderId));
+  };
+
+  const handleResetViews = () => {
+    setViewedOrderIds(new Set());
+    showSuccess("Viewed status has been reset for all orders.");
   };
 
   const handleBulkPrintGatePasses = async () => {
@@ -236,7 +247,10 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         
         const finalY = (doc as any).lastAutoTable.finalY + 10;
         const subtotal = (orderData.sales || []).reduce((sum: number, s: any) => sum + s.total_price, 0);
-        doc.setFontSize(10); doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
         
         let currentY = finalY;
         if (orderData.discount_amount > 0) {
@@ -262,18 +276,25 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
             <CardTitle className="text-xl font-semibold">Orders Awaiting Dispatch</CardTitle>
             <CardDescription className="text-orange-100 dark:text-orange-200">Manage orders ready for dispatch.</CardDescription>
           </div>
-          {selectedOrderIds.length > 0 && (
-            <div className="flex gap-2">
-              <Button onClick={handleBulkPrintGatePasses} disabled={isBulkPrinting} className="bg-white text-orange-600 hover:bg-orange-50">
-                {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
-                Bulk Gate Pass ({selectedOrderIds.length})
+          <div className="flex gap-2">
+            {viewedOrderIds.size > 0 && (
+              <Button onClick={handleResetViews} variant="secondary" size="sm" className="bg-white/20 hover:bg-white/30 text-white">
+                <RotateCcw className="h-4 w-4 mr-2" /> Reset Views
               </Button>
-              <Button onClick={handleBulkPrintOrderDetails} disabled={isBulkPrinting} className="bg-white text-blue-600 hover:bg-blue-50">
-                {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-                Bulk Order Details ({selectedOrderIds.length})
-              </Button>
-            </div>
-          )}
+            )}
+            {selectedOrderIds.length > 0 && (
+              <>
+                <Button onClick={handleBulkPrintGatePasses} disabled={isBulkPrinting} className="bg-white text-orange-600 hover:bg-orange-50">
+                  {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
+                  Bulk Gate Pass ({selectedOrderIds.length})
+                </Button>
+                <Button onClick={handleBulkPrintOrderDetails} disabled={isBulkPrinting} className="bg-white text-blue-600 hover:bg-blue-50">
+                  {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
+                  Bulk Order Details ({selectedOrderIds.length})
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-4">
@@ -296,7 +317,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
                 </TableHeader>
                 <TableBody>
                   {orders.map((order) => (
-                    <TableRow key={order.id} className="hover:bg-accent/50">
+                    <TableRow key={order.id} className={cn("hover:bg-accent/50", viewedOrderIds.has(order.id) && "opacity-50")}>
                       <TableCell><Checkbox checked={selectedOrderIds.includes(order.id)} onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)} /></TableCell>
                       <TableCell className="font-medium">#{order.order_number}</TableCell><TableCell>{order.dealer_name}</TableCell><TableCell>{formatDate(order.order_date)}</TableCell><TableCell className="text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       <TableCell className="text-center"><div className="flex justify-center gap-2">
@@ -312,7 +333,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
           )}
         </div>
       </CardContent>
-      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} />
+      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} onPrint={handleOrderPrinted} />
       <DispatchOrderDialog orderId={selectedOrderIdForDispatch} isOpen={isDispatchDialogOpen} onOpenChange={setIsDispatchDialogOpen} onDispatchSuccess={onDispatchSuccess} />
       <EditOrderDialog orderId={selectedOrderIdForEdit} isOpen={isEditOrderDialogOpen} onOpenChange={setIsEditOrderDialogOpen} onOrderUpdated={handleOrderUpdated} />
     </Card>

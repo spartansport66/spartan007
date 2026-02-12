@@ -48,6 +48,7 @@ interface OrderDetailsDialogProps {
   orderId: string | null;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  onPrint?: (orderId: string) => void;
 }
 
 const formatDate = (dateString: string | null) => {
@@ -62,7 +63,8 @@ const formatDate = (dateString: string | null) => {
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   orderId,
   isOpen,
-  onOpenChange
+  onOpenChange,
+  onPrint,
 }) => {
   const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -233,6 +235,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     const billNo = (orderDetails.bill_no || 'NA').replace(/[^a-zA-Z0-9]/g, '_');
     const fileName = `GatePass_${gatePassNo}_Order_${orderNo}_Bill_${billNo}.pdf`;
     doc.save(fileName);
+    if (onPrint) {
+      onPrint(orderDetails.id);
+    }
   };
 
   const handlePrintOrderDetails = () => {
@@ -287,11 +292,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       `₹${item.total_price.toFixed(2)}`
     ]);
 
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: y,
-      headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 },
+    autoTable(doc, { 
+      head: [tableColumn], 
+      body: tableRows, 
+      startY: y, 
+      headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 }, 
       columnStyles: {
         0: { cellWidth: 20, halign: 'center' },
         1: { cellWidth: 'auto' },
@@ -301,9 +306,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         5: { cellWidth: 15, halign: 'center' },
         6: { cellWidth: 25, halign: 'right' }
       },
-      styles: { fontSize: 8, cellPadding: 2 }
+      styles: { fontSize: 8, cellPadding: 2 } 
     });
-
+    
     const finalY = (doc as any).lastAutoTable.finalY + 10;
     const subtotal = orderDetails.items.reduce((sum, s) => sum + s.total_price, 0);
     
@@ -323,6 +328,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     doc.text(`FINAL TOTAL: ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
 
     doc.save(`Order_Details_${orderDetails.order_number}.pdf`);
+    if (onPrint) {
+      onPrint(orderDetails.id);
+    }
   };
 
   return (
