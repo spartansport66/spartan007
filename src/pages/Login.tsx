@@ -2,7 +2,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useSession } from '@/contexts/SessionContext';
 import { Button } from '@/components/ui/button';
@@ -120,6 +120,11 @@ const Login = () => {
                 <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Sign In'}</Button>
               </form>
             </Form>
+            <div className="mt-4 text-center text-sm">
+              <Link to="/forgot-password" className="font-medium text-primary hover:underline">
+                Forgot your password?
+              </Link>
+            </div>
           </CardContent>
         </Card>
       </div>
