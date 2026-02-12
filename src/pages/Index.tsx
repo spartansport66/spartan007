@@ -14,42 +14,24 @@ const Index = () => {
   const [forceLogoutLoading, setForceLogoutLoading] = useState(false);
 
   useEffect(() => {
-    console.log('Index useEffect triggered');
-    console.log('session:', session);
-    console.log('loading:', loading);
-    console.log('isAdmin:', isAdmin);
-    console.log('userType:', userType);
-    console.log('mustResetPassword:', mustResetPassword);
-    
     if (!loading) {
       if (session) {
-        // Only redirect if userType has been determined (is not null)
-        if (userType !== null) { 
-          if (mustResetPassword && userType === 'sales_person') {
-            console.log('Redirecting sales person to force password reset.');
-            navigate('/force-password-reset');
-          } else if (userType === 'gate_keeper') {
-            console.log('Redirecting to gate pass dashboard');
-            navigate('/gate-pass-dashboard');
-          } else if (userType === 'inventory_manager' || userType === 'warehouse_keeper') {
-            console.log('Redirecting to product dashboard');
-            navigate('/product-dashboard');
-          } else if (userType === 'manager') {
-            console.log('Redirecting to manager dashboard');
-            navigate('/manager-dashboard'); // Keep Manager Dashboard as primary
-          } else if (userType === 'super_admin') {
-            console.log('Redirecting to super admin dashboard');
-            navigate('/super-admin-dashboard');
-          } else if (isAdmin) {
-            console.log('Redirecting to admin dashboard');
-            navigate('/admin-dashboard');
-          } else {
-            console.log('Redirecting to user dashboard');
-            navigate('/dashboard');
-          }
+        if (mustResetPassword && userType === 'sales_person') {
+          navigate('/force-password-reset');
+        } else if (userType === 'gate_keeper') {
+          navigate('/gate-pass-dashboard');
+        } else if (userType === 'inventory_manager' || userType === 'warehouse_keeper') {
+          navigate('/product-dashboard');
+        } else if (userType === 'manager') {
+          navigate('/manager-dashboard');
+        } else if (userType === 'super_admin') {
+          navigate('/super-admin-dashboard');
+        } else if (isAdmin) {
+          navigate('/admin-dashboard');
+        } else {
+          navigate('/dashboard');
         }
       } else {
-        console.log('Redirecting to login');
         navigate('/login');
       }
     }
@@ -74,7 +56,7 @@ const Index = () => {
     }
   };
 
-  if (loading || (session && userType === null)) { // Also show loading if session exists but userType is not yet fetched
+  if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

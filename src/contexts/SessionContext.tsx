@@ -24,77 +24,48 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [mustResetPassword, setMustResetPassword] = useState(false); // Initialize mustResetPassword
 
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
-        setSession(initialSession);
-        setUser(initialSession?.user || null);
-        
-        if (initialSession?.user?.id) {
-          // Fetch user profile
+    setLoading(true); // Start with loading true
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+
+      if (session?.user?.id) {
+        try {
           const { data: profile, error } = await supabase
             .from('profiles')
-            .select('is_admin, user_type, must_reset_password') // Fetch must_reset_password
-            .eq('id', initialSession.user.id)
+            .select('is_admin, user_type, must_reset_password')
+            .eq('id', session.user.id)
             .single();
-            
-          if (!error && profile) {
-            console.log('Profile data:', profile);
+
+          if (error && error.code !== 'PGRST116') {
+            throw error;
+          }
+
+          if (profile) {
             setIsAdmin(profile.is_admin === true);
-            setUserType(profile.user_type as 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null);
-            setMustResetPassword(profile.must_reset_password === true); // Set mustResetPassword
-            console.log('isAdmin set to:', profile.is_admin === true);
-            console.log('userType set to:', profile.user_type);
-            console.log('mustResetPassword set to:', profile.must_reset_password === true);
+            setUserType(profile.user_type as any);
+            setMustResetPassword(profile.must_reset_password === true);
           } else {
-            console.log('Error fetching profile or no profile found:', error);
+            // No profile found, reset states
             setIsAdmin(false);
             setUserType(null);
             setMustResetPassword(false);
           }
+        } catch (e: any) {
+          console.error("Error fetching profile on auth change", e);
+          showError("Failed to fetch user profile.");
+          setIsAdmin(false);
+          setUserType(null);
+          setMustResetPassword(false);
         }
-      } catch (error) {
-        console.error('SessionContext: Error checking session:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkSession();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('Auth state changed:', _event);
-      setSession(session);
-      setUser(session?.user || null);
-      
-      if (session?.user?.id) {
-        // Fetch user profile
-        supabase
-          .from('profiles')
-          .select('is_admin, user_type, must_reset_password') // Fetch must_reset_password
-          .eq('id', session.user.id)
-          .single()
-          .then(({ data: profile, error }) => {
-            if (!error && profile) {
-              console.log('Profile updated:', profile);
-              setIsAdmin(profile.is_admin === true);
-              setUserType(profile.user_type as 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null);
-              setMustResetPassword(profile.must_reset_password === true); // Set mustResetPassword
-              console.log('isAdmin updated to:', profile.is_admin === true);
-              console.log('userType updated to:', profile.user_type);
-              console.log('mustResetPassword updated to:', profile.must_reset_password === true);
-            } else {
-              console.log('Error fetching updated profile or no profile found:', error);
-              setIsAdmin(false);
-              setUserType(null);
-              setMustResetPassword(false);
-            }
-          });
       } else {
+        // No session, reset states
         setIsAdmin(false);
         setUserType(null);
         setMustResetPassword(false);
       }
+      setLoading(false); // Set loading to false after everything is done
     });
 
     return () => {
