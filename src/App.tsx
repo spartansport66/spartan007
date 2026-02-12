@@ -32,7 +32,6 @@ import ForgotPassword from "./pages/ForgotPassword";
 import UpdatePassword from "./pages/UpdatePassword";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
-import ProtectedRoute from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -43,34 +42,30 @@ const AppContent = () => {
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/admin-dashboard" element={<AdminDashboard />} />
+      <Route path="/product-dashboard" element={<ProductDashboard />} />
+      <Route path="/super-admin-dashboard" element={<SuperAdminDashboard />} />
+      <Route path="/manager-dashboard" element={<ManagerDashboard />} />
+      <Route path="/add-dealer" element={<AddDealer />} />
+      <Route path="/manage-dealers" element={<ManageDealers />} />
+      <Route path="/add-product" element={<AddProduct />} />
+      <Route path="/manage-products" element={<ManageProducts />} />
+      <Route path="/manage-users" element={<ManageUsers />} />
+      <Route path="/product-management-console" element={<ProductManagementConsole />} />
+      <Route path="/bulk-add-products" element={<BulkAddProducts />} />
+      <Route path="/combo-offers-dashboard" element={<ComboOffersDashboard />} />
+      <Route path="/sheet-converter" element={<SheetConverterPage />} />
+      <Route path="/force-password-reset" element={<ForcePasswordReset />} />
+      <Route path="/daily-visit-report" element={<DailyVisitReport />} />
+      <Route path="/stock-receipts" element={<StockReceipts />} />
+      <Route path="/change-password" element={<ChangePassword />} />
+      <Route path="/gate-pass-dashboard" element={<GatePassDashboard />} />
+      <Route path="/purchase-dashboard" element={<PurchaseDashboard />} />
+      <Route path="/receive-payment" element={<ReceivePayment />} />
+      <Route path="/material-return" element={<MaterialReturn />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/update-password" element={<UpdatePassword />} />
-
-      <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/admin-dashboard" element={<AdminDashboard />} />
-        <Route path="/product-dashboard" element={<ProductDashboard />} />
-        <Route path="/super-admin-dashboard" element={<SuperAdminDashboard />} />
-        <Route path="/manager-dashboard" element={<ManagerDashboard />} />
-        <Route path="/add-dealer" element={<AddDealer />} />
-        <Route path="/manage-dealers" element={<ManageDealers />} />
-        <Route path="/add-product" element={<AddProduct />} />
-        <Route path="/manage-products" element={<ManageProducts />} />
-        <Route path="/manage-users" element={<ManageUsers />} />
-        <Route path="/product-management-console" element={<ProductManagementConsole />} />
-        <Route path="/bulk-add-products" element={<BulkAddProducts />} />
-        <Route path="/combo-offers-dashboard" element={<ComboOffersDashboard />} />
-        <Route path="/sheet-converter" element={<SheetConverterPage />} />
-        <Route path="/force-password-reset" element={<ForcePasswordReset />} />
-        <Route path="/daily-visit-report" element={<DailyVisitReport />} />
-        <Route path="/stock-receipts" element={<StockReceipts />} />
-        <Route path="/change-password" element={<ChangePassword />} />
-        <Route path="/gate-pass-dashboard" element={<GatePassDashboard />} />
-        <Route path="/purchase-dashboard" element={<PurchaseDashboard />} />
-        <Route path="/receive-payment" element={<ReceivePayment />} />
-        <Route path="/material-return" element={<MaterialReturn />} />
-      </Route>
-      
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>
