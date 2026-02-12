@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { formatCurrency } from '@/utils/formatters';
 
 const SEND_ORDER_NOTIFICATION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-order-notification";
 
@@ -217,25 +218,24 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         
         setDealerCreditLimit(monthlyLimitData?.credit_limit || selectedDealerData?.credit_limit || 0);
 
+        const openingBalance = selectedDealerData?.opening_balance || 0;
+
         const { data: orders } = await supabase
           .from('orders')
           .select('id, total_amount')
           .eq('dealer_id', selectedDealer);
         
         const totalOrderValue = (orders || []).reduce((sum, o) => sum + o.total_amount, 0);
-        const orderIds = (orders || []).map(o => o.id);
         
-        let totalPaymentsValue = 0;
-        if (orderIds.length > 0) {
-          const { data: paymentsData } = await supabase
-            .from('payments')
-            .select('amount')
-            .in('order_id', orderIds)
-            .eq('status', 'completed');
-          totalPaymentsValue = (paymentsData || []).reduce((sum, p) => sum + p.amount, 0);
-        }
+        const { data: paymentsData } = await supabase
+          .from('payments')
+          .select('amount')
+          .eq('dealer_id', selectedDealer)
+          .eq('status', 'completed');
         
-        setDealerBalance(totalOrderValue - totalPaymentsValue);
+        const totalPaymentsValue = (paymentsData || []).reduce((sum, p) => sum + p.amount, 0);
+        
+        setDealerBalance(openingBalance + totalOrderValue - totalPaymentsValue);
       } catch (error: any) {
         console.error('calculateBalance Error:', error);
       }
@@ -420,6 +420,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid;
 
+  const selectedDealerData = useMemo(() => dealers.find(d => d.id === selectedDealer), [dealers, selectedDealer]);
+  const openingBalance = selectedDealerData?.opening_balance || 0;
+  const pendingLimit = dealerCreditLimit - (dealerBalance || 0);
+
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
       <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
@@ -442,6 +446,31 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               </PopoverContent>
             </Popover>
           </div>
+
+          {selectedDealer && dealerBalance !== null && (
+            <Card className="mt-4 bg-muted/50">
+              <CardContent className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Opening Balance</p>
+                  <p className="font-semibold">{formatCurrency(openingBalance)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Credit Limit</p>
+                  <p className="font-semibold">{formatCurrency(dealerCreditLimit)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Consumed Limit</p>
+                  <p className="font-semibold text-orange-600">{formatCurrency(dealerBalance)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Pending Limit</p>
+                  <p className={`font-semibold ${pendingLimit < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {formatCurrency(pendingLimit)}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="space-y-4">
             <Label>Order Items</Label>
