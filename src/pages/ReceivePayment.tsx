@@ -28,7 +28,7 @@ interface Dealer {
 }
 
 interface Liability {
-  id: string; // Can be 'opening_balance' or an order ID
+  id: string; // Can be a dealer ID (for opening_balance) or an order ID
   type: 'opening_balance' | 'order';
   description: string;
   dueDate: string | null;
@@ -123,12 +123,12 @@ const ReceivePayment = () => {
 
       if (openingBalance > 0) {
         newLiabilities.push({
-          id: 'opening_balance',
+          id: dealerId, // Use dealerId as the ID for the opening balance liability
           type: 'opening_balance',
           description: 'Opening Balance',
           dueDate: null,
           dueAmount: openingBalance,
-          paidAmount: 0, // Opening balance payments are handled via general payments
+          paidAmount: 0,
           balance: openingBalance,
         });
       }
@@ -168,7 +168,7 @@ const ReceivePayment = () => {
   }, [selectedDealerId, fetchLiabilities, paymentForm]);
 
   const totalPaymentAmount = paymentForm.watch('amount');
-  const parsedTotalPaymentAmount = Number(totalPaymentAmount || 0);
+  const parsedTotalPaymentAmount = parseFloat(String(totalPaymentAmount)) || 0;
   const totalAllocated = useMemo(() => allocations.reduce((sum, alloc) => sum + alloc.amount, 0), [allocations]);
   const remainingToAllocate = parsedTotalPaymentAmount - totalAllocated;
 
@@ -221,12 +221,18 @@ const ReceivePayment = () => {
 
       const allocationsToInsert = allocations
         .filter(a => a.amount > 0)
-        .map(a => ({
-          payment_id: payment.id,
-          liability_id: a.liabilityId,
-          allocated_amount: a.amount,
-          allocation_type: a.liabilityId === 'opening_balance' ? 'opening_balance' : 'order',
-        }));
+        .map(a => {
+          const liability = liabilities.find(l => l.id === a.liabilityId);
+          if (!liability) {
+            throw new Error(`Could not find liability with ID ${a.liabilityId}`);
+          }
+          return {
+            payment_id: payment.id,
+            liability_id: a.liabilityId,
+            allocated_amount: a.amount,
+            allocation_type: liability.type,
+          };
+        });
 
       const { error: allocationError } = await supabase.from('payment_allocations').insert(allocationsToInsert);
       if (allocationError) throw allocationError;
