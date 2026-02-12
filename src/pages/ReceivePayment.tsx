@@ -104,13 +104,28 @@ const ReceivePayment = () => {
   const fetchLiabilities = useCallback(async (dealerId: string) => {
     setLoading(true);
     try {
+      // Fetch opening balance
       const { data: balanceData, error: balanceError } = await supabase
         .from('dealer_balances')
         .select('opening_balance')
         .eq('dealer_id', dealerId)
         .single();
       if (balanceError && balanceError.code !== 'PGRST116') throw balanceError;
+      const openingBalance = balanceData?.opening_balance || 0;
 
+      // Fetch payments allocated to opening balance
+      const { data: openingBalancePayments, error: obpError } = await supabase
+        .from('payment_allocations')
+        .select('allocated_amount, payments(status)')
+        .eq('liability_id', dealerId)
+        .eq('allocation_type', 'opening_balance')
+        .eq('payments.status', 'completed');
+      if (obpError) throw obpError;
+      const totalPaidAgainstOpeningBalance = (openingBalancePayments || []).reduce((sum, p) => sum + p.allocated_amount, 0);
+      
+      const openingBalanceDue = openingBalance - totalPaidAgainstOpeningBalance;
+
+      // Fetch outstanding orders
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('id, order_number, total_amount, payment_due_date, payments(amount, status)')
@@ -119,17 +134,16 @@ const ReceivePayment = () => {
       if (ordersError) throw ordersError;
 
       const newLiabilities: Liability[] = [];
-      const openingBalance = balanceData?.opening_balance || 0;
 
-      if (openingBalance > 0) {
+      if (openingBalanceDue > 0) {
         newLiabilities.push({
-          id: dealerId, // Use dealerId as the ID for the opening balance liability
+          id: dealerId,
           type: 'opening_balance',
           description: 'Opening Balance',
           dueDate: null,
           dueAmount: openingBalance,
-          paidAmount: 0,
-          balance: openingBalance,
+          paidAmount: totalPaidAgainstOpeningBalance,
+          balance: openingBalanceDue,
         });
       }
 
