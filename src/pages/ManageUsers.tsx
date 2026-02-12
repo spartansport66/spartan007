@@ -24,6 +24,7 @@ import UserTargetsManager from '@/components/UserTargetsManager';
 
 const CREATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/create-user";
 const UPDATE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/update-user";
+const DELETE_USER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/delete-user";
 
 interface SalesTarget {
   id: string;
@@ -305,6 +306,31 @@ const ManageUsers = () => {
     }
   };
 
+  const handleDeleteUser = async (userId: string) => {
+    if (!session) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(DELETE_USER_EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ userId }),
+      });
+      
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to delete user');
+      
+      showSuccess('User deleted successfully.');
+      fetchUsersAndDealers();
+    } catch (error: any) {
+      showError(`Failed to delete user: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSelectAllDealers = () => {
     const allIds = allDealers.map(dealer => dealer.id);
     editForm.setValue('assignedDealerIds', allIds, { shouldValidate: true });
@@ -380,6 +406,27 @@ const ManageUsers = () => {
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                                   <AlertDialogAction onClick={() => handleToggleUserStatus(userItem)} disabled={isSubmitting}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Continue'}</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" title="Delete User" disabled={isSubmitting}>
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete the user {userItem.first_name} {userItem.last_name} and all their associated data.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteUser(userItem.id)} disabled={isSubmitting}>
+                                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                  </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
