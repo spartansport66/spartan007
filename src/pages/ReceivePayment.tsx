@@ -43,7 +43,7 @@ interface Allocation {
 }
 
 const paymentSchema = z.object({
-  amount: z.preprocess((val) => Number(val), z.number().min(0.01, "Amount must be greater than 0.")),
+  amount: z.coerce.number().min(0.01, "Amount must be greater than 0."),
   paymentMethod: z.string().min(1, "Payment method is required."),
   paymentDate: z.string().min(1, "Payment date is required."),
   chequeDdNo: z.string().optional(),
@@ -168,7 +168,7 @@ const ReceivePayment = () => {
   }, [selectedDealerId, fetchLiabilities, paymentForm]);
 
   const totalPaymentAmount = paymentForm.watch('amount');
-  const parsedTotalPaymentAmount = parseFloat(String(totalPaymentAmount)) || 0;
+  const parsedTotalPaymentAmount = Number(totalPaymentAmount) || 0;
   const totalAllocated = useMemo(() => allocations.reduce((sum, alloc) => sum + alloc.amount, 0), [allocations]);
   const remainingToAllocate = parsedTotalPaymentAmount - totalAllocated;
 
