@@ -20,16 +20,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
 
 interface LedgerEntry {
-  date: string;
-  description: string;
-  debit: number;
-  credit: number;
+  transaction_date: string;
+  details: string;
+  debit: number | null;
+  credit: number | null;
+}
+
+interface FormattedLedgerEntry extends LedgerEntry {
   balance: number;
-  type: 'opening_balance' | 'order' | 'payment';
-  refId?: string;
-  order_number?: number;
-  payment_due_date?: string | null;
-  payment_status?: string;
 }
 
 interface FilterOption {
@@ -58,7 +56,7 @@ interface FetchedPayment {
 
 const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const { user } = useSession();
-  const [transactions, setTransactions] = useState<LedgerEntry[]>([]);
+  const [transactions, setTransactions] = useState<FormattedLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<FilterOption[]>([]);
   const [filterDealerId, setFilterDealerId] = useState<string>('');
@@ -107,60 +105,24 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       setSelectedDealerPhone(dealerDetails?.phone || null);
       setSelectedDealerName(dealerDetails?.name || null);
 
-      let initialBalance = 0;
-      const { data: dealerBalanceData, error: balanceError } = await supabase.from('dealer_balances').select('opening_balance').eq('dealer_id', dealerId).single();
-      if (balanceError && balanceError.code !== 'PGRST116') throw balanceError;
-      initialBalance = dealerBalanceData?.opening_balance || 0;
+      const { data, error } = await supabase.rpc('get_dealer_ledger', {
+        dealer_id_param: dealerId
+      });
 
-      if (fromDateISO) {
-        const { data: prevOrders, error: prevOrdersError } = await supabase.from('orders').select('total_amount').eq('dealer_id', dealerId).lt('order_date', fromDateISO);
-        if (prevOrdersError) throw prevOrdersError;
-        initialBalance += (prevOrders || []).reduce((sum, order) => sum + order.total_amount, 0);
-
-        const { data: prevPayments, error: prevPaymentsError } = await supabase.from('payments').select('amount').eq('dealer_id', dealerId).eq('status', 'completed').lt('payment_date', fromDateISO);
-        if (prevPaymentsError) throw prevPaymentsError;
-        initialBalance -= (prevPayments || []).reduce((sum, payment) => sum + payment.amount, 0);
+      if (error) {
+        showError('Failed to fetch ledger report.');
+        console.error('Error fetching ledger:', error);
+        setTransactions([]);
+      } else {
+        let currentBalance = 0;
+        const formattedData = (data || []).map((entry: LedgerEntry) => {
+          const debit = entry.debit || 0;
+          const credit = entry.credit || 0;
+          currentBalance = currentBalance + debit - credit;
+          return { ...entry, balance: currentBalance };
+        });
+        setTransactions(formattedData);
       }
-
-      const ledgerEntries: Omit<LedgerEntry, 'balance'>[] = [];
-      
-      let ordersQuery = supabase.from('orders').select('id, order_number, order_date, total_amount, payment_status, payment_due_date').eq('dealer_id', dealerId);
-      if (fromDateISO) ordersQuery = ordersQuery.gte('order_date', fromDateISO);
-      if (toDateISO) ordersQuery = ordersQuery.lte('order_date', toDateISO);
-      const { data: ordersData, error: ordersError } = await ordersQuery;
-      if (ordersError) throw ordersError;
-      (ordersData || []).forEach(order => ledgerEntries.push({ date: order.order_date.split('T')[0], description: `Order #${order.order_number}`, debit: order.total_amount, credit: 0, type: 'order', refId: order.id, order_number: order.order_number, payment_due_date: order.payment_due_date, payment_status: order.payment_status }));
-
-      let paymentsQuery = supabase.from('payments').select(`id, amount, payment_date, payment_method, transaction_id, order_id, orders(order_number)`).eq('dealer_id', dealerId).eq('status', 'completed');
-      if (fromDateISO) paymentsQuery = paymentsQuery.gte('payment_date', fromDateISO);
-      if (toDateISO) paymentsQuery = paymentsQuery.lte('payment_date', toDateISO);
-      const { data: paymentsData, error: paymentsError } = await paymentsQuery as { data: FetchedPayment[] | null; error: any };
-      if (paymentsError) throw paymentsError;
-      (paymentsData || []).forEach(payment => {
-        const orderNumber = payment.orders?.order_number || 'General';
-        ledgerEntries.push({ date: payment.payment_date.split('T')[0], description: `Payment for Order #${orderNumber}`, debit: 0, credit: payment.amount, type: 'payment', refId: payment.id });
-      });
-
-      ledgerEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      let currentBalance = initialBalance;
-      const finalLedger: LedgerEntry[] = [];
-
-      finalLedger.push({
-        date: fromDateISO ? filterFromDate : 'N/A',
-        description: fromDateISO ? `Balance as of ${new Date(filterFromDate).toLocaleDateString()}` : 'Opening Balance',
-        debit: 0,
-        credit: 0,
-        balance: initialBalance,
-        type: 'opening_balance'
-      });
-
-      ledgerEntries.forEach(entry => {
-        currentBalance += entry.debit - entry.credit;
-        finalLedger.push({ ...entry, balance: currentBalance });
-      });
-
-      setTransactions(finalLedger);
     } catch (error: any) {
       showError(`Failed to load dealer ledger: ${error.message}`);
     } finally {
@@ -224,9 +186,9 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       doc.text(`Period: ${filterFromDate || 'Start'} to ${filterToDate || 'End'}`, 14, 45);
 
       const tableColumn = ["Date", "Description", "Debit (₹)", "Credit (₹)", "Balance (₹)"];
-      const tableRows = transactions.map(entry => [entry.date, entry.description, entry.debit.toFixed(2), entry.credit.toFixed(2), entry.balance.toFixed(2)]);
-      const totalDebit = transactions.reduce((sum, entry) => sum + entry.debit, 0);
-      const totalCredit = transactions.reduce((sum, entry) => sum + entry.credit, 0);
+      const tableRows = transactions.map(entry => [entry.transaction_date, entry.details, entry.debit?.toFixed(2) || '0.00', entry.credit?.toFixed(2) || '0.00', entry.balance.toFixed(2)]);
+      const totalDebit = transactions.reduce((sum, entry) => sum + (entry.debit || 0), 0);
+      const totalCredit = transactions.reduce((sum, entry) => sum + (entry.credit || 0), 0);
 
       autoTable(doc, {
         head: [tableColumn],
@@ -253,8 +215,8 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     return allDealers.filter(d => d.label.toLowerCase().includes(dealerSearch.toLowerCase()));
   }, [allDealers, dealerSearch]);
 
-  const totalDebit = useMemo(() => transactions.reduce((sum, entry) => sum + entry.debit, 0), [transactions]);
-  const totalCredit = useMemo(() => transactions.reduce((sum, entry) => sum + entry.credit, 0), [transactions]);
+  const totalDebit = useMemo(() => transactions.reduce((sum, entry) => sum + (entry.debit || 0), 0), [transactions]);
+  const totalCredit = useMemo(() => transactions.reduce((sum, entry) => sum + (entry.credit || 0), 0), [transactions]);
   const finalBalance = transactions.length > 0 ? transactions[transactions.length - 1].balance : 0;
 
   return (
@@ -292,10 +254,10 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                 <TableBody>
                   {transactions.map((entry, index) => (
                     <TableRow key={index} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{entry.date}</TableCell>
-                      <TableCell className="text-foreground">{entry.description}</TableCell>
-                      <TableCell className="text-foreground text-right">{entry.debit > 0 ? entry.debit.toFixed(2) : ''}</TableCell>
-                      <TableCell className="text-foreground text-right">{entry.credit > 0 ? entry.credit.toFixed(2) : ''}</TableCell>
+                      <TableCell className="font-medium text-foreground">{entry.transaction_date}</TableCell>
+                      <TableCell className="text-foreground">{entry.details}</TableCell>
+                      <TableCell className="text-foreground text-right">{entry.debit && entry.debit > 0 ? entry.debit.toFixed(2) : ''}</TableCell>
+                      <TableCell className="text-foreground text-right">{entry.credit && entry.credit > 0 ? entry.credit.toFixed(2) : ''}</TableCell>
                       <TableCell className="text-foreground text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}

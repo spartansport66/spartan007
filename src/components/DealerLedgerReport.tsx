@@ -18,7 +18,6 @@ interface Dealer {
 
 interface LedgerEntry {
   transaction_date: string;
-  type: 'Invoice' | 'Payment';
   details: string;
   debit: number | null;
   credit: number | null;
