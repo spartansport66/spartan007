@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
 
@@ -79,6 +80,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>('');
   const [filterToDate, setFilterToDate] = useState<string>('');
+  const [showPendingOnly, setShowPendingOnly] = useState(false); // New state for the filter
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null);
   const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null);
@@ -120,7 +122,8 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       setSelectedDealerName(dealerDetails?.name || null);
 
       const { data, error } = await supabase.rpc('get_dealer_ledger', {
-        dealer_id_param: dealerId
+        dealer_id_param: dealerId,
+        p_show_pending_only: showPendingOnly // Pass the new parameter
       });
 
       if (error) {
@@ -154,7 +157,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     } finally {
       setLoading(false);
     }
-  }, [filterDealerId, filterFromDate, filterToDate, user?.id]);
+  }, [filterDealerId, filterFromDate, filterToDate, user?.id, showPendingOnly]); // Added showPendingOnly dependency
 
   useEffect(() => {
     if (isOpen) {
@@ -177,6 +180,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     setFilterDealerId('');
     setFilterFromDate('');
     setFilterToDate('');
+    setShowPendingOnly(false); // Reset the new filter
   };
 
   const handleSendWhatsApp = async (balance: number) => {
@@ -210,6 +214,10 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       const dealerNameForPdf = allDealers.find(d => d.value === filterDealerId)?.label || 'N/A';
       doc.text(`Dealer: ${dealerNameForPdf}`, 14, 40);
       doc.text(`Period: ${filterFromDate || 'Start'} to ${filterToDate || 'End'}`, 14, 45);
+      if (showPendingOnly) {
+        doc.setFont("helvetica", "bold");
+        doc.text('Showing Pending Payments Only', 14, 50);
+      }
 
       const tableColumn = ["Date", "Description", "Days", "Debit (₹)", "Credit (₹)", "Balance (₹)"];
       const tableRows = transactions.map(entry => [
@@ -275,6 +283,10 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           </div>
           <div className="flex-1 min-w-[150px]"><Label htmlFor="filterFromDate">From Date</Label><Input id="filterFromDate" type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} className="w-full" /></div>
           <div className="flex-1 min-w-[150px]"><Label htmlFor="filterToDate">To Date</Label><Input id="filterToDate" type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} className="w-full" /></div>
+          <div className="flex items-center space-x-2">
+            <Checkbox id="showPendingOnly" checked={showPendingOnly} onCheckedChange={(checked) => setShowPendingOnly(!!checked)} />
+            <Label htmlFor="showPendingOnly">Show Pending Payments Only</Label>
+          </div>
           <Button onClick={fetchLedgerData} disabled={!filterDealerId} className="flex items-center gap-2 bg-primary hover:bg-primary/90"><Search className="h-4 w-4" /> Apply Filters</Button>
           <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">Clear Filters</Button>
         </div>
