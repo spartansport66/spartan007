@@ -168,8 +168,9 @@ const ReceivePayment = () => {
   }, [selectedDealerId, fetchLiabilities, paymentForm]);
 
   const totalPaymentAmount = paymentForm.watch('amount');
+  const parsedTotalPaymentAmount = parseFloat(String(totalPaymentAmount)) || 0;
   const totalAllocated = useMemo(() => allocations.reduce((sum, alloc) => sum + alloc.amount, 0), [allocations]);
-  const remainingToAllocate = totalPaymentAmount - totalAllocated;
+  const remainingToAllocate = parsedTotalPaymentAmount - totalAllocated;
 
   const handleAllocationChange = (liabilityId: string, amountStr: string) => {
     const amount = parseFloat(amountStr) || 0;
@@ -189,7 +190,7 @@ const ReceivePayment = () => {
 
   const onSubmit = async (values: z.infer<typeof paymentSchema>) => {
     if (!selectedDealerId || !user) return;
-    if (totalAllocated > totalPaymentAmount) {
+    if (totalAllocated > parsedTotalPaymentAmount) {
       showError("Total allocated amount cannot exceed the payment amount.");
       return;
     }
@@ -310,7 +311,7 @@ const ReceivePayment = () => {
                           </div>
                           <Separator />
                           <div className="space-y-2 text-sm font-medium">
-                            <div className="flex justify-between"><span>Total Payment:</span><span>₹{totalPaymentAmount.toFixed(2)}</span></div>
+                            <div className="flex justify-between"><span>Total Payment:</span><span>₹{parsedTotalPaymentAmount.toFixed(2)}</span></div>
                             <div className="flex justify-between"><span>Total Allocated:</span><span>₹{totalAllocated.toFixed(2)}</span></div>
                             <div className={`flex justify-between font-bold ${remainingToAllocate < 0 ? 'text-destructive' : 'text-primary'}`}><span>Unallocated:</span><span>₹{remainingToAllocate.toFixed(2)}</span></div>
                           </div>
