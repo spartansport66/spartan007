@@ -83,7 +83,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<number>(0);
   const [newItemGstPercent, setNewItemGstPercent] = useState<number>(0); // New state for editable GST
 
-  const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD'];
+  const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD', 'COD'];
 
   const totalTaxableValue = useMemo(() => {
     return orderItems.reduce((total, item) => total + item.taxable_value, 0);
