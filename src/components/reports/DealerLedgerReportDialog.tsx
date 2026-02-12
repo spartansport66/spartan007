@@ -144,7 +144,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
             } else {
                 currentBalance = currentBalance + debit - credit;
             }
-            const days_elapsed = calculateDaysDifference(entry.transaction_date);
+            const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
             return { ...entry, balance: currentBalance, days_elapsed };
         });
         setTransactions(formattedData);
@@ -215,7 +215,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       const tableRows = transactions.map(entry => [
         entry.transaction_date, 
         entry.details, 
-        entry.days_elapsed !== null ? entry.days_elapsed.toString() : 'N/A',
+        entry.days_elapsed !== null ? entry.days_elapsed.toString() : '',
         entry.debit?.toFixed(2) || '0.00', 
         entry.credit?.toFixed(2) || '0.00', 
         entry.balance.toFixed(2)
