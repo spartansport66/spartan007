@@ -235,10 +235,8 @@ const Dashboard = () => {
       } else {
         showSuccess('Logged out successfully!');
       }
-      navigate('/login');
     } catch (error: any) {
       showError(`An unexpected error occurred during logout: ${error.message}.`);
-      navigate('/login');
     }
   };
 
