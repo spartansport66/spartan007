@@ -236,13 +236,13 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         </DialogHeader>
 
         <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
-          <div className="flex-1 min-w-[180px] md:w-[400px]">
+          <div className="flex-1 min-w-[300px]">
             <Label htmlFor="filterDealer">Select Dealer</Label>
             <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
               <PopoverTrigger asChild>
                 <Button variant="outline" role="combobox" className="w-full justify-between">{selectedDealerName}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-0">
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                 <div className="p-2 border-b"><Input placeholder="Search dealer..." value={dealerSearch} onChange={(e) => setDealerSearch(e.target.value)} className="h-8" /></div>
                 <ScrollArea className="h-[200px]"><div className="p-1">{filteredDealers.map((d) => (<Button key={d.value} variant="ghost" className="w-full justify-start font-normal" onClick={() => { setFilterDealerId(d.value); setIsDealerPopoverOpen(false); }}><Check className={cn("mr-2 h-4 w-4", filterDealerId === d.value ? "opacity-100" : "opacity-0")} />{d.label}</Button>))}</div></ScrollArea>
               </PopoverContent>
