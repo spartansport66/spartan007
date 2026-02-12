@@ -5,12 +5,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Search, ChevronLeft, ChevronRight, Edit } from 'lucide-react';
+import { Loader2, Eye, Search, ChevronLeft, ChevronRight, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { showError } from '@/utils/toast';
+import { showError, showSuccess } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import { Label } from '@/components/ui/label';
+import { useSession } from '@/contexts/SessionContext';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { cn } from '@/lib/utils';
 
 interface DispatchedOrder {
   id: string;
@@ -32,10 +35,12 @@ interface DealerOption {
 const PAGE_SIZE = 5;
 
 const DispatchedOrdersCard: React.FC = () => {
+  const { isAdmin } = useSession();
   const [orders, setOrders] = useState<DispatchedOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Format date as dd/mm/yyyy
   const formatDate = (dateString: string | null) => {
@@ -161,6 +166,39 @@ const DispatchedOrdersCard: React.FC = () => {
     setFilterDispatchDate('');
   };
 
+  const handleDeleteOrder = async (orderId: string, orderNumber: number) => {
+    setIsDeleting(true);
+    try {
+      // Step 1: Delete associated payments
+      const { error: paymentError } = await supabase
+        .from('payments')
+        .delete()
+        .eq('order_id', orderId);
+
+      if (paymentError) {
+        throw new Error(`Failed to delete associated payments: ${paymentError.message}`);
+      }
+
+      // Step 2: Delete the order. This will cascade to 'sales' table, which will trigger stock restoration.
+      const { error: orderError } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', orderId);
+
+      if (orderError) {
+        throw new Error(`Failed to delete order: ${orderError.message}`);
+      }
+
+      showSuccess(`Order #${orderNumber} and its associated payments have been deleted.`);
+      fetchOrdersAndDealers(); // Refresh the list
+    } catch (error: any) {
+      console.error('Error deleting order:', error);
+      showError(error.message);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Pagination logic
   const totalPages = Math.ceil(orders.length / PAGE_SIZE);
   const displayedOrders = orders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -272,6 +310,29 @@ const DispatchedOrdersCard: React.FC = () => {
                             >
                               <Edit className="h-4 w-4 text-orange-600" />
                             </Button>
+                            {isAdmin && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" title="Delete Order" disabled={isDeleting}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will permanently delete Order #{order.order_number}, its associated payments, and restore stock. This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeleteOrder(order.id, order.order_number)} disabled={isDeleting}>
+                                      {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
