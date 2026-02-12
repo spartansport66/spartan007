@@ -67,7 +67,5 @@ AS $function$
     FROM public.payments p
     WHERE p.dealer_id = dealer_id_param
     AND p.status = 'completed'
-    AND p_show_pending_only = false -- This line excludes payments when filtering
-
-    ORDER BY transaction_date;
+    AND p_show_pending_only = false; -- This line excludes payments when filtering
 $function$;
