@@ -76,12 +76,12 @@ const ProductManagementConsole = () => {
         {/* Record Stock Receipt Card (New) */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-purple-500 dark:bg-purple-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Record Stock Receipt</CardTitle>
-            <CardDescription className="text-purple-100 dark:text-purple-200">Log new inventory received.</CardDescription>
+            <CardTitle className="text-xl font-semibold">Material Return</CardTitle>
+            <CardDescription className="text-purple-100 dark:text-purple-200">Log materials returned from dealers.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 flex-grow flex items-center justify-center">
-            <Button onClick={() => navigate('/stock-receipts')} className="w-full bg-purple-600 hover:bg-purple-700 text-white">
-              <Package className="h-5 w-5 mr-2" /> Record Receipt
+            <Button onClick={() => navigate('/material-returns')} className="w-full bg-purple-600 hover:bg-purple-700 text-white">
+              <Package className="h-5 w-5 mr-2" /> Record Return
             </Button>
           </CardContent>
         </Card>

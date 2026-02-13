@@ -93,10 +93,10 @@ const ProductDashboard = () => {
                 <FileUp className="h-4 w-4" /> Bulk Upload
               </Button>
               <Button
-                onClick={() => navigate('/stock-receipts')}
+                onClick={() => navigate('/material-returns')}
                 className="w-full justify-start gap-2 bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
               >
-                <Package className="h-4 w-4" /> Record Stock Receipt
+                <Package className="h-4 w-4" /> Record Material Return
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

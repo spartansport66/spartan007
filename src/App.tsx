@@ -19,7 +19,7 @@ import ComboOffersDashboard from "./pages/ComboOffersDashboard";
 import SheetConverterPage from "./pages/SheetConverterPage";
 import ForcePasswordReset from "./pages/ForcePasswordReset";
 import DailyVisitReport from "./pages/DailyVisitReport";
-import StockReceipts from "./pages/StockReceipts";
+import MaterialReturns from "./pages/MaterialReturns";
 import ChangePassword from "./pages/ChangePassword";
 import GatePassDashboard from "./pages/GatePassDashboard";
 import ProductDashboard from "./pages/ProductDashboard";
@@ -55,7 +55,7 @@ const AppContent = () => {
       <Route path="/sheet-converter" element={<SheetConverterPage />} />
       <Route path="/force-password-reset" element={<ForcePasswordReset />} />
       <Route path="/daily-visit-report" element={<DailyVisitReport />} />
-      <Route path="/stock-receipts" element={<StockReceipts />} />
+      <Route path="/material-returns" element={<MaterialReturns />} />
       <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/gate-pass-dashboard" element={<GatePassDashboard />} />
       <Route path="/purchase-dashboard" element={<PurchaseDashboard />} />

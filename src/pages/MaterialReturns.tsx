@@ -6,10 +6,10 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { showError } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
-import StockReceiptForm from '@/components/StockReceiptForm';
-import StockInHistoryTable from '@/components/StockInHistoryTable';
+import MaterialReturnForm from '@/components/MaterialReturnForm';
+import MaterialReturnHistory from '@/components/MaterialReturnHistory';
 
-const StockReceipts = () => {
+const MaterialReturns = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, userType } = useSession();
   const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
@@ -19,12 +19,12 @@ const StockReceipts = () => {
     if (!sessionLoading && !user) {
       navigate('/login');
     } else if (!sessionLoading && user && !isAuthorized) {
-      showError('Access Denied: Only authorized personnel can manage stock receipts.');
+      showError('Access Denied: Only authorized personnel can manage material returns.');
       navigate('/dashboard');
     }
   }, [sessionLoading, user, isAuthorized, navigate]);
 
-  const handleReceiptRecorded = () => {
+  const handleReturnRecorded = () => {
     setRefreshKey(prev => prev + 1); // Trigger refresh in the history table
   };
 
@@ -32,7 +32,7 @@ const StockReceipts = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading stock receipts page...</p>
+        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading material returns page...</p>
       </div>
     );
   }
@@ -54,8 +54,8 @@ const StockReceipts = () => {
         </Button>
         
         <div className="grid grid-cols-1 gap-6">
-          <StockReceiptForm onReceiptRecorded={handleReceiptRecorded} />
-          <StockInHistoryTable key={refreshKey} />
+          <MaterialReturnForm onReturnRecorded={handleReturnRecorded} />
+          <MaterialReturnHistory key={refreshKey} />
         </div>
       </div>
       <MadeWithDyad />
@@ -63,4 +63,4 @@ const StockReceipts = () => {
   );
 };
 
-export default StockReceipts;
+export default MaterialReturns;
