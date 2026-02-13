@@ -1,3 +1,15 @@
+-- Create a sequence for sales return numbers
+CREATE SEQUENCE IF NOT EXISTS public.sales_return_number_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+-- Add the return_number column to the sales_returns table
+ALTER TABLE public.sales_returns
+ADD COLUMN IF NOT EXISTS return_number INT DEFAULT nextval('public.sales_return_number_seq');
+
 -- Create sales_returns table to log credit notes
 CREATE TABLE public.sales_returns (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
