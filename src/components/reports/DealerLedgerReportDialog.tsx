@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as UiTableFooter } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, MessageCircle, Check, ChevronsUpDown } from 'lucide-react';
+import { Loader2, Search, Printer, MessageCircle, Check, ChevronsUpDown, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -33,11 +33,15 @@ interface FormattedLedgerEntry extends LedgerEntry {
 }
 
 interface ItemLedgerEntry {
-  parent_id: string;
-  parent_type: string;
+  transaction_date: string;
+  transaction_type: string;
+  order_number: number;
+  product_code: string;
   product_name: string;
   quantity: number;
   unit_price: number;
+  discount_percent: number;
+  gst_percent: number;
   total_value: number;
 }
 
@@ -77,6 +81,19 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
   const [dealerSearch, setDealerSearch] = useState('');
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const toggleRowExpansion = (transactionId: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(transactionId)) {
+        newSet.delete(transactionId);
+      } else {
+        newSet.add(transactionId);
+      }
+      return newSet;
+    });
+  };
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -212,15 +229,34 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
             transactions.length === 0 ? <p className="text-center text-muted-foreground py-8">No transactions found.</p> : (
               <div className="max-h-[400px] overflow-y-auto border rounded-md">
                 <Table>
-                  <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Particulars</TableHead><TableHead className="text-center">Days</TableHead><TableHead className="text-right">Debit (₹)</TableHead><TableHead className="text-right">Credit (₹)</TableHead><TableHead className="text-right">Balance (₹)</TableHead></TableRow></TableHeader>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Particulars</TableHead>
+                      <TableHead className="text-center">Days</TableHead>
+                      <TableHead className="text-right">Debit (₹)</TableHead>
+                      <TableHead className="text-right">Credit (₹)</TableHead>
+                      <TableHead className="text-right">Balance (₹)</TableHead>
+                    </TableRow>
+                  </TableHeader>
                   <TableBody>
                     {transactions.map((entry, index) => {
-                      const items = showItemWise && (entry.transaction_type === 'order' || entry.transaction_type === 'sales_return')
-                        ? itemLedgerEntries.filter(item => item.parent_id === entry.transaction_id)
-                        : [];
+                      const orderNumberMatch = entry.details.match(/Order #(\d+)/);
+                      const orderNumber = orderNumberMatch ? parseInt(orderNumberMatch[1], 10) : null;
+                      const items = showItemWise && orderNumber ? itemLedgerEntries.filter(item => item.order_number === orderNumber) : [];
+                      const canExpand = showItemWise && (entry.transaction_type === 'order' || entry.transaction_type === 'sales_return') && items.length > 0;
+
                       return (
                         <React.Fragment key={entry.transaction_id || index}>
                           <TableRow>
+                            <TableCell>
+                              {canExpand && (
+                                <Button variant="ghost" size="icon" onClick={() => toggleRowExpansion(entry.transaction_id!)} className="h-6 w-6">
+                                  {expandedRows.has(entry.transaction_id!) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                </Button>
+                              )}
+                            </TableCell>
                             <TableCell>{new Date(entry.transaction_date).toLocaleDateString()}</TableCell>
                             <TableCell>{entry.details}</TableCell>
                             <TableCell className="text-center">{entry.days_elapsed !== null ? entry.days_elapsed : ''}</TableCell>
@@ -228,22 +264,52 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                             <TableCell className="text-right text-green-600">{entry.credit ? entry.credit.toFixed(2) : ''}</TableCell>
                             <TableCell className="text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
                           </TableRow>
-                          {items.map((item, itemIndex) => (
-                            <TableRow key={`${entry.transaction_id}-${itemIndex}`} className="bg-muted/30 text-xs">
-                              <TableCell></TableCell>
-                              <TableCell colSpan={5} className="py-1 px-8">
-                                <div className="flex justify-between">
-                                  <span>{item.product_name}</span>
-                                  <span>Qty: {item.quantity} @ ₹{item.unit_price.toFixed(2)} = ₹{item.total_value.toFixed(2)}</span>
+                          {canExpand && expandedRows.has(entry.transaction_id!) && (
+                            <TableRow className="bg-muted/30 hover:bg-muted/30">
+                              <TableCell />
+                              <TableCell colSpan={6} className="p-2">
+                                <div className="p-2 bg-background rounded-md">
+                                  <h4 className="font-semibold text-sm mb-1 px-2">Item Details:</h4>
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Product</TableHead>
+                                        <TableHead className="text-center">Qty</TableHead>
+                                        <TableHead className="text-right">Unit Price</TableHead>
+                                        <TableHead className="text-right">Disc %</TableHead>
+                                        <TableHead className="text-right">GST %</TableHead>
+                                        <TableHead className="text-right">Total</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {items.map((item, itemIndex) => (
+                                        <TableRow key={itemIndex} className="border-none h-8">
+                                          <TableCell className="py-1">{item.product_name} ({item.product_code})</TableCell>
+                                          <TableCell className="text-center py-1">{item.quantity}</TableCell>
+                                          <TableCell className="text-right py-1">₹{item.unit_price.toFixed(2)}</TableCell>
+                                          <TableCell className="text-right py-1">{item.discount_percent.toFixed(2)}%</TableCell>
+                                          <TableCell className="text-right py-1">{item.gst_percent.toFixed(2)}%</TableCell>
+                                          <TableCell className="text-right py-1">₹{item.total_value.toFixed(2)}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
                                 </div>
                               </TableCell>
                             </TableRow>
-                          ))}
+                          )}
                         </React.Fragment>
                       )
                     })}
                   </TableBody>
-                  <UiTableFooter><TableRow><TableCell colSpan={3} className="text-right font-bold">Totals</TableCell><TableCell className="text-right font-bold">₹{totalDebit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{totalCredit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{finalBalance.toFixed(2)}</TableCell></TableRow></UiTableFooter>
+                  <UiTableFooter>
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-right font-bold">Totals</TableCell>
+                      <TableCell className="text-right font-bold">₹{totalDebit.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-bold">₹{totalCredit.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-bold">₹{finalBalance.toFixed(2)}</TableCell>
+                    </TableRow>
+                  </UiTableFooter>
                 </Table>
               </div>
             )
