@@ -91,5 +91,7 @@ AS $function$
     JOIN public.orders o ON sr.order_id = o.id
     JOIN public.products prod ON sr.product_id = prod.id
     WHERE o.dealer_id = dealer_id_param
+    AND o.dispatched = true -- Only show returns for dispatched orders
+    AND o.dispatch_date IS NOT NULL
     AND p_show_pending_only = false;
 $function$;

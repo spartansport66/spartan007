@@ -76,6 +76,7 @@ const MaterialReturnForm: React.FC<MaterialReturnFormProps> = ({ onReturnRecorde
         .from('orders')
         .select(`
           id,
+          dispatched,
           dealers (name),
           sales (id, quantity, products (id, name, code))
         `)
@@ -83,6 +84,12 @@ const MaterialReturnForm: React.FC<MaterialReturnFormProps> = ({ onReturnRecorde
         .single();
 
       if (error) throw error;
+
+      if (!data.dispatched) {
+        showError(`Order #${orderNumberInput} has not been dispatched. Returns can only be processed for dispatched orders.`);
+        setLoading(false);
+        return;
+      }
 
       setLoadedOrder({
         id: data.id,
