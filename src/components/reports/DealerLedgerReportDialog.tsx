@@ -32,17 +32,10 @@ interface FormattedLedgerEntry extends LedgerEntry {
   days_elapsed: number | null;
 }
 
-interface ItemLedgerEntry {
-  transaction_date: string;
-  transaction_type: string;
-  order_number: number;
-  product_code: string;
-  product_name: string;
+interface ItemDetail {
+  name: string;
   quantity: number;
-  unit_price: number;
-  discount_percent: number;
-  gst_percent: number;
-  total_value: number;
+  price: number;
 }
 
 interface FilterOption {
@@ -69,7 +62,7 @@ const calculateDaysDifference = (dateString: string): number | null => {
 const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const { user } = useSession();
   const [transactions, setTransactions] = useState<FormattedLedgerEntry[]>([]);
-  const [itemLedgerEntries, setItemLedgerEntries] = useState<ItemLedgerEntry[]>([]);
+  const [itemDetails, setItemDetails] = useState<Map<string, ItemDetail[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<FilterOption[]>([]);
   const [filterDealerId, setFilterDealerId] = useState<string>('');
@@ -95,7 +88,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const fetchLedgerData = useCallback(async (dealerId: string, pendingOnly: boolean, itemWise: boolean) => {
     if (!dealerId) {
       setTransactions([]);
-      setItemLedgerEntries([]);
+      setItemDetails(new Map());
       setSelectedDealerPhone(null);
       setSelectedDealerName(null);
       setLoading(false);
@@ -131,13 +124,35 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       setTransactions(formattedData);
 
       if (itemWise) {
-        const { data: itemData, error: itemError } = await supabase.rpc('get_dealer_item_ledger', {
-          dealer_id_param: dealerId
-        });
-        if (itemError) throw itemError;
-        setItemLedgerEntries(itemData || []);
+        const orderIds = (data || [])
+          .filter((entry: LedgerEntry) => entry.transaction_type === 'order' || entry.transaction_type === 'sales_return')
+          .map((entry: LedgerEntry) => entry.transaction_id)
+          .filter((id: string | null): id is string => id !== null);
+
+        if (orderIds.length > 0) {
+          const { data: salesData, error: salesError } = await supabase
+            .from('sales')
+            .select('order_id, quantity, unit_price, products!inner(name)')
+            .in('order_id', orderIds);
+
+          if (salesError) throw salesError;
+
+          const detailsMap = new Map<string, ItemDetail[]>();
+          (salesData || []).forEach(sale => {
+            const items = detailsMap.get(sale.order_id) || [];
+            items.push({
+              name: sale.products.name || 'Unknown',
+              quantity: sale.quantity,
+              price: sale.unit_price,
+            });
+            detailsMap.set(sale.order_id, items);
+          });
+          setItemDetails(detailsMap);
+        } else {
+          setItemDetails(new Map());
+        }
       } else {
-        setItemLedgerEntries([]);
+        setItemDetails(new Map());
       }
 
     } catch (error: any) {
@@ -213,57 +228,35 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
         <div className="overflow-x-auto">
           {loading ? (<div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-lg text-foreground">Loading ledger data...</p></div>) : !filterDealerId ? (<p className="text-center text-muted-foreground py-8">Please select a dealer.</p>) : (
-            (showItemWise ? itemLedgerEntries.length === 0 : transactions.length === 0) ? <p className="text-center text-muted-foreground py-8">No transactions found.</p> : (
+            transactions.length === 0 ? <p className="text-center text-muted-foreground py-8">No transactions found.</p> : (
               <div className="max-h-[400px] overflow-y-auto border rounded-md">
-                {showItemWise ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Order No.</TableHead>
-                        <TableHead>Product</TableHead>
-                        <TableHead className="text-right">Qty</TableHead>
-                        <TableHead className="text-right">Unit Price</TableHead>
-                        <TableHead className="text-right">Disc %</TableHead>
-                        <TableHead className="text-right">GST %</TableHead>
-                        <TableHead className="text-right">Total Value</TableHead>
+                <Table>
+                  <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Particulars</TableHead><TableHead className="text-center">Days</TableHead><TableHead className="text-right">Debit (₹)</TableHead><TableHead className="text-right">Credit (₹)</TableHead><TableHead className="text-right">Balance (₹)</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {transactions.map((entry, index) => (
+                      <TableRow key={entry.transaction_id || index}>
+                        <TableCell>{new Date(entry.transaction_date).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <div>{entry.details}</div>
+                          {showItemWise && itemDetails.has(entry.transaction_id!) && (
+                            <div className="pl-4 mt-2 text-xs text-muted-foreground border-l-2 border-muted">
+                              {(itemDetails.get(entry.transaction_id!) || []).map((item, idx) => (
+                                <div key={idx}>
+                                  - {item.name} (Qty: {item.quantity} @ ₹{item.price.toFixed(2)})
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">{entry.days_elapsed !== null ? entry.days_elapsed : ''}</TableCell>
+                        <TableCell className="text-right text-red-600">{entry.debit ? entry.debit.toFixed(2) : ''}</TableCell>
+                        <TableCell className="text-right text-green-600">{entry.credit ? entry.credit.toFixed(2) : ''}</TableCell>
+                        <TableCell className="text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {itemLedgerEntries.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{new Date(item.transaction_date).toLocaleDateString()}</TableCell>
-                          <TableCell>{item.transaction_type}</TableCell>
-                          <TableCell>#{item.order_number}</TableCell>
-                          <TableCell>{item.product_name} ({item.product_code})</TableCell>
-                          <TableCell className="text-right">{item.quantity}</TableCell>
-                          <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
-                          <TableCell className="text-right">{item.discount_percent.toFixed(2)}%</TableCell>
-                          <TableCell className="text-right">{item.gst_percent.toFixed(2)}%</TableCell>
-                          <TableCell className="text-right font-medium">₹{item.total_value.toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Particulars</TableHead><TableHead className="text-center">Days</TableHead><TableHead className="text-right">Debit (₹)</TableHead><TableHead className="text-right">Credit (₹)</TableHead><TableHead className="text-right">Balance (₹)</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {transactions.map((entry, index) => (
-                        <TableRow key={entry.transaction_id || index}>
-                          <TableCell>{new Date(entry.transaction_date).toLocaleDateString()}</TableCell>
-                          <TableCell>{entry.details}</TableCell>
-                          <TableCell className="text-center">{entry.days_elapsed !== null ? entry.days_elapsed : ''}</TableCell>
-                          <TableCell className="text-right text-red-600">{entry.debit ? entry.debit.toFixed(2) : ''}</TableCell>
-                          <TableCell className="text-right text-green-600">{entry.credit ? entry.credit.toFixed(2) : ''}</TableCell>
-                          <TableCell className="text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                    <UiTableFooter><TableRow><TableCell colSpan={3} className="text-right font-bold">Totals</TableCell><TableCell className="text-right font-bold">₹{totalDebit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{totalCredit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{finalBalance.toFixed(2)}</TableCell></TableRow></UiTableFooter>
-                  </Table>
-                )}
+                    ))}
+                  </TableBody>
+                  <UiTableFooter><TableRow><TableCell colSpan={3} className="text-right font-bold">Totals</TableCell><TableCell className="text-right font-bold">₹{totalDebit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{totalCredit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{finalBalance.toFixed(2)}</TableCell></TableRow></UiTableFooter>
+                </Table>
               </div>
             )
           )}
