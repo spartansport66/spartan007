@@ -92,12 +92,6 @@ const ProductDashboard = () => {
               >
                 <FileUp className="h-4 w-4" /> Bulk Upload
               </Button>
-              <Button
-                onClick={() => navigate('/material-returns')}
-                className="w-full justify-start gap-2 bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
-              >
-                <Package className="h-4 w-4" /> Record Material Return
-              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -123,7 +117,7 @@ const ProductDashboard = () => {
       </div>
 
       {/* Quick Actions / Low Stock */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         {/* Add New Product Card */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
@@ -150,19 +144,6 @@ const ProductDashboard = () => {
           </CardContent>
         </Card>
         
-        {/* Record Stock Receipt Card */}
-        <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
-          <CardHeader className="bg-purple-500 dark:bg-purple-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Record Stock Receipt</CardTitle>
-            <CardDescription className="text-purple-100 dark:text-purple-200">Log new inventory received.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 flex-grow flex items-center justify-center">
-            <Button onClick={() => navigate('/stock-receipts')} className="w-full bg-purple-600 hover:bg-purple-700 text-white">
-              <Package className="h-5 w-5 mr-2" /> Record Receipt
-            </Button>
-          </CardContent>
-        </Card>
-
         {/* Low Stock Products Card */}
         <LowStockProductsCard key={`low-stock-${refreshKey}`} onProductAction={handleProductAction} />
       </div>
