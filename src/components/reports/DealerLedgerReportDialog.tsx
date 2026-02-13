@@ -157,9 +157,14 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       };
       fetchAllDealers();
       fetchCompanyInfo();
-      if (filterDealerId) fetchLedgerData();
     }
-  }, [isOpen, fetchLedgerData, fetchCompanyInfo, filterDealerId]);
+  }, [isOpen, fetchCompanyInfo]);
+
+  useEffect(() => {
+    if (isOpen && filterDealerId) {
+      fetchLedgerData();
+    }
+  }, [isOpen, filterDealerId, showPendingOnly, showItemWise, fetchLedgerData]);
 
   const handleClearFilters = () => {
     setFilterDealerId('');
