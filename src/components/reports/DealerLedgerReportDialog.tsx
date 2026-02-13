@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as UiTableFooter } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, MessageCircle, Check, ChevronsUpDown, Eye, ChevronDown, ChevronRight } from 'lucide-react';
+import { Loader2, Search, Printer, MessageCircle, Check, ChevronsUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -17,9 +17,6 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-import SalesReturnDetailsDialog from './SalesReturnDetailsDialog';
-
-const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
 
 interface LedgerEntry {
   transaction_date: string;
@@ -35,11 +32,13 @@ interface FormattedLedgerEntry extends LedgerEntry {
   days_elapsed: number | null;
 }
 
-interface ItemDetail {
+interface ItemLedgerEntry {
+  parent_id: string;
+  parent_type: string;
   product_name: string;
   quantity: number;
   unit_price: number;
-  total_price: number;
+  total_value: number;
 }
 
 interface FilterOption {
@@ -66,23 +65,18 @@ const calculateDaysDifference = (dateString: string): number | null => {
 const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const { user } = useSession();
   const [transactions, setTransactions] = useState<FormattedLedgerEntry[]>([]);
+  const [itemLedgerEntries, setItemLedgerEntries] = useState<ItemLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<FilterOption[]>([]);
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [showPendingOnly, setShowPendingOnly] = useState(false);
+  const [showItemWise, setShowItemWise] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null);
   const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null);
   const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
   const [dealerSearch, setDealerSearch] = useState('');
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
-  
-  const [isReturnDetailsOpen, setIsReturnDetailsOpen] = useState(false);
-  const [selectedReturnId, setSelectedReturnId] = useState<string | null>(null);
-
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [itemDetailsCache, setItemDetailsCache] = useState<Record<string, ItemDetail[]>>({});
-  const [loadingItems, setLoadingItems] = useState<string | null>(null);
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -97,6 +91,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const fetchLedgerData = useCallback(async () => {
     if (!filterDealerId) {
       setTransactions([]);
+      setItemLedgerEntries([]);
       setSelectedDealerPhone(null);
       setSelectedDealerName(null);
       setLoading(false);
@@ -131,12 +126,23 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           return { ...entry, balance: currentBalance, days_elapsed };
       });
       setTransactions(formattedData);
+
+      if (showItemWise) {
+        const { data: itemData, error: itemError } = await supabase.rpc('get_dealer_item_ledger', {
+          dealer_id_param: dealerId
+        });
+        if (itemError) throw itemError;
+        setItemLedgerEntries(itemData || []);
+      } else {
+        setItemLedgerEntries([]);
+      }
+
     } catch (error: any) {
       showError(`Failed to load dealer ledger: ${error.message}`);
     } finally {
       setLoading(false);
     }
-  }, [filterDealerId, showPendingOnly]);
+  }, [filterDealerId, showPendingOnly, showItemWise]);
 
   useEffect(() => {
     if (isOpen) {
@@ -158,57 +164,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const handleClearFilters = () => {
     setFilterDealerId('');
     setShowPendingOnly(false);
-  };
-
-  const handleViewReturnDetails = (returnId: string) => {
-    setSelectedReturnId(returnId);
-    setIsReturnDetailsOpen(true);
-  };
-
-  const toggleRow = async (transactionId: string, transactionType: string) => {
-    const newExpandedRows = new Set(expandedRows);
-    if (newExpandedRows.has(transactionId)) {
-      newExpandedRows.delete(transactionId);
-    } else {
-      newExpandedRows.add(transactionId);
-      if (!itemDetailsCache[transactionId] && (transactionType === 'order' || transactionType === 'sales_return')) {
-        setLoadingItems(transactionId);
-        try {
-          let items: ItemDetail[] = [];
-          if (transactionType === 'order') {
-            const { data, error } = await supabase
-              .from('sales')
-              .select('quantity, unit_price, total_price, products(name)')
-              .eq('order_id', transactionId);
-            if (error) throw error;
-            items = (data || []).map((item: any) => ({
-              product_name: item.products.name,
-              quantity: item.quantity,
-              unit_price: item.unit_price,
-              total_price: item.total_price,
-            }));
-          } else if (transactionType === 'sales_return') {
-            const { data, error } = await supabase
-              .from('sales_returns')
-              .select('quantity, unit_price, total_credit_amount, products(name)')
-              .eq('id', transactionId);
-            if (error) throw error;
-            items = (data || []).map((item: any) => ({
-              product_name: item.products.name,
-              quantity: item.quantity,
-              unit_price: item.unit_price,
-              total_price: item.total_credit_amount,
-            }));
-          }
-          setItemDetailsCache(prev => ({ ...prev, [transactionId]: items }));
-        } catch (err: any) {
-          showError(`Failed to load item details: ${err.message}`);
-        } finally {
-          setLoadingItems(null);
-        }
-      }
-    }
-    setExpandedRows(newExpandedRows);
+    setShowItemWise(false);
   };
 
   const filteredDealers = useMemo(() => {
@@ -221,111 +177,84 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const finalBalance = transactions.length > 0 ? transactions[transactions.length - 1].balance : 0;
 
   return (
-    <>
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-primary">Dealer Ledger Report</DialogTitle>
-            <DialogDescription>View the transaction history for a specific dealer.</DialogDescription>
-          </DialogHeader>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold text-primary">Dealer Ledger Report</DialogTitle>
+          <DialogDescription>View the transaction history for a specific dealer.</DialogDescription>
+        </DialogHeader>
 
-          <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
-            <div className="flex-1 min-w-[300px]">
-              <Label htmlFor="filterDealer">Select Dealer</Label>
-              <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" role="combobox" className="w-full justify-between">{selectedDealerName}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                  <div className="p-2 border-b"><Input placeholder="Search dealer..." value={dealerSearch} onChange={(e) => setDealerSearch(e.target.value)} className="h-8" /></div>
-                  <ScrollArea className="h-[200px]"><div className="p-1">{filteredDealers.map((d) => (<Button key={d.value} variant="ghost" className="w-full justify-start font-normal" onClick={() => { setFilterDealerId(d.value); setIsDealerPopoverOpen(false); }}><Check className={cn("mr-2 h-4 w-4", filterDealerId === d.value ? "opacity-100" : "opacity-0")} />{d.label}</Button>))}</div></ScrollArea>
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className="flex items-center space-x-2"><Checkbox id="showPendingOnly" checked={showPendingOnly} onCheckedChange={(checked) => setShowPendingOnly(!!checked)} /><Label htmlFor="showPendingOnly">Show Pending Only</Label></div>
-            <Button onClick={fetchLedgerData} disabled={!filterDealerId} className="flex items-center gap-2 bg-primary hover:bg-primary/90"><Search className="h-4 w-4" /> Apply Filters</Button>
-            <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">Clear Filters</Button>
+        <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-card rounded-lg">
+          <div className="flex-1 min-w-[300px]">
+            <Label htmlFor="filterDealer">Select Dealer</Label>
+            <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" className="w-full justify-between">{selectedDealerName}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                <div className="p-2 border-b"><Input placeholder="Search dealer..." value={dealerSearch} onChange={(e) => setDealerSearch(e.target.value)} className="h-8" /></div>
+                <ScrollArea className="h-[200px]"><div className="p-1">{filteredDealers.map((d) => (<Button key={d.value} variant="ghost" className="w-full justify-start font-normal" onClick={() => { setFilterDealerId(d.value); setIsDealerPopoverOpen(false); }}><Check className={cn("mr-2 h-4 w-4", filterDealerId === d.value ? "opacity-100" : "opacity-0")} />{d.label}</Button>))}</div></ScrollArea>
+              </PopoverContent>
+            </Popover>
           </div>
+          <div className="flex items-center space-x-2"><Checkbox id="showPendingOnly" checked={showPendingOnly} onCheckedChange={(checked) => setShowPendingOnly(!!checked)} /><Label htmlFor="showPendingOnly">Show Pending Only</Label></div>
+          <div className="flex items-center space-x-2"><Checkbox id="showItemWise" checked={showItemWise} onCheckedChange={(checked) => setShowItemWise(!!checked)} /><Label htmlFor="showItemWise">Show Item-wise Details</Label></div>
+          <Button onClick={fetchLedgerData} disabled={!filterDealerId} className="flex items-center gap-2 bg-primary hover:bg-primary/90"><Search className="h-4 w-4" /> Apply Filters</Button>
+          <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">Clear Filters</Button>
+        </div>
 
-          <div className="overflow-x-auto">
-            {loading ? (<div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-lg text-foreground">Loading ledger data...</p></div>) : !filterDealerId ? (<p className="text-center text-muted-foreground py-8">Please select a dealer.</p>) : (
-              transactions.length === 0 ? <p className="text-center text-muted-foreground py-8">No transactions found.</p> : (
-                <div className="max-h-[400px] overflow-y-auto border rounded-md">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Particulars</TableHead><TableHead className="text-center">Days</TableHead><TableHead className="text-right">Debit (₹)</TableHead><TableHead className="text-right">Credit (₹)</TableHead><TableHead className="text-right">Balance (₹)</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {transactions.map((entry, index) => {
-                        const isExpandable = entry.transaction_type === 'order' || entry.transaction_type === 'sales_return';
-                        const isExpanded = expandedRows.has(entry.transaction_id!);
-                        return (
-                          <React.Fragment key={entry.transaction_id || index}>
-                            <TableRow onClick={() => isExpandable && entry.transaction_id && toggleRow(entry.transaction_id, entry.transaction_type!)} className={isExpandable ? 'cursor-pointer hover:bg-accent/50' : ''}>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  {isExpandable && (isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)}
-                                  {new Date(entry.transaction_date).toLocaleDateString()}
+        <div className="overflow-x-auto">
+          {loading ? (<div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-lg text-foreground">Loading ledger data...</p></div>) : !filterDealerId ? (<p className="text-center text-muted-foreground py-8">Please select a dealer.</p>) : (
+            transactions.length === 0 ? <p className="text-center text-muted-foreground py-8">No transactions found.</p> : (
+              <div className="max-h-[400px] overflow-y-auto border rounded-md">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Particulars</TableHead><TableHead className="text-center">Days</TableHead><TableHead className="text-right">Debit (₹)</TableHead><TableHead className="text-right">Credit (₹)</TableHead><TableHead className="text-right">Balance (₹)</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {transactions.map((entry, index) => {
+                      const items = showItemWise && (entry.transaction_type === 'order' || entry.transaction_type === 'sales_return')
+                        ? itemLedgerEntries.filter(item => item.parent_id === entry.transaction_id)
+                        : [];
+                      return (
+                        <React.Fragment key={entry.transaction_id || index}>
+                          <TableRow>
+                            <TableCell>{new Date(entry.transaction_date).toLocaleDateString()}</TableCell>
+                            <TableCell>{entry.details}</TableCell>
+                            <TableCell className="text-center">{entry.days_elapsed !== null ? entry.days_elapsed : ''}</TableCell>
+                            <TableCell className="text-right text-red-600">{entry.debit ? entry.debit.toFixed(2) : ''}</TableCell>
+                            <TableCell className="text-right text-green-600">{entry.credit ? entry.credit.toFixed(2) : ''}</TableCell>
+                            <TableCell className="text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
+                          </TableRow>
+                          {items.map((item, itemIndex) => (
+                            <TableRow key={`${entry.transaction_id}-${itemIndex}`} className="bg-muted/30 text-xs">
+                              <TableCell></TableCell>
+                              <TableCell colSpan={5} className="py-1 px-8">
+                                <div className="flex justify-between">
+                                  <span>{item.product_name}</span>
+                                  <span>Qty: {item.quantity} @ ₹{item.unit_price.toFixed(2)} = ₹{item.total_value.toFixed(2)}</span>
                                 </div>
                               </TableCell>
-                              <TableCell>{entry.details}</TableCell>
-                              <TableCell className="text-center">{entry.days_elapsed !== null ? entry.days_elapsed : ''}</TableCell>
-                              <TableCell className="text-right text-red-600">{entry.debit ? entry.debit.toFixed(2) : ''}</TableCell>
-                              <TableCell className="text-right text-green-600">{entry.credit ? entry.credit.toFixed(2) : ''}</TableCell>
-                              <TableCell className="text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
                             </TableRow>
-                            {isExpanded && (
-                              <TableRow>
-                                <TableCell colSpan={6} className="p-0">
-                                  <div className="p-4 bg-muted/50">
-                                    {loadingItems === entry.transaction_id ? (
-                                      <div className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>
-                                    ) : (
-                                      <Table>
-                                        <TableHeader>
-                                          <TableRow>
-                                            <TableHead>Product</TableHead>
-                                            <TableHead className="text-right">Qty</TableHead>
-                                            <TableHead className="text-right">Price</TableHead>
-                                            <TableHead className="text-right">Amount</TableHead>
-                                          </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                          {itemDetailsCache[entry.transaction_id!]?.map((item, itemIndex) => (
-                                            <TableRow key={itemIndex}>
-                                              <TableCell>{item.product_name}</TableCell>
-                                              <TableCell className="text-right">{item.quantity}</TableCell>
-                                              <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
-                                              <TableCell className="text-right">₹{item.total_price.toFixed(2)}</TableCell>
-                                            </TableRow>
-                                          ))}
-                                        </TableBody>
-                                      </Table>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </React.Fragment>
-                        )
-                      })}
-                    </TableBody>
-                    <UiTableFooter><TableRow><TableCell colSpan={3} className="text-right font-bold">Totals</TableCell><TableCell className="text-right font-bold">₹{totalDebit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{totalCredit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{finalBalance.toFixed(2)}</TableCell></TableRow></UiTableFooter>
-                  </Table>
-                </div>
-              )
-            )}
-          </div>
+                          ))}
+                        </React.Fragment>
+                      )
+                    })}
+                  </TableBody>
+                  <UiTableFooter><TableRow><TableCell colSpan={3} className="text-right font-bold">Totals</TableCell><TableCell className="text-right font-bold">₹{totalDebit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{totalCredit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{finalBalance.toFixed(2)}</TableCell></TableRow></UiTableFooter>
+                </Table>
+              </div>
+            )
+          )}
+        </div>
 
-          <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => { /* handleSendWhatsApp(finalBalance) */ }} disabled={!filterDealerId || finalBalance <= 0 || isSendingWhatsApp} className="flex items-center gap-2">
-              {isSendingWhatsApp ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />} Send Balance Reminder
-            </Button>
-            <Button variant="outline" onClick={() => { /* handlePrint() */ }} disabled={transactions.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Print Report</Button>
-            <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <SalesReturnDetailsDialog isOpen={isReturnDetailsOpen} onOpenChange={setIsReturnDetailsOpen} returnId={selectedReturnId} />
-    </>
+        <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
+          <Button variant="outline" onClick={() => { /* handleSendWhatsApp(finalBalance) */ }} disabled={!filterDealerId || finalBalance <= 0 || isSendingWhatsApp} className="flex items-center gap-2">
+            {isSendingWhatsApp ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />} Send Balance Reminder
+          </Button>
+          <Button variant="outline" onClick={() => { /* handlePrint() */ }} disabled={transactions.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Print Report</Button>
+          <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

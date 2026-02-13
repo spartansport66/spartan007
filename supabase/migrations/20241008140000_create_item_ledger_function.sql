@@ -1,5 +1,7 @@
 CREATE OR REPLACE FUNCTION public.get_dealer_item_ledger(dealer_id_param uuid)
 RETURNS TABLE(
+    parent_id uuid,
+    parent_type text,
     transaction_date date,
     transaction_type text,
     order_number integer,
@@ -15,6 +17,8 @@ LANGUAGE sql
 AS $$
     -- Sales (Debit)
     SELECT
+        o.id as parent_id,
+        'order' as parent_type,
         s.sale_date::date as transaction_date,
         'Sale' as transaction_type,
         o.order_number,
@@ -35,6 +39,8 @@ AS $$
 
     -- Sales Returns (Credit)
     SELECT
+        sr.id as parent_id,
+        'sales_return' as parent_type,
         sr.return_date as transaction_date,
         'Return' as transaction_type,
         o.order_number,
