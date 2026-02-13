@@ -1,1 +1,1 @@
-ALTER TABLE public.sales_returns ADD COLUMN remarks TEXT;
+ALTER TABLE public.sales_returns ADD COLUMN IF NOT EXISTS remarks TEXT;
