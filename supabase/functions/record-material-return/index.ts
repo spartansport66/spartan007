@@ -30,7 +30,6 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Fetch dealer_id from the order
     const { data: orderData, error: orderError } = await supabaseAdmin
       .from('orders')
       .select('dealer_id')
@@ -43,7 +42,40 @@ serve(async (req: Request) => {
     const dealer_id = orderData.dealer_id;
 
     for (const item of items) {
-      // 1. Update stock via RPC
+      const { data: saleData, error: saleError } = await supabaseAdmin
+        .from('sales')
+        .select('unit_price, discount_percent, gst_percent')
+        .eq('order_id', order_id)
+        .eq('product_id', item.product_id)
+        .single();
+
+      if (saleError || !saleData) {
+        throw new Error(`Original sale record not found for product ID ${item.product_id} in order ${order_id}`);
+      }
+
+      const { unit_price, discount_percent, gst_percent } = saleData;
+      const taxableValue = (unit_price * (1 - (discount_percent || 0) / 100)) * item.quantity;
+      const gstAmount = (taxableValue * (gst_percent || 0)) / 100;
+      const total_credit_amount = taxableValue + gstAmount;
+
+      const { error: returnError } = await supabaseAdmin
+        .from('sales_returns')
+        .insert({
+          order_id: order_id,
+          dealer_id: dealer_id,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          unit_price: unit_price,
+          discount_percent: discount_percent,
+          gst_percent: gst_percent,
+          total_credit_amount: total_credit_amount,
+          return_date: receipt_date,
+          created_by: user_id,
+        });
+      if (returnError) {
+        throw new Error(`Failed to create sales return record: ${returnError.message}`);
+      }
+
       const { error: stockError } = await supabaseAdmin.rpc('increment_stock', {
         product_id_in: item.product_id,
         quantity_in: item.quantity
@@ -52,7 +84,6 @@ serve(async (req: Request) => {
         console.warn(`[record-material-return] Failed to update stock for product ${item.product_id}: ${stockError.message}`);
       }
 
-      // 2. Insert stock receipt log
       const { error: logError } = await supabaseAdmin
         .from('stock_receipts')
         .insert({
@@ -65,11 +96,11 @@ serve(async (req: Request) => {
           order_id: order_id,
         });
       if (logError) {
-        throw new Error(`Failed to save history log for product ${item.product_id}: ${logError.message}`);
+        console.warn(`Failed to save history log for product ${item.product_id}: ${logError.message}`);
       }
     }
 
-    return new Response(JSON.stringify({ success: true, message: `${items.length} item(s) returned successfully.` }), {
+    return new Response(JSON.stringify({ success: true, message: `${items.length} item(s) returned and credited successfully.` }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
