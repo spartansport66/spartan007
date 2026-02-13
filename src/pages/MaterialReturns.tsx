@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { MadeWithDyad } from '@/components/made-with-dyad';
@@ -46,11 +46,11 @@ const MaterialReturns = () => {
       <div className="w-full max-w-4xl">
         <Button 
           variant="outline" 
-          onClick={() => navigate(userType === 'admin' ? '/product-management-console' : '/product-dashboard')} 
+          onClick={() => navigate(userType === 'admin' ? '/admin-dashboard' : '/product-dashboard')} 
           className="mb-6 flex items-center gap-2"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Product Console
+          Back to Admin Dashboard
         </Button>
         
         <div className="grid grid-cols-1 gap-6">
