@@ -88,8 +88,8 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     }
   }, []);
 
-  const fetchLedgerData = useCallback(async () => {
-    if (!filterDealerId) {
+  const fetchLedgerData = useCallback(async (dealerId: string, pendingOnly: boolean, itemWise: boolean) => {
+    if (!dealerId) {
       setTransactions([]);
       setItemLedgerEntries([]);
       setSelectedDealerPhone(null);
@@ -99,7 +99,6 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     }
     setLoading(true);
     try {
-      const dealerId = filterDealerId;
       const { data: dealerDetails, error: dealerDetailsError } = await supabase.from('dealers').select('name, phone').eq('id', dealerId).single();
       if (dealerDetailsError) throw dealerDetailsError;
       setSelectedDealerPhone(dealerDetails?.phone || null);
@@ -107,7 +106,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
       const { data, error } = await supabase.rpc('get_dealer_ledger', {
         dealer_id_param: dealerId,
-        p_show_pending_only: showPendingOnly
+        p_show_pending_only: pendingOnly
       });
       if (error) throw error;
       
@@ -127,7 +126,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       });
       setTransactions(formattedData);
 
-      if (showItemWise) {
+      if (itemWise) {
         const { data: itemData, error: itemError } = await supabase.rpc('get_dealer_item_ledger', {
           dealer_id_param: dealerId
         });
@@ -142,7 +141,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     } finally {
       setLoading(false);
     }
-  }, [filterDealerId, showPendingOnly, showItemWise]);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -162,7 +161,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
 
   useEffect(() => {
     if (isOpen && filterDealerId) {
-      fetchLedgerData();
+      fetchLedgerData(filterDealerId, showPendingOnly, showItemWise);
     }
   }, [isOpen, filterDealerId, showPendingOnly, showItemWise, fetchLedgerData]);
 
@@ -204,7 +203,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           </div>
           <div className="flex items-center space-x-2"><Checkbox id="showPendingOnly" checked={showPendingOnly} onCheckedChange={(checked) => setShowPendingOnly(!!checked)} /><Label htmlFor="showPendingOnly">Show Pending Only</Label></div>
           <div className="flex items-center space-x-2"><Checkbox id="showItemWise" checked={showItemWise} onCheckedChange={(checked) => setShowItemWise(!!checked)} /><Label htmlFor="showItemWise">Show Item-wise Details</Label></div>
-          <Button onClick={fetchLedgerData} disabled={!filterDealerId} className="flex items-center gap-2 bg-primary hover:bg-primary/90"><Search className="h-4 w-4" /> Apply Filters</Button>
+          <Button onClick={() => fetchLedgerData(filterDealerId, showPendingOnly, showItemWise)} disabled={!filterDealerId} className="flex items-center gap-2 bg-primary hover:bg-primary/90"><Search className="h-4 w-4" /> Apply Filters</Button>
           <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">Clear Filters</Button>
         </div>
 
