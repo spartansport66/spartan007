@@ -41,23 +41,40 @@ const MaterialReturnHistory: React.FC = () => {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Step 1: Fetch stock receipts with related product and profile info
+      const { data: receiptsData, error: receiptsError } = await supabase
         .from('stock_receipts')
         .select(`
           id,
           receipt_date,
           quantity,
           remarks,
+          dealer_id,
           products:product_id (name, code),
-          profiles:received_by (first_name, last_name),
-          dealers!dealer_id (name)
+          profiles:received_by (first_name, last_name)
         `)
         .order('receipt_date', { ascending: false })
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (receiptsError) throw receiptsError;
 
-      const formatted: MaterialReturnRecord[] = (data || []).map((r: any) => {
+      // Step 2: Get unique dealer IDs from the receipts
+      const dealerIds = [...new Set(receiptsData.map(r => r.dealer_id).filter(Boolean))];
+      
+      // Step 3: Fetch dealer names for those IDs
+      let dealerMap = new Map<string, string>();
+      if (dealerIds.length > 0) {
+        const { data: dealersData, error: dealersError } = await supabase
+          .from('dealers')
+          .select('id, name')
+          .in('id', dealerIds);
+        
+        if (dealersError) throw dealersError;
+        dealerMap = new Map(dealersData.map(d => [d.id, d.name]));
+      }
+
+      // Step 4: Combine the data
+      const formatted: MaterialReturnRecord[] = (receiptsData || []).map((r: any) => {
         const product = r.products || { name: 'Unknown Product', code: 'N/A' };
         const profile = r.profiles || { first_name: 'Unknown', last_name: 'User' };
         const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
@@ -70,7 +87,7 @@ const MaterialReturnHistory: React.FC = () => {
           product_name: product.name,
           product_code: product.code,
           received_by_name: name,
-          dealer_name: r.dealers?.name || 'N/A',
+          dealer_name: r.dealer_id ? dealerMap.get(r.dealer_id) || 'Unknown Dealer' : 'N/A',
         };
       });
 
