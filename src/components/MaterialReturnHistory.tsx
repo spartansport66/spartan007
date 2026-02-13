@@ -49,8 +49,8 @@ const MaterialReturnHistory: React.FC = () => {
           return_date,
           quantity,
           remarks,
-          products:product_id (name, code),
-          profiles:created_by (first_name, last_name),
+          products (name, code),
+          profiles (first_name, last_name),
           dealers (name),
           orders (order_number)
         `)
