@@ -88,62 +88,6 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     }
   }, []);
 
-  const fetchLedgerData = useCallback(async () => {
-    if (!filterDealerId) {
-      setTransactions([]);
-      setItemLedgerEntries([]);
-      setSelectedDealerPhone(null);
-      setSelectedDealerName(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const dealerId = filterDealerId;
-      const { data: dealerDetails, error: dealerDetailsError } = await supabase.from('dealers').select('name, phone').eq('id', dealerId).single();
-      if (dealerDetailsError) throw dealerDetailsError;
-      setSelectedDealerPhone(dealerDetails?.phone || null);
-      setSelectedDealerName(dealerDetails?.name || null);
-
-      const { data, error } = await supabase.rpc('get_dealer_ledger', {
-        dealer_id_param: dealerId,
-        p_show_pending_only: showPendingOnly
-      });
-      if (error) throw error;
-      
-      let currentBalance = 0;
-      const formattedData = (data || []).map((entry: LedgerEntry) => {
-          const debit = entry.debit || 0;
-          const credit = entry.credit || 0;
-          if (entry.details === 'Opening Balance') {
-              currentBalance = debit - credit;
-          } else {
-              if (!entry.details.includes('Pending Approval')) {
-                  currentBalance = currentBalance + debit - credit;
-              }
-          }
-          const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
-          return { ...entry, balance: currentBalance, days_elapsed };
-      });
-      setTransactions(formattedData);
-
-      if (showItemWise) {
-        const { data: itemData, error: itemError } = await supabase.rpc('get_dealer_item_ledger', {
-          dealer_id_param: dealerId
-        });
-        if (itemError) throw itemError;
-        setItemLedgerEntries(itemData || []);
-      } else {
-        setItemLedgerEntries([]);
-      }
-
-    } catch (error: any) {
-      showError(`Failed to load dealer ledger: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterDealerId, showPendingOnly, showItemWise]);
-
   useEffect(() => {
     if (isOpen) {
       const fetchAllDealers = async () => {
@@ -161,10 +105,63 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   }, [isOpen, fetchCompanyInfo]);
 
   useEffect(() => {
-    if (isOpen && filterDealerId) {
-      fetchLedgerData();
+    if (!isOpen || !filterDealerId) {
+      setTransactions([]);
+      setItemLedgerEntries([]);
+      if (isOpen) setLoading(false);
+      return;
     }
-  }, [isOpen, filterDealerId, showPendingOnly, showItemWise, fetchLedgerData]);
+
+    const fetchLedgerData = async () => {
+      setLoading(true);
+      try {
+        const dealerId = filterDealerId;
+        const { data: dealerDetails, error: dealerDetailsError } = await supabase.from('dealers').select('name, phone').eq('id', dealerId).single();
+        if (dealerDetailsError) throw dealerDetailsError;
+        setSelectedDealerPhone(dealerDetails?.phone || null);
+        setSelectedDealerName(dealerDetails?.name || null);
+
+        const { data, error } = await supabase.rpc('get_dealer_ledger', {
+          dealer_id_param: dealerId,
+          p_show_pending_only: showPendingOnly
+        });
+        if (error) throw error;
+        
+        let currentBalance = 0;
+        const formattedData = (data || []).map((entry: LedgerEntry) => {
+            const debit = entry.debit || 0;
+            const credit = entry.credit || 0;
+            if (entry.details === 'Opening Balance') {
+                currentBalance = debit - credit;
+            } else {
+                if (!entry.details.includes('Pending Approval')) {
+                    currentBalance = currentBalance + debit - credit;
+                }
+            }
+            const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
+            return { ...entry, balance: currentBalance, days_elapsed };
+        });
+        setTransactions(formattedData);
+
+        if (showItemWise) {
+          const { data: itemData, error: itemError } = await supabase.rpc('get_dealer_item_ledger', {
+            dealer_id_param: dealerId
+          });
+          if (itemError) throw itemError;
+          setItemLedgerEntries(itemData || []);
+        } else {
+          setItemLedgerEntries([]);
+        }
+
+      } catch (error: any) {
+        showError(`Failed to load dealer ledger: ${error.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLedgerData();
+  }, [isOpen, filterDealerId, showPendingOnly, showItemWise]);
 
   const handleClearFilters = () => {
     setFilterDealerId('');
@@ -204,7 +201,6 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           </div>
           <div className="flex items-center space-x-2"><Checkbox id="showPendingOnly" checked={showPendingOnly} onCheckedChange={(checked) => setShowPendingOnly(!!checked)} /><Label htmlFor="showPendingOnly">Show Pending Only</Label></div>
           <div className="flex items-center space-x-2"><Checkbox id="showItemWise" checked={showItemWise} onCheckedChange={(checked) => setShowItemWise(!!checked)} /><Label htmlFor="showItemWise">Show Item-wise Details</Label></div>
-          <Button onClick={fetchLedgerData} disabled={!filterDealerId} className="flex items-center gap-2 bg-primary hover:bg-primary/90"><Search className="h-4 w-4" /> Apply Filters</Button>
           <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">Clear Filters</Button>
         </div>
 
