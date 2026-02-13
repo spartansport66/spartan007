@@ -2,17 +2,17 @@ CREATE OR REPLACE FUNCTION public.get_dealer_item_ledger(dealer_id_param uuid)
 RETURNS TABLE(
     transaction_date date,
     transaction_type text,
-    order_number int,
+    order_number integer,
     product_code text,
     product_name text,
-    quantity int,
+    quantity integer,
     unit_price numeric,
     discount_percent numeric,
     gst_percent numeric,
     total_value numeric
 )
 LANGUAGE sql
-AS $function$
+AS $$
     -- Sales (Debit)
     SELECT
         s.sale_date::date as transaction_date,
@@ -40,14 +40,15 @@ AS $function$
         o.order_number,
         p.code as product_code,
         p.name as product_name,
-        -sr.quantity as quantity, -- Negative quantity for returns
+        sr.quantity,
         sr.unit_price,
         sr.discount_percent,
         sr.gst_percent,
-        -sr.total_credit_amount as total_value -- Negative value for returns
+        -sr.total_credit_amount as total_value -- Negative value for credit
     FROM public.sales_returns sr
     JOIN public.orders o ON sr.order_id = o.id
     JOIN public.products p ON sr.product_id = p.id
     WHERE o.dealer_id = dealer_id_param
-    AND o.dispatched = true;
-$function$;
+
+    ORDER BY transaction_date, order_number;
+$$;
