@@ -30,6 +30,7 @@ interface MaterialReturnRecord {
   product_code: string;
   received_by_name: string;
   dealer_name: string | null;
+  order_number: number | null;
 }
 
 const MaterialReturnHistory: React.FC = () => {
@@ -41,55 +42,35 @@ const MaterialReturnHistory: React.FC = () => {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      // Step 1: Fetch stock receipts with related product and profile info
-      const { data: receiptsData, error: receiptsError } = await supabase
+      const { data, error } = await supabase
         .from('stock_receipts')
         .select(`
           id,
           receipt_date,
           quantity,
           remarks,
-          dealer_id,
           products:product_id (name, code),
-          profiles:received_by (first_name, last_name)
+          profiles:received_by (first_name, last_name),
+          dealers (name),
+          orders (order_number)
         `)
+        .not('order_id', 'is', null) // Only show returns linked to an order
         .order('receipt_date', { ascending: false })
         .order('created_at', { ascending: false });
 
-      if (receiptsError) throw receiptsError;
+      if (error) throw error;
 
-      // Step 2: Get unique dealer IDs from the receipts
-      const dealerIds = [...new Set(receiptsData.map(r => r.dealer_id).filter(Boolean))];
-      
-      // Step 3: Fetch dealer names for those IDs
-      let dealerMap = new Map<string, string>();
-      if (dealerIds.length > 0) {
-        const { data: dealersData, error: dealersError } = await supabase
-          .from('dealers')
-          .select('id, name')
-          .in('id', dealerIds);
-        
-        if (dealersError) throw dealersError;
-        dealerMap = new Map(dealersData.map(d => [d.id, d.name]));
-      }
-
-      // Step 4: Combine the data
-      const formatted: MaterialReturnRecord[] = (receiptsData || []).map((r: any) => {
-        const product = r.products || { name: 'Unknown Product', code: 'N/A' };
-        const profile = r.profiles || { first_name: 'Unknown', last_name: 'User' };
-        const name = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
-
-        return {
-          id: r.id,
-          receipt_date: r.receipt_date,
-          quantity: r.quantity,
-          remarks: r.remarks,
-          product_name: product.name,
-          product_code: product.code,
-          received_by_name: name,
-          dealer_name: r.dealer_id ? dealerMap.get(r.dealer_id) || 'Unknown Dealer' : 'N/A',
-        };
-      });
+      const formatted: MaterialReturnRecord[] = (data || []).map((r: any) => ({
+        id: r.id,
+        receipt_date: r.receipt_date,
+        quantity: r.quantity,
+        remarks: r.remarks,
+        product_name: r.products?.name || 'N/A',
+        product_code: r.products?.code || 'N/A',
+        received_by_name: `${r.profiles?.first_name || ''} ${r.profiles?.last_name || ''}`.trim() || 'Unknown',
+        dealer_name: r.dealers?.name || 'N/A',
+        order_number: r.orders?.order_number || null,
+      }));
 
       setRecords(formatted);
     } catch (error: any) {
@@ -128,6 +109,7 @@ const MaterialReturnHistory: React.FC = () => {
     r.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     r.product_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (r.dealer_name && r.dealer_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (r.order_number && r.order_number.toString().includes(searchTerm)) ||
     (r.remarks && r.remarks.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
@@ -137,7 +119,7 @@ const MaterialReturnHistory: React.FC = () => {
         <CardTitle className="text-xl font-semibold flex items-center gap-2">
           <Calendar className="h-5 w-5" /> Material Return History
         </CardTitle>
-        <CardDescription>A detailed log of all material returns.</CardDescription>
+        <CardDescription>A detailed log of all material returns from orders.</CardDescription>
       </CardHeader>
       <CardContent className="p-4">
         <div className="mb-4">
@@ -146,7 +128,7 @@ const MaterialReturnHistory: React.FC = () => {
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
               id="historySearch"
-              placeholder="Search by product, dealer, or remarks..." 
+              placeholder="Search by product, dealer, order no, or remarks..." 
               className="pl-8"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -165,6 +147,7 @@ const MaterialReturnHistory: React.FC = () => {
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted/50">
                     <TableHead>Date</TableHead>
+                    <TableHead>Order No.</TableHead>
                     <TableHead>Product</TableHead>
                     <TableHead>Dealer</TableHead>
                     <TableHead className="text-right">Quantity</TableHead>
@@ -177,6 +160,7 @@ const MaterialReturnHistory: React.FC = () => {
                   {filteredRecords.map((record) => (
                     <TableRow key={record.id} className="hover:bg-accent/50">
                       <TableCell className="whitespace-nowrap">{new Date(record.receipt_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="font-medium">#{record.order_number}</TableCell>
                       <TableCell>
                         <div className="font-medium">{record.product_name}</div>
                         <div className="text-xs text-muted-foreground">{record.product_code}</div>
