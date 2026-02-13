@@ -58,6 +58,7 @@ serve(async (req: Request) => {
       const gstAmount = (taxableValue * (gst_percent || 0)) / 100;
       const total_credit_amount = taxableValue + gstAmount;
 
+      // Inserting into sales_returns will now automatically trigger the stock increment.
       const { error: returnError } = await supabaseAdmin
         .from('sales_returns')
         .insert({
@@ -74,29 +75,6 @@ serve(async (req: Request) => {
         });
       if (returnError) {
         throw new Error(`Failed to create sales return record: ${returnError.message}`);
-      }
-
-      const { error: stockError } = await supabaseAdmin.rpc('increment_stock', {
-        product_id_in: item.product_id,
-        quantity_in: item.quantity
-      });
-      if (stockError) {
-        console.warn(`[record-material-return] Failed to update stock for product ${item.product_id}: ${stockError.message}`);
-      }
-
-      const { error: logError } = await supabaseAdmin
-        .from('stock_receipts')
-        .insert({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          receipt_date: receipt_date,
-          received_by: user_id,
-          remarks: remarks,
-          dealer_id: dealer_id,
-          order_id: order_id,
-        });
-      if (logError) {
-        console.warn(`Failed to save history log for product ${item.product_id}: ${logError.message}`);
       }
     }
 
