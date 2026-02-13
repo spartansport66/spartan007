@@ -23,7 +23,7 @@ import {
 
 interface MaterialReturnRecord {
   id: string;
-  receipt_date: string;
+  return_date: string;
   quantity: number;
   remarks: string | null;
   product_name: string;
@@ -43,26 +43,25 @@ const MaterialReturnHistory: React.FC = () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('stock_receipts')
+        .from('sales_returns')
         .select(`
           id,
-          receipt_date,
+          return_date,
           quantity,
           remarks,
           products:product_id (name, code),
-          profiles:received_by (first_name, last_name),
+          profiles:created_by (first_name, last_name),
           dealers (name),
           orders (order_number)
         `)
-        .not('order_id', 'is', null) // Only show returns linked to an order
-        .order('receipt_date', { ascending: false })
+        .order('return_date', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       const formatted: MaterialReturnRecord[] = (data || []).map((r: any) => ({
         id: r.id,
-        receipt_date: r.receipt_date,
+        return_date: r.return_date,
         quantity: r.quantity,
         remarks: r.remarks,
         product_name: r.products?.name || 'N/A',
@@ -89,7 +88,7 @@ const MaterialReturnHistory: React.FC = () => {
     setIsDeleting(id);
     try {
       const { error } = await supabase
-        .from('stock_receipts')
+        .from('sales_returns')
         .delete()
         .eq('id', id);
 
@@ -159,7 +158,7 @@ const MaterialReturnHistory: React.FC = () => {
                 <TableBody>
                   {filteredRecords.map((record) => (
                     <TableRow key={record.id} className="hover:bg-accent/50">
-                      <TableCell className="whitespace-nowrap">{new Date(record.receipt_date).toLocaleDateString()}</TableCell>
+                      <TableCell className="whitespace-nowrap">{new Date(record.return_date).toLocaleDateString()}</TableCell>
                       <TableCell className="font-medium">#{record.order_number}</TableCell>
                       <TableCell>
                         <div className="font-medium">{record.product_name}</div>

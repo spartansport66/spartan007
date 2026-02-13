@@ -72,6 +72,7 @@ serve(async (req: Request) => {
           total_credit_amount: total_credit_amount,
           return_date: receipt_date,
           created_by: user_id,
+          remarks: remarks, // Save the remarks
         });
       if (returnError) {
         throw new Error(`Failed to create sales return record: ${returnError.message}`);
