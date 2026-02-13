@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as UiTableFooter } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, MessageCircle, Check, ChevronsUpDown, Eye } from 'lucide-react';
+import { Loader2, Search, Printer, MessageCircle, Check, ChevronsUpDown, Eye, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -17,7 +17,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-import SalesReturnDetailsDialog from './SalesReturnDetailsDialog'; // New import
+import SalesReturnDetailsDialog from './SalesReturnDetailsDialog';
 
 const SEND_WHATSAPP_MESSAGE_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-whatsapp-message";
 
@@ -35,17 +35,11 @@ interface FormattedLedgerEntry extends LedgerEntry {
   days_elapsed: number | null;
 }
 
-interface ItemLedgerEntry {
-  transaction_date: string;
-  transaction_type: string;
-  order_number: number;
-  product_code: string;
+interface ItemDetail {
   product_name: string;
   quantity: number;
   unit_price: number;
-  discount_percent: number;
-  gst_percent: number;
-  total_value: number;
+  total_price: number;
 }
 
 interface FilterOption {
@@ -72,12 +66,10 @@ const calculateDaysDifference = (dateString: string): number | null => {
 const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isOpen, onOpenChange }) => {
   const { user } = useSession();
   const [transactions, setTransactions] = useState<FormattedLedgerEntry[]>([]);
-  const [itemLedger, setItemLedger] = useState<ItemLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<FilterOption[]>([]);
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [showPendingOnly, setShowPendingOnly] = useState(false);
-  const [showItemWise, setShowItemWise] = useState(false); // New state for item-wise view
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [selectedDealerPhone, setSelectedDealerPhone] = useState<string | null>(null);
   const [selectedDealerName, setSelectedDealerName] = useState<string | null>(null);
@@ -87,6 +79,10 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   
   const [isReturnDetailsOpen, setIsReturnDetailsOpen] = useState(false);
   const [selectedReturnId, setSelectedReturnId] = useState<string | null>(null);
+
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [itemDetailsCache, setItemDetailsCache] = useState<Record<string, ItemDetail[]>>({});
+  const [loadingItems, setLoadingItems] = useState<string | null>(null);
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -101,7 +97,6 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const fetchLedgerData = useCallback(async () => {
     if (!filterDealerId) {
       setTransactions([]);
-      setItemLedger([]);
       setSelectedDealerPhone(null);
       setSelectedDealerName(null);
       setLoading(false);
@@ -115,41 +110,33 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       setSelectedDealerPhone(dealerDetails?.phone || null);
       setSelectedDealerName(dealerDetails?.name || null);
 
-      if (showItemWise) {
-        const { data, error } = await supabase.rpc('get_dealer_item_ledger', { dealer_id_param: dealerId });
-        if (error) throw error;
-        setItemLedger(data || []);
-        setTransactions([]);
-      } else {
-        const { data, error } = await supabase.rpc('get_dealer_ledger', {
-          dealer_id_param: dealerId,
-          p_show_pending_only: showPendingOnly
-        });
-        if (error) throw error;
-        
-        let currentBalance = 0;
-        const formattedData = (data || []).map((entry: LedgerEntry) => {
-            const debit = entry.debit || 0;
-            const credit = entry.credit || 0;
-            if (entry.details === 'Opening Balance') {
-                currentBalance = debit - credit;
-            } else {
-                if (!entry.details.includes('Pending Approval')) {
-                    currentBalance = currentBalance + debit - credit;
-                }
-            }
-            const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
-            return { ...entry, balance: currentBalance, days_elapsed };
-        });
-        setTransactions(formattedData);
-        setItemLedger([]);
-      }
+      const { data, error } = await supabase.rpc('get_dealer_ledger', {
+        dealer_id_param: dealerId,
+        p_show_pending_only: showPendingOnly
+      });
+      if (error) throw error;
+      
+      let currentBalance = 0;
+      const formattedData = (data || []).map((entry: LedgerEntry) => {
+          const debit = entry.debit || 0;
+          const credit = entry.credit || 0;
+          if (entry.details === 'Opening Balance') {
+              currentBalance = debit - credit;
+          } else {
+              if (!entry.details.includes('Pending Approval')) {
+                  currentBalance = currentBalance + debit - credit;
+              }
+          }
+          const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
+          return { ...entry, balance: currentBalance, days_elapsed };
+      });
+      setTransactions(formattedData);
     } catch (error: any) {
       showError(`Failed to load dealer ledger: ${error.message}`);
     } finally {
       setLoading(false);
     }
-  }, [filterDealerId, showPendingOnly, showItemWise]);
+  }, [filterDealerId, showPendingOnly]);
 
   useEffect(() => {
     if (isOpen) {
@@ -171,12 +158,57 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const handleClearFilters = () => {
     setFilterDealerId('');
     setShowPendingOnly(false);
-    setShowItemWise(false);
   };
 
   const handleViewReturnDetails = (returnId: string) => {
     setSelectedReturnId(returnId);
     setIsReturnDetailsOpen(true);
+  };
+
+  const toggleRow = async (transactionId: string, transactionType: string) => {
+    const newExpandedRows = new Set(expandedRows);
+    if (newExpandedRows.has(transactionId)) {
+      newExpandedRows.delete(transactionId);
+    } else {
+      newExpandedRows.add(transactionId);
+      if (!itemDetailsCache[transactionId] && (transactionType === 'order' || transactionType === 'sales_return')) {
+        setLoadingItems(transactionId);
+        try {
+          let items: ItemDetail[] = [];
+          if (transactionType === 'order') {
+            const { data, error } = await supabase
+              .from('sales')
+              .select('quantity, unit_price, total_price, products(name)')
+              .eq('order_id', transactionId);
+            if (error) throw error;
+            items = (data || []).map((item: any) => ({
+              product_name: item.products.name,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              total_price: item.total_price,
+            }));
+          } else if (transactionType === 'sales_return') {
+            const { data, error } = await supabase
+              .from('sales_returns')
+              .select('quantity, unit_price, total_credit_amount, products(name)')
+              .eq('id', transactionId);
+            if (error) throw error;
+            items = (data || []).map((item: any) => ({
+              product_name: item.products.name,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              total_price: item.total_credit_amount,
+            }));
+          }
+          setItemDetailsCache(prev => ({ ...prev, [transactionId]: items }));
+        } catch (err: any) {
+          showError(`Failed to load item details: ${err.message}`);
+        } finally {
+          setLoadingItems(null);
+        }
+      }
+    }
+    setExpandedRows(newExpandedRows);
   };
 
   const filteredDealers = useMemo(() => {
@@ -211,56 +243,70 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
               </Popover>
             </div>
             <div className="flex items-center space-x-2"><Checkbox id="showPendingOnly" checked={showPendingOnly} onCheckedChange={(checked) => setShowPendingOnly(!!checked)} /><Label htmlFor="showPendingOnly">Show Pending Only</Label></div>
-            <div className="flex items-center space-x-2"><Checkbox id="showItemWise" checked={showItemWise} onCheckedChange={(checked) => setShowItemWise(!!checked)} /><Label htmlFor="showItemWise">Item-wise Ledger</Label></div>
             <Button onClick={fetchLedgerData} disabled={!filterDealerId} className="flex items-center gap-2 bg-primary hover:bg-primary/90"><Search className="h-4 w-4" /> Apply Filters</Button>
             <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">Clear Filters</Button>
           </div>
 
           <div className="overflow-x-auto">
-            {loading ? (<div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-lg text-foreground">Loading ledger data...</p></div>) : !filterDealerId ? (<p className="text-center text-muted-foreground py-8">Please select a dealer.</p>) : showItemWise ? (
-              itemLedger.length === 0 ? <p className="text-center text-muted-foreground py-8">No items found.</p> : (
-                <div className="max-h-[400px] overflow-y-auto border rounded-md">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Order#</TableHead><TableHead>Product</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Price</TableHead><TableHead className="text-right">Disc%</TableHead><TableHead className="text-right">GST%</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {itemLedger.map((item, index) => (
-                        <TableRow key={index} className={item.transaction_type === 'Return' ? 'bg-red-50' : ''}>
-                          <TableCell>{new Date(item.transaction_date).toLocaleDateString()}</TableCell>
-                          <TableCell>{item.transaction_type}</TableCell>
-                          <TableCell>#{item.order_number}</TableCell>
-                          <TableCell>{item.product_name} ({item.product_code})</TableCell>
-                          <TableCell className="text-right">{item.quantity}</TableCell>
-                          <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
-                          <TableCell className="text-right">{item.discount_percent}%</TableCell>
-                          <TableCell className="text-right">{item.gst_percent}%</TableCell>
-                          <TableCell className="text-right font-medium">₹{item.total_value.toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )
-            ) : (
+            {loading ? (<div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-lg text-foreground">Loading ledger data...</p></div>) : !filterDealerId ? (<p className="text-center text-muted-foreground py-8">Please select a dealer.</p>) : (
               transactions.length === 0 ? <p className="text-center text-muted-foreground py-8">No transactions found.</p> : (
                 <div className="max-h-[400px] overflow-y-auto border rounded-md">
                   <Table>
                     <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Particulars</TableHead><TableHead className="text-center">Days</TableHead><TableHead className="text-right">Debit (₹)</TableHead><TableHead className="text-right">Credit (₹)</TableHead><TableHead className="text-right">Balance (₹)</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {transactions.map((entry, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{new Date(entry.transaction_date).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            {entry.details}
-                            {entry.transaction_type === 'sales_return' && (
-                              <Button variant="link" size="sm" className="p-0 ml-2 h-auto" onClick={() => handleViewReturnDetails(entry.transaction_id!)}>View</Button>
+                      {transactions.map((entry, index) => {
+                        const isExpandable = entry.transaction_type === 'order' || entry.transaction_type === 'sales_return';
+                        const isExpanded = expandedRows.has(entry.transaction_id!);
+                        return (
+                          <React.Fragment key={entry.transaction_id || index}>
+                            <TableRow onClick={() => isExpandable && entry.transaction_id && toggleRow(entry.transaction_id, entry.transaction_type!)} className={isExpandable ? 'cursor-pointer hover:bg-accent/50' : ''}>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  {isExpandable && (isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)}
+                                  {new Date(entry.transaction_date).toLocaleDateString()}
+                                </div>
+                              </TableCell>
+                              <TableCell>{entry.details}</TableCell>
+                              <TableCell className="text-center">{entry.days_elapsed !== null ? entry.days_elapsed : ''}</TableCell>
+                              <TableCell className="text-right text-red-600">{entry.debit ? entry.debit.toFixed(2) : ''}</TableCell>
+                              <TableCell className="text-right text-green-600">{entry.credit ? entry.credit.toFixed(2) : ''}</TableCell>
+                              <TableCell className="text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
+                            </TableRow>
+                            {isExpanded && (
+                              <TableRow>
+                                <TableCell colSpan={6} className="p-0">
+                                  <div className="p-4 bg-muted/50">
+                                    {loadingItems === entry.transaction_id ? (
+                                      <div className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>
+                                    ) : (
+                                      <Table>
+                                        <TableHeader>
+                                          <TableRow>
+                                            <TableHead>Product</TableHead>
+                                            <TableHead className="text-right">Qty</TableHead>
+                                            <TableHead className="text-right">Price</TableHead>
+                                            <TableHead className="text-right">Amount</TableHead>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                          {itemDetailsCache[entry.transaction_id!]?.map((item, itemIndex) => (
+                                            <TableRow key={itemIndex}>
+                                              <TableCell>{item.product_name}</TableCell>
+                                              <TableCell className="text-right">{item.quantity}</TableCell>
+                                              <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
+                                              <TableCell className="text-right">₹{item.total_price.toFixed(2)}</TableCell>
+                                            </TableRow>
+                                          ))}
+                                        </TableBody>
+                                      </Table>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
                             )}
-                          </TableCell>
-                          <TableCell className="text-center">{entry.days_elapsed !== null ? entry.days_elapsed : ''}</TableCell>
-                          <TableCell className="text-right text-red-600">{entry.debit ? entry.debit.toFixed(2) : ''}</TableCell>
-                          <TableCell className="text-right text-green-600">{entry.credit ? entry.credit.toFixed(2) : ''}</TableCell>
-                          <TableCell className="text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
+                          </React.Fragment>
+                        )
+                      })}
                     </TableBody>
                     <UiTableFooter><TableRow><TableCell colSpan={3} className="text-right font-bold">Totals</TableCell><TableCell className="text-right font-bold">₹{totalDebit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{totalCredit.toFixed(2)}</TableCell><TableCell className="text-right font-bold">₹{finalBalance.toFixed(2)}</TableCell></TableRow></UiTableFooter>
                   </Table>
@@ -273,7 +319,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
             <Button variant="outline" onClick={() => { /* handleSendWhatsApp(finalBalance) */ }} disabled={!filterDealerId || finalBalance <= 0 || isSendingWhatsApp} className="flex items-center gap-2">
               {isSendingWhatsApp ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />} Send Balance Reminder
             </Button>
-            <Button variant="outline" onClick={() => { /* handlePrint() */ }} disabled={transactions.length === 0 && itemLedger.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Print Report</Button>
+            <Button variant="outline" onClick={() => { /* handlePrint() */ }} disabled={transactions.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Print Report</Button>
             <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
           </DialogFooter>
         </DialogContent>
