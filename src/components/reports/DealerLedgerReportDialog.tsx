@@ -185,14 +185,29 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
   const finalBalance = transactions.length > 0 ? transactions[transactions.length - 1].balance : 0;
 
   const itemsByOrderNumber = useMemo(() => {
-    return itemLedgerEntries.reduce((acc, item) => {
-      if (!acc.has(item.order_number)) {
-        acc.set(item.order_number, []);
-      }
-      acc.get(item.order_number)!.push(item);
-      return acc;
-    }, new Map<number, ItemLedgerEntry[]>());
-  }, [itemLedgerEntries]);
+    if (!showItemWise) return new Map();
+    return itemLedgerEntries
+      .filter(item => item.transaction_type === 'Sale')
+      .reduce((acc, item) => {
+        if (!acc.has(item.order_number)) {
+          acc.set(item.order_number, []);
+        }
+        acc.get(item.order_number)!.push(item);
+        return acc;
+      }, new Map<number, ItemLedgerEntry[]>());
+  }, [itemLedgerEntries, showItemWise]);
+
+  const returnItemsMap = useMemo(() => {
+    if (!showItemWise) return new Map();
+    const map = new Map<string, ItemLedgerEntry>();
+    itemLedgerEntries
+      .filter(item => item.transaction_type === 'Return')
+      .forEach(item => {
+        const key = `${item.order_number}|${item.product_name}|${Math.abs(item.total_value).toFixed(2)}|${item.transaction_date}`;
+        map.set(key, item);
+      });
+    return map;
+  }, [itemLedgerEntries, showItemWise]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -231,7 +246,23 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                     {transactions.map((entry, index) => {
                       const orderNumberMatch = entry.details.match(/Order #(\d+)/);
                       const orderNumber = orderNumberMatch ? parseInt(orderNumberMatch[1], 10) : null;
-                      const items = showItemWise && orderNumber ? itemsByOrderNumber.get(orderNumber) : [];
+
+                      let items: ItemLedgerEntry[] = [];
+                      if (showItemWise) {
+                        if (entry.transaction_type === 'order' && orderNumber !== null) {
+                          items = itemsByOrderNumber.get(orderNumber) || [];
+                        } else if (entry.transaction_type === 'sales_return' && orderNumber !== null) {
+                          const productNameMatch = entry.details.match(/ - (.*)$/);
+                          const productName = productNameMatch ? productNameMatch[1] : null;
+                          if (productName) {
+                            const key = `${orderNumber}|${productName}|${(entry.credit || 0).toFixed(2)}|${entry.transaction_date}`;
+                            const matchedItem = returnItemsMap.get(key);
+                            if (matchedItem) {
+                              items = [matchedItem];
+                            }
+                          }
+                        }
+                      }
 
                       return (
                         <TableRow key={entry.transaction_id || index}>
@@ -239,7 +270,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                           <TableCell>
                             <div className="flex flex-col">
                               <span>{entry.details}</span>
-                              {items && items.length > 0 && (
+                              {items.length > 0 && (
                                 <div className="pl-4 mt-1 text-xs text-muted-foreground border-l-2 border-muted">
                                   {items.map((item, itemIndex) => (
                                     <p key={itemIndex}>
