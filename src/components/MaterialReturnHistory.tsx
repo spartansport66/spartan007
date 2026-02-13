@@ -48,9 +48,9 @@ const MaterialReturnHistory: React.FC = () => {
           receipt_date,
           quantity,
           remarks,
-          products (name, code),
-          profiles (first_name, last_name),
-          dealers (name)
+          products:product_id (name, code),
+          profiles:received_by (first_name, last_name),
+          dealers:dealer_id (name)
         `)
         .order('receipt_date', { ascending: false })
         .order('created_at', { ascending: false });
