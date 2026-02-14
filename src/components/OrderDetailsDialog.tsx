@@ -419,6 +419,16 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                 <p><strong>Payment:</strong> {orderDetails.payment_status}</p>
               </div>
             </div>
+            {orderDetails.online_order_details && (
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md space-y-1 text-sm">
+                <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Online Order Details</h4>
+                <p><strong>Client Name:</strong> {orderDetails.online_order_details.client_name}</p>
+                <p><strong>Platform:</strong> {orderDetails.online_order_details.platform_name}</p>
+                <p><strong>Platform Order #:</strong> {orderDetails.online_order_details.platform_order_number || 'N/A'}</p>
+                <p><strong>Contact:</strong> {orderDetails.online_order_details.contact_no || 'N/A'}</p>
+                <p><strong>Location:</strong> {orderDetails.online_order_details.city}, {orderDetails.online_order_details.state}</p>
+              </div>
+            )}
             <Separator />
             <div className="border rounded-md overflow-hidden">
               <Table>
