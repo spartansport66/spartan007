@@ -185,13 +185,14 @@ const AdminDashboard = () => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error && error.message !== 'Auth session missing!') {
-        showError(`Logout failed: ${error.message}.`);
+        showError(`Logout failed: ${error.message}. Redirecting to login.`);
       } else {
         showSuccess('Logged out successfully!');
       }
-      // The onAuthStateChange listener in SessionContext will handle redirection.
     } catch (error: any) {
-      showError(`An unexpected error occurred during logout: ${error.message}.`);
+      showError(`An unexpected error occurred during logout: ${error.message}. Redirecting to login.`);
+    } finally {
+      navigate('/login');
     }
   };
 
