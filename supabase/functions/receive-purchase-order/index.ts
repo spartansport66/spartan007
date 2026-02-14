@@ -14,7 +14,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { purchase_order_id, items, receipt_date, received_by } = await req.json();
+    const { purchase_order_id, items, receipt_date, received_by, supplier_invoice_no, supplier_invoice_date } = await req.json();
 
     if (!purchase_order_id || !Array.isArray(items) || items.length === 0 || !receipt_date || !received_by) {
       return new Response(JSON.stringify({ error: 'Missing required fields.' }), {
@@ -49,7 +49,7 @@ serve(async (req: Request) => {
       }
     }
 
-    // 3. Update PO status
+    // 3. Update PO status and invoice details
     const { data: allItems, error: fetchItemsError } = await supabaseAdmin
       .from('purchase_order_items')
       .select('quantity, quantity_received')
@@ -67,9 +67,16 @@ serve(async (req: Request) => {
       newStatus = 'Partially Received';
     }
 
+    const poUpdateData: any = { 
+      status: newStatus, 
+      updated_at: new Date().toISOString() 
+    };
+    if (supplier_invoice_no) poUpdateData.supplier_invoice_no = supplier_invoice_no;
+    if (supplier_invoice_date) poUpdateData.supplier_invoice_date = supplier_invoice_date;
+
     const { error: poUpdateError } = await supabaseAdmin
       .from('purchase_orders')
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .update(poUpdateData)
       .eq('id', purchase_order_id);
 
     if (poUpdateError) throw poUpdateError;
@@ -87,15 +94,3 @@ serve(async (req: Request) => {
     });
   }
 });
-
-// Helper RPC function to increment po_item_received
-/*
-CREATE OR REPLACE FUNCTION increment_po_item_received(p_po_item_id UUID, p_quantity NUMERIC)
-RETURNS VOID AS $$
-BEGIN
-  UPDATE public.purchase_order_items
-  SET quantity_received = quantity_received + p_quantity
-  WHERE id = p_po_item_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-*/

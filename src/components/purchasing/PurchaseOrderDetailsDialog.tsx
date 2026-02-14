@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const RECEIVE_PURCHASE_ORDER_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/receive-purchase-order";
 
@@ -26,6 +27,8 @@ interface PurchaseOrderDetail {
   order_date: string;
   status: string;
   supplier_name: string | null;
+  supplier_invoice_no: string | null;
+  supplier_invoice_date: string | null;
   items: POItemDetail[];
 }
 
@@ -48,6 +51,8 @@ const PurchaseOrderDetailsDialog: React.FC<PurchaseOrderDetailsDialogProps> = ({
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [receiveQuantities, setReceiveQuantities] = useState<Record<string, number>>({});
+  const [supplierInvoiceNo, setSupplierInvoiceNo] = useState('');
+  const [supplierInvoiceDate, setSupplierInvoiceDate] = useState('');
 
   const fetchDetails = useCallback(async () => {
     setLoading(true);
@@ -55,7 +60,7 @@ const PurchaseOrderDetailsDialog: React.FC<PurchaseOrderDetailsDialogProps> = ({
       const { data, error } = await supabase
         .from('purchase_orders')
         .select(`
-          id, po_number, order_date, status, suppliers (name),
+          id, po_number, order_date, status, supplier_invoice_no, supplier_invoice_date, suppliers (name),
           purchase_order_items (id, quantity, quantity_received, unit_price, raw_material_id, raw_materials (name, code))
         `)
         .eq('id', purchaseOrderId)
@@ -68,6 +73,8 @@ const PurchaseOrderDetailsDialog: React.FC<PurchaseOrderDetailsDialogProps> = ({
         order_date: data.order_date,
         status: data.status,
         supplier_name: (data.suppliers as any)?.name || 'N/A',
+        supplier_invoice_no: data.supplier_invoice_no,
+        supplier_invoice_date: data.supplier_invoice_date,
         items: (data.purchase_order_items as any[]).map(item => ({
           id: item.id,
           raw_material_id: item.raw_material_id,
@@ -77,6 +84,8 @@ const PurchaseOrderDetailsDialog: React.FC<PurchaseOrderDetailsDialogProps> = ({
           unit_price: item.unit_price,
         })),
       });
+      setSupplierInvoiceNo(data.supplier_invoice_no || '');
+      setSupplierInvoiceDate(data.supplier_invoice_date || '');
     } catch (error: any) {
       showError(`Failed to load PO details: ${error.message}`);
     } finally {
@@ -125,6 +134,8 @@ const PurchaseOrderDetailsDialog: React.FC<PurchaseOrderDetailsDialogProps> = ({
           items: itemsToReceive,
           receipt_date: new Date().toISOString().split('T')[0],
           received_by: user.id,
+          supplier_invoice_no: supplierInvoiceNo,
+          supplier_invoice_date: supplierInvoiceDate,
         }),
       });
       const data = await response.json();
@@ -152,6 +163,16 @@ const PurchaseOrderDetailsDialog: React.FC<PurchaseOrderDetailsDialogProps> = ({
               <div><span className="font-semibold">Supplier:</span> {order.supplier_name}</div>
               <div><span className="font-semibold">Order Date:</span> {new Date(order.order_date).toLocaleDateString()}</div>
               <div><span className="font-semibold">Status:</span> {order.status}</div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="supplierInvoiceNo">Supplier Invoice No.</Label>
+                <Input id="supplierInvoiceNo" value={supplierInvoiceNo} onChange={e => setSupplierInvoiceNo(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="supplierInvoiceDate">Supplier Invoice Date</Label>
+                <Input id="supplierInvoiceDate" type="date" value={supplierInvoiceDate} onChange={e => setSupplierInvoiceDate(e.target.value)} />
+              </div>
             </div>
             <div className="max-h-96 overflow-y-auto border rounded-md">
               <Table>
