@@ -26,22 +26,6 @@ interface DashboardData {
   totalDispatchedValue: number;
 }
 
-const StatCard = ({ title, value, icon, isLoading }: { title: string, value: string, icon: React.ReactNode, isLoading: boolean }) => (
-  <div className="flex items-center justify-between py-2 sm:p-4 sm:rounded-lg sm:border sm:bg-card">
-    <div className="space-y-1">
-      <p className="text-xs sm:text-sm font-medium text-muted-foreground">{title}</p>
-      {isLoading ? (
-        <Skeleton className="h-7 w-24 sm:w-32" />
-      ) : (
-        <p className="text-xl sm:text-2xl font-bold">{value}</p>
-      )}
-    </div>
-    <div className="bg-primary text-primary-foreground p-2 sm:p-3 rounded-full">
-      {icon}
-    </div>
-  </div>
-);
-
 const CEO_Dashboard_Card: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
@@ -116,64 +100,73 @@ const CEO_Dashboard_Card: React.FC = () => {
         <CardDescription>Live summary for {todayDate}</CardDescription>
       </CardHeader>
       <CardContent className="p-4 md:p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Column 1: Orders Received */}
-          <div className="space-y-4">
-            <h3 className="text-base md:text-lg font-semibold flex items-center gap-2"><ArrowDown className="h-5 w-5 text-green-500" /> Today's Orders Received</h3>
-            <StatCard title="From Sales Team" value={formatCurrency(data?.ordersFromSalesmen || 0)} icon={<Users className="h-4 sm:h-5 w-4 sm:w-5" />} isLoading={loading} />
-            <StatCard title="From Online" value={formatCurrency(data?.ordersFromOnline || 0)} icon={<ShoppingCart className="h-4 sm:h-5 w-4 sm:w-5" />} isLoading={loading} />
-            <Separator />
-            <StatCard title="Total Received" value={formatCurrency(data?.totalOrdersReceived || 0)} icon={<DollarSign className="h-4 sm:h-5 w-4 sm:w-5" />} isLoading={loading} />
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-
-          {/* Column 2: Dispatched Material */}
+        ) : (
           <div className="space-y-4">
-            <h3 className="text-base md:text-lg font-semibold flex items-center gap-2"><ArrowUp className="h-5 w-5 text-blue-500" /> Today's Dispatched Material</h3>
-            <div className="max-h-48 md:max-h-64 overflow-y-auto border rounded-md">
-              {loading ? (
-                <div className="p-4 space-y-2">
-                  <Skeleton className="h-8 w-full" />
-                  <Skeleton className="h-8 w-full" />
-                  <Skeleton className="h-8 w-full" />
+            {/* Orders Received Section */}
+            <div>
+              <h3 className="text-base md:text-lg font-semibold flex items-center gap-2 mb-2">
+                <ArrowDown className="h-5 w-5 text-green-500" /> Today's Orders Received
+              </h3>
+              <div className="space-y-2 pl-7">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground flex items-center gap-2"><Users className="h-4 w-4" /> From Sales Team:</span>
+                  <span className="font-bold">{formatCurrency(data?.ordersFromSalesmen || 0)}</span>
                 </div>
-              ) : !data || data.dispatchedOrders.length === 0 ? (
-                <p className="text-center text-muted-foreground p-8">No material dispatched today.</p>
-              ) : (
-                <>
-                  <div className="md:hidden">
-                    {data.dispatchedOrders.map((order, index) => (
-                      <div key={index} className="p-3 border-b last:border-b-0">
-                        <div className="font-semibold">{order.dealerName}</div>
-                        <div className="text-sm text-muted-foreground">By: {order.salesmanName}</div>
-                        <div className="text-sm font-medium text-right">{formatCurrency(order.amount)}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <Table className="hidden md:table">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground flex items-center gap-2"><ShoppingCart className="h-4 w-4" /> From Online:</span>
+                  <span className="font-bold">{formatCurrency(data?.ordersFromOnline || 0)}</span>
+                </div>
+                <Separator className="my-2" />
+                <div className="flex items-center justify-between font-bold text-base">
+                  <span className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> Total Received:</span>
+                  <span>{formatCurrency(data?.totalOrdersReceived || 0)}</span>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Dispatched Material Section */}
+            <div>
+              <h3 className="text-base md:text-lg font-semibold flex items-center gap-2 mb-2">
+                <ArrowUp className="h-5 w-5 text-blue-500" /> Today's Dispatched Material
+              </h3>
+              <div className="space-y-2 pl-7">
+                <div className="flex items-center justify-between font-bold text-base">
+                  <span className="flex items-center gap-2"><Package className="h-4 w-4" /> Total Dispatched:</span>
+                  <span>{formatCurrency(data?.totalDispatchedValue || 0)}</span>
+                </div>
+              </div>
+              
+              {data && data.dispatchedOrders.length > 0 && (
+                <div className="mt-4 max-h-48 overflow-y-auto border rounded-md">
+                  <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Dealer</TableHead>
-                        <TableHead>Sales Person</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="text-xs">Dealer</TableHead>
+                        <TableHead className="text-xs hidden sm:table-cell">Sales Person</TableHead>
+                        <TableHead className="text-right text-xs">Amount</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {data.dispatchedOrders.map((order, index) => (
-                        <TableRow key={index}>
+                        <TableRow key={index} className="text-sm">
                           <TableCell>{order.dealerName}</TableCell>
-                          <TableCell>{order.salesmanName}</TableCell>
+                          <TableCell className="hidden sm:table-cell">{order.salesmanName}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(order.amount)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
-                </>
+                </div>
               )}
             </div>
-            <Separator />
-            <StatCard title="Total Dispatched" value={formatCurrency(data?.totalDispatchedValue || 0)} icon={<Package className="h-4 sm:h-5 w-4 sm:w-5" />} isLoading={loading} />
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   );
