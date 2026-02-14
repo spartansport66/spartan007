@@ -71,7 +71,7 @@ const formSchema = z.object({
   opening_stock: z.preprocess((val) => Number(val), z.number().int().min(0)),
 });
 
-type SortKey = 'code' | 'name' | 'opening_stock' | 'stock_in' | 'stock_out' | 'calculated_closing';
+type SortKey = 'code' | 'name' | 'dp' | 'gst' | 'opening_stock' | 'stock_in' | 'stock_out' | 'calculated_closing';
 
 const PAGE_SIZE = 10;
 
@@ -419,6 +419,12 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
                 <TableHead className="cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>
                   <div className="flex items-center">Name <SortIcon column="name" /></div>
                 </TableHead>
+                <TableHead className="text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('dp')}>
+                  <div className="flex items-center justify-end">DP (₹) <SortIcon column="dp" /></div>
+                </TableHead>
+                <TableHead className="text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('gst')}>
+                  <div className="flex items-center justify-end">GST (%) <SortIcon column="gst" /></div>
+                </TableHead>
                 <TableHead className="text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('opening_stock')}>
                   <div className="flex items-center justify-end">Opening <SortIcon column="opening_stock" /></div>
                 </TableHead>
@@ -449,7 +455,7 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
             <TableBody>
               {paginatedProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     No products found matching your filters.
                   </TableCell>
                 </TableRow>
@@ -461,6 +467,8 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
                     <TableRow key={product.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium">{product.code}</TableCell>
                       <TableCell>{product.name}</TableCell>
+                      <TableCell className="text-right">₹{product.dp.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{product.gst}%</TableCell>
                       <TableCell className="text-right">{product.opening_stock}</TableCell>
                       <TableCell className="text-right text-green-600">+{product.stock_in}</TableCell>
                       <TableCell className="text-right text-red-600">-{product.stock_out}</TableCell>
