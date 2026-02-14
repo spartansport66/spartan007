@@ -35,6 +35,11 @@ interface Dealer {
   opening_balance: number;
 }
 
+interface Platform {
+  id: string;
+  name: string;
+}
+
 interface OrderItem {
   id: string;
   product_id: string;
@@ -57,6 +62,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const { user, session, loading: sessionLoading } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -81,7 +87,16 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
   const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
   const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<number>(0);
-  const [newItemGstPercent, setNewItemGstPercent] = useState<number>(0); // New state for editable GST
+  const [newItemGstPercent, setNewItemGstPercent] = useState<number>(0);
+
+  // State for online order fields
+  const [isOnlineOrder, setIsOnlineOrder] = useState(false);
+  const [clientName, setClientName] = useState('');
+  const [platformId, setPlatformId] = useState('');
+  const [platformOrderNumber, setPlatformOrderNumber] = useState('');
+  const [contactNo, setContactNo] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
 
   const paymentMethodsOptions = ['Cash', 'Card', 'Bank Transfer', 'UPI', 'Cheque/DD', 'COD'];
 
@@ -172,6 +187,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setDealers(formattedDealers);
       }
 
+      const { data: platformsData, error: platformsError } = await supabase.from('online_platforms').select('*');
+      if (platformsError) throw platformsError;
+      setPlatforms(platformsData || []);
+
       await fetchProducts();
 
     } catch (error: any) {
@@ -194,10 +213,12 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         setAllottedCreditDays(0);
         setPaymentDueDate(null);
         setDiscountAmount(0);
+        setIsOnlineOrder(false);
         return;
       }
       const selectedDealerData = dealers.find(d => d.id === selectedDealer);
       if (selectedDealerData) {
+        setIsOnlineOrder(selectedDealerData.name === 'Online Order');
         setAllottedCreditDays(selectedDealerData.allotted_credit_days);
         const today = new Date();
         const dueDate = new Date(today);
@@ -312,6 +333,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       showError('Please correct all errors before submitting.');
       return;
     }
+    if (isOnlineOrder && (!clientName || !platformId)) {
+      showError('Client Name and Platform are required for online orders.');
+      return;
+    }
     setLoading(true);
     try {
       const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
@@ -335,9 +360,25 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
       if (orderError) throw orderError;
 
+      // 2. If it's an online order, save the details
+      if (isOnlineOrder) {
+        const { error: onlineOrderError } = await supabase
+          .from('online_order_details')
+          .insert({
+            order_id: newOrder.id,
+            client_name: clientName,
+            platform_id: platformId,
+            platform_order_number: platformOrderNumber,
+            contact_no: contactNo,
+            city: city,
+            state: state,
+          });
+        if (onlineOrderError) throw onlineOrderError;
+      }
+
       await supabase.from('dealers').update({ last_billing_date: newOrder.order_date }).eq('id', selectedDealer);
       
-      // 2. Insert Sales Items
+      // 3. Insert Sales Items
       const salesWithOrderId = orderItems.map(item => ({
         order_id: newOrder.id,
         product_id: item.product_id,
@@ -351,7 +392,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const { error: salesInsertError } = await supabase.from('sales').insert(salesWithOrderId);
       if (salesInsertError) throw salesInsertError;
 
-      // 3. Record Payment
+      // 4. Record Payment
       const paymentData = {
         order_id: newOrder.id,
         dealer_id: selectedDealer,
@@ -367,7 +408,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
       if (paymentInsertError) throw paymentInsertError;
 
-      // 4. Trigger Email Notification
+      // 5. Trigger Email Notification
       try {
         await fetch(SEND_ORDER_NOTIFICATION_URL, {
           method: 'POST',
@@ -447,7 +488,21 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             </Popover>
           </div>
 
-          {selectedDealer && dealerBalance !== null && (
+          {isOnlineOrder && (
+            <Card className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+              <CardHeader><CardTitle>Online Order Details</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><Label>Client Name</Label><Input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Enter client's full name" /></div>
+                <div><Label>Platform</Label><Select value={platformId} onValueChange={setPlatformId}><SelectTrigger><SelectValue placeholder="Select platform" /></SelectTrigger><SelectContent>{platforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></div>
+                <div><Label>Platform Order No.</Label><Input value={platformOrderNumber} onChange={e => setPlatformOrderNumber(e.target.value)} placeholder="e.g., AMZ-12345" /></div>
+                <div><Label>Contact No.</Label><Input value={contactNo} onChange={e => setContactNo(e.target.value)} placeholder="Enter client's phone number" /></div>
+                <div><Label>City</Label><Input value={city} onChange={e => setCity(e.target.value)} placeholder="Enter city" /></div>
+                <div><Label>State</Label><Input value={state} onChange={e => setState(e.target.value)} placeholder="Enter state" /></div>
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedDealer && !isOnlineOrder && dealerBalance !== null && (
             <Card className="mt-4 bg-muted/50">
               <CardContent className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
@@ -483,13 +538,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   </PopoverTrigger>
                   <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                     <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
-                    <ScrollArea className="h-[250px]">
-                      <div className="p-1">
-                        {filteredProducts.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>) : (
+                    <ScrollArea className="h-[250px]"><div className="p-1">{filteredProducts.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>) : (
                           filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setNewItemGstPercent(parseFloat(product.gst) || 0); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start"><div className="flex items-center"><Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span>{product.name} ({product.code})</span></div><div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - GST: {product.gst}% - Stock: {product.closing_stock}</div></div></Button>))
-                        )}
-                      </div>
-                    </ScrollArea>
+                        )}</div></ScrollArea>
                   </PopoverContent>
                 </Popover>
               </div>

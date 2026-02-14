@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from 'react-router-dom';
-import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale, MapPin, Clock, ListChecks, ShoppingCart, Lock, Package, PlusCircle } from 'lucide-react';
+import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale, MapPin, Clock, ListChecks, ShoppingCart, Lock, Package, PlusCircle, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AdminSidebarProps {
@@ -113,6 +113,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         icon={<UserCog className="h-4 w-4" />}
         label="Manage Users"
         onClick={() => navigate('/manage-users')}
+      />
+      <NavButton
+        icon={<Globe className="h-4 w-4" />}
+        label="Manage Platforms"
+        onClick={() => navigate('/manage-platforms')}
       />
 
       <DropdownMenu>
