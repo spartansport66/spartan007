@@ -7,15 +7,15 @@ import { useSession } from '@/contexts/SessionContext';
 import { LogOut, Loader2, UserCog } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import PaymentOverviewCard from '@/components/PaymentOverviewCard'; // New Import
-import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog'; // New Import
+import PaymentOverviewCard from '@/components/PaymentOverviewCard';
+import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog';
+import TodaySalesCard from '@/components/TodaySalesCard';
 
 const ManagerDashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, userType } = useSession();
   const [loadingData, setLoadingData] = useState(false);
   
-  // State required for PaymentOverviewCard and its associated report dialog
   const [refreshKey, setRefreshKey] = useState(0);
   const [isPaymentsReportOpen, setIsPaymentsReportOpen] = useState(false);
   const [paymentsReportInitialStatus, setPaymentsReportInitialStatus] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'upcoming' | 'todays_due' | 'pending_approval'>('all');
@@ -23,7 +23,6 @@ const ManagerDashboard = () => {
   const [paymentsReportInitialToDate, setPaymentsReportInitialToDate] = useState<string>('');
   const [paymentsReportDialogKey, setPaymentsReportDialogKey] = useState(0);
 
-  // Function to handle logout
   const handleLogout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
@@ -39,7 +38,6 @@ const ManagerDashboard = () => {
     }
   };
 
-  // Handler to open the payments report dialog
   const handleViewPaymentsReport = () => {
     setPaymentsReportInitialStatus('all');
     setPaymentsReportInitialFromDate('');
@@ -48,7 +46,6 @@ const ManagerDashboard = () => {
     setIsPaymentsReportOpen(true);
   };
 
-  // Authentication and Redirection Logic
   useEffect(() => {
     if (!sessionLoading) {
       if (!user) {
@@ -77,7 +74,7 @@ const ManagerDashboard = () => {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl sm:text-4xl font-bold text-primary flex items-center gap-2">
           <UserCog className="h-8 w-8" />
-          Admin Dashboard
+          Manager Dashboard
         </h1>
         <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2">
           <LogOut className="h-4 w-4" />
@@ -91,15 +88,7 @@ const ManagerDashboard = () => {
           key={`payment-overview-${refreshKey}`} 
           onViewReport={handleViewPaymentsReport} 
         />
-        {/* Placeholder for other manager cards */}
-        <div className="flex flex-col items-center justify-center h-full min-h-[200px] border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-600 dark:text-gray-400 mb-2">
-            More Manager Tools Coming Soon
-          </h2>
-          <p className="text-sm text-muted-foreground text-center">
-            This space is reserved for manager-specific reports and actions.
-          </p>
-        </div>
+        <TodaySalesCard />
       </div>
 
       <MadeWithDyad />
