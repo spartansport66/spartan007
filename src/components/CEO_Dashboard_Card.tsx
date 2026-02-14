@@ -16,6 +16,7 @@ interface DispatchedOrder {
   dealerName: string;
   salesmanName: string;
   amount: number;
+  dispatchNumber: number | null;
 }
 
 interface DashboardData {
@@ -36,7 +37,7 @@ const CEO_Dashboard_Card: React.FC = () => {
       const startOfToday = getStartOfUTCDayISO();
       const endOfToday = getEndOfUTCDayISO();
 
-      // 1. Fetch Orders Received Today
+      // 1. Fetch Orders Received Today (based on order_date)
       const { data: ordersToday, error: ordersError } = await supabase
         .from('orders')
         .select('total_amount, dealers (name)')
@@ -54,13 +55,15 @@ const CEO_Dashboard_Card: React.FC = () => {
         }
       });
 
-      // 2. Fetch Dispatched Orders Today
+      // 2. Fetch Dispatched Orders Today (based on dispatch_date - when dispatch info was added)
+      // We filter by dispatch_date to catch orders "dispatched today" regardless of their creation date
       const { data: dispatchedToday, error: dispatchedError } = await supabase
         .from('orders')
-        .select('order_number, total_amount, dealers(name), profiles:user_id(first_name, last_name)')
-        .gte('gate_pass_dispatch_time', startOfToday)
-        .lte('gate_pass_dispatch_time', endOfToday)
-        .order('gate_pass_dispatch_time', { ascending: false });
+        .select('order_number, total_amount, dispatch_number, dealers(name), profiles:user_id(first_name, last_name)')
+        .gte('dispatch_date', startOfToday)
+        .lte('dispatch_date', endOfToday)
+        .order('dispatch_date', { ascending: false });
+      
       if (dispatchedError) throw dispatchedError;
 
       const dispatchedOrdersList: DispatchedOrder[] = (dispatchedToday || []).map((order: any) => ({
@@ -68,6 +71,7 @@ const CEO_Dashboard_Card: React.FC = () => {
         dealerName: order.dealers?.name || 'N/A',
         salesmanName: `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim() || 'N/A',
         amount: order.total_amount,
+        dispatchNumber: order.dispatch_number,
       }));
 
       const totalDispatched = dispatchedOrdersList.reduce((sum, order) => sum + order.amount, 0);
@@ -143,10 +147,11 @@ const CEO_Dashboard_Card: React.FC = () => {
               </div>
               
               {data && data.dispatchedOrders.length > 0 && (
-                <div className="mt-4 max-h-48 overflow-y-auto border rounded-md">
+                <div className="mt-4 max-h-64 overflow-y-auto border rounded-md">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="sticky top-0 bg-background z-10">
                       <TableRow>
+                        <TableHead className="text-xs">Order #</TableHead>
                         <TableHead className="text-xs">Dealer</TableHead>
                         <TableHead className="text-xs hidden sm:table-cell">Sales Person</TableHead>
                         <TableHead className="text-right text-xs">Amount</TableHead>
@@ -155,6 +160,7 @@ const CEO_Dashboard_Card: React.FC = () => {
                     <TableBody>
                       {data.dispatchedOrders.map((order, index) => (
                         <TableRow key={index} className="text-sm">
+                          <TableCell className="font-medium">#{order.orderNumber}</TableCell>
                           <TableCell>{order.dealerName}</TableCell>
                           <TableCell className="hidden sm:table-cell">{order.salesmanName}</TableCell>
                           <TableCell className="text-right font-medium">{formatCurrency(order.amount)}</TableCell>
