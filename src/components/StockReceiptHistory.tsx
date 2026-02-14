@@ -27,33 +27,56 @@ const StockReceiptHistory: React.FC = () => {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Step 1: Fetch receipts with created_by user ID
+      const { data: receiptsData, error: receiptsError } = await supabase
         .from('stock_receipts')
         .select(`
           id,
           receipt_date,
           quantity,
           remarks,
-          products (name, code),
-          profiles (first_name, last_name)
+          created_by,
+          products (name, code)
         `)
         .order('created_at', { ascending: false })
         .limit(100);
 
-      if (error) throw error;
+      if (receiptsError) throw receiptsError;
 
-      const formatted: StockReceiptRecord[] = (data || []).map((r: any) => ({
+      // Step 2: Get unique user IDs from the receipts
+      const userIds = [...new Set((receiptsData || []).map(r => r.created_by).filter(Boolean))];
+
+      // Step 3: Fetch profiles for those user IDs
+      let userMap = new Map<string, string>();
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', userIds);
+        
+        if (profilesError) {
+          console.warn('Could not fetch some user profiles:', profilesError.message);
+        } else {
+          (profilesData || []).forEach(p => {
+            userMap.set(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim());
+          });
+        }
+      }
+
+      // Step 4: Format the records with user names
+      const formatted: StockReceiptRecord[] = (receiptsData || []).map((r: any) => ({
         id: r.id,
         receipt_date: r.receipt_date,
         quantity: r.quantity,
         remarks: r.remarks,
         product_name: r.products?.name || 'N/A',
         product_code: r.products?.code || 'N/A',
-        recorded_by: `${r.profiles?.first_name || ''} ${r.profiles?.last_name || ''}`.trim() || 'Unknown',
+        recorded_by: userMap.get(r.created_by) || 'Unknown',
       }));
 
       setRecords(formatted);
     } catch (error: any) {
+      console.error('Error fetching stock receipt history:', error.message);
       showError(`Failed to load history: ${error.message}`);
     } finally {
       setLoading(false);

@@ -42,31 +42,48 @@ const MaterialReturnHistory: React.FC = () => {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: returnsData, error: returnsError } = await supabase
         .from('sales_returns')
         .select(`
           id,
           return_date,
           quantity,
           remarks,
+          created_by,
           products (name, code),
-          profiles (first_name, last_name),
           dealers (name),
           orders (order_number)
         `)
         .order('return_date', { ascending: false })
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (returnsError) throw returnsError;
 
-      const formatted: MaterialReturnRecord[] = (data || []).map((r: any) => ({
+      const userIds = [...new Set((returnsData || []).map(r => r.created_by).filter(Boolean))];
+      let userMap = new Map<string, string>();
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', userIds);
+        
+        if (profilesError) {
+          console.warn('Could not fetch some user profiles for material returns:', profilesError.message);
+        } else {
+          (profilesData || []).forEach(p => {
+            userMap.set(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim());
+          });
+        }
+      }
+
+      const formatted: MaterialReturnRecord[] = (returnsData || []).map((r: any) => ({
         id: r.id,
         return_date: r.return_date,
         quantity: r.quantity,
         remarks: r.remarks,
         product_name: r.products?.name || 'N/A',
         product_code: r.products?.code || 'N/A',
-        received_by_name: `${r.profiles?.first_name || ''} ${r.profiles?.last_name || ''}`.trim() || 'Unknown',
+        received_by_name: userMap.get(r.created_by) || 'Unknown',
         dealer_name: r.dealers?.name || 'N/A',
         order_number: r.orders?.order_number || null,
       }));
