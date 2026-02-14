@@ -255,6 +255,13 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     rightY += 5;
     doc.text(`Date: ${formatDate(orderDetails.order_date)}`, rightColX, rightY);
 
+    if (isOnline) {
+      rightY += 5;
+      doc.text(`Platform: ${orderDetails.online_order_details!.platform_name}`, rightColX, rightY);
+      rightY += 5;
+      doc.text(`Platform Order #: ${orderDetails.online_order_details!.platform_order_number || 'N/A'}`, rightColX, rightY);
+    }
+
     y = Math.max(y + (addressLines.length * 5), rightY + 10);
 
     const tableColumn = ["Code", "Product Name", "Quantity"];
