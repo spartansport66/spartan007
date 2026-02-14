@@ -27,50 +27,52 @@ const StockReceiptHistory: React.FC = () => {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      // Step 1: Fetch receipts with created_by user ID
+      // Step 1: Fetch raw receipts data without joins
       const { data: receiptsData, error: receiptsError } = await supabase
         .from('stock_receipts')
-        .select(`
-          id,
-          receipt_date,
-          quantity,
-          remarks,
-          created_by,
-          products (name, code)
-        `)
+        .select('id, receipt_date, quantity, remarks, created_by, product_id')
         .order('created_at', { ascending: false })
         .limit(100);
 
       if (receiptsError) throw receiptsError;
-
-      // Step 2: Get unique user IDs from the receipts
-      const userIds = [...new Set((receiptsData || []).map(r => r.created_by).filter(Boolean))];
-
-      // Step 3: Fetch profiles for those user IDs
-      let userMap = new Map<string, string>();
-      if (userIds.length > 0) {
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name')
-          .in('id', userIds);
-        
-        if (profilesError) {
-          console.warn('Could not fetch some user profiles:', profilesError.message);
-        } else {
-          (profilesData || []).forEach(p => {
-            userMap.set(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim());
-          });
-        }
+      if (!receiptsData) {
+        setRecords([]);
+        setLoading(false);
+        return;
       }
 
-      // Step 4: Format the records with user names
-      const formatted: StockReceiptRecord[] = (receiptsData || []).map((r: any) => ({
+      // Step 2: Collect all unique IDs for subsequent queries
+      const userIds = [...new Set(receiptsData.map(r => r.created_by).filter(Boolean))];
+      const productIds = [...new Set(receiptsData.map(r => r.product_id).filter(Boolean))];
+
+      // Step 3: Fetch related data in parallel
+      const [profilesResponse, productsResponse] = await Promise.all([
+        userIds.length > 0 ? supabase.from('profiles').select('id, first_name, last_name').in('id', userIds) : Promise.resolve({ data: [], error: null }),
+        productIds.length > 0 ? supabase.from('products').select('id, name, code').in('id', productIds) : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (profilesResponse.error) console.warn('Could not fetch some user profiles:', profilesResponse.error.message);
+      if (productsResponse.error) throw productsResponse.error;
+
+      // Step 4: Create maps for easy lookup
+      const userMap = new Map<string, string>();
+      (profilesResponse.data || []).forEach(p => {
+        userMap.set(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim());
+      });
+
+      const productMap = new Map<string, { name: string; code: string }>();
+      (productsResponse.data || []).forEach(p => {
+        productMap.set(p.id, { name: p.name, code: p.code });
+      });
+
+      // Step 5: Format the final records
+      const formatted: StockReceiptRecord[] = receiptsData.map((r: any) => ({
         id: r.id,
         receipt_date: r.receipt_date,
         quantity: r.quantity,
         remarks: r.remarks,
-        product_name: r.products?.name || 'N/A',
-        product_code: r.products?.code || 'N/A',
+        product_name: productMap.get(r.product_id)?.name || 'N/A',
+        product_code: productMap.get(r.product_id)?.code || 'N/A',
         recorded_by: userMap.get(r.created_by) || 'Unknown',
       }));
 

@@ -42,50 +42,63 @@ const MaterialReturnHistory: React.FC = () => {
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
+      // Step 1: Fetch raw sales_returns data
       const { data: returnsData, error: returnsError } = await supabase
         .from('sales_returns')
-        .select(`
-          id,
-          return_date,
-          quantity,
-          remarks,
-          created_by,
-          products (name, code),
-          dealers (name),
-          orders (order_number)
-        `)
+        .select('id, return_date, quantity, remarks, created_by, product_id, dealer_id, order_id')
         .order('return_date', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (returnsError) throw returnsError;
-
-      const userIds = [...new Set((returnsData || []).map(r => r.created_by).filter(Boolean))];
-      let userMap = new Map<string, string>();
-      if (userIds.length > 0) {
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name')
-          .in('id', userIds);
-        
-        if (profilesError) {
-          console.warn('Could not fetch some user profiles for material returns:', profilesError.message);
-        } else {
-          (profilesData || []).forEach(p => {
-            userMap.set(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim());
-          });
-        }
+      if (!returnsData) {
+        setRecords([]);
+        setLoading(false);
+        return;
       }
 
-      const formatted: MaterialReturnRecord[] = (returnsData || []).map((r: any) => ({
+      // Step 2: Collect unique IDs
+      const userIds = [...new Set(returnsData.map(r => r.created_by).filter(Boolean))];
+      const productIds = [...new Set(returnsData.map(r => r.product_id).filter(Boolean))];
+      const dealerIds = [...new Set(returnsData.map(r => r.dealer_id).filter(Boolean))];
+      const orderIds = [...new Set(returnsData.map(r => r.order_id).filter(Boolean))];
+
+      // Step 3: Fetch related data in parallel
+      const [profilesResponse, productsResponse, dealersResponse, ordersResponse] = await Promise.all([
+        userIds.length > 0 ? supabase.from('profiles').select('id, first_name, last_name').in('id', userIds) : Promise.resolve({ data: [], error: null }),
+        productIds.length > 0 ? supabase.from('products').select('id, name, code').in('id', productIds) : Promise.resolve({ data: [], error: null }),
+        dealerIds.length > 0 ? supabase.from('dealers').select('id, name').in('id', dealerIds) : Promise.resolve({ data: [], error: null }),
+        orderIds.length > 0 ? supabase.from('orders').select('id, order_number').in('id', orderIds) : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (profilesResponse.error) console.warn('Could not fetch some user profiles:', profilesResponse.error.message);
+      if (productsResponse.error) throw productsResponse.error;
+      if (dealersResponse.error) throw dealersResponse.error;
+      if (ordersResponse.error) throw ordersResponse.error;
+
+      // Step 4: Create maps for easy lookup
+      const userMap = new Map<string, string>();
+      (profilesResponse.data || []).forEach(p => userMap.set(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim()));
+
+      const productMap = new Map<string, { name: string; code: string }>();
+      (productsResponse.data || []).forEach(p => productMap.set(p.id, { name: p.name, code: p.code }));
+
+      const dealerMap = new Map<string, string>();
+      (dealersResponse.data || []).forEach(d => dealerMap.set(d.id, d.name));
+
+      const orderMap = new Map<string, number>();
+      (ordersResponse.data || []).forEach(o => orderMap.set(o.id, o.order_number));
+
+      // Step 5: Format the final records
+      const formatted: MaterialReturnRecord[] = returnsData.map((r: any) => ({
         id: r.id,
         return_date: r.return_date,
         quantity: r.quantity,
         remarks: r.remarks,
-        product_name: r.products?.name || 'N/A',
-        product_code: r.products?.code || 'N/A',
+        product_name: productMap.get(r.product_id)?.name || 'N/A',
+        product_code: productMap.get(r.product_id)?.code || 'N/A',
         received_by_name: userMap.get(r.created_by) || 'Unknown',
-        dealer_name: r.dealers?.name || 'N/A',
-        order_number: r.orders?.order_number || null,
+        dealer_name: dealerMap.get(r.dealer_id) || 'N/A',
+        order_number: orderMap.get(r.order_id) || null,
       }));
 
       setRecords(formatted);
