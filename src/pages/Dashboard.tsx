@@ -448,7 +448,7 @@ const Dashboard = () => {
         </CardContent>
       </Card>
       <MadeWithDyad />
-      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} />
+      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} showGatePassButton={false} />
       <EditOrderDialog orderId={selectedOrderIdForEdit} isOpen={isEditOrderDialogOpen} onOrderUpdated={handleOrderUpdated} onOpenChange={setIsEditOrderDialogOpen} />
       <SalesPersonSalesReport isOpen={isSalesPersonSalesReportOpen} onOpenChange={setIsSalesPersonSalesReportOpen} />
       <SalesPersonDealerReport isOpen={isSalesPersonDealerReportOpen} onOpenChange={setIsSalesPersonDealerReportOpen} />

@@ -59,6 +59,7 @@ interface OrderDetailsDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onPrint?: (orderId: string) => void;
+  showGatePassButton?: boolean;
 }
 
 const formatDate = (dateString: string | null) => {
@@ -75,6 +76,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   isOpen,
   onOpenChange,
   onPrint,
+  showGatePassButton = true,
 }) => {
   const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -453,9 +455,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
           </div>
         ) : null}
         <DialogFooter className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={handlePrintGatePass} disabled={!orderDetails}>
-            <Printer className="mr-2 h-4 w-4" /> Print Gate Pass
-          </Button>
+          {showGatePassButton && (
+            <Button variant="outline" onClick={handlePrintGatePass} disabled={!orderDetails}>
+              <Printer className="mr-2 h-4 w-4" /> Print Gate Pass
+            </Button>
+          )}
           <Button variant="outline" onClick={handlePrintOrderDetails} disabled={!orderDetails}>
             <FileText className="mr-2 h-4 w-4" /> Print Order Details
           </Button>
