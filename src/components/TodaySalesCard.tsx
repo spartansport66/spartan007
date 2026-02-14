@@ -27,8 +27,9 @@ const TodaySalesCard: React.FC = () => {
       const { data, error } = await supabase
         .from('orders')
         .select('total_amount')
-        .gte('order_date', startOfDay)
-        .lte('order_date', endOfDay);
+        .not('gate_pass_dispatch_time', 'is', null) // Ensure gate pass is created
+        .gte('gate_pass_dispatch_time', startOfDay) // Filter by gate pass date
+        .lte('gate_pass_dispatch_time', endOfDay); // Filter by gate pass date
 
       if (error) throw error;
 
@@ -50,15 +51,15 @@ const TodaySalesCard: React.FC = () => {
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">Gross Sales</CardTitle>
+        <CardTitle className="text-xl font-semibold">Dispatched Sales</CardTitle>
         <CardDescription className="text-green-100 dark:text-green-200">
-          Total sales value for the selected date.
+          Total sales from orders with a gate pass on the selected date.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
         <div className="flex flex-col sm:flex-row items-end gap-4">
           <div className="flex-grow">
-            <Label htmlFor="sales-date">Select Date</Label>
+            <Label htmlFor="sales-date">Select Gate Pass Date</Label>
             <Input
               id="sales-date"
               type="date"
