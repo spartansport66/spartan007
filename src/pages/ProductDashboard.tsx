@@ -75,10 +75,10 @@ const ProductDashboard = () => {
             </SheetHeader>
             <div className="flex flex-col space-y-2 p-4">
               <Button
-                onClick={() => navigate('/purchase-dashboard')}
+                onClick={() => navigate('/record-stock-receipt')}
                 className="w-full justify-start gap-2 bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
               >
-                <ShoppingCart className="h-4 w-4" /> Manage Purchases
+                <PlusCircle className="h-4 w-4" /> Record Stock Receipt
               </Button>
               <Button
                 onClick={() => navigate('/add-product')}
@@ -147,12 +147,12 @@ const ProductDashboard = () => {
         {/* Record Stock Receipt Card (New) */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Record Purchase</CardTitle>
-            <CardDescription className="text-blue-100 dark:text-blue-200">Log incoming stock from suppliers.</CardDescription>
+            <CardTitle className="text-xl font-semibold">Record Stock Receipt</CardTitle>
+            <CardDescription className="text-blue-100 dark:text-blue-200">Manually add incoming stock to inventory.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 flex-grow flex items-center justify-center">
-            <Button onClick={() => navigate('/purchase-dashboard')} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-              <ShoppingCart className="h-5 w-5 mr-2" /> Record Purchase
+            <Button onClick={() => navigate('/record-stock-receipt')} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+              <PlusCircle className="h-5 w-5 mr-2" /> Record Stock
             </Button>
           </CardContent>
         </Card>

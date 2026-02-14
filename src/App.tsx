@@ -25,8 +25,8 @@ import GatePassDashboard from "./pages/GatePassDashboard";
 import ProductDashboard from "./pages/ProductDashboard";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import ManagerDashboard from "./pages/ManagerDashboard";
-import PurchaseDashboard from "./pages/PurchaseDashboard";
-import ReceivePayment from "./pages/ReceivePayment"; // New Import
+import RecordStockReceipt from "./pages/RecordStockReceipt"; // New Import
+import ReceivePayment from "./pages/ReceivePayment";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -58,8 +58,8 @@ const AppContent = () => {
       <Route path="/material-returns" element={<MaterialReturns />} />
       <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/gate-pass-dashboard" element={<GatePassDashboard />} />
-      <Route path="/purchase-dashboard" element={<PurchaseDashboard />} />
-      <Route path="/receive-payment" element={<ReceivePayment />} /> {/* New Route */}
+      <Route path="/record-stock-receipt" element={<RecordStockReceipt />} /> {/* New Route */}
+      <Route path="/receive-payment" element={<ReceivePayment />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>
