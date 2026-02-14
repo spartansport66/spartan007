@@ -7,6 +7,7 @@ import { ArrowLeft, ShoppingCart, Package, Users, Factory } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SupplierManager from '../components/purchasing/SupplierManager';
 import RawMaterialManager from '../components/purchasing/RawMaterialManager';
+import PurchaseOrderManager from '../components/purchasing/PurchaseOrderManager';
 
 const PurchaseDashboard = () => {
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ const PurchaseDashboard = () => {
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="suppliers"><Users className="h-4 w-4 mr-2" />Suppliers</TabsTrigger>
           <TabsTrigger value="raw_materials"><Package className="h-4 w-4 mr-2" />Raw Materials</TabsTrigger>
-          <TabsTrigger value="purchase_orders" disabled><ShoppingCart className="h-4 w-4 mr-2" />Purchase Orders</TabsTrigger>
+          <TabsTrigger value="purchase_orders"><ShoppingCart className="h-4 w-4 mr-2" />Purchase Orders</TabsTrigger>
           <TabsTrigger value="production" disabled><Factory className="h-4 w-4 mr-2" />Production</TabsTrigger>
         </TabsList>
         <TabsContent value="suppliers" className="flex-grow mt-4">
@@ -38,7 +39,7 @@ const PurchaseDashboard = () => {
           <RawMaterialManager />
         </TabsContent>
         <TabsContent value="purchase_orders" className="flex-grow mt-4">
-          {/* Purchase Order component will go here */}
+          <PurchaseOrderManager />
         </TabsContent>
         <TabsContent value="production" className="flex-grow mt-4">
           {/* Production component will go here */}
