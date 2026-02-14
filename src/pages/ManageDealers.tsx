@@ -106,7 +106,7 @@ const formSchema = z.object({
 
 const ManageDealers = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, isAdmin } = useSession();
+  const { user, loading: sessionLoading, isAdmin, userType } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +148,12 @@ const ManageDealers = () => {
       lastBillingDate: '', // Default to empty string
     },
   });
+
+  const getDashboardPath = () => {
+    if (isAdmin) return '/admin-dashboard';
+    if (userType === 'manager') return '/manager-dashboard';
+    return '/dashboard';
+  };
 
   useEffect(() => {
     if (selectedDealer) {
@@ -618,7 +624,7 @@ const ManageDealers = () => {
       <div className="w-full max-w-full flex flex-col flex-grow overflow-hidden">
         <Button 
           variant="outline" 
-          onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} 
+          onClick={() => navigate(getDashboardPath())} 
           className="mb-6 flex items-center gap-2 flex-shrink-0"
         >
           <ArrowLeft className="h-4 w-4" />

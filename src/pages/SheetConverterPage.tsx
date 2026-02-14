@@ -11,14 +11,20 @@ import { useSession } from '@/contexts/SessionContext';
 
 const SheetConverterPage = () => {
   const navigate = useNavigate();
-  const { isAdmin } = useSession();
+  const { isAdmin, userType } = useSession();
   
+  const getDashboardPath = () => {
+    if (isAdmin) return '/admin-dashboard';
+    if (userType === 'manager') return '/manager-dashboard';
+    return '/dashboard';
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-6xl">
         <Button 
           variant="outline" 
-          onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} 
+          onClick={() => navigate(getDashboardPath())} 
           className="mb-6 flex items-center gap-2"
         >
           <ArrowLeft className="h-4 w-4" />

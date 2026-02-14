@@ -49,7 +49,7 @@ interface SalesPerson {
 
 const AddDealer = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, isAdmin } = useSession();
+  const { user, loading: sessionLoading, isAdmin, userType } = useSession();
   const [salesPersons, setSalesPersons] = useState<SalesPerson[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   
@@ -71,6 +71,12 @@ const AddDealer = () => {
       lastBillingDate: '', // Default to empty string
     },
   });
+
+  const getDashboardPath = () => {
+    if (isAdmin) return '/admin-dashboard';
+    if (userType === 'manager') return '/manager-dashboard';
+    return '/dashboard';
+  };
 
   useEffect(() => {
     const fetchSalesPersons = async () => {
@@ -201,7 +207,7 @@ const AddDealer = () => {
       <div className="w-full max-w-md sm:max-w-lg">
         <Button 
           variant="outline" 
-          onClick={() => navigate(isAdmin ? '/admin-dashboard' : '/dashboard')} 
+          onClick={() => navigate(getDashboardPath())} 
           className="mb-6 flex items-center gap-2"
         >
           <ArrowLeft className="h-4 w-4" />
