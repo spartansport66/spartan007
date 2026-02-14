@@ -47,7 +47,7 @@ const ManageProducts = () => {
           <ArrowLeft className="h-4 w-4" /> Back to Dashboard
         </Button>
 
-        <ProductTableManager isAdmin={isAdmin} /> {/* Render the reusable component */}
+        <ProductTableManager isAuthorized={isAuthorized} /> {/* Render the reusable component */}
       </div>
       <MadeWithDyad />
     </div>

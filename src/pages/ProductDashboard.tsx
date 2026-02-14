@@ -18,6 +18,7 @@ const ProductDashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, userType, isAdmin } = useSession();
   const [refreshKey, setRefreshKey] = useState(0);
+  const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
 
   const handleProductAction = useCallback(() => {
     setRefreshKey(prev => prev + 1);
@@ -159,7 +160,7 @@ const ProductDashboard = () => {
 
       {/* Manage All Products Table */}
       <div className="flex-grow">
-        <ProductTableManager key={`table-manager-${refreshKey}`} onProductAction={handleProductAction} isAdmin={isAdmin} />
+        <ProductTableManager key={`table-manager-${refreshKey}`} onProductAction={handleProductAction} isAuthorized={isAuthorized} />
       </div>
 
       <MadeWithDyad />

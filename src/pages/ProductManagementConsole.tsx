@@ -14,7 +14,8 @@ import { showError } from '@/utils/toast';
 
 const ProductManagementConsole = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, isAdmin } = useSession();
+  const { user, loading: sessionLoading, isAdmin, userType } = useSession();
+  const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
   const [refreshKey, setRefreshKey] = useState(0); // Key to force re-fetch in child components
 
   const handleProductAction = useCallback(() => {
@@ -92,7 +93,7 @@ const ProductManagementConsole = () => {
 
       {/* Manage All Products Table */}
       <div className="flex-grow">
-        <ProductTableManager key={`table-manager-${refreshKey}`} onProductAction={handleProductAction} isAdmin={isAdmin} />
+        <ProductTableManager key={`table-manager-${refreshKey}`} onProductAction={handleProductAction} isAuthorized={isAuthorized} />
       </div>
 
       <MadeWithDyad />

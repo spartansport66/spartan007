@@ -77,12 +77,11 @@ const PAGE_SIZE = 10;
 
 interface ProductTableManagerProps {
   onProductAction?: () => void;
-  isAdmin: boolean;
+  isAuthorized: boolean;
 }
 
-const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductAction, isAdmin }) => {
+const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductAction, isAuthorized }) => {
   const { user, session, loading: sessionLoading, userType } = useSession();
-  const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -481,7 +480,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                       <TableCell>
                         <div className="flex gap-2">
                           <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
-                          {isAdmin && (
+                          {isAuthorized && (
                             <AlertDialog>
                               <TooltipProvider>
                                 <Tooltip>
