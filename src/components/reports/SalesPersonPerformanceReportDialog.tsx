@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface SalesPersonPerformance {
   id: string; // Sales person ID
@@ -56,6 +57,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
   const [filterMonth, setFilterMonth] = useState<string>((today.getMonth() + 1).toString());
   const [filterYear, setFilterYear] = useState<string>(today.getFullYear().toString());
   const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const fetchPerformanceData = useCallback(async () => {
     setLoading(true);
@@ -218,7 +220,31 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
     setFilterSalesPersonId('');
   };
 
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allIds = [...new Set(performanceData.map(p => p.id))];
+      setSelectedIds(allIds);
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleSelectRow = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedIds(prev => [...prev, id]);
+    } else {
+      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+    }
+  };
+
   const handlePrint = () => {
+    if (selectedIds.length === 0) {
+      showError("Please select at least one sales person to print.");
+      return;
+    }
+    
+    const dataToPrint = performanceData.filter(item => selectedIds.includes(item.id));
+
     const doc = new jsPDF({ orientation: 'landscape' });
     const reportPeriod = filterMonth === "all" ? `Year ${filterYear} - Monthly Breakdown` : `${getMonthName(filterMonth)} ${filterYear}`;
     doc.setFontSize(18);
@@ -227,7 +253,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
     doc.setTextColor(100);
 
     const tableColumn = ["Sales Person", "Month", "Year", "Target Amount", "Achieved Sales", "Pending Sales"];
-    const tableRows = performanceData.map(item => [
+    const tableRows = dataToPrint.map(item => [
       item.salesPersonName,
       item.month,
       item.year,
@@ -253,8 +279,11 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       }
     });
 
-    doc.save(`sales_person_performance_report_${filterMonth}_${filterYear}.pdf`);
+    doc.save(`selected_sales_performance_report.pdf`);
   };
+
+  const allIdsInView = [...new Set(performanceData.map(p => p.id))];
+  const isAllSelected = allIdsInView.length > 0 && allIdsInView.every(id => selectedIds.includes(id));
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -333,6 +362,13 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted hover:bg-muted/90">
+                    <TableHead>
+                      <Checkbox
+                        checked={isAllSelected}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all"
+                      />
+                    </TableHead>
                     <TableHead className="text-muted-foreground">Sales Person</TableHead>
                     <TableHead className="text-muted-foreground">Month</TableHead>
                     <TableHead className="text-muted-foreground">Year</TableHead>
@@ -344,6 +380,13 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
                 <TableBody>
                   {performanceData.map((item, index) => (
                     <TableRow key={`${item.id}-${item.month}-${index}`} className="hover:bg-accent/50">
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.includes(item.id)}
+                          onCheckedChange={(checked) => handleSelectRow(item.id, !!checked)}
+                          aria-label={`Select row for ${item.salesPersonName}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium text-foreground">{item.salesPersonName}</TableCell>
                       <TableCell className="text-muted-foreground">{item.month}</TableCell>
                       <TableCell className="text-muted-foreground">{item.year}</TableCell>
@@ -359,8 +402,8 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         </div>
 
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={handlePrint} disabled={performanceData.length === 0}>
-            <Printer className="mr-2 h-4 w-4" /> Print Report
+          <Button variant="outline" onClick={handlePrint} disabled={selectedIds.length === 0}>
+            <Printer className="mr-2 h-4 w-4" /> Print Selected ({selectedIds.length})
           </Button>
           <Button onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
