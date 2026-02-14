@@ -92,14 +92,14 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         setLoading(false);
         return;
       }
-      const salesPersonOptions = (profilesData || []).map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name || ''}`.trim() }));
+      const salesPersonOptions = (profilesData || []).map((p: any) => ({ value: p.id, label: `${p.first_name} ${p.last_name || ''}`.trim() }));
       setAllSalesPersons(salesPersonOptions);
 
-      const salesPersonMap = new Map(profilesData.map(p => [p.id, `${p.first_name} ${p.last_name || ''}`.trim()]));
+      const salesPersonMap = new Map(profilesData.map((p: any) => [p.id, `${p.first_name} ${p.last_name || ''}`.trim()]));
       const yearNum = parseInt(filterYear);
       const reportData: SalesPersonPerformance[] = [];
 
-      const personsToReport = filterSalesPersonId ? profilesData.filter(p => p.id === filterSalesPersonId) : profilesData;
+      const personsToReport = filterSalesPersonId ? profilesData.filter((p: any) => p.id === filterSalesPersonId) : profilesData;
 
       if (filterMonth === "all") {
         const startOfYear = new Date(Date.UTC(yearNum, 0, 1)).toISOString();
@@ -131,12 +131,12 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         });
 
         const monthlyTargetsByPersonAndMonth = new Map<string, number>();
-        (yearlyTargetsData || []).forEach(target => {
+        (yearlyTargetsData || []).forEach((target: any) => {
           const key = `${target.sales_person_id}-${target.target_month}`;
           monthlyTargetsByPersonAndMonth.set(key, (monthlyTargetsByPersonAndMonth.get(key) || 0) + target.target_amount);
         });
 
-        personsToReport.forEach(person => {
+        personsToReport.forEach((person: any) => {
           for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
             const monthDate = new Date(Date.UTC(yearNum, monthIndex, 1));
             const monthKey = monthDate.toISOString().split('T')[0];
@@ -187,11 +187,11 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         if (targetsError) throw new Error(`Failed to fetch targets data: ${targetsError.message}`);
 
         const targetsByPerson: { [key: string]: number } = {};
-        (targetsData || []).forEach(t => {
+        (targetsData || []).forEach((t: any) => {
           targetsByPerson[t.sales_person_id] = (targetsByPerson[t.sales_person_id] || 0) + t.target_amount;
         });
 
-        personsToReport.forEach(person => {
+        personsToReport.forEach((person: any) => {
           const achievedSales = salesByPerson[person.id] || 0;
           const targetAmount = targetsByPerson[person.id] || 0;
           const pendingSales = targetAmount - achievedSales;
@@ -241,7 +241,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      const allIds = [...new Set(performanceData.map((p: SalesPersonPerformance) => p.id))];
+      const allIds = [...new Set(performanceData.map(p => p.id))];
       setSelectedIds(allIds);
     } else {
       setSelectedIds([]);
@@ -250,9 +250,9 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
 
   const handleSelectRow = (id: string, checked: boolean) => {
     if (checked) {
-      setSelectedIds((prev: string[]) => [...prev, id]);
+      setSelectedIds(prev => [...prev, id]);
     } else {
-      setSelectedIds((prev: string[]) => prev.filter((selectedId: string) => selectedId !== id));
+      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
     }
   };
 
@@ -262,7 +262,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       return;
     }
     
-    const dataToPrint = performanceData.filter((item: SalesPersonPerformance) => selectedIds.includes(item.id));
+    const dataToPrint = performanceData.filter(item => selectedIds.includes(item.id));
 
     try {
       const doc = new jsPDF({ orientation: 'landscape' });
@@ -299,6 +299,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
 
       const chartData = Object.entries(performanceSummary).map(([name, data]: [string, { target: number; achieved: number }]) => ({
         name,
+        achieved: data.achieved,
         performance: data.target > 0 ? Math.min(100, (data.achieved / data.target) * 100) : 0,
       })).sort((a, b) => b.performance - a.performance);
 
@@ -336,10 +337,11 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         doc.setFillColor(30, 58, 138);
         doc.rect(chartX + 50, barY, barWidth, barHeight, 'F');
 
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(255);
-        doc.text(`${data.performance.toFixed(1)}%`, chartX + 50 + barWidth - 3, barY + barHeight / 2 + 2, { align: 'right' });
+        doc.setFont("helvetica", "normal");
         doc.setTextColor(0);
+        const achievedAmountFormatted = `₹${data.achieved.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+        const textToShow = `${data.performance.toFixed(1)}% (${achievedAmountFormatted})`;
+        doc.text(textToShow, chartX + 50 + barWidth + 2, barY + barHeight / 2 + 2, { align: 'left' });
       });
       // --- END: GRAPH GENERATION ---
 
@@ -347,7 +349,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       yPos = 15; // Reset yPos for the new page
 
       const tableColumn = ["Sales Person", "Month", "Year", "Target Amount", "Achieved Sales", "Pending Sales", "Performance %"];
-      const tableRows = dataToPrint.map((item: SalesPersonPerformance) => {
+      const tableRows = dataToPrint.map(item => {
         const performance = item.targetAmount > 0 ? (item.achievedSales / item.targetAmount) * 100 : 0;
         return [
           item.salesPersonName,
@@ -360,8 +362,8 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         ];
       });
 
-      const totalTarget = dataToPrint.reduce((sum: number, item: SalesPersonPerformance) => sum + item.targetAmount, 0);
-      const totalAchieved = dataToPrint.reduce((sum: number, item: SalesPersonPerformance) => sum + item.achievedSales, 0);
+      const totalTarget = dataToPrint.reduce((sum, item) => sum + item.targetAmount, 0);
+      const totalAchieved = dataToPrint.reduce((sum, item) => sum + item.achievedSales, 0);
       const totalPending = totalTarget - totalAchieved;
       const overallPerformance = totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : 0;
 
@@ -418,7 +420,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
     }
   };
 
-  const allIdsInView = [...new Set(performanceData.map((p: SalesPersonPerformance) => p.id))];
+  const allIdsInView = [...new Set(performanceData.map(p => p.id))];
   const isAllSelected = allIdsInView.length > 0 && allIdsInView.every(id => selectedIds.includes(id));
 
   return (
@@ -471,7 +473,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Sales Persons</SelectItem>
-                {allSalesPersons.map((sp: FilterOption) => (
+                {allSalesPersons.map(sp => (
                   <SelectItem key={sp.value} value={sp.value}>{sp.label}</SelectItem>
                 ))}
               </SelectContent>
@@ -514,7 +516,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {performanceData.map((item: SalesPersonPerformance, index: number) => (
+                  {performanceData.map((item, index) => (
                     <TableRow key={`${item.id}-${item.month}-${index}`} className="hover:bg-accent/50">
                       <TableCell>
                         <Checkbox
