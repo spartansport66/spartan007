@@ -92,14 +92,14 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         setLoading(false);
         return;
       }
-      const salesPersonOptions = (profilesData || []).map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name || ''}`.trim() }));
+      const salesPersonOptions = (profilesData || []).map((p: { id: string; first_name: string; last_name: string | null; }) => ({ value: p.id, label: `${p.first_name} ${p.last_name || ''}`.trim() }));
       setAllSalesPersons(salesPersonOptions);
 
-      const salesPersonMap = new Map(profilesData.map(p => [p.id, `${p.first_name} ${p.last_name || ''}`.trim()]));
+      const salesPersonMap = new Map(profilesData.map((p: { id: string; first_name: string; last_name: string | null; }) => [p.id, `${p.first_name} ${p.last_name || ''}`.trim()]));
       const yearNum = parseInt(filterYear);
       const reportData: SalesPersonPerformance[] = [];
 
-      const personsToReport = filterSalesPersonId ? profilesData.filter(p => p.id === filterSalesPersonId) : profilesData;
+      const personsToReport = filterSalesPersonId ? profilesData.filter((p: { id: string; }) => p.id === filterSalesPersonId) : profilesData;
 
       if (filterMonth === "all") {
         const startOfYear = new Date(Date.UTC(yearNum, 0, 1)).toISOString();
@@ -131,12 +131,12 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         });
 
         const monthlyTargetsByPersonAndMonth = new Map<string, number>();
-        (yearlyTargetsData || []).forEach(target => {
+        (yearlyTargetsData || []).forEach((target: { sales_person_id: string; target_month: string; target_amount: number; }) => {
           const key = `${target.sales_person_id}-${target.target_month}`;
           monthlyTargetsByPersonAndMonth.set(key, (monthlyTargetsByPersonAndMonth.get(key) || 0) + target.target_amount);
         });
 
-        personsToReport.forEach(person => {
+        personsToReport.forEach((person: { id: string; }) => {
           for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
             const monthDate = new Date(Date.UTC(yearNum, monthIndex, 1));
             const monthKey = monthDate.toISOString().split('T')[0];
@@ -187,11 +187,11 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         if (targetsError) throw new Error(`Failed to fetch targets data: ${targetsError.message}`);
 
         const targetsByPerson: { [key: string]: number } = {};
-        (targetsData || []).forEach(t => {
+        (targetsData || []).forEach((t: { sales_person_id: string; target_amount: number; }) => {
           targetsByPerson[t.sales_person_id] = (targetsByPerson[t.sales_person_id] || 0) + t.target_amount;
         });
 
-        personsToReport.forEach(person => {
+        personsToReport.forEach((person: { id: string; }) => {
           const achievedSales = salesByPerson[person.id] || 0;
           const targetAmount = targetsByPerson[person.id] || 0;
           const pendingSales = targetAmount - achievedSales;
@@ -353,9 +353,9 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
           item.salesPersonName,
           item.month,
           item.year,
-          `₹${item.targetAmount.toFixed(2)}`,
-          `₹${item.achievedSales.toFixed(2)}`,
-          `₹${item.pendingSales.toFixed(2)}`,
+          `Rs. ${item.targetAmount.toFixed(2)}`,
+          `Rs. ${item.achievedSales.toFixed(2)}`,
+          `Rs. ${item.pendingSales.toFixed(2)}`,
           `${performance.toFixed(2)}%`,
         ];
       });
@@ -371,9 +371,9 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         foot: [
           [
             { content: 'Totals', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
-            `₹${totalTarget.toFixed(2)}`,
-            `₹${totalAchieved.toFixed(2)}`,
-            `₹${totalPending.toFixed(2)}`,
+            `Rs. ${totalTarget.toFixed(2)}`,
+            `Rs. ${totalAchieved.toFixed(2)}`,
+            `Rs. ${totalPending.toFixed(2)}`,
             `${overallPerformance.toFixed(2)}%`,
           ]
         ],
