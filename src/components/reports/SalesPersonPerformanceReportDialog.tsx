@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer } from 'lucide-react';
+import { Loader2, Search, Printer, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -23,6 +23,8 @@ interface SalesPersonPerformance {
   achievedSales: number;
   pendingSales: number;
 }
+
+type SortKey = keyof SalesPersonPerformance | 'performance';
 
 interface FilterOption {
   value: string;
@@ -59,6 +61,8 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
   const [filterYear, setFilterYear] = useState<string>(today.getFullYear().toString());
   const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<SortKey>('salesPersonName');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -207,16 +211,6 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         });
       }
 
-      reportData.sort((a, b) => {
-        const nameCompare = a.salesPersonName.localeCompare(b.salesPersonName);
-        if (nameCompare !== 0) return nameCompare;
-        if (filterMonth === "all") {
-          const monthOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-          return monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
-        }
-        return 0;
-      });
-
       setPerformanceData(reportData);
     } catch (error: any) {
       console.error('Error in fetchPerformanceData:', error.message);
@@ -256,13 +250,51 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
     }
   };
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedPerformanceData = useMemo(() => {
+    if (performanceData.length === 0) return [];
+    return [...performanceData].sort((a, b) => {
+      let valA: any;
+      let valB: any;
+
+      if (sortKey === 'month') {
+        const monthOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "Yearly Total"];
+        valA = monthOrder.indexOf(a.month);
+        valB = monthOrder.indexOf(b.month);
+      } else if (sortKey === 'performance') {
+        valA = a.targetAmount > 0 ? (a.achievedSales / a.targetAmount) * 100 : 0;
+        valB = b.targetAmount > 0 ? (b.achievedSales / b.targetAmount) * 100 : 0;
+      } else {
+        valA = a[sortKey as keyof SalesPersonPerformance];
+        valB = b[sortKey as keyof SalesPersonPerformance];
+      }
+
+      let comparison = 0;
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        comparison = valA.localeCompare(valB);
+      } else if (typeof valA === 'number' && typeof valB === 'number') {
+        comparison = valA - valB;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [performanceData, sortKey, sortDirection]);
+
   const handlePrint = () => {
     if (selectedIds.length === 0) {
       showError("Please select at least one sales person to print.");
       return;
     }
     
-    const dataToPrint = performanceData.filter((item: SalesPersonPerformance) => selectedIds.includes(item.id));
+    const dataToPrint = sortedPerformanceData.filter((item: SalesPersonPerformance) => selectedIds.includes(item.id));
 
     try {
       const doc = new jsPDF({ orientation: 'landscape' });
@@ -329,6 +361,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         const barY = chartY + index * (barHeight + barSpacing);
         const barWidth = (data.performance / 100) * maxBarWidth;
         
+        doc.setFont("helvetica", "bold");
         doc.text(data.name, chartX + 48, barY + barHeight / 2 + 2, { align: 'right' });
 
         doc.setFillColor(30, 58, 138);
@@ -421,6 +454,11 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
   const allIdsInView = [...new Set(performanceData.map((p: SalesPersonPerformance) => p.id))];
   const isAllSelected = allIdsInView.length > 0 && allIdsInView.every(id => selectedIds.includes(id));
 
+  const SortIcon = ({ column }: { column: SortKey }) => {
+    if (sortKey !== column) return <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />;
+    return sortDirection === 'asc' ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />;
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
@@ -505,32 +543,37 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
                         aria-label="Select all"
                       />
                     </TableHead>
-                    <TableHead className="text-muted-foreground">Sales Person</TableHead>
-                    <TableHead className="text-muted-foreground">Month</TableHead>
-                    <TableHead className="text-muted-foreground">Year</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Target Amount</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Achieved Sales</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Pending Sales</TableHead>
+                    <TableHead className="text-muted-foreground cursor-pointer hover:bg-muted/80" onClick={() => handleSort('salesPersonName')}><div className="flex items-center">Sales Person <SortIcon column="salesPersonName" /></div></TableHead>
+                    <TableHead className="text-muted-foreground cursor-pointer hover:bg-muted/80" onClick={() => handleSort('month')}><div className="flex items-center">Month <SortIcon column="month" /></div></TableHead>
+                    <TableHead className="text-muted-foreground cursor-pointer hover:bg-muted/80" onClick={() => handleSort('year')}><div className="flex items-center">Year <SortIcon column="year" /></div></TableHead>
+                    <TableHead className="text-muted-foreground text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('targetAmount')}><div className="flex items-center justify-end">Target Amount <SortIcon column="targetAmount" /></div></TableHead>
+                    <TableHead className="text-muted-foreground text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('achievedSales')}><div className="flex items-center justify-end">Achieved Sales <SortIcon column="achievedSales" /></div></TableHead>
+                    <TableHead className="text-muted-foreground text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('pendingSales')}><div className="flex items-center justify-end">Pending Sales <SortIcon column="pendingSales" /></div></TableHead>
+                    <TableHead className="text-muted-foreground text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('performance')}><div className="flex items-center justify-end">Performance % <SortIcon column="performance" /></div></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {performanceData.map((item: SalesPersonPerformance, index: number) => (
-                    <TableRow key={`${item.id}-${item.month}-${index}`} className="hover:bg-accent/50">
-                      <TableCell>
-                        <Checkbox
-                          checked={selectedIds.includes(item.id)}
-                          onCheckedChange={(checked) => handleSelectRow(item.id, !!checked)}
-                          aria-label={`Select row for ${item.salesPersonName}`}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium text-foreground">{item.salesPersonName}</TableCell>
-                      <TableCell className="text-muted-foreground">{item.month}</TableCell>
-                      <TableCell className="text-muted-foreground">{item.year}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{item.targetAmount.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{item.achievedSales.toFixed(2)}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{item.pendingSales.toFixed(2)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {sortedPerformanceData.map((item: SalesPersonPerformance, index: number) => {
+                    const performance = item.targetAmount > 0 ? (item.achievedSales / item.targetAmount) * 100 : 0;
+                    return (
+                      <TableRow key={`${item.id}-${item.month}-${index}`} className="hover:bg-accent/50">
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.includes(item.id)}
+                            onCheckedChange={(checked) => handleSelectRow(item.id, !!checked)}
+                            aria-label={`Select row for ${item.salesPersonName}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium text-foreground">{item.salesPersonName}</TableCell>
+                        <TableCell className="text-muted-foreground">{item.month}</TableCell>
+                        <TableCell className="text-muted-foreground">{item.year}</TableCell>
+                        <TableCell className="text-muted-foreground text-right">₹{item.targetAmount.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground text-right">₹{item.achievedSales.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground text-right">₹{item.pendingSales.toFixed(2)}</TableCell>
+                        <TableCell className="text-muted-foreground text-right font-bold">{performance.toFixed(2)}%</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
