@@ -25,8 +25,9 @@ interface AdminSidebarProps {
   setIsLoginLogReportOpen: (isOpen: boolean) => void;
   setIsSalesPersonAccountStatementReportOpen: (isOpen: boolean) => void;
   setIsOrderSummaryReportOpen: (isOpen: boolean) => void;
-  setIsSalesPersonLedgerReportOpen: (isOpen: boolean) => void; // New Prop
+  setIsSalesPersonLedgerReportOpen: (isOpen: boolean) => void;
   setIsSalesPersonPerformanceReportOpen: (isOpen: boolean) => void;
+  setIsDailyReportOpen: (isOpen: boolean) => void; // New Prop
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -46,8 +47,9 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsLoginLogReportOpen,
   setIsSalesPersonAccountStatementReportOpen,
   setIsOrderSummaryReportOpen,
-  setIsSalesPersonLedgerReportOpen, // New Prop
+  setIsSalesPersonLedgerReportOpen,
   setIsSalesPersonPerformanceReportOpen,
+  setIsDailyReportOpen, // New Prop
 }) => {
   const navigate = useNavigate();
 
@@ -141,6 +143,12 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56">
           <DropdownMenuLabel>Select a Report</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsDailyReportOpen(true)} className="font-semibold text-blue-600">
+              Daily Report Summary
+            </DropdownMenuItem>
+          </SheetClose>
           <DropdownMenuSeparator />
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsOrdersAwaitingDispatchReportOpen(true)}>

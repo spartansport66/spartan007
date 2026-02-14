@@ -39,8 +39,9 @@ import SalesPersonAccountStatementReportDialog from '@/components/reports/SalesP
 import OrderSummaryReportDialog from '@/components/reports/OrderSummaryReportDialog';
 import NotificationEmailManager from '@/components/NotificationEmailManager';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import SalesPersonLedgerReportDialog from '@/components/reports/SalesPersonLedgerReportDialog'; // New Import
+import SalesPersonLedgerReportDialog from '@/components/reports/SalesPersonLedgerReportDialog';
 import SalesPersonPerformanceReportDialog from '@/components/reports/SalesPersonPerformanceReportDialog';
+import DailyReportDialog from '@/components/reports/DailyReportDialog'; // New Import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -64,8 +65,9 @@ const AdminDashboard = () => {
   const [isSalesPersonAccountStatementReportOpen, setIsSalesPersonAccountStatementReportOpen] = useState(false);
   const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false);
   const [isEmailManagerOpen, setIsEmailManagerOpen] = useState(false);
-  const [isSalesPersonLedgerReportOpen, setIsSalesPersonLedgerReportOpen] = useState(false); // New State
+  const [isSalesPersonLedgerReportOpen, setIsSalesPersonLedgerReportOpen] = useState(false);
   const [isSalesPersonPerformanceReportOpen, setIsSalesPersonPerformanceReportOpen] = useState(false);
+  const [isDailyReportOpen, setIsDailyReportOpen] = useState(false); // New State
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastActiveTime, setLastActiveTime] = useState<string | null>(null);
@@ -246,7 +248,7 @@ const AdminDashboard = () => {
           <Button variant="outline" size="icon" onClick={() => setIsEmailManagerOpen(true)} title="Notification Settings">
             <Mail className="h-5 w-5" />
           </Button>
-          <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400"><Menu className="h-5 w-5" /></Button></SheetTrigger><SheetContent side="right" className="w-[250px] sm:w-[300px]"><SheetHeader><SheetTitle>Admin Navigation</SheetTitle></SheetHeader><AdminSidebar handleLogout={handleLogout} setIsOrdersAwaitingDispatchReportOpen={setIsOrdersAwaitingDispatchReportOpen} setIsDispatchedOrdersReportOpen={setIsDispatchedOrdersReportOpen} setIsDealerReportOpen={setIsDealerReportOpen} setIsPaymentsReportOpen={setIsPaymentsReportOpen} setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen} setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen} setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen} setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen} setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen} setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen} setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen} setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen} setIsLoginLogReportOpen={setIsLoginLogReportOpen} setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen} setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen} setIsSalesPersonLedgerReportOpen={setIsSalesPersonLedgerReportOpen} setIsSalesPersonPerformanceReportOpen={setIsSalesPersonPerformanceReportOpen} /></SheetContent></Sheet>
+          <Sheet><SheetTrigger asChild><Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400"><Menu className="h-5 w-5" /></Button></SheetTrigger><SheetContent side="right" className="w-[250px] sm:w-[300px]"><SheetHeader><SheetTitle>Admin Navigation</SheetTitle></SheetHeader><AdminSidebar handleLogout={handleLogout} setIsOrdersAwaitingDispatchReportOpen={setIsOrdersAwaitingDispatchReportOpen} setIsDispatchedOrdersReportOpen={setIsDispatchedOrdersReportOpen} setIsDealerReportOpen={setIsDealerReportOpen} setIsPaymentsReportOpen={setIsPaymentsReportOpen} setIsSalesReportsDialogOpen={setIsSalesReportsDialogOpen} setIsCompanyInfoDialogOpen={setIsCompanyInfoDialogOpen} setIsDealerLedgerReportOpen={setIsDealerLedgerReportOpen} setIsOpeningBalanceReportOpen={setIsOpeningBalanceReportOpen} setIsDealerOverdueBalanceReportOpen={setIsDealerOverdueBalanceReportOpen} setIsDealerClosingBalanceReportOpen={setIsDealerClosingBalanceReportOpen} setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen} setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen} setIsLoginLogReportOpen={setIsLoginLogReportOpen} setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen} setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen} setIsSalesPersonLedgerReportOpen={setIsSalesPersonLedgerReportOpen} setIsSalesPersonPerformanceReportOpen={setIsSalesPersonPerformanceReportOpen} setIsDailyReportOpen={setIsDailyReportOpen} /></SheetContent></Sheet>
         </div>
       </div>
       
@@ -307,6 +309,7 @@ const AdminDashboard = () => {
       <SalesPersonAccountStatementReportDialog isOpen={isSalesPersonAccountStatementReportOpen} onOpenChange={setIsSalesPersonAccountStatementReportOpen} />
       <SalesPersonLedgerReportDialog isOpen={isSalesPersonLedgerReportOpen} onOpenChange={setIsSalesPersonLedgerReportOpen} />
       <SalesPersonPerformanceReportDialog isOpen={isSalesPersonPerformanceReportOpen} onOpenChange={setIsSalesPersonPerformanceReportOpen} />
+      <DailyReportDialog isOpen={isDailyReportOpen} onOpenChange={setIsDailyReportOpen} /> {/* New Dialog */}
       
       <Dialog open={isEmailManagerOpen} onOpenChange={setIsEmailManagerOpen}>
         <DialogContent className="sm:max-w-[700px]">
