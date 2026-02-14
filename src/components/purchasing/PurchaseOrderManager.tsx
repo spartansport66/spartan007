@@ -7,6 +7,7 @@ import { Loader2, PlusCircle, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import CreatePurchaseOrderDialog from './CreatePurchaseOrderDialog';
+import PurchaseOrderDetailsDialog from './PurchaseOrderDetailsDialog'; // New Import
 
 interface PurchaseOrder {
   id: string;
@@ -21,6 +22,8 @@ const PurchaseOrderManager: React.FC = () => {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [selectedPoId, setSelectedPoId] = useState<string | null>(null);
 
   const fetchPurchaseOrders = useCallback(async () => {
     setLoading(true);
@@ -65,6 +68,11 @@ const PurchaseOrderManager: React.FC = () => {
     setIsCreateDialogOpen(false);
   };
 
+  const handleViewDetails = (poId: string) => {
+    setSelectedPoId(poId);
+    setIsDetailsDialogOpen(true);
+  };
+
   return (
     <>
       <Card>
@@ -104,7 +112,7 @@ const PurchaseOrderManager: React.FC = () => {
                       <TableCell>{po.status}</TableCell>
                       <TableCell className="text-right">₹{po.total_value.toFixed(2)}</TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon"><Eye className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleViewDetails(po.id)}><Eye className="h-4 w-4" /></Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -119,6 +127,14 @@ const PurchaseOrderManager: React.FC = () => {
         onOpenChange={setIsCreateDialogOpen}
         onOrderCreated={handleOrderCreated}
       />
+      {selectedPoId && (
+        <PurchaseOrderDetailsDialog
+          purchaseOrderId={selectedPoId}
+          isOpen={isDetailsDialogOpen}
+          onOpenChange={setIsDetailsDialogOpen}
+          onReceiptRecorded={fetchPurchaseOrders}
+        />
+      )}
     </>
   );
 };
