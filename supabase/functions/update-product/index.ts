@@ -45,17 +45,6 @@ serve(async (req) => {
       throw new Error(`Failed to fetch product: ${fetchError.message}`);
     }
 
-    const { count: salesCount, error: salesCountError } = await supabaseAdmin
-      .from('sales')
-      .select('id', { count: 'exact', head: true })
-      .eq('product_id', productId);
-    
-    if (salesCountError) {
-      console.error("[update-product] Error checking sales:", salesCountError);
-      throw new Error(`Failed to check product sales: ${salesCountError.message}`);
-    }
-
-    const hasSales = (salesCount || 0) > 0;
     const updateData: any = {};
 
     if (code !== undefined) updateData.code = code;
@@ -63,16 +52,13 @@ serve(async (req) => {
     if (hsn !== undefined) updateData.hsn = hsn;
     if (gst !== undefined) updateData.gst = gst;
     if (dp !== undefined) updateData.dp = Number(dp);
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
     
     // Always recalculate closing stock based on the formula: Opening + In - Out
     const newOpening = opening_stock !== undefined ? Number(opening_stock) : (currentProduct.opening_stock || 0);
     updateData.opening_stock = newOpening;
     updateData.closing_stock = newOpening + (currentProduct.stock_in || 0) - (currentProduct.stock_out || 0);
-
-    if (!hasSales) {
-      if (name !== undefined) updateData.name = name;
-      if (description !== undefined) updateData.description = description;
-    }
 
     const { data: updatedProduct, error: updateError } = await supabaseAdmin
       .from('products')

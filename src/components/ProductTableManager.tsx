@@ -536,11 +536,11 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="name" className="text-right">Name</Label>
-                  <Input id="name" {...form.register('name')} className="col-span-3" disabled={selectedProduct.has_sales || isSubmitting} />
+                  <Input id="name" {...form.register('name')} className="col-span-3" disabled={isSubmitting} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="description" className="text-right">Description</Label>
-                  <Textarea id="description" {...form.register('description')} className="col-span-3" disabled={selectedProduct.has_sales || isSubmitting} />
+                  <Textarea id="description" {...form.register('description')} className="col-span-3" disabled={isSubmitting} />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="size" className="text-right">Size</Label>
