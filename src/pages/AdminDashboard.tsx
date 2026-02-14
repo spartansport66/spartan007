@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail, ShoppingCart } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
@@ -249,7 +249,7 @@ const AdminDashboard = () => {
       </div>
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">{salesOverview.map((item, index) => (<Card key={index} className="bg-card text-card-foreground shadow-md h-full"><CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 p-4 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg`}><CardTitle className="text-base font-medium text-white">{item.title}</CardTitle>{item.icon}</CardHeader><CardContent className="p-4 pt-0"><div className={`text-3xl font-bold ${item.valueColor}`}>{item.value}</div><p className="text-xs text-muted-foreground mt-1">{item.change}</p></CardContent></Card>))}</div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between cursor-pointer hover:bg-accent" onClick={() => navigate('/receive-payment')}>
           <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
             <CardTitle className="text-xl font-semibold">Receive Payment</CardTitle>
@@ -266,6 +266,15 @@ const AdminDashboard = () => {
           </CardHeader>
           <CardContent className="p-4 flex-grow flex items-center justify-center">
             <Package className="h-12 w-12 text-purple-500" />
+          </CardContent>
+        </Card>
+        <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between cursor-pointer hover:bg-accent" onClick={() => navigate('/purchase-dashboard')}>
+          <CardHeader className="bg-cyan-500 dark:bg-cyan-700 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold">Purchasing</CardTitle>
+            <CardDescription className="text-cyan-100 dark:text-cyan-200">Manage suppliers & raw materials.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 flex-grow flex items-center justify-center">
+            <ShoppingCart className="h-12 w-12 text-cyan-500" />
           </CardContent>
         </Card>
         <AdminTodayFollowupsCard key={`admin-followups-${refreshKey}`} onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} />
