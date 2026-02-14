@@ -148,7 +148,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
             const key = `${person.id}-${monthKey}`;
             const achievedSales = monthlySalesByPersonAndMonth.get(key) || 0;
             const targetAmount = monthlyTargetsByPersonAndMonth.get(key) || 0;
-            const pendingSales = targetAmount - achievedSales;
+            const pendingSales = Math.max(0, targetAmount - achievedSales);
 
             reportData.push({
               id: person.id,
@@ -198,7 +198,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         personsToReport.forEach((person: { id: string; }) => {
           const achievedSales = salesByPerson[person.id] || 0;
           const targetAmount = targetsByPerson[person.id] || 0;
-          const pendingSales = targetAmount - achievedSales;
+          const pendingSales = Math.max(0, targetAmount - achievedSales);
           reportData.push({
             id: person.id,
             salesPersonName: salesPersonMap.get(person.id) || 'Unknown',
@@ -392,7 +392,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
 
       const totalTarget = dataToPrint.reduce((sum: number, item: SalesPersonPerformance) => sum + item.targetAmount, 0);
       const totalAchieved = dataToPrint.reduce((sum: number, item: SalesPersonPerformance) => sum + item.achievedSales, 0);
-      const totalPending = totalTarget - totalAchieved;
+      const totalPending = Math.max(0, totalTarget - totalAchieved);
       const overallPerformance = totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : 0;
 
       autoTable(doc, {

@@ -82,7 +82,7 @@ const SalesPersonPerformanceOverviewCard: React.FC<SalesPersonPerformanceOvervie
       const targetAmount = (targetsData || []).reduce((sum, target) => sum + target.target_amount, 0);
       setCombinedTargetAmount(targetAmount);
 
-      const pendingTarget = targetAmount - achievedSales; // Calculate pending target
+      const pendingTarget = Math.max(0, targetAmount - achievedSales); // Calculate pending target, ensuring it's not negative
       setCombinedPendingTarget(pendingTarget);
 
       let calculatedPerformancePercentage = 0;
