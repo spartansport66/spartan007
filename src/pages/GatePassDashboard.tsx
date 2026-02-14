@@ -29,17 +29,15 @@ const GatePassDashboard = () => {
   const handleLogout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
-      
       if (error && error.message !== 'Auth session missing!') {
-        console.warn('Logout API call failed:', error.message);
         showError(`Logout failed: ${error.message}.`);
       } else {
         showSuccess('Logged out successfully!');
       }
-      // The onAuthStateChange listener in SessionContext will handle redirection.
     } catch (error: any) {
-      console.error('Unexpected error during logout:', error);
       showError(`An unexpected error occurred during logout: ${error.message}.`);
+    } finally {
+      navigate('/');
     }
   };
   
