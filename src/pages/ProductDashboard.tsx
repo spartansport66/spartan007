@@ -117,7 +117,7 @@ const ProductDashboard = () => {
       </div>
 
       {/* Quick Actions / Low Stock */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
         {/* Add New Product Card */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
@@ -144,6 +144,19 @@ const ProductDashboard = () => {
           </CardContent>
         </Card>
         
+        {/* Record Stock Receipt Card (New) */}
+        <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
+          <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold">Record Purchase</CardTitle>
+            <CardDescription className="text-blue-100 dark:text-blue-200">Log incoming stock from suppliers.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 flex-grow flex items-center justify-center">
+            <Button onClick={() => navigate('/purchase-dashboard')} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+              <ShoppingCart className="h-5 w-5 mr-2" /> Record Purchase
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Low Stock Products Card */}
         <LowStockProductsCard key={`low-stock-${refreshKey}`} onProductAction={handleProductAction} />
       </div>
