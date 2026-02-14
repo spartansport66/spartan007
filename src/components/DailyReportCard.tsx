@@ -29,7 +29,7 @@ interface DashboardData {
   totalDispatchedValue: number;
 }
 
-const CEO_Dashboard_Card: React.FC = () => {
+const DailyReportCard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
@@ -118,14 +118,14 @@ const CEO_Dashboard_Card: React.FC = () => {
       });
 
       // Header
-      const headerText = companyName ? companyName.toUpperCase() : "DAILY SUMMARY REPORT";
+      const headerText = companyName ? companyName.toUpperCase() : "DAILY REPORT";
       doc.setFontSize(18);
       doc.setFont("helvetica", "bold");
       doc.text(headerText, pageWidth / 2, 20, { align: 'center' });
       
       doc.setFontSize(12);
       doc.setFont("helvetica", "normal");
-      doc.text(`CEO's Daily Briefing - Figures Only`, pageWidth / 2, 28, { align: 'center' });
+      doc.text(`Daily Briefing - Figures Only`, pageWidth / 2, 28, { align: 'center' });
       doc.text(`Date: ${todayStr}`, pageWidth / 2, 35, { align: 'center' });
 
       // Figures Table
@@ -148,8 +148,8 @@ const CEO_Dashboard_Card: React.FC = () => {
         styles: { fontSize: 11, cellPadding: 5 }
       });
 
-      doc.save(`CEO_Daily_Summary_${todayStr.replace(/\//g, '-')}.pdf`);
-      showSuccess("Summary report generated successfully.");
+      doc.save(`Daily_Report_${todayStr.replace(/\//g, '-')}.pdf`);
+      showSuccess("Daily report generated successfully.");
     } catch (error: any) {
       showError(`Failed to generate PDF: ${error.message}`);
     }
@@ -179,12 +179,12 @@ const CEO_Dashboard_Card: React.FC = () => {
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 32px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(companyName?.toUpperCase() || "DAILY SUMMARY", canvas.width / 2, 60);
+      ctx.fillText(companyName?.toUpperCase() || "DAILY REPORT", canvas.width / 2, 60);
 
       // Subheader
       ctx.fillStyle = '#333333';
       ctx.font = '20px Arial';
-      ctx.fillText(`CEO's Daily Briefing - Figures Only`, canvas.width / 2, 140);
+      ctx.fillText(`Daily Briefing - Figures Only`, canvas.width / 2, 140);
       
       const todayStr = new Date().toLocaleDateString('en-IN', { 
         day: '2-digit', 
@@ -235,11 +235,11 @@ const CEO_Dashboard_Card: React.FC = () => {
 
       // Trigger Download
       const link = document.createElement('a');
-      link.download = `CEO_Summary_${todayStr.replace(/\//g, '-')}.jpg`;
+      link.download = `Daily_Report_${todayStr.replace(/\//g, '-')}.jpg`;
       link.href = canvas.toDataURL('image/jpeg', 0.9);
       link.click();
       
-      showSuccess("Summary JPG downloaded successfully.");
+      showSuccess("Daily report JPG downloaded successfully.");
     } catch (error: any) {
       showError(`Failed to generate JPG: ${error.message}`);
     }
@@ -252,7 +252,7 @@ const CEO_Dashboard_Card: React.FC = () => {
       <CardHeader className="bg-muted/30 p-4 md:p-6">
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle className="text-xl md:text-2xl font-bold text-primary">CEO's Daily Briefing</CardTitle>
+            <CardTitle className="text-xl md:text-2xl font-bold text-primary">Daily Report</CardTitle>
             <CardDescription>Live summary for {todayDate}</CardDescription>
           </div>
           <div className="flex gap-2">
@@ -352,4 +352,4 @@ const CEO_Dashboard_Card: React.FC = () => {
   );
 };
 
-export default CEO_Dashboard_Card;
+export default DailyReportCard;

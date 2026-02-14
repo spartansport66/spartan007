@@ -10,7 +10,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import PaymentOverviewCard from '@/components/PaymentOverviewCard';
 import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog';
 import TodaySalesCard from '@/components/TodaySalesCard';
-import CEO_Dashboard_Card from '@/components/CEO_Dashboard_Card';
+import DailyReportCard from '@/components/DailyReportCard';
 
 const ManagerDashboard = () => {
   const navigate = useNavigate();
@@ -84,7 +84,7 @@ const ManagerDashboard = () => {
       </div>
 
       <div className="mb-6">
-        <CEO_Dashboard_Card />
+        <DailyReportCard />
       </div>
 
       {/* Dashboard Content */}
