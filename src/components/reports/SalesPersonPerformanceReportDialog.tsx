@@ -241,7 +241,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      const allIds = [...new Set(performanceData.map(p => p.id))];
+      const allIds = [...new Set(performanceData.map((p: SalesPersonPerformance) => p.id))];
       setSelectedIds(allIds);
     } else {
       setSelectedIds([]);
@@ -250,9 +250,9 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
 
   const handleSelectRow = (id: string, checked: boolean) => {
     if (checked) {
-      setSelectedIds(prev => [...prev, id]);
+      setSelectedIds((prev: string[]) => [...prev, id]);
     } else {
-      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+      setSelectedIds((prev: string[]) => prev.filter((selectedId: string) => selectedId !== id));
     }
   };
 
@@ -262,7 +262,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       return;
     }
     
-    const dataToPrint = performanceData.filter(item => selectedIds.includes(item.id));
+    const dataToPrint = performanceData.filter((item: SalesPersonPerformance) => selectedIds.includes(item.id));
 
     try {
       const doc = new jsPDF({ orientation: 'landscape' });
@@ -287,8 +287,67 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' });
       yPos += 10;
 
+      // --- START: GRAPH GENERATION ---
+      const performanceSummary = dataToPrint.reduce((acc: Record<string, { target: number; achieved: number }>, item: SalesPersonPerformance) => {
+        if (!acc[item.salesPersonName]) {
+          acc[item.salesPersonName] = { target: 0, achieved: 0 };
+        }
+        acc[item.salesPersonName].target += item.targetAmount;
+        acc[item.salesPersonName].achieved += item.achievedSales;
+        return acc;
+      }, {} as Record<string, { target: number; achieved: number }>);
+
+      const chartData = Object.entries(performanceSummary).map(([name, data]: [string, { target: number; achieved: number }]) => ({
+        name,
+        performance: data.target > 0 ? Math.min(100, (data.achieved / data.target) * 100) : 0,
+      })).sort((a, b) => b.performance - a.performance);
+
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Performance Overview", margin, yPos);
+      yPos += 8;
+
+      const chartX = margin;
+      const chartY = yPos;
+      const chartWidth = pageWidth - margin * 2;
+      const maxBarWidth = chartWidth - 50; // Space for labels
+      const barHeight = 10;
+      const barSpacing = 5;
+
+      doc.setFontSize(8);
+      doc.setDrawColor(200);
+      doc.line(chartX + 50, chartY - 2, chartX + 50, chartY + chartData.length * (barHeight + barSpacing)); // Y-axis
+      doc.line(chartX + 50, chartY + chartData.length * (barHeight + barSpacing), chartX + 50 + maxBarWidth, chartY + chartData.length * (barHeight + barSpacing)); // X-axis
+
+      for (let i = 0; i <= 10; i++) {
+        const x = chartX + 50 + (i * (maxBarWidth / 10));
+        doc.setDrawColor(220);
+        doc.line(x, chartY - 2, x, chartY + chartData.length * (barHeight + barSpacing));
+        doc.text(`${i * 10}%`, x, chartY + chartData.length * (barHeight + barSpacing) + 4, { align: 'center' });
+      }
+
+      chartData.forEach((data, index) => {
+        const barY = chartY + index * (barHeight + barSpacing);
+        const barWidth = (data.performance / 100) * maxBarWidth;
+        
+        doc.setFont("helvetica", "normal");
+        doc.text(data.name, chartX + 48, barY + barHeight / 2 + 2, { align: 'right' });
+
+        doc.setFillColor(30, 58, 138);
+        doc.rect(chartX + 50, barY, barWidth, barHeight, 'F');
+
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(255);
+        doc.text(`${data.performance.toFixed(1)}%`, chartX + 50 + barWidth - 3, barY + barHeight / 2 + 2, { align: 'right' });
+        doc.setTextColor(0);
+      });
+      // --- END: GRAPH GENERATION ---
+
+      doc.addPage();
+      yPos = 15; // Reset yPos for the new page
+
       const tableColumn = ["Sales Person", "Month", "Year", "Target Amount", "Achieved Sales", "Pending Sales", "Performance %"];
-      const tableRows = dataToPrint.map(item => {
+      const tableRows = dataToPrint.map((item: SalesPersonPerformance) => {
         const performance = item.targetAmount > 0 ? (item.achievedSales / item.targetAmount) * 100 : 0;
         return [
           item.salesPersonName,
@@ -301,8 +360,8 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         ];
       });
 
-      const totalTarget = dataToPrint.reduce((sum, item) => sum + item.targetAmount, 0);
-      const totalAchieved = dataToPrint.reduce((sum, item) => sum + item.achievedSales, 0);
+      const totalTarget = dataToPrint.reduce((sum: number, item: SalesPersonPerformance) => sum + item.targetAmount, 0);
+      const totalAchieved = dataToPrint.reduce((sum: number, item: SalesPersonPerformance) => sum + item.achievedSales, 0);
       const totalPending = totalTarget - totalAchieved;
       const overallPerformance = totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : 0;
 
@@ -359,7 +418,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
     }
   };
 
-  const allIdsInView = [...new Set(performanceData.map(p => p.id))];
+  const allIdsInView = [...new Set(performanceData.map((p: SalesPersonPerformance) => p.id))];
   const isAllSelected = allIdsInView.length > 0 && allIdsInView.every(id => selectedIds.includes(id));
 
   return (
@@ -412,7 +471,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Sales Persons</SelectItem>
-                {allSalesPersons.map(sp => (
+                {allSalesPersons.map((sp: FilterOption) => (
                   <SelectItem key={sp.value} value={sp.value}>{sp.label}</SelectItem>
                 ))}
               </SelectContent>
@@ -455,7 +514,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {performanceData.map((item, index) => (
+                  {performanceData.map((item: SalesPersonPerformance, index: number) => (
                     <TableRow key={`${item.id}-${item.month}-${index}`} className="hover:bg-accent/50">
                       <TableCell>
                         <Checkbox
