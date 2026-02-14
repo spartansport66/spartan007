@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SupplierManager from '../components/purchasing/SupplierManager';
 import RawMaterialManager from '../components/purchasing/RawMaterialManager';
 import PurchaseOrderManager from '../components/purchasing/PurchaseOrderManager';
+import BillOfMaterialsManager from '../components/purchasing/BillOfMaterialsManager';
 
 const PurchaseDashboard = () => {
   const navigate = useNavigate();
@@ -30,7 +31,7 @@ const PurchaseDashboard = () => {
           <TabsTrigger value="suppliers"><Users className="h-4 w-4 mr-2" />Suppliers</TabsTrigger>
           <TabsTrigger value="raw_materials"><Package className="h-4 w-4 mr-2" />Raw Materials</TabsTrigger>
           <TabsTrigger value="purchase_orders"><ShoppingCart className="h-4 w-4 mr-2" />Purchase Orders</TabsTrigger>
-          <TabsTrigger value="production" disabled><Factory className="h-4 w-4 mr-2" />Production</TabsTrigger>
+          <TabsTrigger value="boms"><Factory className="h-4 w-4 mr-2" />Bill of Materials</TabsTrigger>
         </TabsList>
         <TabsContent value="suppliers" className="flex-grow mt-4">
           <SupplierManager />
@@ -41,8 +42,8 @@ const PurchaseDashboard = () => {
         <TabsContent value="purchase_orders" className="flex-grow mt-4">
           <PurchaseOrderManager />
         </TabsContent>
-        <TabsContent value="production" className="flex-grow mt-4">
-          {/* Production component will go here */}
+        <TabsContent value="boms" className="flex-grow mt-4">
+          <BillOfMaterialsManager />
         </TabsContent>
       </Tabs>
 
