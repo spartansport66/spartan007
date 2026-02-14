@@ -41,7 +41,6 @@ import NotificationEmailManager from '@/components/NotificationEmailManager';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import SalesPersonLedgerReportDialog from '@/components/reports/SalesPersonLedgerReportDialog'; // New Import
 import SalesPersonPerformanceReportDialog from '@/components/reports/SalesPersonPerformanceReportDialog';
-import CEO_Dashboard_Card from '@/components/CEO_Dashboard_Card'; // New Import
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -251,10 +250,6 @@ const AdminDashboard = () => {
         </div>
       </div>
       
-      <div className="mb-6">
-        <CEO_Dashboard_Card />
-      </div>
-
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">{salesOverview.map((item, index) => (<Card key={index} className="bg-card text-card-foreground shadow-md h-full"><CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 p-4 bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg`}><CardTitle className="text-base font-medium text-white">{item.title}</CardTitle>{item.icon}</CardHeader><CardContent className="p-4 pt-0"><div className={`text-3xl font-bold ${item.valueColor}`}>{item.value}</div><p className="text-xs text-muted-foreground mt-1">{item.change}</p></CardContent></Card>))}</div>
       
       <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 mb-6">
