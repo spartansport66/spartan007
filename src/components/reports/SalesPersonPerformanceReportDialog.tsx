@@ -53,11 +53,29 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
   const [performanceData, setPerformanceData] = useState<SalesPersonPerformance[]>([]);
   const [loading, setLoading] = useState(true);
   const [allSalesPersons, setAllSalesPersons] = useState<FilterOption[]>([]);
+  const [companyName, setCompanyName] = useState<string | null>(null);
   const today = new Date();
   const [filterMonth, setFilterMonth] = useState<string>((today.getMonth() + 1).toString());
   const [filterYear, setFilterYear] = useState<string>(today.getFullYear().toString());
   const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const fetchCompanyInfo = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('company_info')
+        .select('company_name')
+        .limit(1)
+        .single();
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+      setCompanyName(data?.company_name || null);
+    } catch (error: any) {
+      console.error('Error fetching company name for PDF:', error.message);
+      setCompanyName(null);
+    }
+  }, []);
 
   const fetchPerformanceData = useCallback(async () => {
     setLoading(true);
@@ -211,8 +229,9 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
   useEffect(() => {
     if (isOpen) {
       fetchPerformanceData();
+      fetchCompanyInfo();
     }
-  }, [isOpen, fetchPerformanceData]);
+  }, [isOpen, fetchPerformanceData, fetchCompanyInfo]);
 
   const handleClearFilters = () => {
     setFilterMonth((today.getMonth() + 1).toString());
@@ -245,41 +264,99 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
     
     const dataToPrint = performanceData.filter(item => selectedIds.includes(item.id));
 
-    const doc = new jsPDF({ orientation: 'landscape' });
-    const reportPeriod = filterMonth === "all" ? `Year ${filterYear} - Monthly Breakdown` : `${getMonthName(filterMonth)} ${filterYear}`;
-    doc.setFontSize(18);
-    doc.text(`Sales Person Performance Report - ${reportPeriod}`, 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
+    try {
+      const doc = new jsPDF({ orientation: 'landscape' });
+      const pageWidth = doc.internal.pageSize.width;
+      const margin = 15;
+      let yPos = 15;
 
-    const tableColumn = ["Sales Person", "Month", "Year", "Target Amount", "Achieved Sales", "Pending Sales"];
-    const tableRows = dataToPrint.map(item => [
-      item.salesPersonName,
-      item.month,
-      item.year,
-      `₹${item.targetAmount.toFixed(2)}`,
-      `₹${item.achievedSales.toFixed(2)}`,
-      `₹${item.pendingSales.toFixed(2)}`,
-    ]);
+      const companyNameText = companyName ? companyName.toUpperCase() : "PERFORMANCE REPORT";
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text(companyNameText, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 8;
+      
+      const reportPeriod = filterMonth === "all" ? `Year ${filterYear} - Monthly Breakdown` : `${getMonthName(filterMonth)} ${filterYear}`;
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Sales Person Performance - ${reportPeriod}`, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 6;
 
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 30,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
-      margin: { top: 25, left: 10, right: 10 },
-      columnStyles: {
-        0: { cellWidth: 40 },
-        1: { cellWidth: 30 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 35, halign: 'right' },
-        4: { cellWidth: 35, halign: 'right' },
-        5: { cellWidth: 35, halign: 'right' },
-      }
-    });
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 10;
 
-    doc.save(`selected_sales_performance_report.pdf`);
+      const tableColumn = ["Sales Person", "Month", "Year", "Target Amount", "Achieved Sales", "Pending Sales", "Performance %"];
+      const tableRows = dataToPrint.map(item => {
+        const performance = item.targetAmount > 0 ? (item.achievedSales / item.targetAmount) * 100 : 0;
+        return [
+          item.salesPersonName,
+          item.month,
+          item.year,
+          `₹${item.targetAmount.toFixed(2)}`,
+          `₹${item.achievedSales.toFixed(2)}`,
+          `₹${item.pendingSales.toFixed(2)}`,
+          `${performance.toFixed(2)}%`,
+        ];
+      });
+
+      const totalTarget = dataToPrint.reduce((sum, item) => sum + item.targetAmount, 0);
+      const totalAchieved = dataToPrint.reduce((sum, item) => sum + item.achievedSales, 0);
+      const totalPending = totalTarget - totalAchieved;
+      const overallPerformance = totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : 0;
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        foot: [
+          [
+            { content: 'Totals', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+            `₹${totalTarget.toFixed(2)}`,
+            `₹${totalAchieved.toFixed(2)}`,
+            `₹${totalPending.toFixed(2)}`,
+            `${overallPerformance.toFixed(2)}%`,
+          ]
+        ],
+        startY: yPos,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [30, 58, 138], // Dark blue
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'center',
+        },
+        footStyles: {
+          fillColor: [220, 220, 220],
+          textColor: [0, 0, 0],
+          fontStyle: 'bold',
+          fontSize: 9,
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+        styles: {
+          fontSize: 8,
+          cellPadding: 2,
+          valign: 'middle',
+        },
+        columnStyles: {
+          0: { cellWidth: 40 }, // Sales Person
+          1: { cellWidth: 25 }, // Month
+          2: { cellWidth: 20, halign: 'center' }, // Year
+          3: { cellWidth: 30, halign: 'right' }, // Target
+          4: { cellWidth: 30, halign: 'right' }, // Achieved
+          5: { cellWidth: 30, halign: 'right' }, // Pending
+          6: { cellWidth: 30, halign: 'right' }, // Performance %
+        }
+      });
+
+      doc.save(`selected_sales_performance_report.pdf`);
+      showSuccess('Report generated successfully!');
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`);
+    }
   };
 
   const allIdsInView = [...new Set(performanceData.map(p => p.id))];
