@@ -11,7 +11,7 @@ import ProductTableManager from '@/components/ProductTableManager'; // Import th
 
 const ManageProducts = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, userType } = useSession();
+  const { user, loading: sessionLoading, userType, isAdmin } = useSession();
   const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
 
   useEffect(() => {
@@ -47,7 +47,7 @@ const ManageProducts = () => {
           <ArrowLeft className="h-4 w-4" /> Back to Dashboard
         </Button>
 
-        <ProductTableManager /> {/* Render the reusable component */}
+        <ProductTableManager isAdmin={isAdmin} /> {/* Render the reusable component */}
       </div>
       <MadeWithDyad />
     </div>

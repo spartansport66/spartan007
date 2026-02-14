@@ -16,7 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 
 const ProductDashboard = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, userType } = useSession();
+  const { user, loading: sessionLoading, userType, isAdmin } = useSession();
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleProductAction = useCallback(() => {
@@ -159,7 +159,7 @@ const ProductDashboard = () => {
 
       {/* Manage All Products Table */}
       <div className="flex-grow">
-        <ProductTableManager key={`table-manager-${refreshKey}`} onProductAction={handleProductAction} />
+        <ProductTableManager key={`table-manager-${refreshKey}`} onProductAction={handleProductAction} isAdmin={isAdmin} />
       </div>
 
       <MadeWithDyad />

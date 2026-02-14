@@ -75,7 +75,12 @@ type SortKey = 'code' | 'name' | 'dp' | 'gst' | 'opening_stock' | 'stock_in' | '
 
 const PAGE_SIZE = 10;
 
-const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onProductAction }) => {
+interface ProductTableManagerProps {
+  onProductAction?: () => void;
+  isAdmin: boolean;
+}
+
+const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductAction, isAdmin }) => {
   const { user, session, loading: sessionLoading, userType } = useSession();
   const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
 
@@ -476,13 +481,38 @@ const ProductTableManager: React.FC<{ onProductAction?: () => void }> = ({ onPro
                       <TableCell>
                         <div className="flex gap-2">
                           <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" disabled={product.has_sales}><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader><AlertDialogTitle>Delete Product?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
-                              <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(product.id)}>Delete</AlertDialogAction></AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          {isAdmin && (
+                            <AlertDialog>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span tabIndex={product.has_sales ? 0 : -1}>
+                                      <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" disabled={product.has_sales}>
+                                          <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                    </span>
+                                  </TooltipTrigger>
+                                  {product.has_sales && (
+                                    <TooltipContent>
+                                      <p>Cannot delete products with sales history.</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Product?</AlertDialogTitle>
+                                  <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDelete(product.id)}>Delete</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

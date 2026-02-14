@@ -92,7 +92,7 @@ const ProductManagementConsole = () => {
 
       {/* Manage All Products Table */}
       <div className="flex-grow">
-        <ProductTableManager key={`table-manager-${refreshKey}`} onProductAction={handleProductAction} />
+        <ProductTableManager key={`table-manager-${refreshKey}`} onProductAction={handleProductAction} isAdmin={isAdmin} />
       </div>
 
       <MadeWithDyad />
