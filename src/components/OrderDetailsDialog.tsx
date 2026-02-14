@@ -22,6 +22,15 @@ interface OrderItemDetail {
   discount_percent: number;
 }
 
+interface OnlineOrderInfo {
+  client_name: string;
+  platform_name: string;
+  platform_order_number: string | null;
+  contact_no: string | null;
+  city: string | null;
+  state: string | null;
+}
+
 interface OrderDetail {
   id: string;
   order_number: number;
@@ -42,6 +51,7 @@ interface OrderDetail {
   dispatch_number: number | null;
   dispatched: boolean;
   payment_status: string;
+  online_order_details?: OnlineOrderInfo | null;
 }
 
 interface OrderDetailsDialogProps {
@@ -132,6 +142,35 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       });
 
       const dealer = (orderData.dealers as any);
+      
+      let onlineOrderDetails: OnlineOrderInfo | null = null;
+      if (dealer?.name === 'Online Order') {
+        const { data: onlineData, error: onlineError } = await supabase
+          .from('online_order_details')
+          .select(`
+            client_name,
+            platform_order_number,
+            contact_no,
+            city,
+            state,
+            online_platforms (name)
+          `)
+          .eq('order_id', id)
+          .single();
+        
+        if (onlineError && onlineError.code !== 'PGRST116') {
+          console.error("Error fetching online order details:", onlineError);
+        } else if (onlineData) {
+          onlineOrderDetails = {
+            client_name: onlineData.client_name,
+            platform_name: (onlineData.online_platforms as any)?.name || 'N/A',
+            platform_order_number: onlineData.platform_order_number,
+            contact_no: onlineData.contact_no,
+            city: onlineData.city,
+            state: onlineData.state,
+          };
+        }
+      }
 
       setOrderDetails({
         id: orderData.id,
@@ -153,6 +192,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         dispatch_number: orderData.dispatch_number,
         dispatched: orderData.dispatched,
         payment_status: orderData.payment_status,
+        online_order_details: onlineOrderDetails,
       });
     } catch (error: any) {
       console.error('Error fetching order details:', error);
@@ -190,13 +230,17 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     doc.setFontSize(10);
     let y = 45;
     
+    const isOnline = orderDetails.online_order_details;
+    const partyName = isOnline ? orderDetails.online_order_details!.client_name : orderDetails.dealer_name;
+    const partyAddress = isOnline ? `${orderDetails.online_order_details!.city}, ${orderDetails.online_order_details!.state}` : `${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`;
+
     doc.setFont("helvetica", "bold");
     doc.text("PARTY DETAILS:", margin, y);
     doc.setFont("helvetica", "normal");
     y += 5;
-    doc.text(orderDetails.dealer_name, margin, y);
+    doc.text(partyName, margin, y);
     y += 5;
-    const addressLines = doc.splitTextToSize(`${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`, pageWidth / 2 - margin);
+    const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
     doc.text(addressLines, margin, y);
     
     let rightY = 45;
@@ -258,13 +302,18 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     doc.setFontSize(10);
     let y = 35;
     
+    const isOnline = orderDetails.online_order_details;
+    const partyName = isOnline ? orderDetails.online_order_details!.client_name : orderDetails.dealer_name;
+    const partyAddress = isOnline ? `${orderDetails.online_order_details!.city}, ${orderDetails.online_order_details!.state}` : `${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`;
+    const partyPhone = isOnline ? orderDetails.online_order_details!.contact_no : orderDetails.dealer_phone;
+
     doc.setFont("helvetica", "bold");
     doc.text("PARTY DETAILS:", margin, y);
     doc.setFont("helvetica", "normal");
     y += 5;
-    doc.text(orderDetails.dealer_name, margin, y);
+    doc.text(partyName, margin, y);
     y += 5;
-    const addressLines = doc.splitTextToSize(`${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`, pageWidth / 2 - margin);
+    const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
     doc.text(addressLines, margin, y);
     
     let rightY = 35;
@@ -277,7 +326,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     rightY += 5;
     doc.text(`Date: ${formatDate(orderDetails.order_date)}`, rightColX, rightY);
     rightY += 5;
-    doc.text(`Phone: ${orderDetails.dealer_phone}`, rightColX, rightY);
+    doc.text(`Phone: ${partyPhone || 'N/A'}`, rightColX, rightY);
+
+    if (isOnline) {
+      rightY += 5;
+      doc.text(`Platform: ${orderDetails.online_order_details!.platform_name}`, rightColX, rightY);
+      rightY += 5;
+      doc.text(`Platform Order #: ${orderDetails.online_order_details!.platform_order_number || 'N/A'}`, rightColX, rightY);
+    }
 
     y = Math.max(y + (addressLines.length * 5), rightY + 10);
 
