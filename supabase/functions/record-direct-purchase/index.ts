@@ -38,6 +38,7 @@ serve(async (req) => {
     const { data: voucher, error: voucherError } = await supabaseAdmin
       .from('purchase_vouchers')
       .insert({
+        purchase_order_id: null, // Explicitly set to null for direct purchase
         supplier_id: supplier_id,
         receipt_date: bill_date,
         received_by: user_id,

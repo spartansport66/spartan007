@@ -1,10 +1,15 @@
--- Create sequence for voucher number
-CREATE SEQUENCE IF NOT EXISTS public.purchase_vouchers_voucher_number_seq;
+-- Drop existing tables and sequences if they exist to ensure a clean slate
+DROP TABLE IF EXISTS public.purchase_voucher_items CASCADE;
+DROP TABLE IF EXISTS public.purchase_vouchers CASCADE;
+DROP SEQUENCE IF EXISTS public.purchase_vouchers_voucher_number_seq;
 
--- Create purchase_vouchers table
-CREATE TABLE IF NOT EXISTS public.purchase_vouchers (
+-- Create sequence for voucher number
+CREATE SEQUENCE public.purchase_vouchers_voucher_number_seq;
+
+-- Create purchase_vouchers table with purchase_order_id as nullable
+CREATE TABLE public.purchase_vouchers (
     id uuid NOT NULL DEFAULT gen_random_uuid(),
-    purchase_order_id uuid NULL, -- Made nullable to allow direct entries
+    purchase_order_id uuid NULL, -- Explicitly nullable
     supplier_id uuid NOT NULL,
     voucher_number integer NOT NULL DEFAULT nextval('purchase_vouchers_voucher_number_seq'::regclass),
     receipt_date date NOT NULL,
@@ -27,7 +32,7 @@ CREATE POLICY "Admins and inventory managers can manage purchase vouchers" ON pu
 FOR ALL USING (public.has_inventory_access()) WITH CHECK (public.has_inventory_access());
 
 -- Create purchase_voucher_items table
-CREATE TABLE IF NOT EXISTS public.purchase_voucher_items (
+CREATE TABLE public.purchase_voucher_items (
     id uuid NOT NULL DEFAULT gen_random_uuid(),
     purchase_voucher_id uuid NOT NULL,
     raw_material_id uuid NOT NULL,
