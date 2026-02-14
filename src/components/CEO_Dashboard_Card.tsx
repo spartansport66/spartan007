@@ -27,16 +27,16 @@ interface DashboardData {
 }
 
 const StatCard = ({ title, value, icon, isLoading }: { title: string, value: string, icon: React.ReactNode, isLoading: boolean }) => (
-  <div className="flex items-center justify-between rounded-lg border bg-card text-card-foreground p-4">
+  <div className="flex items-center justify-between rounded-lg border bg-card text-card-foreground p-3 sm:p-4">
     <div className="space-y-1">
-      <p className="text-sm font-medium text-muted-foreground">{title}</p>
+      <p className="text-xs sm:text-sm font-medium text-muted-foreground">{title}</p>
       {isLoading ? (
-        <Skeleton className="h-7 w-32" />
+        <Skeleton className="h-7 w-24 sm:w-32" />
       ) : (
-        <p className="text-2xl font-bold">{value}</p>
+        <p className="text-xl sm:text-2xl font-bold">{value}</p>
       )}
     </div>
-    <div className="bg-primary text-primary-foreground p-3 rounded-full">
+    <div className="bg-primary text-primary-foreground p-2 sm:p-3 rounded-full">
       {icon}
     </div>
   </div>
@@ -111,25 +111,25 @@ const CEO_Dashboard_Card: React.FC = () => {
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg w-full border-2 border-primary/20">
-      <CardHeader className="bg-muted/30">
-        <CardTitle className="text-2xl font-bold text-primary">CEO's Daily Briefing</CardTitle>
+      <CardHeader className="bg-muted/30 p-4 md:p-6">
+        <CardTitle className="text-xl md:text-2xl font-bold text-primary">CEO's Daily Briefing</CardTitle>
         <CardDescription>Live summary for {todayDate}</CardDescription>
       </CardHeader>
-      <CardContent className="p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <CardContent className="p-4 md:p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Column 1: Orders Received */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2"><ArrowDown className="h-5 w-5 text-green-500" /> Today's Orders Received</h3>
-            <StatCard title="From Sales Team" value={formatCurrency(data?.ordersFromSalesmen || 0)} icon={<Users className="h-5 w-5" />} isLoading={loading} />
-            <StatCard title="From Online" value={formatCurrency(data?.ordersFromOnline || 0)} icon={<ShoppingCart className="h-5 w-5" />} isLoading={loading} />
+            <h3 className="text-base md:text-lg font-semibold flex items-center gap-2"><ArrowDown className="h-5 w-5 text-green-500" /> Today's Orders Received</h3>
+            <StatCard title="From Sales Team" value={formatCurrency(data?.ordersFromSalesmen || 0)} icon={<Users className="h-4 sm:h-5 w-4 sm:w-5" />} isLoading={loading} />
+            <StatCard title="From Online" value={formatCurrency(data?.ordersFromOnline || 0)} icon={<ShoppingCart className="h-4 sm:h-5 w-4 sm:w-5" />} isLoading={loading} />
             <Separator />
-            <StatCard title="Total Received" value={formatCurrency(data?.totalOrdersReceived || 0)} icon={<DollarSign className="h-5 w-5" />} isLoading={loading} />
+            <StatCard title="Total Received" value={formatCurrency(data?.totalOrdersReceived || 0)} icon={<DollarSign className="h-4 sm:h-5 w-4 sm:w-5" />} isLoading={loading} />
           </div>
 
-          {/* Column 2 & 3: Dispatched Material */}
-          <div className="lg:col-span-2 space-y-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2"><ArrowUp className="h-5 w-5 text-blue-500" /> Today's Dispatched Material</h3>
-            <div className="max-h-64 overflow-y-auto border rounded-md">
+          {/* Column 2: Dispatched Material */}
+          <div className="space-y-4">
+            <h3 className="text-base md:text-lg font-semibold flex items-center gap-2"><ArrowUp className="h-5 w-5 text-blue-500" /> Today's Dispatched Material</h3>
+            <div className="max-h-48 md:max-h-64 overflow-y-auto border rounded-md">
               {loading ? (
                 <div className="p-4 space-y-2">
                   <Skeleton className="h-8 w-full" />
@@ -139,28 +139,39 @@ const CEO_Dashboard_Card: React.FC = () => {
               ) : !data || data.dispatchedOrders.length === 0 ? (
                 <p className="text-center text-muted-foreground p-8">No material dispatched today.</p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Dealer</TableHead>
-                      <TableHead>Sales Person</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <>
+                  <div className="md:hidden">
                     {data.dispatchedOrders.map((order, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{order.dealerName}</TableCell>
-                        <TableCell>{order.salesmanName}</TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(order.amount)}</TableCell>
-                      </TableRow>
+                      <div key={index} className="p-3 border-b last:border-b-0">
+                        <div className="font-semibold">{order.dealerName}</div>
+                        <div className="text-sm text-muted-foreground">By: {order.salesmanName}</div>
+                        <div className="text-sm font-medium text-right">{formatCurrency(order.amount)}</div>
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
+                  </div>
+                  <Table className="hidden md:table">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Dealer</TableHead>
+                        <TableHead>Sales Person</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.dispatchedOrders.map((order, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{order.dealerName}</TableCell>
+                          <TableCell>{order.salesmanName}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(order.amount)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
               )}
             </div>
             <Separator />
-            <StatCard title="Total Dispatched" value={formatCurrency(data?.totalDispatchedValue || 0)} icon={<Package className="h-5 w-5" />} isLoading={loading} />
+            <StatCard title="Total Dispatched" value={formatCurrency(data?.totalDispatchedValue || 0)} icon={<Package className="h-4 sm:h-5 w-4 sm:w-5" />} isLoading={loading} />
           </div>
         </div>
       </CardContent>
