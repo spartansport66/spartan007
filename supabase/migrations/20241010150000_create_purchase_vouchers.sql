@@ -4,7 +4,7 @@ CREATE SEQUENCE IF NOT EXISTS public.purchase_vouchers_voucher_number_seq;
 -- Create purchase_vouchers table
 CREATE TABLE IF NOT EXISTS public.purchase_vouchers (
     id uuid NOT NULL DEFAULT gen_random_uuid(),
-    purchase_order_id uuid NOT NULL, -- Will be made nullable by a later migration
+    purchase_order_id uuid NULL, -- Made nullable to allow direct entries
     supplier_id uuid NOT NULL,
     voucher_number integer NOT NULL DEFAULT nextval('purchase_vouchers_voucher_number_seq'::regclass),
     receipt_date date NOT NULL,
@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS public.purchase_voucher_items (
     raw_material_id uuid NOT NULL,
     quantity_received numeric NOT NULL,
     unit_price numeric NOT NULL DEFAULT 0,
+    discount_percent numeric NOT NULL DEFAULT 0,
+    gst_percent numeric NOT NULL DEFAULT 0,
+    total_amount numeric GENERATED ALWAYS AS ( (quantity_received * unit_price * (1 - (discount_percent / 100))) * (1 + (gst_percent / 100)) ) STORED,
     CONSTRAINT purchase_voucher_items_pkey PRIMARY KEY (id),
     CONSTRAINT purchase_voucher_items_purchase_voucher_id_fkey FOREIGN KEY (purchase_voucher_id) REFERENCES public.purchase_vouchers(id) ON DELETE CASCADE,
     CONSTRAINT purchase_voucher_items_raw_material_id_fkey FOREIGN KEY (raw_material_id) REFERENCES public.raw_materials(id)
