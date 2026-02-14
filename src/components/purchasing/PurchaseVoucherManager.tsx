@@ -3,9 +3,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Eye } from 'lucide-react';
+import { Loader2, PlusCircle, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
+import CreatePurchaseBillDialog from './CreatePurchaseBillDialog'; // New Import
 import PurchaseVoucherDetailsDialog from './PurchaseVoucherDetailsDialog';
 
 interface PurchaseVoucher {
@@ -13,12 +14,13 @@ interface PurchaseVoucher {
   voucher_number: number;
   receipt_date: string;
   supplier_name: string | null;
-  po_number: number;
+  po_number: number | null; // Can be null now
 }
 
 const PurchaseVoucherManager: React.FC = () => {
   const [vouchers, setVouchers] = useState<PurchaseVoucher[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
 
@@ -43,7 +45,7 @@ const PurchaseVoucherManager: React.FC = () => {
         voucher_number: v.voucher_number,
         receipt_date: v.receipt_date,
         supplier_name: (v.suppliers as any)?.name || 'N/A',
-        po_number: (v.purchase_orders as any)?.po_number || 0,
+        po_number: (v.purchase_orders as any)?.po_number || null,
       }));
 
       setVouchers(formattedData);
@@ -58,6 +60,11 @@ const PurchaseVoucherManager: React.FC = () => {
     fetchVouchers();
   }, [fetchVouchers]);
 
+  const handleBillCreated = () => {
+    fetchVouchers();
+    setIsCreateDialogOpen(false);
+  };
+
   const handleViewDetails = (voucherId: string) => {
     setSelectedVoucherId(voucherId);
     setIsDetailsDialogOpen(true);
@@ -67,8 +74,15 @@ const PurchaseVoucherManager: React.FC = () => {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Purchase Vouchers</CardTitle>
-          <CardDescription>History of all received goods against purchase orders.</CardDescription>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Purchase Vouchers</CardTitle>
+              <CardDescription>History of all received goods against purchase orders or direct bills.</CardDescription>
+            </div>
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <PlusCircle className="mr-2 h-4 w-4" /> Create Purchase Bill
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -89,7 +103,7 @@ const PurchaseVoucherManager: React.FC = () => {
                   {vouchers.map((voucher) => (
                     <TableRow key={voucher.id}>
                       <TableCell className="font-medium">#{voucher.voucher_number}</TableCell>
-                      <TableCell>#{voucher.po_number}</TableCell>
+                      <TableCell>{voucher.po_number ? `#${voucher.po_number}` : 'Direct Bill'}</TableCell>
                       <TableCell>{voucher.supplier_name}</TableCell>
                       <TableCell>{new Date(voucher.receipt_date).toLocaleDateString()}</TableCell>
                       <TableCell>
@@ -103,6 +117,11 @@ const PurchaseVoucherManager: React.FC = () => {
           )}
         </CardContent>
       </Card>
+      <CreatePurchaseBillDialog
+        isOpen={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onBillCreated={handleBillCreated}
+      />
       {selectedVoucherId && (
         <PurchaseVoucherDetailsDialog
           voucherId={selectedVoucherId}
