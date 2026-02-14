@@ -271,14 +271,13 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       let yPos = 15;
 
       const companyNameText = companyName ? companyName.toUpperCase() : "PERFORMANCE REPORT";
-      doc.setFontSize(18);
       doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
       doc.text(companyNameText, pageWidth / 2, yPos, { align: 'center' });
       yPos += 8;
       
       const reportPeriod = filterMonth === "all" ? `Year ${filterYear} - Monthly Breakdown` : `${getMonthName(filterMonth)} ${filterYear}`;
       doc.setFontSize(14);
-      doc.setFont("helvetica", "normal");
       doc.text(`Sales Person Performance - ${reportPeriod}`, pageWidth / 2, yPos, { align: 'center' });
       yPos += 6;
 
@@ -286,6 +285,7 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' });
       yPos += 10;
+      doc.setTextColor(0);
 
       // --- START: GRAPH GENERATION ---
       const performanceSummary = dataToPrint.reduce((acc: Record<string, { target: number; achieved: number }>, item: SalesPersonPerformance) => {
@@ -303,7 +303,6 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
       })).sort((a, b) => b.performance - a.performance);
 
       doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
       doc.text("Performance Overview", margin, yPos);
       yPos += 8;
 
@@ -330,13 +329,11 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         const barY = chartY + index * (barHeight + barSpacing);
         const barWidth = (data.performance / 100) * maxBarWidth;
         
-        doc.setFont("helvetica", "normal");
         doc.text(data.name, chartX + 48, barY + barHeight / 2 + 2, { align: 'right' });
 
         doc.setFillColor(30, 58, 138);
         doc.rect(chartX + 50, barY, barWidth, barHeight, 'F');
 
-        doc.setFont("helvetica", "bold");
         doc.setTextColor(255);
         doc.text(`${data.performance.toFixed(1)}%`, chartX + 50 + barWidth - 3, barY + barHeight / 2 + 2, { align: 'right' });
         doc.setTextColor(0);
@@ -393,6 +390,9 @@ const SalesPersonPerformanceReportDialog: React.FC<SalesPersonPerformanceReportD
         },
         alternateRowStyles: {
           fillColor: [245, 245, 245],
+        },
+        bodyStyles: {
+          fontStyle: 'bold',
         },
         styles: {
           fontSize: 8,
