@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowDown, ArrowUp, DollarSign, Package, Users, ShoppingCart } from 'lucide-react';
+import { Loader2, ArrowDown, ArrowUp, DollarSign, Package, Users, ShoppingCart, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { showError } from '@/utils/toast';
+import { showError, showSuccess } from '@/utils/toast';
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 import { formatCurrency } from '@/utils/formatters';
 import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 interface DispatchedOrder {
   orderNumber: number;
@@ -30,12 +32,21 @@ interface DashboardData {
 const CEO_Dashboard_Card: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     try {
       const startOfToday = getStartOfUTCDayISO();
       const endOfToday = getEndOfUTCDayISO();
+
+      // Fetch Company Info for the report header
+      const { data: companyInfo } = await supabase
+        .from('company_info')
+        .select('company_name')
+        .limit(1)
+        .single();
+      setCompanyName(companyInfo?.company_name || null);
 
       // 1. Fetch Orders Received Today (based on order_date)
       const { data: ordersToday, error: ordersError } = await supabase
@@ -55,8 +66,7 @@ const CEO_Dashboard_Card: React.FC = () => {
         }
       });
 
-      // 2. Fetch Dispatched Orders Today (based on dispatch_date - when dispatch info was added)
-      // We filter by dispatch_date to catch orders "dispatched today" regardless of their creation date
+      // 2. Fetch Dispatched Orders Today (based on dispatch_date)
       const { data: dispatchedToday, error: dispatchedError } = await supabase
         .from('orders')
         .select('order_number, total_amount, dispatch_number, dealers(name), profiles:user_id(first_name, last_name)')
@@ -95,13 +105,76 @@ const CEO_Dashboard_Card: React.FC = () => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
+  const handlePrintSummary = () => {
+    if (!data) return;
+
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.width;
+      const todayStr = new Date().toLocaleDateString('en-IN', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+      });
+
+      // Header
+      const headerText = companyName ? companyName.toUpperCase() : "DAILY SUMMARY REPORT";
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text(headerText, pageWidth / 2, 20, { align: 'center' });
+      
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      doc.text(`CEO's Daily Briefing - Figures Only`, pageWidth / 2, 28, { align: 'center' });
+      doc.text(`Date: ${todayStr}`, pageWidth / 2, 35, { align: 'center' });
+
+      // Figures Table
+      autoTable(doc, {
+        startY: 45,
+        head: [['Metric', 'Amount (INR)']],
+        body: [
+          ['Orders from Sales Team', formatCurrency(data.ordersFromSalesmen)],
+          ['Orders from Online Platforms', formatCurrency(data.ordersFromOnline)],
+          ['Total Orders Received Today', formatCurrency(data.totalOrdersReceived)],
+          ['', ''], // Spacer
+          ['Total Dispatched Material Value', formatCurrency(data.totalDispatchedValue)],
+        ],
+        theme: 'striped',
+        headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255] },
+        columnStyles: {
+          0: { cellWidth: 100 },
+          1: { halign: 'right', fontStyle: 'bold' }
+        },
+        styles: { fontSize: 11, cellPadding: 5 }
+      });
+
+      doc.save(`CEO_Daily_Summary_${todayStr.replace(/\//g, '-')}.pdf`);
+      showSuccess("Summary report generated successfully.");
+    } catch (error: any) {
+      showError(`Failed to generate PDF: ${error.message}`);
+    }
+  };
+
   const todayDate = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg w-full border-2 border-primary/20">
       <CardHeader className="bg-muted/30 p-4 md:p-6">
-        <CardTitle className="text-xl md:text-2xl font-bold text-primary">CEO's Daily Briefing</CardTitle>
-        <CardDescription>Live summary for {todayDate}</CardDescription>
+        <div className="flex justify-between items-start">
+          <div>
+            <CardTitle className="text-xl md:text-2xl font-bold text-primary">CEO's Daily Briefing</CardTitle>
+            <CardDescription>Live summary for {todayDate}</CardDescription>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handlePrintSummary}
+            disabled={loading || !data}
+            className="flex items-center gap-2"
+          >
+            <Printer className="h-4 w-4" /> Print Summary
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-4 md:p-6">
         {loading ? (
