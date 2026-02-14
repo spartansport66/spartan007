@@ -30,6 +30,29 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Fetch PO details to get supplier_id
+    const { data: poDetails, error: poDetailsError } = await supabaseAdmin
+      .from('purchase_orders')
+      .select('supplier_id')
+      .eq('id', purchase_order_id)
+      .single();
+    if (poDetailsError) throw new Error(`Failed to fetch PO details: ${poDetailsError.message}`);
+
+    // --- Create Purchase Voucher ---
+    const { data: voucher, error: voucherError } = await supabaseAdmin
+      .from('purchase_vouchers')
+      .insert({
+        purchase_order_id: purchase_order_id,
+        supplier_id: poDetails.supplier_id,
+        receipt_date: receipt_date,
+        received_by: received_by,
+        supplier_invoice_no: supplier_invoice_no,
+        supplier_invoice_date: supplier_invoice_date,
+      })
+      .select('id')
+      .single();
+    if (voucherError) throw new Error(`Failed to create purchase voucher: ${voucherError.message}`);
+
     // Process each item
     for (const item of items) {
       if (item.quantity_received > 0) {
@@ -46,10 +69,21 @@ serve(async (req: Request) => {
           p_quantity: item.quantity_received
         });
         if (stockUpdateError) throw new Error(`Failed to update stock: ${stockUpdateError.message}`);
+
+        // 3. Create Purchase Voucher Item
+        const { error: voucherItemError } = await supabaseAdmin
+          .from('purchase_voucher_items')
+          .insert({
+            purchase_voucher_id: voucher.id,
+            raw_material_id: item.raw_material_id,
+            quantity_received: item.quantity_received,
+            unit_price: item.unit_price, // Assuming unit_price is passed in the item object
+          });
+        if (voucherItemError) throw new Error(`Failed to create voucher item: ${voucherItemError.message}`);
       }
     }
 
-    // 3. Update PO status and invoice details
+    // 4. Update PO status
     const { data: allItems, error: fetchItemsError } = await supabaseAdmin
       .from('purchase_order_items')
       .select('quantity, quantity_received')
@@ -81,7 +115,7 @@ serve(async (req: Request) => {
 
     if (poUpdateError) throw poUpdateError;
 
-    return new Response(JSON.stringify({ success: true, message: `Successfully received items. PO status is now ${newStatus}.` }), {
+    return new Response(JSON.stringify({ success: true, message: `Successfully received items and created voucher. PO status is now ${newStatus}.` }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
