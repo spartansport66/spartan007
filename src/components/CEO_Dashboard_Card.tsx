@@ -27,7 +27,7 @@ interface DashboardData {
 }
 
 const StatCard = ({ title, value, icon, isLoading }: { title: string, value: string, icon: React.ReactNode, isLoading: boolean }) => (
-  <div className="flex items-center justify-between rounded-lg border bg-card text-card-foreground p-3 sm:p-4">
+  <div className="flex items-center justify-between py-2 sm:p-4 sm:rounded-lg sm:border sm:bg-card">
     <div className="space-y-1">
       <p className="text-xs sm:text-sm font-medium text-muted-foreground">{title}</p>
       {isLoading ? (
