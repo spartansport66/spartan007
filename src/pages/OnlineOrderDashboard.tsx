@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import * as pdfjsLib from 'pdfjs-dist';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -256,6 +257,25 @@ const OnlineOrderDashboard = () => {
     }
   };
 
+  const handleClearStaging = async () => {
+    setIsProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('online_order_staging')
+        .delete()
+        .eq('status', 'pending');
+      
+      if (error) throw error;
+      
+      showSuccess("Staging area cleared.");
+      fetchInitialData();
+    } catch (error: any) {
+      showError(error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleBulkCreateOrders = async () => {
     if (stagedOrders.length === 0 || !user) return;
     setIsProcessing(true);
@@ -454,11 +474,32 @@ const OnlineOrderDashboard = () => {
                       <CardTitle>Staging Area</CardTitle>
                       <CardDescription>Orders extracted but not yet created in the system.</CardDescription>
                     </div>
-                    {stagedOrders.length > 0 && (
-                      <Button onClick={handleBulkCreateOrders} disabled={isProcessing} className="bg-indigo-600 hover:bg-indigo-700">
-                        <Play className="mr-2 h-4 w-4" /> Bulk Create Orders
-                      </Button>
-                    )}
+                    <div className="flex gap-2">
+                      {stagedOrders.length > 0 && (
+                        <>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" disabled={isProcessing} className="text-destructive border-destructive hover:bg-destructive/10">
+                                <Eraser className="mr-2 h-4 w-4" /> Clear Staging
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Clear Staging Area?</AlertDialogTitle>
+                                <AlertDialogDescription>This will remove all {stagedOrders.length} pending orders from the staging area. This action cannot be undone.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleClearStaging} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Clear All</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                          <Button onClick={handleBulkCreateOrders} disabled={isProcessing} className="bg-indigo-600 hover:bg-indigo-700">
+                            <Play className="mr-2 h-4 w-4" /> Bulk Create Orders
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
