@@ -227,18 +227,48 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i);
+    // 1. Extract Order ID (Sub Order ID)
+    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)\s*:\s*([a-zA-Z0-9_]+)/i);
     if (!orderNoMatch) return null;
-    const orderNo = orderNoMatch[1];
+    const orderNo = orderNoMatch[1].trim();
 
-    const nameMatch = text.match(/(?:Ship to|Deliver to|Name)\s*:\s*([^\n,]+)/i);
-    const customerName = nameMatch ? nameMatch[1].trim() : "Unknown";
+    // 2. Extract Customer Name
+    let customerName = "Unknown";
+    // Try to find name on the line after "Customer Address" or "Ship to"
+    let nameMatch = text.match(/(?:Customer Address|Ship to)\s*:\s*\n\s*([^\n]+)/i);
+    if (nameMatch) {
+      customerName = nameMatch[1].trim();
+    } else {
+      // Fallback: find name on the same line
+      nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to|Name)\s*:\s*([^\n,]+)/i);
+      if (nameMatch) {
+        customerName = nameMatch[1].trim();
+      }
+    }
 
+    // 3. Extract Item/Product Description
+    let item = "N/A";
     const itemMatch = text.match(/Product Details\s+([\s\S]+?)\s+HSN Code/i);
-    const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Meesho Item";
+    if (itemMatch) {
+      item = itemMatch[1].trim().replace(/\s+/g, ' ').replace(/SKU\s*:\s*[^\s]+/, '').trim();
+    } else {
+      const descMatch = text.match(/Description\n([\s\S]+?)\nHSN/i);
+      if (descMatch) {
+        item = descMatch[1].trim().replace(/\s+/g, ' ');
+      }
+    }
 
+    // 4. Extract Amount
     const amountMatch = text.match(/(?:Grand Total|Collectable Amount)\s*₹?\s*([\d,]+\.\d{2})/i);
-    const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
+    let amount = "0.00";
+    if (amountMatch) {
+      amount = amountMatch[1].replace(/,/g, '');
+    } else {
+      const amounts = text.match(/₹\s*([\d,]+\.\d{2})/g);
+      if (amounts && amounts.length > 0) {
+        amount = amounts[amounts.length - 1].replace(/[₹\s,]/g, '');
+      }
+    }
 
     return { orderNo, customerName, item, amount };
   };
