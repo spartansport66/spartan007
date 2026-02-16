@@ -228,26 +228,39 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    const orderNoMatch = text.match(/Purchase Order No\.\s*(\d+)/i);
+    const orderNoMatch = text.match(/(?:Purchase Order No\.|Order No\.)\s*([a-zA-Z0-9_]+)/i);
     if (!orderNoMatch) return null;
-    const orderNo = orderNoMatch[1].trim();
+    const orderNo = orderNoMatch[1].trim().split('_')[0];
 
-    const nameMatch = text.match(/Customer Address\s*\n\s*([^\n]+)/i);
-    const customerName = nameMatch ? nameMatch[1].trim() : "Unknown";
-
-    const itemMatch = text.match(/Description\s+([\s\S]+?)\s+\d{6,8}/i);
-    let item = "N/A";
-    if (itemMatch) {
-        item = itemMatch[1].trim().replace(/\s*\n\s*/g, ' ');
+    let customerName = "Unknown";
+    const nameMatch = text.match(/Customer Address\s+([^\n]+)/i);
+    if (nameMatch) {
+        customerName = nameMatch[1].trim();
+    } else {
+        const billToMatch = text.match(/BILL TO \/ SHIP TO\s+([^\n]+)/i);
+        if (billToMatch) {
+            customerName = billToMatch[1].split('-')[0].trim();
+        }
     }
 
-    const totalSectionMatch = text.match(/Total\s+([\s\S]+?)(?=Tax is not payable)/i);
+    let item = "N/A";
+    const itemMatch = text.match(/Description\s+([\s\S]+?)\s+\d{6,8}/i);
+    if (itemMatch) {
+        item = itemMatch[1].trim().replace(/\n/g, ' ').replace(/\s+/g, ' ');
+    }
+
     let amount = "0.00";
-    if (totalSectionMatch) {
-        const amounts = totalSectionMatch[1].match(/Rs\.\s*([\d,]+\.\d{2})/g);
-        if (amounts && amounts.length > 0) {
-            amount = amounts[amounts.length - 1].replace(/Rs\./, '').trim().replace(/,/g, '');
+    const totalLineMatches = text.match(/Total\s+[\s\S]*?Rs\.\s*([\d,]+\.\d{2})/g);
+    if (totalLineMatches) {
+        const lastTotalLine = totalLineMatches[totalLineMatches.length - 1];
+        const amountValueMatch = lastTotalLine.match(/Rs\.\s*([\d,]+\.\d{2})$/);
+        if (amountValueMatch) {
+            amount = amountValueMatch[1].replace(/,/g, '');
         }
+    }
+
+    if (item === "N/A" && amount === "0.00") {
+        return null;
     }
 
     return { orderNo, customerName, item, amount };
