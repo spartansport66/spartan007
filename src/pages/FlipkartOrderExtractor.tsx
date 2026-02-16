@@ -5,9 +5,11 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, FileText, Upload, Search, Download, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Loader2, ArrowLeft, FileText, Upload, Search, Download, AlertCircle, Eye, EyeOff, Save, ListChecks } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useSession } from '@/contexts/SessionContext';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Import the worker directly from the package to avoid CDN issues
@@ -26,34 +28,27 @@ interface ExtractedOrder {
 
 const FlipkartOrderExtractor = () => {
   const navigate = useNavigate();
+  const { user } = useSession();
   const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [extractedOrders, setExtractedOrders] = useState<ExtractedOrder[]>([]);
   const [rawText, setRawText] = useState<string>("");
   const [showRawText, setShowRawText] = useState(false);
 
   const extractDataFromPageText = (text: string): ExtractedOrder | null => {
-    // 1. Extract Order ID (Standard Flipkart format is OD followed by 18 digits)
     const orderNoMatch = text.match(/OD\d{18}/);
     if (!orderNoMatch) return null;
 
     const orderNo = orderNoMatch[0];
-
-    // 2. Extract Amount
-    // Specifically target "TOTAL PRICE: XXX.XX" which appears at the end of the invoice table
     const amountMatch = text.match(/TOTAL PRICE\s*[:\s]+\s*([\d,]+\.\d{2})/i);
-    const amount = amountMatch ? amountMatch[1].trim() : "0.00";
+    const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
 
-    // 3. Extract Item/Product
-    // In Flipkart invoices, the product name follows the "Total" column header
-    // We look for the text between "Total" and the first pipe "|" or "IMEI" or "HSN"
     const itemMatch = text.match(/Total\s*,?\s*([^|]+?)(?=\s*\||\s*IMEI|\s*HSN|\s*Qty|\s*Product)/i);
     const item = itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A";
 
-    // 4. Extract Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
 
-    // Try to find "Deliver to:" or "Shipping Address:"
     const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=\s*(?:FSSAI|Seller|Phone|Pin|Order ID|Invoice)|$)/i);
     
     if (deliverToMatch) {
@@ -62,8 +57,6 @@ const FlipkartOrderExtractor = () => {
       customerName = parts[0].trim();
       address = parts.slice(1).join(", ").trim() || "N/A";
     } else {
-      // Fallback: Look for text immediately following the Order ID if "Deliver to" is missing
-      // This is common in some label formats where the name follows the ID
       const fallbackMatch = text.match(new RegExp(`${orderNo}\\s+([\\s\\S]*?)(?=\\s*(?:Product|Description|Qty|FSSAI|Seller|Invoice)|$)`, 'i'));
       if (fallbackMatch) {
         const fullText = fallbackMatch[1].trim();
@@ -73,13 +66,7 @@ const FlipkartOrderExtractor = () => {
       }
     }
 
-    return {
-      orderNo,
-      customerName,
-      address,
-      item,
-      amount
-    };
+    return { orderNo, customerName, address, item, amount };
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,8 +88,6 @@ const FlipkartOrderExtractor = () => {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        
-        // Join text items with spaces to preserve word boundaries
         const pageText = textContent.items.map((item: any) => item.str).join(' ');
         fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
 
@@ -115,7 +100,7 @@ const FlipkartOrderExtractor = () => {
       setRawText(fullDebugText);
       
       if (allExtracted.length === 0) {
-        throw new Error("No valid Flipkart order patterns found in the PDF. Please check the Debug View.");
+        throw new Error("No valid Flipkart order patterns found in the PDF.");
       }
 
       setExtractedOrders(allExtracted);
@@ -128,31 +113,47 @@ const FlipkartOrderExtractor = () => {
     }
   };
 
-  const handleExport = () => {
-    const headers = ["Order No", "Customer Name", "Address", "Item", "Amount"];
-    const csvContent = [
-      headers.join(","),
-      ...extractedOrders.map(o => `"${o.orderNo}","${o.customerName}","${o.address.replace(/"/g, '""')}","${o.item.replace(/"/g, '""')}","${o.amount}"`)
-    ].join("\n");
+  const handleSaveToStaging = async () => {
+    if (!user || extractedOrders.length === 0) return;
+    setIsSaving(true);
+    try {
+      const stagingData = extractedOrders.map(order => ({
+        platform_order_number: order.orderNo,
+        customer_name: order.customerName,
+        shipping_address: order.address,
+        flipkart_item_name: order.item,
+        amount: parseFloat(order.amount),
+        created_by: user.id,
+        status: 'pending'
+      }));
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.body.appendChild(document.createElement("a"));
-    link.href = URL.createObjectURL(blob);
-    link.download = `Flipkart_Orders_${new Date().getTime()}.csv`;
-    link.click();
-    document.body.removeChild(link);
+      const { error } = await supabase
+        .from('online_order_staging')
+        .upsert(stagingData, { onConflict: 'platform_order_number' });
+
+      if (error) throw error;
+
+      showSuccess(`Saved ${extractedOrders.length} orders to staging area.`);
+      navigate('/process-online-orders');
+    } catch (error: any) {
+      console.error("Staging Error:", error);
+      showError(`Failed to save to staging: ${error.message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-6xl">
-        <Button 
-          variant="outline" 
-          onClick={() => navigate('/admin-dashboard')} 
-          className="mb-6 flex items-center gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
-        </Button>
+        <div className="flex justify-between items-center mb-6">
+          <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
+          </Button>
+          <Button variant="secondary" onClick={() => navigate('/process-online-orders')} className="flex items-center gap-2">
+            <ListChecks className="h-4 w-4" /> Process Staged Orders
+          </Button>
+        </div>
 
         <Card className="mb-8 border-2 border-primary/20 shadow-xl">
           <CardHeader className="bg-blue-600 text-white rounded-t-lg">
@@ -171,7 +172,7 @@ const FlipkartOrderExtractor = () => {
               <Upload className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">Select Flipkart Label PDF</h3>
               <p className="text-sm text-muted-foreground mb-6 text-center max-w-md">
-                The system processes the file locally in your browser. No data is sent to any external server.
+                The system processes the file locally in your browser.
               </p>
               <div className="flex flex-col items-center gap-4">
                 <div className="relative">
@@ -223,9 +224,12 @@ const FlipkartOrderExtractor = () => {
                   <CardTitle>Extracted Order Details</CardTitle>
                   <CardDescription>Found {extractedOrders.length} orders in the document.</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleExport} className="flex items-center gap-2">
-                  <Download className="h-4 w-4" /> Export to CSV
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={handleSaveToStaging} disabled={isSaving} className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 border-none">
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save to Staging
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
