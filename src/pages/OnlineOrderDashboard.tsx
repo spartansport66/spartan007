@@ -223,27 +223,23 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    // Try to find "Sub Order ID" or "Order ID" followed by the ID.
-    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID)[:\s]*([a-zA-Z0-9_]+)/i);
-    
+    // Pattern 1: "Sub Order ID : 123456789" with flexible spacing and optional colon
+    let orderNoMatch = text.match(/Sub\s*Order\s*ID\s*:?\s*(\d+)/i);
     if (orderNoMatch && orderNoMatch[1]) {
-      return {
-        orderNo: orderNoMatch[1],
-        customerName: "N/A",
-        item: "N/A",
-        amount: "0.00",
-      };
+      return { orderNo: orderNoMatch[1], customerName: "N/A", item: "N/A", amount: "0.00" };
     }
-    
-    // Fallback: Look for a long number that could be an order ID.
-    const fallbackMatch = text.match(/\b(\d{14,20})\b/);
-    if (fallbackMatch && fallbackMatch[1]) {
-        return {
-            orderNo: fallbackMatch[1],
-            customerName: "N/A",
-            item: "N/A",
-            amount: "0.00",
-        };
+
+    // Pattern 2: "Order ID : 123456789"
+    orderNoMatch = text.match(/Order\s*ID\s*:?\s*(\d+)/i);
+    if (orderNoMatch && orderNoMatch[1]) {
+      return { orderNo: orderNoMatch[1], customerName: "N/A", item: "N/A", amount: "0.00" };
+    }
+
+    // Pattern 3: A long number that is likely an order ID, often near the top.
+    // This is a broad fallback.
+    orderNoMatch = text.match(/\b(\d{10,20})\b/);
+    if (orderNoMatch && orderNoMatch[1]) {
+      return { orderNo: orderNoMatch[1], customerName: "N/A", item: "N/A", amount: "0.00" };
     }
 
     return null;
