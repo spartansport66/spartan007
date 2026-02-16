@@ -229,47 +229,25 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    // 1. Extract Order ID (Meesho uses "Sub Order ID" or "Order ID")
-    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i) || 
-                         text.match(/\b(sub_[a-zA-Z0-9]+)\b/i) ||
-                         text.match(/\b(\d{14,18})\b/);
-    
+    // 1. Order ID - Look for "Purchase Order No." or "Order No."
+    const orderNoMatch = text.match(/Purchase Order No\.\s+(\d+)/i) || 
+                         text.match(/Order No\.\s+[\s\S]*?\s+(\d{15,}_?\d*)/i);
     if (!orderNoMatch) return null;
-    const orderNo = orderNoMatch[1] || orderNoMatch[0];
+    const orderNo = orderNoMatch[1];
 
-    // 2. Extract Amount
-    // Specifically look for the "Total" row at the bottom of the table: "Total Rs.XX.XX Rs.YY.YY"
-    const totalRowMatch = text.match(/Total\s+Rs\.\d+\.\d+\s+Rs\.([\d,]+\.\d{2})/i) ||
-                          text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount|Payable)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i);
-    const amount = totalRowMatch ? totalRowMatch[1].trim().replace(/,/g, '') : "0.00";
+    // 2. Amount - Look for the "Total" row in the invoice table
+    const amountMatch = text.match(/Total\s+Rs\.\d+\.\d+\s+Rs\.([\d,]+\.\d{2})/i) ||
+                        text.match(/Total\s+Rs\.([\d,]+\.\d{2})/i);
+    const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
 
-    // 3. Extract Item/Product Description
-    const itemMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
-    let item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Meesho Item";
-    
-    if (item.toLowerCase().includes("details sku")) item = "N/A";
+    // 3. Item - Text between Description and HSN
+    const itemMatch = text.match(/Description\s+([\s\S]*?)\s+HSN/i);
+    const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Meesho Item";
 
-    // 4. Extract Customer Name and Address
-    let customerName = "Unknown";
-    let address = "N/A";
-
-    const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to|Name)[:\s]*([^\n,]+)/i);
-    if (nameMatch) {
-      customerName = nameMatch[1].trim();
-    }
-
-    const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
-    
-    if (addressMatch) {
-      address = addressMatch[1].trim().replace(/\s+/g, ' ');
-    } else {
-      const blockMatch = text.match(/(?:Customer Name|Shipping Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID)|$)/i);
-      if (blockMatch) {
-        const parts = blockMatch[1].trim().split(/\n|,|,,/);
-        if (customerName === "Unknown") customerName = parts[0].trim();
-        address = parts.slice(1).join(", ").trim() || "N/A";
-      }
-    }
+    // 4. Customer & Address - Text after BILL TO / SHIP TO
+    const billToMatch = text.match(/BILL TO \/ SHIP TO\s+([^-]+)-\s*([\s\S]*?)(?=\s*,?\s*Place of Supply)/i);
+    const customerName = billToMatch ? billToMatch[1].trim() : "Unknown";
+    const address = billToMatch ? billToMatch[2].trim().replace(/\s+/g, ' ') : "See Label";
 
     return { orderNo, customerName, address, item, amount };
   };
