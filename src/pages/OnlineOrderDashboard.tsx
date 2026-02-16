@@ -1,0 +1,580 @@
+"use client";
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2 } from 'lucide-react';
+import { MadeWithDyad } from '@/components/made-with-dyad';
+import { showError, showSuccess } from '@/utils/toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useSession } from '@/contexts/SessionContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import * as pdfjsLib from 'pdfjs-dist';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+// Import the worker directly
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+
+interface ExtractedOrder {
+  orderNo: string;
+  customerName: string;
+  address: string;
+  item: string;
+  amount: string;
+}
+
+interface StagedOrder {
+  id: string;
+  platform_order_number: string;
+  customer_name: string;
+  shipping_address: string;
+  flipkart_item_name: string;
+  amount: number;
+}
+
+interface CreatedOrder {
+  id: string;
+  order_number: number;
+  order_date: string;
+  total_amount: number;
+  client_name: string;
+  raw_item_name: string;
+  platform_order_number: string;
+  mapped_product_id: string | null;
+  bill_no: string;
+  dispatch_date: string;
+  dispatch_number: number | null;
+  dispatched: boolean;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  code: string;
+  dp: number;
+  gst: string;
+}
+
+const OnlineOrderDashboard = () => {
+  const navigate = useNavigate();
+  const { user, isAdmin } = useSession();
+  const [activeTab, setActiveTab] = useState("extract");
+  const [loading, setLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Data states
+  const [platforms, setPlatforms] = useState<{id: string, name: string}[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [stagedOrders, setStagedOrders] = useState<StagedOrder[]>([]);
+  const [createdOrders, setCreatedOrders] = useState<CreatedOrder[]>([]);
+  
+  // UI states
+  const [selectedPlatformId, setSelectedPlatformId] = useState<string>("");
+  const [extractedOrders, setExtractedOrders] = useState<ExtractedOrder[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+  const [companyName, setCompanyName] = useState<string | null>(null);
+
+  const fetchInitialData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [platformsRes, productsRes, stagedRes, companyRes] = await Promise.all([
+        supabase.from('online_platforms').select('*').order('name'),
+        supabase.from('products').select('id, name, code, dp, gst').order('name'),
+        supabase.from('online_order_staging').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
+        supabase.from('company_info').select('company_name').limit(1).single()
+      ]);
+
+      setPlatforms(platformsRes.data || []);
+      setProducts(productsRes.data || []);
+      setStagedOrders(stagedRes.data || []);
+      setCompanyName(companyRes.data?.company_name || null);
+      
+      if (platformsRes.data?.length) setSelectedPlatformId(platformsRes.data[0].id);
+    } catch (error: any) {
+      showError("Failed to load dashboard data.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchCreatedOrders = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id, order_number, order_date, total_amount, bill_no, dispatch_date, dispatch_number, dispatched,
+          dealers!inner(name),
+          online_order_details!inner(client_name, raw_item_name, platform_order_number, mapped_product_id)
+        `)
+        .eq('dealers.name', 'Online Order')
+        .eq('dispatched', false)
+        .order('order_date', { ascending: false });
+
+      if (error) throw error;
+
+      const formatted: CreatedOrder[] = (data || []).map((o: any) => ({
+        id: o.id,
+        order_number: o.order_number,
+        order_date: o.order_date,
+        total_amount: o.total_amount,
+        client_name: o.online_order_details[0].client_name,
+        raw_item_name: o.online_order_details[0].raw_item_name,
+        platform_order_number: o.online_order_details[0].platform_order_number,
+        mapped_product_id: o.online_order_details[0].mapped_product_id,
+        bill_no: o.bill_no || '',
+        dispatch_date: o.dispatch_date ? o.dispatch_date.split('T')[0] : new Date().toISOString().split('T')[0],
+        dispatch_number: o.dispatch_number,
+        dispatched: o.dispatched
+      }));
+      setCreatedOrders(formatted);
+    } catch (error: any) {
+      showError("Failed to load created orders.");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      navigate('/dashboard');
+      return;
+    }
+    fetchInitialData();
+  }, [isAdmin, navigate, fetchInitialData]);
+
+  useEffect(() => {
+    if (activeTab === "process") {
+      fetchCreatedOrders();
+    }
+  }, [activeTab, fetchCreatedOrders]);
+
+  // --- Extraction Logic ---
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !selectedPlatformId) return;
+
+    const platformName = platforms.find(p => p.id === selectedPlatformId)?.name.toLowerCase() || "";
+    setLoading(true);
+    
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      const pdf = await loadingTask.promise;
+      
+      let allExtracted: ExtractedOrder[] = [];
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item: any) => item.str).join(' ');
+
+        let order: ExtractedOrder | null = null;
+        
+        if (platformName.includes('flipkart')) {
+          order = extractFlipkart(pageText);
+        } else if (platformName.includes('meesho')) {
+          order = extractMeesho(pageText);
+        }
+
+        if (order) allExtracted.push(order);
+      }
+
+      if (allExtracted.length === 0) throw new Error("No orders found in PDF.");
+      setExtractedOrders(allExtracted);
+      showSuccess(`Extracted ${allExtracted.length} orders.`);
+    } catch (error: any) {
+      showError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const extractFlipkart = (text: string): ExtractedOrder | null => {
+    const orderNoMatch = text.match(/OD\d{18}/);
+    if (!orderNoMatch) return null;
+    const amountMatch = text.match(/TOTAL PRICE\s*[:\s]+\s*([\d,]+\.\d{2})/i);
+    const itemMatch = text.match(/Total\s*,?\s*([^|]+?)(?=\s*\||\s*IMEI|\s*HSN|\s*Qty)/i);
+    const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=\s*(?:FSSAI|Seller|Phone|Pin|Order ID)|$)/i);
+    
+    const parts = deliverToMatch ? deliverToMatch[1].trim().split(/,,|,/) : ["Unknown"];
+    return {
+      orderNo: orderNoMatch[0],
+      customerName: parts[0].trim(),
+      address: parts.slice(1).join(", ").trim() || "N/A",
+      item: itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A",
+      amount: amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00"
+    };
+  };
+
+  const extractMeesho = (text: string): ExtractedOrder | null => {
+    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i);
+    if (!orderNoMatch) return null;
+    const totalRowMatch = text.match(/Total\s+Rs\.\d+\.\d+\s+Rs\.([\d,]+\.\d{2})/i);
+    const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to|Name)[:\s]*([^\n,]+)/i);
+    return {
+      orderNo: orderNoMatch[1],
+      customerName: nameMatch ? nameMatch[1].trim() : "Unknown",
+      address: "See Label",
+      item: "Meesho Item",
+      amount: totalRowMatch ? totalRowMatch[1].trim().replace(/,/g, '') : "0.00"
+    };
+  };
+
+  // --- Processing Logic ---
+  const handleSaveToStaging = async () => {
+    if (!user || extractedOrders.length === 0) return;
+    setIsProcessing(true);
+    try {
+      const stagingData = extractedOrders.map(order => ({
+        platform_order_number: order.orderNo,
+        customer_name: order.customerName,
+        shipping_address: order.address,
+        flipkart_item_name: order.item,
+        amount: parseFloat(order.amount),
+        created_by: user.id,
+        status: 'pending'
+      }));
+
+      const { error } = await supabase.from('online_order_staging').upsert(stagingData, { onConflict: 'platform_order_number' });
+      if (error) throw error;
+
+      showSuccess(`Staged ${extractedOrders.length} orders.`);
+      setExtractedOrders([]);
+      fetchInitialData();
+    } catch (error: any) {
+      showError(error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBulkCreateOrders = async () => {
+    if (stagedOrders.length === 0 || !user) return;
+    setIsProcessing(true);
+    try {
+      const { data: dealer } = await supabase.from('dealers').select('id').eq('name', 'Online Order').single();
+      if (!dealer) throw new Error("Create 'Online Order' dealer first.");
+
+      for (const staged of stagedOrders) {
+        const { data: newOrder } = await supabase.from('orders').insert({
+          dealer_id: dealer.id,
+          user_id: user.id,
+          total_amount: staged.amount,
+          status: 'completed',
+          payment_status: 'paid',
+          order_date: new Date().toISOString(),
+        }).select('id').single();
+
+        if (newOrder) {
+          await supabase.from('online_order_details').insert({
+            order_id: newOrder.id,
+            client_name: staged.customer_name,
+            platform_id: selectedPlatformId,
+            platform_order_number: staged.platform_order_number,
+            address: staged.shipping_address,
+            raw_item_name: staged.flipkart_item_name,
+          });
+          await supabase.from('online_order_staging').update({ status: 'processed' }).eq('id', staged.id);
+        }
+      }
+      showSuccess("Orders created. Now map products in the next tab.");
+      fetchInitialData();
+      setActiveTab("process");
+    } catch (error: any) {
+      showError(error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleUpdateOrderField = (orderId: string, field: keyof CreatedOrder, value: any) => {
+    setCreatedOrders(prev => prev.map(o => o.id === orderId ? { ...o, [field]: value } : o));
+  };
+
+  const handleBulkCreateGatepass = async () => {
+    const ordersToProcess = createdOrders.filter(o => o.mapped_product_id && o.bill_no);
+    if (ordersToProcess.length === 0) {
+      showError("Select products and enter bill numbers for orders first.");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      for (const order of ordersToProcess) {
+        const product = products.find(p => p.id === order.mapped_product_id)!;
+        const gstPercent = parseFloat(product.gst) || 0;
+
+        // 1. Update Order (triggers dispatch number generation)
+        await supabase.from('orders').update({
+          bill_no: order.bill_no,
+          dispatch_date: order.dispatch_date,
+          dispatched: true
+        }).eq('id', order.id);
+
+        // 2. Update Mapping
+        await supabase.from('online_order_details').update({
+          mapped_product_id: order.mapped_product_id
+        }).eq('order_id', order.id);
+
+        // 3. Create Sales (triggers stock out)
+        await supabase.from('sales').insert({
+          order_id: order.id,
+          product_id: order.mapped_product_id,
+          quantity: 1,
+          unit_price: order.total_amount / (1 + gstPercent / 100),
+          gst_percent: gstPercent,
+          total_price: order.total_amount,
+        });
+      }
+      showSuccess("Gatepasses generated and stock updated.");
+      fetchCreatedOrders();
+    } catch (error: any) {
+      showError(error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBulkPrintInvoices = async () => {
+    const doc = new jsPDF();
+    const darkBlue: [number, number, number] = [30, 58, 138];
+    
+    for (let i = 0; i < createdOrders.length; i++) {
+      const order = createdOrders[i];
+      if (i > 0) doc.addPage();
+      
+      doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 10, 210, 15, 'F');
+      doc.setFontSize(18); doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold");
+      doc.text(companyName?.toUpperCase() || "ORDER INVOICE", 105, 20, { align: 'center' });
+
+      doc.setTextColor(0); doc.setFontSize(10);
+      doc.text(`Order No: #${order.order_number}`, 15, 40);
+      doc.text(`Platform ID: ${order.platform_order_number}`, 15, 45);
+      doc.text(`Customer: ${order.client_name}`, 15, 50);
+      doc.text(`Item: ${order.raw_item_name}`, 15, 55);
+      doc.text(`Total: Rs. ${order.total_amount.toFixed(2)}`, 15, 60);
+    }
+    doc.save("Bulk_Online_Invoices.pdf");
+  };
+
+  const handleBulkPrintGatepasses = async () => {
+    const doc = new jsPDF();
+    const darkBlue: [number, number, number] = [30, 58, 138];
+    
+    const dispatched = createdOrders.filter(o => o.dispatched && o.dispatch_number);
+    if (dispatched.length === 0) {
+      showError("No dispatched orders found to print gatepasses.");
+      return;
+    }
+
+    for (let i = 0; i < dispatched.length; i++) {
+      const order = dispatched[i];
+      if (i > 0) doc.addPage();
+      
+      doc.setFontSize(20); doc.setFont("helvetica", "bold");
+      doc.text(`Gate Pass: ${order.dispatch_number}`, 105, 15, { align: 'center' });
+      doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 22, 210, 12, 'F');
+      doc.setFontSize(16); doc.setTextColor(255, 255, 255);
+      doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", 105, 30, { align: 'center' });
+      
+      doc.setTextColor(0); doc.setFontSize(10);
+      doc.text(`Order: #${order.order_number}`, 15, 45);
+      doc.text(`Customer: ${order.client_name}`, 15, 50);
+      doc.text(`Bill No: ${order.bill_no}`, 15, 55);
+      doc.text(`Amount: Rs. ${order.total_amount.toFixed(2)}`, 15, 60);
+    }
+    doc.save("Bulk_Gate_Passes.pdf");
+  };
+
+  const filteredProducts = useMemo(() => {
+    if (!productSearch) return products;
+    return products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.code.toLowerCase().includes(productSearch.toLowerCase()));
+  }, [products, productSearch]);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
+      <div className="w-full max-w-7xl">
+        <div className="flex justify-between items-center mb-6">
+          <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+          </Button>
+          <h1 className="text-3xl font-bold text-primary">Online Order Dashboard</h1>
+          <div className="w-fit"></div>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-8">
+            <TabsTrigger value="extract" className="text-lg py-3"><Upload className="mr-2 h-5 w-5" /> 1. Extract & Stage</TabsTrigger>
+            <TabsTrigger value="process" className="text-lg py-3"><ListChecks className="mr-2 h-5 w-5" /> 2. Map & Dispatch</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="extract" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="md:col-span-1">
+                <CardHeader className="bg-blue-600 text-white rounded-t-lg">
+                  <CardTitle>Upload Labels</CardTitle>
+                  <CardDescription className="text-blue-100">Select platform and upload PDF.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  <div className="space-y-2">
+                    <Label>Platform</Label>
+                    <Select value={selectedPlatformId} onValueChange={setSelectedPlatformId}>
+                      <SelectTrigger><SelectValue placeholder="Select Platform" /></SelectTrigger>
+                      <SelectContent>
+                        {platforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="border-2 border-dashed rounded-lg p-8 text-center hover:bg-muted/50 transition-colors relative">
+                    <input type="file" accept=".pdf" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" disabled={loading} />
+                    <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm font-medium">Click to upload PDF</p>
+                  </div>
+                  {extractedOrders.length > 0 && (
+                    <Button onClick={handleSaveToStaging} disabled={isProcessing} className="w-full bg-green-600 hover:bg-green-700">
+                      {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Stage {extractedOrders.length} Orders
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle>Staging Area</CardTitle>
+                      <CardDescription>Orders extracted but not yet created in the system.</CardDescription>
+                    </div>
+                    {stagedOrders.length > 0 && (
+                      <Button onClick={handleBulkCreateOrders} disabled={isProcessing} className="bg-indigo-600 hover:bg-indigo-700">
+                        <Play className="mr-2 h-4 w-4" /> Bulk Create Orders
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ScrollArea className="h-[500px]">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Order ID</TableHead><TableHead>Customer</TableHead><TableHead>Item</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {stagedOrders.length === 0 ? (
+                          <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No orders in staging.</TableCell></TableRow>
+                        ) : (
+                          stagedOrders.map(o => (
+                            <TableRow key={o.id}>
+                              <TableCell className="font-mono text-xs">{o.platform_order_number}</TableCell>
+                              <TableCell className="text-xs">{o.customer_name}</TableCell>
+                              <TableCell className="text-xs">{o.flipkart_item_name}</TableCell>
+                              <TableCell className="text-right font-bold">₹{o.amount.toFixed(2)}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="process" className="space-y-6">
+            <Card>
+              <CardHeader className="bg-indigo-600 text-white rounded-t-lg">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <CardTitle>Map & Dispatch Orders</CardTitle>
+                    <CardDescription className="text-indigo-100">Link online items to actual products and generate gatepasses.</CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={handleBulkPrintInvoices} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+                      <Printer className="mr-2 h-4 w-4" /> Print Invoices
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleBulkPrintGatepasses} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+                      <Truck className="mr-2 h-4 w-4" /> Print Gatepasses
+                    </Button>
+                    <Button onClick={handleBulkCreateGatepass} disabled={isProcessing} className="bg-green-500 hover:bg-green-600">
+                      {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                      Generate Bulk Gatepasses
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead>Order #</TableHead>
+                        <TableHead>Online Item</TableHead>
+                        <TableHead className="w-[250px]">Map to Product</TableHead>
+                        <TableHead className="w-[150px]">Bill No.</TableHead>
+                        <TableHead className="w-[150px]">Bill Date</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {createdOrders.length === 0 ? (
+                        <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No pending online orders to process.</TableCell></TableRow>
+                      ) : (
+                        createdOrders.map((o) => (
+                          <TableRow key={o.id} className={o.dispatched ? "opacity-50" : ""}>
+                            <TableCell className="font-bold">#{o.order_number}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium">{o.client_name}</span>
+                                <span className="text-[10px] text-muted-foreground">{o.raw_item_name}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button variant="outline" size="sm" className="w-full justify-between text-left font-normal h-auto py-1" disabled={o.dispatched}>
+                                    {o.mapped_product_id ? (
+                                      <span className="text-[10px] truncate">{products.find(p => p.id === o.mapped_product_id)?.name}</span>
+                                    ) : (
+                                      <span className="text-[10px] text-muted-foreground">Select Product...</span>
+                                    )}
+                                    <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[250px] p-0">
+                                  <div className="p-2 border-b"><Input placeholder="Search..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="h-7 text-xs" /></div>
+                                  <ScrollArea className="h-[150px]">
+                                    {filteredProducts.map(p => (
+                                      <Button key={p.id} variant="ghost" className="w-full justify-start text-[10px] h-auto py-1" onClick={() => { handleUpdateOrderField(o.id, 'mapped_product_id', p.id); setProductSearch(''); }}>
+                                        {p.name} ({p.code})
+                                      </Button>
+                                    ))}
+                                  </ScrollArea>
+                                </PopoverContent>
+                              </Popover>
+                            </TableCell>
+                            <TableCell><Input size={1} className="h-8 text-xs" value={o.bill_no} onChange={e => handleUpdateOrderField(o.id, 'bill_no', e.target.value)} disabled={o.dispatched} placeholder="Bill #" /></TableCell>
+                            <TableCell><Input type="date" className="h-8 text-xs" value={o.dispatch_date} onChange={e => handleUpdateOrderField(o.id, 'dispatch_date', e.target.value)} disabled={o.dispatched} /></TableCell>
+                            <TableCell className="text-right font-bold text-xs">₹{o.total_amount.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+      <MadeWithDyad />
+    </div>
+  );
+};
+
+export default OnlineOrderDashboard;
