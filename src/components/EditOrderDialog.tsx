@@ -143,9 +143,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         .from('orders')
         .select(`
           id, order_number, order_date, dealer_id, user_id, total_amount, discount_amount, round_off, bill_no, dispatch_date,
-          sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst))
+          sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, sale_date, products (name, code, dp, gst))
         `)
         .eq('id', id)
+        .order('sale_date', { foreignTable: 'sales', ascending: true }) // Ensure items are in order of addition
         .single();
 
       if (orderError) throw orderError;
@@ -363,7 +364,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
           <DialogDescription>
