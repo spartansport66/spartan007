@@ -45,18 +45,27 @@ const MeeshoOrderExtractor = () => {
     const orderNo = orderNoMatch[1] || orderNoMatch[0];
 
     // 2. Extract Amount
-    // Look for "Total", "Collectable Amount", "Price", or "Amount" followed by a number
-    const amountMatch = text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount|Payable)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
-                        text.match(/₹\s*([\d,]+(?:\.\d{2})?)/);
-    const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
+    // Specifically look for the "Total" row at the bottom of the table: "Total Rs.XX.XX Rs.YY.YY"
+    // The second Rs. value is usually the grand total.
+    const totalRowMatch = text.match(/Total\s+Rs\.\d+\.\d+\s+Rs\.([\d,]+\.\d{2})/i);
+    let amount = "0.00";
+    
+    if (totalRowMatch) {
+      amount = totalRowMatch[1].trim().replace(/,/g, '');
+    } else {
+      // Fallback to general amount search
+      const amountMatch = text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount|Payable)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
+                          text.match(/₹\s*([\d,]+(?:\.\d{2})?)/);
+      amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
+    }
 
     // 3. Extract Item/Product Description
-    // In Meesho labels, the actual SKU often follows the "Order No." header in the product table
-    const itemTableMatch = text.match(/Order No\.\s+([a-zA-Z0-9_-]+)/i);
+    // Look for the text after the table headers and before the HSN code (6-8 digits)
+    const itemTableMatch = text.match(/(?:Description HSN Qty|Product Details)[\s\S]*?Total\s+([\s\S]*?)\s+\d{6,8}/i);
     let item = "N/A";
     
     if (itemTableMatch) {
-      item = itemTableMatch[1].trim();
+      item = itemTableMatch[1].trim().replace(/\s+/g, ' ');
     } else {
       // Fallback to general description search
       const descMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
@@ -72,19 +81,16 @@ const MeeshoOrderExtractor = () => {
     let customerName = "Unknown";
     let address = "N/A";
 
-    // Look for "Customer Name" or "Ship to"
     const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to|Name)[:\s]*([^\n,]+)/i);
     if (nameMatch) {
       customerName = nameMatch[1].trim();
     }
 
-    // Extract address and stop before return address info
     const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
     
     if (addressMatch) {
       address = addressMatch[1].trim().replace(/\s+/g, ' ');
     } else {
-      // Fallback: Try to find the block between "Customer Name" and "If undelivered"
       const blockMatch = text.match(/(?:Customer Name|Shipping Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID)|$)/i);
       if (blockMatch) {
         const parts = blockMatch[1].trim().split(/\n|,|,,/);
