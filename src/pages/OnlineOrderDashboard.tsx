@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser, AlertCircle, Eye, EyeOff, Copy } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -229,35 +229,55 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    // 1. Order ID - Look for "Order No." followed by newline(s) and then the ID
-    const orderNoMatch = text.match(/Order No\.[\s\n]+([a-zA-Z0-9_]+)/i);
-    if (!orderNoMatch) return null;
-    const orderNo = orderNoMatch[1].trim();
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    
+    // 1. Find Order No
+    const orderIdx = lines.findIndex((l: string) => l.includes("Order No."));
+    let orderNo = "N/A";
+    if (orderIdx !== -1) {
+      orderNo = lines[orderIdx].replace("Order No.", "").trim();
+      if (!orderNo && lines[orderIdx + 1]) orderNo = lines[orderIdx + 1];
+    }
 
-    // 2. Customer Name - Look for "Customer Address" followed by newline(s) and then the name
-    const nameMatch = text.match(/Customer Address[\s\n]+([^\n]+)/i);
-    const customerName = nameMatch ? nameMatch[1].trim() : "Unknown";
+    if (orderNo === "N/A") return null;
 
-    // 3. Address - Text between the name and "If undelivered"
+    // 2. Find Customer Name (Line after "Customer Address")
+    const custIdx = lines.findIndex((l: string) => l.includes("Customer Address"));
+    const customerName = custIdx !== -1 && lines[custIdx + 1] ? lines[custIdx + 1] : "Unknown";
+
+    // 3. Find Address (Lines between Customer Name and "If undelivered")
     let address = "N/A";
-    if (nameMatch) {
-      const addressMatch = text.match(new RegExp(`${customerName}[\\s\\n]+([\\s\\S]*?)(?=If undelivered|return to|$)`, 'i'));
-      if (addressMatch) {
-        address = addressMatch[1].trim().replace(/\n/g, ', ').replace(/\s+/g, ' ');
+    if (custIdx !== -1) {
+      const addressLines = [];
+      for (let j = custIdx + 2; j < lines.length; j++) {
+        if (lines[j].includes("If undelivered") || lines[j].includes("return to")) break;
+        addressLines.push(lines[j]);
+      }
+      if (addressLines.length > 0) address = addressLines.join(", ");
+    }
+
+    // 4. Find Item (Line after "Description HSN Qty")
+    const itemIdx = lines.findIndex((l: string) => l.includes("Description HSN Qty"));
+    let item = "Meesho Item";
+    if (itemIdx !== -1 && lines[itemIdx + 1]) {
+      // The item name is usually the first part of the line before the HSN (6 digits)
+      item = lines[itemIdx + 1].split(/\s\d{6}/)[0].trim();
+    }
+
+    // 5. Find Amount (Last "Rs." value on the line containing "Total")
+    let totalIdx = -1;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (lines[i].includes("Total") && lines[i].includes("Rs.")) {
+        totalIdx = i;
+        break;
       }
     }
 
-    // 4. Item - Text between "Description" and "HSN" in the table
-    const itemMatch = text.match(/Description[\s\S]*?Total[\s\n]+([\s\S]*?)(?=\s+\d{6,8})/i);
-    let item = itemMatch ? itemMatch[1].trim().replace(/\n/g, ' ').replace(/\s+/g, ' ') : "Meesho Item";
-
-    // 5. Amount - Look for the last "Rs." value in the "Total" row
-    const totalSectionMatch = text.match(/Total[\s\n]+(?:Rs\.[\d,.]+\s*)+/i);
     let amount = "0.00";
-    if (totalSectionMatch) {
-      const rsValues = totalSectionMatch[0].match(/Rs\.([\d,]+\.\d{2})/g);
-      if (rsValues && rsValues.length > 0) {
-        amount = rsValues[rsValues.length - 1].replace(/Rs\./g, '').replace(/,/g, '');
+    if (totalIdx !== -1) {
+      const amountMatch = lines[totalIdx].match(/Rs\.([\d,.]+)/g);
+      if (amountMatch) {
+        amount = amountMatch[amountMatch.length - 1].replace("Rs.", "").replace(/,/g, "");
       }
     }
 
@@ -271,23 +291,19 @@ const OnlineOrderDashboard = () => {
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[0];
     
-    // Extract Amount - Look for the last currency value after "Total Amount"
     const amountSection = text.split(/Total\s*Amount/i)[1];
     const amounts = amountSection?.match(/₹\s*([\d,]+\.\d{2})/g);
     const amount = amounts ? amounts[amounts.length - 1].replace(/[₹\s,]/g, '') : "0.00";
 
-    // Extract Item Name - Look for the text after a serial number (1, 2, etc) that follows "Description"
     const itemMatch = text.match(/Description[\s\S]*?\n\s*\d+\s+([\s\S]+?)(?=\n\s*HSN|Qty|Unit|Price|TOTAL|Amount|$)/i);
     const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Amazon Item";
 
-    // Extract Customer Name and Address from Billing Address
     let customerName = "Unknown";
     let address = "N/A";
 
     const billingMatch = text.match(/Billing Address\s*:\s*\n\s*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
     if (billingMatch) {
-      const fullText = billingMatch[1].trim();
-      const lines = fullText.split('\n');
+      const lines = billingMatch[1].trim().split('\n');
       if (lines.length > 0) {
         customerName = lines[0].trim();
         address = lines.slice(1).join(", ").trim() || "N/A";
@@ -412,19 +428,16 @@ const OnlineOrderDashboard = () => {
         const product = products.find(p => p.id === order.mapped_product_id)!;
         const gstPercent = parseFloat(product.gst) || 0;
 
-        // 1. Update Order (triggers dispatch number generation)
         await supabase.from('orders').update({
           bill_no: order.bill_no,
           dispatch_date: order.dispatch_date,
           dispatched: true
         }).eq('id', order.id);
 
-        // 2. Update Mapping
         await supabase.from('online_order_details').update({
           mapped_product_id: order.mapped_product_id
         }).eq('order_id', order.id);
 
-        // 3. Create Sales (triggers stock out)
         await supabase.from('sales').insert({
           order_id: order.id,
           product_id: order.mapped_product_id,
@@ -494,6 +507,12 @@ const OnlineOrderDashboard = () => {
     doc.save("Bulk_Gate_Passes.pdf");
   };
 
+  const handleCopyDebugText = () => {
+    if (!rawText) return;
+    navigator.clipboard.writeText(rawText);
+    showSuccess("Debug text copied to clipboard.");
+  };
+
   const filteredProducts = useMemo(() => {
     if (!productSearch) return products;
     return products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.code.toLowerCase().includes(productSearch.toLowerCase()));
@@ -545,15 +564,27 @@ const OnlineOrderDashboard = () => {
                     </Button>
                   )}
                   {rawText && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => setShowRawText(!showRawText)}
-                      className="w-full text-xs text-muted-foreground"
-                    >
-                      {showRawText ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
-                      {showRawText ? 'Hide Debug View' : 'Show Debug View'}
-                    </Button>
+                    <div className="flex flex-col gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setShowRawText(!showRawText)}
+                        className="w-full text-xs text-muted-foreground"
+                      >
+                        {showRawText ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
+                        {showRawText ? 'Hide Debug View' : 'Show Debug View'}
+                      </Button>
+                      {showRawText && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleCopyDebugText}
+                          className="w-full text-xs"
+                        >
+                          <Copy className="h-3 w-3 mr-1" /> Copy Debug Text
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </CardContent>
               </Card>
