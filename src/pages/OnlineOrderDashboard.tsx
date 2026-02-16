@@ -233,7 +233,7 @@ const OnlineOrderDashboard = () => {
   const extractMeesho = (text: string): ExtractedOrder | null => {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     
-    // 1. Find Order No - Look for the distinct long number with underscore
+    // 1. Find Order No - Look for the distinct long number with underscore (e.g. 252746449405028736_1)
     const orderNoMatch = text.match(/\b(\d{15,20}_\d+)\b/);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[0];
@@ -266,7 +266,7 @@ const OnlineOrderDashboard = () => {
       }
       
       for (let k = startIdx; k < lines.length; k++) {
-        if (lines[k].match(/^\d{5,8}$/)) break; // HSN code
+        if (lines[k].match(/^\d{6}$/)) break; // Stop at HSN code
         if (lines[k].toLowerCase().includes("total")) break;
         if (lines[k].includes("Rs.")) break;
         itemParts.push(lines[k]);
