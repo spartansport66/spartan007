@@ -32,7 +32,8 @@ import ManagePlatforms from "./pages/ManagePlatforms";
 import PurchaseDashboard from "./pages/PurchaseDashboard";
 import TransferDealers from "./pages/TransferDealers";
 import FlipkartOrderExtractor from "./pages/FlipkartOrderExtractor";
-import ProcessOnlineOrders from "./pages/ProcessOnlineOrders"; // New Import
+import MeeshoOrderExtractor from "./pages/MeeshoOrderExtractor";
+import ProcessOnlineOrders from "./pages/ProcessOnlineOrders";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -71,7 +72,8 @@ const AppContent = () => {
       <Route path="/purchase-dashboard" element={<PurchaseDashboard />} />
       <Route path="/transfer-dealers" element={<TransferDealers />} />
       <Route path="/flipkart-extractor" element={<FlipkartOrderExtractor />} />
-      <Route path="/process-online-orders" element={<ProcessOnlineOrders />} /> {/* New Route */}
+      <Route path="/meesho-extractor" element={<MeeshoOrderExtractor />} />
+      <Route path="/process-online-orders" element={<ProcessOnlineOrders />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>

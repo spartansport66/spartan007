@@ -89,6 +89,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         onClick={() => navigate('/flipkart-extractor')}
       />
       <NavButton
+        icon={<FileSearch className="h-4 w-4" />}
+        label="Meesho Extractor"
+        onClick={() => navigate('/meesho-extractor')}
+      />
+      <NavButton
         icon={<DollarSign className="h-4 w-4" />}
         label="Receive Payment"
         onClick={() => navigate('/receive-payment')}
