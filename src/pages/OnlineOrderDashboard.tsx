@@ -30,7 +30,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 interface ExtractedOrder {
   orderNo: string;
   customerName: string;
-  address: string;
   item: string;
   amount: string;
 }
@@ -39,7 +38,6 @@ interface StagedOrder {
   id: string;
   platform_order_number: string;
   customer_name: string;
-  shipping_address: string;
   flipkart_item_name: string;
   amount: number;
 }
@@ -223,7 +221,6 @@ const OnlineOrderDashboard = () => {
     return {
       orderNo: orderNoMatch[0],
       customerName: parts[0].trim(),
-      address: parts.slice(1).join(", ").trim() || "N/A",
       item: itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A",
       amount: amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00"
     };
@@ -238,16 +235,6 @@ const OnlineOrderDashboard = () => {
 
     const custIdx = lines.findIndex(l => l.toLowerCase().includes("customer address"));
     const customerName = (custIdx !== -1 && lines[custIdx + 1]) ? lines[custIdx + 1] : "Unknown";
-
-    let address = "N/A";
-    if (custIdx !== -1) {
-      const addressLines = [];
-      for (let j = custIdx + 2; j < lines.length; j++) {
-        if (lines[j].toLowerCase().includes("if undelivered") || lines[j].toLowerCase().includes("return to")) break;
-        addressLines.push(lines[j]);
-      }
-      if (addressLines.length > 0) address = addressLines.join(", ");
-    }
 
     const headerIdx = lines.findIndex(l => l.toLowerCase().includes("description") && l.toLowerCase().includes("hsn"));
     let item = "Meesho Item";
@@ -265,7 +252,7 @@ const OnlineOrderDashboard = () => {
     const amounts = text.match(/Rs\.?\s*([\d,]+\.\d{2})/gi);
     const amount = amounts ? amounts[amounts.length - 1].replace(/Rs\.?\s*/i, "").replace(/,/g, "") : "0.00";
 
-    return { orderNo, customerName, address, item, amount };
+    return { orderNo, customerName, item, amount };
   };
 
   const extractAmazon = (text: string): ExtractedOrder | null => {
@@ -283,18 +270,16 @@ const OnlineOrderDashboard = () => {
     const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Amazon Item";
 
     let customerName = "Unknown";
-    let address = "N/A";
 
     const billingMatch = text.match(/Billing Address\s*:\s*\n\s*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
     if (billingMatch) {
       const lines = billingMatch[1].trim().split('\n');
       if (lines.length > 0) {
         customerName = lines[0].trim();
-        address = lines.slice(1).join(", ").trim() || "N/A";
       }
     }
 
-    return { orderNo, customerName, address, item, amount };
+    return { orderNo, customerName, item, amount };
   };
 
   // --- Processing Logic ---
@@ -305,7 +290,6 @@ const OnlineOrderDashboard = () => {
       const stagingData = extractedOrders.map(order => ({
         platform_order_number: order.orderNo,
         customer_name: order.customerName,
-        shipping_address: order.address,
         flipkart_item_name: order.item,
         amount: parseFloat(order.amount),
         created_by: user.id,
@@ -378,7 +362,6 @@ const OnlineOrderDashboard = () => {
             client_name: staged.customer_name,
             platform_id: selectedPlatformId,
             platform_order_number: staged.platform_order_number,
-            address: staged.shipping_address,
             raw_item_name: staged.flipkart_item_name,
           });
           await supabase.from('online_order_staging').update({ status: 'processed' }).eq('id', staged.id);
