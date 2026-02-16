@@ -233,16 +233,13 @@ const OnlineOrderDashboard = () => {
   const extractMeesho = (text: string): ExtractedOrder | null => {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     
-    // 1. Find Order No - Look for the distinct long number with underscore (e.g. 252746449405028736_1)
-    const orderNoMatch = text.match(/\b(\d{15,20}_\d+)\b/);
+    const orderNoMatch = text.match(/\b(\d{15,20}(?:_\d+)?)\b/);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[0];
 
-    // 2. Find Customer Name - Line immediately after "Customer Address"
     const custIdx = lines.findIndex(l => l.toLowerCase().includes("customer address"));
     const customerName = (custIdx !== -1 && lines[custIdx + 1]) ? lines[custIdx + 1] : "Unknown";
 
-    // 3. Find Address - Text between Customer Name and "If undelivered"
     let address = "N/A";
     if (custIdx !== -1) {
       const addressLines = [];
@@ -253,20 +250,12 @@ const OnlineOrderDashboard = () => {
       if (addressLines.length > 0) address = addressLines.join(", ");
     }
 
-    // 4. Find Item - Text between "Description" and the HSN code (6 digits)
-    const descIdx = lines.findIndex(l => l.toLowerCase().includes("description"));
+    const headerIdx = lines.findIndex(l => l.toLowerCase().includes("description") && l.toLowerCase().includes("hsn"));
     let item = "Meesho Item";
-    if (descIdx !== -1) {
+    if (headerIdx !== -1) {
       const itemParts = [];
-      // Skip headers
-      let startIdx = descIdx + 1;
-      // Skip common headers if they are on separate lines
-      while (startIdx < lines.length && ["hsn", "qty", "gross", "amount", "discount", "taxable", "value", "taxes", "total"].includes(lines[startIdx].toLowerCase())) {
-        startIdx++;
-      }
-      
-      for (let k = startIdx; k < lines.length; k++) {
-        if (lines[k].match(/^\d{5,8}$/)) break; // HSN code
+      for (let k = headerIdx + 1; k < lines.length; k++) {
+        if (lines[k].match(/^\d{6,8}$/)) break;
         if (lines[k].toLowerCase().includes("total")) break;
         if (lines[k].includes("Rs.")) break;
         itemParts.push(lines[k]);
@@ -274,7 +263,6 @@ const OnlineOrderDashboard = () => {
       if (itemParts.length > 0) item = itemParts.join(" ");
     }
 
-    // 5. Find Amount - The last "Rs." value appearing in the text
     const amounts = text.match(/Rs\.?\s*([\d,]+\.\d{2})/gi);
     const amount = amounts ? amounts[amounts.length - 1].replace(/Rs\.?\s*/i, "").replace(/,/g, "") : "0.00";
 
