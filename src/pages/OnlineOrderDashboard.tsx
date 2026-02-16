@@ -22,6 +22,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import * as pdfjsLib from 'pdfjs-dist';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import OnlineOrderExcelUpload from '@/components/OnlineOrderExcelUpload'; // New Import
 
 // Import the worker directly
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -227,31 +228,26 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    // 1. Extract Order ID (Sub Order ID)
-    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)[\s:]*([a-zA-Z0-9_]+)/i);
+    const orderNoMatch = text.match(/Purchase Order No\.\s*(\d+)/i);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[1].trim();
 
-    // 2. Extract Customer Name
-    let customerName = "Unknown";
-    const nameMatch = text.match(/(?:Customer Address|Ship to)[\s:]*([^\n\s][^\n]*)/i);
-    if (nameMatch) {
-      customerName = nameMatch[1].trim();
-    }
+    const nameMatch = text.match(/Customer Address\s*\n\s*([^\n]+)/i);
+    const customerName = nameMatch ? nameMatch[1].trim() : "Unknown";
 
-    // 3. Extract Item/Product Description from Invoice table
+    const itemMatch = text.match(/Description\s+([\s\S]+?)\s+\d{6,8}/i);
     let item = "N/A";
-    const itemMatch = text.match(/Total\n+([\s\S]+?)\n+\s*\d{6,8}/i);
     if (itemMatch) {
-      // Clean up the captured string: remove newlines and extra spaces
-      item = itemMatch[1].trim().replace(/\n/g, ' ').replace(/\s+/g, ' ');
+        item = itemMatch[1].trim().replace(/\s*\n\s*/g, ' ');
     }
 
-    // 4. Extract Amount from Invoice table
+    const totalSectionMatch = text.match(/Total\s+([\s\S]+?)(?=Tax is not payable)/i);
     let amount = "0.00";
-    const amountMatch = text.match(/Total[\s\S]*?Rs\.\s*([\d,]+\.\d{2})\s*\n*\s*Tax is not payable/i);
-    if (amountMatch) {
-      amount = amountMatch[1].replace(/,/g, '');
+    if (totalSectionMatch) {
+        const amounts = totalSectionMatch[1].match(/Rs\.\s*([\d,]+\.\d{2})/g);
+        if (amounts && amounts.length > 0) {
+            amount = amounts[amounts.length - 1].replace(/Rs\./, '').trim().replace(/,/g, '');
+        }
     }
 
     return { orderNo, customerName, item, amount };
@@ -505,10 +501,10 @@ const OnlineOrderDashboard = () => {
           </TabsList>
 
           <TabsContent value="extract" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card className="md:col-span-1">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
                 <CardHeader className="bg-blue-600 text-white rounded-t-lg">
-                  <CardTitle>Upload Labels</CardTitle>
+                  <CardTitle>Upload Labels (PDF)</CardTitle>
                   <CardDescription className="text-blue-100">Select platform and upload PDF.</CardDescription>
                 </CardHeader>
                 <CardContent className="p-6 space-y-4">
@@ -557,94 +553,94 @@ const OnlineOrderDashboard = () => {
                   )}
                 </CardContent>
               </Card>
-
-              <Card className="md:col-span-2">
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <CardTitle>Staging Area</CardTitle>
-                      <CardDescription>Orders extracted but not yet created in the system.</CardDescription>
-                    </div>
-                    <div className="flex gap-2">
-                      {stagedOrders.length > 0 && (
-                        <>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="outline" disabled={isProcessing} className="text-destructive border-destructive hover:bg-destructive/10">
-                                <Eraser className="mr-2 h-4 w-4" /> Clear Staging
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Clear Staging Area?</AlertDialogTitle>
-                                <AlertDialogDescription>This will remove all {stagedOrders.length} pending orders from the staging area. This action cannot be undone.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleClearStaging} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Clear All</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                          <Button onClick={handleBulkCreateOrders} disabled={isProcessing || selectedStagedIds.length === 0} className="bg-indigo-600 hover:bg-indigo-700">
-                            <Play className="mr-2 h-4 w-4" /> Bulk Create {selectedStagedIds.length} Orders
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {showRawText && rawText && (
-                    <div className="p-4 bg-slate-950 text-slate-50 rounded-none overflow-x-auto border-b">
-                      <h4 className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-2">
-                        <AlertCircle className="h-3 w-3" /> Raw Extracted Text (Debug)
-                      </h4>
-                      <pre className="text-[10px] leading-relaxed whitespace-pre-wrap font-mono max-h-[200px] overflow-y-auto">
-                        {rawText}
-                      </pre>
-                    </div>
-                  )}
-                  <ScrollArea className="h-[500px]">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="w-12">
-                            <Checkbox 
-                              checked={selectedStagedIds.length === stagedOrders.length && stagedOrders.length > 0}
-                              onCheckedChange={(checked) => handleSelectAllStaged(!!checked)}
-                            />
-                          </TableHead>
-                          <TableHead>Order ID</TableHead>
-                          <TableHead>Customer</TableHead>
-                          <TableHead>Item</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {stagedOrders.length === 0 ? (
-                          <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No orders in staging.</TableCell></TableRow>
-                        ) : (
-                          stagedOrders.map(o => (
-                            <TableRow key={o.id}>
-                              <TableCell>
-                                <Checkbox 
-                                  checked={selectedStagedIds.includes(o.id)}
-                                  onCheckedChange={(checked) => handleSelectStagedOrder(o.id, !!checked)}
-                                />
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">{o.platform_order_number}</TableCell>
-                              <TableCell className="text-xs">{o.customer_name}</TableCell>
-                              <TableCell className="text-xs">{o.flipkart_item_name}</TableCell>
-                              <TableCell className="text-right font-bold">₹{o.amount.toFixed(2)}</TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
+              <OnlineOrderExcelUpload onUploadComplete={fetchInitialData} />
             </div>
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Staging Area</CardTitle>
+                    <CardDescription>Orders extracted but not yet created in the system.</CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    {stagedOrders.length > 0 && (
+                      <>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" disabled={isProcessing} className="text-destructive border-destructive hover:bg-destructive/10">
+                              <Eraser className="mr-2 h-4 w-4" /> Clear Staging
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Clear Staging Area?</AlertDialogTitle>
+                              <AlertDialogDescription>This will remove all {stagedOrders.length} pending orders from the staging area. This action cannot be undone.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={handleClearStaging} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Clear All</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <Button onClick={handleBulkCreateOrders} disabled={isProcessing || selectedStagedIds.length === 0} className="bg-indigo-600 hover:bg-indigo-700">
+                          <Play className="mr-2 h-4 w-4" /> Bulk Create {selectedStagedIds.length} Orders
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {showRawText && rawText && (
+                  <div className="p-4 bg-slate-950 text-slate-50 rounded-none overflow-x-auto border-b">
+                    <h4 className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-2">
+                      <AlertCircle className="h-3 w-3" /> Raw Extracted Text (Debug)
+                    </h4>
+                    <pre className="text-[10px] leading-relaxed whitespace-pre-wrap font-mono max-h-[200px] overflow-y-auto">
+                      {rawText}
+                    </pre>
+                  </div>
+                )}
+                <ScrollArea className="h-[500px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="w-12">
+                          <Checkbox 
+                            checked={selectedStagedIds.length === stagedOrders.length && stagedOrders.length > 0}
+                            onCheckedChange={(checked) => handleSelectAllStaged(!!checked)}
+                          />
+                        </TableHead>
+                        <TableHead>Order ID</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Item</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {stagedOrders.length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No orders in staging.</TableCell></TableRow>
+                      ) : (
+                        stagedOrders.map(o => (
+                          <TableRow key={o.id}>
+                            <TableCell>
+                              <Checkbox 
+                                checked={selectedStagedIds.includes(o.id)}
+                                onCheckedChange={(checked) => handleSelectStagedOrder(o.id, !!checked)}
+                              />
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">{o.platform_order_number}</TableCell>
+                            <TableCell className="text-xs">{o.customer_name}</TableCell>
+                            <TableCell className="text-xs">{o.flipkart_item_name}</TableCell>
+                            <TableCell className="text-right font-bold">₹{o.amount.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="process" className="space-y-6">
