@@ -39,28 +39,37 @@ const FlipkartOrderExtractor = () => {
     const orderNo = orderNoMatch[0];
 
     // 2. Extract Amount
-    // Pattern: TOTAL PRICE: 162.00
-    const amountMatch = text.match(/TOTAL PRICE:\s*([\d,]+\.?\d*)/i);
+    // Specifically target "TOTAL PRICE: XXX.XX" which appears at the end of the invoice table
+    const amountMatch = text.match(/TOTAL PRICE:\s*([\d,]+\.\d{2})/i);
     const amount = amountMatch ? amountMatch[1].trim() : "0.00";
 
     // 3. Extract Item/Product
+    // In Flipkart invoices, the product name follows the "Total" column header
     // Pattern: Total, [PRODUCT NAME], |
-    // This targets the product name that appears immediately after the 'Total' column header in the invoice table
-    const itemMatch = text.match(/Total,\s*([\s\S]*?)(?=\s*\||\s*IMEI|\s*HSN)/i);
+    const itemMatch = text.match(/Total,\s*([^|]+)/i);
     const item = itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A";
 
     // 4. Extract Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
 
-    // Pattern: Deliver to: [NAME] [ADDRESS] ... stops at FSSAI or Seller info
-    const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=[,\s]+(?:FSSAI|Seller|Phone|Pin|Order ID|Invoice)|$)/i);
+    // Try to find "Deliver to:" or "Shipping Address:"
+    const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=\s*(?:FSSAI|Seller|Phone|Pin|Order ID|Invoice)|$)/i);
+    
     if (deliverToMatch) {
-      const fullAddressText = deliverToMatch[1].trim();
-      // Split by common delimiters to separate name from address
-      const addressLines = fullAddressText.split(/,|\n/).map(l => l.trim()).filter(Boolean);
-      customerName = addressLines[0] || "Unknown";
-      address = addressLines.slice(1).join(", ").trim() || "N/A";
+      const fullText = deliverToMatch[1].trim();
+      const parts = fullText.split(/,,|,/);
+      customerName = parts[0].trim();
+      address = parts.slice(1).join(", ").trim() || "N/A";
+    } else {
+      // Fallback: Look for text immediately following the Order ID if "Deliver to" is missing
+      const fallbackMatch = text.match(new RegExp(`${orderNo}\\s+([\\s\\S]*?)(?=\\s*(?:Product|Description|Qty|FSSAI|Seller|Invoice)|$)`, 'i'));
+      if (fallbackMatch) {
+        const fullText = fallbackMatch[1].trim();
+        const parts = fullText.split(/,,|,/);
+        customerName = parts[0].trim();
+        address = parts.slice(1).join(", ").trim() || "N/A";
+      }
     }
 
     return {
@@ -92,6 +101,7 @@ const FlipkartOrderExtractor = () => {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         
+        // Join text items with spaces to preserve word boundaries
         const pageText = textContent.items.map((item: any) => item.str).join(' ');
         fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
 
