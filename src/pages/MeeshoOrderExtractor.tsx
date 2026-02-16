@@ -44,23 +44,29 @@ const MeeshoOrderExtractor = () => {
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[1] || orderNoMatch[0];
 
-    // 2. Extract Amount (Look for "Total", "Collectable Amount", or "Price")
-    // We look for the amount specifically associated with totals
-    const amountMatch = text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
+    // 2. Extract Amount
+    // Look for "Total", "Collectable Amount", "Price", or "Amount" followed by a number
+    const amountMatch = text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount|Payable)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
                         text.match(/₹\s*([\d,]+(?:\.\d{2})?)/);
     const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
 
     // 3. Extract Item/Product Description
-    // Look for "Product", "Description", or "Item"
-    const itemMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
-    let item = itemMatch ? itemMatch[1].trim() : "N/A";
+    // In Meesho labels, the actual SKU often follows the "Order No." header in the product table
+    const itemTableMatch = text.match(/Order No\.\s+([a-zA-Z0-9_-]+)/i);
+    let item = "N/A";
     
-    // Clean up item description if it contains header noise
-    if (item.toLowerCase().includes("details sku")) {
-      // Try a different pattern if the first one caught headers
-      const altItemMatch = text.match(/Description\s+([\s\S]*?)(?=\s*(?:Qty|Price|Total)|$)/i);
-      item = altItemMatch ? altItemMatch[1].trim() : "N/A";
+    if (itemTableMatch) {
+      item = itemTableMatch[1].trim();
+    } else {
+      // Fallback to general description search
+      const descMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
+      if (descMatch) {
+        item = descMatch[1].trim();
+      }
     }
+    
+    // Clean up common noise
+    if (item.toLowerCase().includes("details sku")) item = "N/A";
 
     // 4. Extract Customer Name and Address
     let customerName = "Unknown";
@@ -68,20 +74,21 @@ const MeeshoOrderExtractor = () => {
 
     // Look for "Customer Name" or "Ship to"
     const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to|Name)[:\s]*([^\n,]+)/i);
-    const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
-    
     if (nameMatch) {
       customerName = nameMatch[1].trim();
     }
 
+    // Extract address and stop before return address info
+    const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
+    
     if (addressMatch) {
       address = addressMatch[1].trim().replace(/\s+/g, ' ');
     } else {
-      // Fallback: Try to find the block between "Customer Name" and "Phone"
-      const blockMatch = text.match(/(?:Customer Name|Shipping Address)[:\s]*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID)|$)/i);
+      // Fallback: Try to find the block between "Customer Name" and "If undelivered"
+      const blockMatch = text.match(/(?:Customer Name|Shipping Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID)|$)/i);
       if (blockMatch) {
         const parts = blockMatch[1].trim().split(/\n|,|,,/);
-        customerName = parts[0].trim();
+        if (customerName === "Unknown") customerName = parts[0].trim();
         address = parts.slice(1).join(", ").trim() || "N/A";
       }
     }
