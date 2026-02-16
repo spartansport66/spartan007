@@ -234,6 +234,9 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractAmazon = (text: string): ExtractedOrder | null => {
+    // Check for the specific header to ensure we are on an invoice page
+    if (!text.includes("Tax Invoice/Bill of Supply/Cash Memo")) return null;
+
     // Amazon Order ID format: 40X-XXXXXXX-XXXXXXX
     const orderNoMatch = text.match(/\d{3}-\d{7}-\d{7}/);
     if (!orderNoMatch) return null;
@@ -258,16 +261,11 @@ const OnlineOrderDashboard = () => {
     const billingMatch = text.match(/Billing Address\s*[:\s]+([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
     if (billingMatch) {
       const fullText = billingMatch[1].trim();
-      // Try splitting by newline first, then by comma
-      const lines = fullText.split(/\n/);
-      if (lines.length > 1) {
+      // Split by common delimiters to find the first line (name)
+      const lines = fullText.split(/\n|,|,,/);
+      if (lines.length > 0) {
         customerName = lines[0].trim();
-        address = lines.slice(1).join(", ").trim();
-      } else {
-        // If no newlines, maybe it's comma separated
-        const parts = fullText.split(/,/);
-        customerName = parts[0].trim();
-        address = parts.slice(1).join(", ").trim() || "N/A";
+        address = lines.slice(1).join(", ").trim() || "N/A";
       }
     }
 
