@@ -227,30 +227,18 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    
-    const orderNoMatch = text.match(/\b(\d{15,20}(?:_\d+)?)\b/);
+    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i);
     if (!orderNoMatch) return null;
-    const orderNo = orderNoMatch[0];
+    const orderNo = orderNoMatch[1];
 
-    const custIdx = lines.findIndex(l => l.toLowerCase().includes("customer address"));
-    const customerName = (custIdx !== -1 && lines[custIdx + 1]) ? lines[custIdx + 1] : "Unknown";
+    const nameMatch = text.match(/(?:Ship to|Deliver to|Name)\s*:\s*([^\n,]+)/i);
+    const customerName = nameMatch ? nameMatch[1].trim() : "Unknown";
 
-    const headerIdx = lines.findIndex(l => l.toLowerCase().includes("description") && l.toLowerCase().includes("hsn"));
-    let item = "Meesho Item";
-    if (headerIdx !== -1) {
-      const itemParts = [];
-      for (let k = headerIdx + 1; k < lines.length; k++) {
-        if (lines[k].match(/^\d{6,8}$/)) break;
-        if (lines[k].toLowerCase().includes("total")) break;
-        if (lines[k].includes("Rs.")) break;
-        itemParts.push(lines[k]);
-      }
-      if (itemParts.length > 0) item = itemParts.join(" ");
-    }
+    const itemMatch = text.match(/Product Details\s+([\s\S]+?)\s+HSN Code/i);
+    const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Meesho Item";
 
-    const amounts = text.match(/Rs\.?\s*([\d,]+\.\d{2})/gi);
-    const amount = amounts ? amounts[amounts.length - 1].replace(/Rs\.?\s*/i, "").replace(/,/g, "") : "0.00";
+    const amountMatch = text.match(/(?:Grand Total|Collectable Amount)\s*₹?\s*([\d,]+\.\d{2})/i);
+    const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
 
     return { orderNo, customerName, item, amount };
   };
