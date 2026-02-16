@@ -185,6 +185,8 @@ const OnlineOrderDashboard = () => {
           order = extractFlipkart(pageText);
         } else if (platformName.includes('meesho')) {
           order = extractMeesho(pageText);
+        } else if (platformName.includes('amazon')) {
+          order = extractAmazon(pageText);
         }
 
         if (order) allExtracted.push(order);
@@ -229,6 +231,36 @@ const OnlineOrderDashboard = () => {
       item: "Meesho Item",
       amount: totalRowMatch ? totalRowMatch[1].trim().replace(/,/g, '') : "0.00"
     };
+  };
+
+  const extractAmazon = (text: string): ExtractedOrder | null => {
+    // Amazon Order ID format: 40X-XXXXXXX-XXXXXXX
+    const orderNoMatch = text.match(/\d{3}-\d{7}-\d{7}/);
+    if (!orderNoMatch) return null;
+
+    const orderNo = orderNoMatch[0];
+    
+    // Extract Amount - usually near "Grand Total" or "Total"
+    const amountMatch = text.match(/(?:Grand Total|Total|Amount Payable)[:\s]*₹?\s*([\d,]+\.\d{2})/i) || 
+                        text.match(/₹\s*([\d,]+\.\d{2})/);
+    const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
+
+    // Extract Item Name
+    const itemMatch = text.match(/(?:Product|Description|Item)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Price|HSN|GST|Total)|$)/i);
+    const item = itemMatch ? itemMatch[1].trim() : "Amazon Item";
+
+    // Extract Customer Name and Address
+    let customerName = "Unknown";
+    let address = "N/A";
+
+    const shipToMatch = text.match(/(?:Ship to|Shipping Address|Deliver to)[:\s]+([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller)|$)/i);
+    if (shipToMatch) {
+      const parts = shipToMatch[1].trim().split(/\n|,|,,/);
+      customerName = parts[0].trim();
+      address = parts.slice(1).join(", ").trim() || "N/A";
+    }
+
+    return { orderNo, customerName, address, item, amount };
   };
 
   // --- Processing Logic ---
