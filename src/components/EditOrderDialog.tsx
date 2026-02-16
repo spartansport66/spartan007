@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Percent, Search, Building, Phone, MapPin } from 'lucide-react';
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Percent, Search, Building, Phone, MapPin, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -16,6 +16,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Product {
   id: string;
@@ -24,6 +25,17 @@ interface Product {
   dp: number;
   closing_stock: number;
   gst: string;
+}
+
+interface Dealer {
+  id: string;
+  name: string;
+}
+
+interface SalesPerson {
+  id: string;
+  first_name: string;
+  last_name: string;
 }
 
 interface OrderItem {
@@ -43,10 +55,9 @@ interface OrderItem {
 interface OrderToEdit {
   id: string;
   order_number: number;
-  dealer_name: string;
-  dealer_address: string;
-  dealer_phone: string;
-  dealer_city: string;
+  order_date: string;
+  dealer_id: string;
+  user_id: string;
   total_amount: number;
   discount_amount: number;
   round_off: number;
@@ -64,6 +75,9 @@ interface EditOrderDialogProps {
 
 const formSchema = z.object({
   orderNumber: z.preprocess((val) => Number(val), z.number().int().min(1, { message: 'Order number must be at least 1.' })),
+  orderDate: z.string().min(1, { message: 'Order date is required.' }),
+  dealerId: z.string().uuid({ message: 'Please select a dealer.' }),
+  salesPersonId: z.string().uuid({ message: 'Please select a sales person.' }),
   discountAmount: z.preprocess((val) => Number(val), z.number().min(0)),
   billNo: z.string().nullable().optional(),
   dispatchDate: z.string().nullable().optional(),
@@ -74,6 +88,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [salesPersons, setSalesPersons] = useState<SalesPerson[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [orderData, setOrderData] = useState<OrderToEdit | null>(null);
 
@@ -89,6 +105,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     resolver: zodResolver(formSchema),
     defaultValues: {
       orderNumber: 0,
+      orderDate: '',
+      dealerId: '',
+      salesPersonId: '',
       discountAmount: 0,
       billNo: '',
       dispatchDate: '',
@@ -96,48 +115,34 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     },
   });
 
-  const fetchOrderAndProducts = useCallback(async (id: string) => {
+  const fetchInitialData = useCallback(async () => {
+    try {
+      const [productsRes, dealersRes, salesPersonsRes] = await Promise.all([
+        supabase.from('products').select('id, code, name, dp, closing_stock, gst').order('name'),
+        supabase.from('dealers').select('id, name').order('name'),
+        supabase.from('profiles').select('id, first_name, last_name').eq('user_type', 'sales_person').order('first_name'),
+      ]);
+
+      if (productsRes.error) throw productsRes.error;
+      if (dealersRes.error) throw dealersRes.error;
+      if (salesPersonsRes.error) throw salesPersonsRes.error;
+
+      setProducts(productsRes.data || []);
+      setDealers(dealersRes.data || []);
+      setSalesPersons(salesPersonsRes.data || []);
+    } catch (error: any) {
+      console.error('Error fetching initial data:', error.message);
+      showError('Failed to load form data.');
+    }
+  }, []);
+
+  const fetchOrderDetails = useCallback(async (id: string) => {
     setLoading(true);
     try {
-      const fetchAllProducts = async (): Promise<Product[]> => {
-        const allProducts: Product[] = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data, error } = await supabase
-            .from('products')
-            .select('id, code, name, dp, closing_stock, gst')
-            .order('name', { ascending: true })
-            .range(page * pageSize, (page + 1) * pageSize - 1);
-
-          if (error) {
-            console.error("Error fetching a page of products:", error);
-            throw error;
-          }
-
-          if (data) {
-            allProducts.push(...data);
-          }
-
-          if (!data || data.length < pageSize) {
-            hasMore = false;
-          } else {
-            page++;
-          }
-        }
-        return allProducts;
-      };
-
-      const productsData = await fetchAllProducts();
-      setProducts(productsData || []);
-
       const { data: orderRaw, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, total_amount, discount_amount, round_off, bill_no, dispatch_date,
-          dealers (name, address, phone, city),
+          id, order_number, order_date, dealer_id, user_id, total_amount, discount_amount, round_off, bill_no, dispatch_date,
           sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst))
         `)
         .eq('id', id)
@@ -169,26 +174,17 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         };
       });
 
-      const dealer = (orderRaw.dealers as any);
-
       setOrderData({
-        id: orderRaw.id,
-        order_number: orderRaw.order_number,
-        dealer_name: dealer?.name || 'N/A',
-        dealer_address: dealer?.address || 'N/A',
-        dealer_phone: dealer?.phone || 'N/A',
-        dealer_city: dealer?.city || 'N/A',
-        total_amount: orderRaw.total_amount,
-        discount_amount: orderRaw.discount_amount || 0,
-        round_off: orderRaw.round_off || 0,
-        bill_no: orderRaw.bill_no,
-        dispatch_date: orderRaw.dispatch_date,
+        ...orderRaw,
         items: fetchedItems,
       });
       
       setOrderItems(fetchedItems);
       form.reset({
         orderNumber: orderRaw.order_number,
+        orderDate: orderRaw.order_date ? orderRaw.order_date.split('T')[0] : '',
+        dealerId: orderRaw.dealer_id,
+        salesPersonId: orderRaw.user_id,
         discountAmount: orderRaw.discount_amount || 0,
         billNo: orderRaw.bill_no || '',
         dispatchDate: orderRaw.dispatch_date ? orderRaw.dispatch_date.split('T')[0] : '',
@@ -196,9 +192,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       });
 
     } catch (error: any) {
-      console.error('Error fetching order details for edit:', error.message);
+      console.error('Error fetching order details:', error.message);
       showError(`Failed to load order details: ${error.message}`);
-      setOrderData(null);
     } finally {
       setLoading(false);
     }
@@ -206,12 +201,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   useEffect(() => {
     if (isOpen && orderId) {
-      fetchOrderAndProducts(orderId);
-    } else if (!isOpen) {
-      setOrderData(null);
-      setOrderItems([]);
+      fetchInitialData();
+      fetchOrderDetails(orderId);
     }
-  }, [isOpen, orderId, fetchOrderAndProducts]);
+  }, [isOpen, orderId, fetchInitialData, fetchOrderDetails]);
 
   const totalTaxableValue = useMemo(() => {
     return orderItems.reduce((total, item) => total + item.taxable_value, 0);
@@ -263,7 +256,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       gst_amount: newItemCalculations.gstAmount,
       total_price: newItemCalculations.totalPrice,
     };
-    // Changed from [newOrderItem, ...prevItems] to [...prevItems, newOrderItem]
     setOrderItems(prevItems => [...prevItems, newOrderItem]);
     setNewItemProductId('');
     setNewItemQuantity(1);
@@ -318,6 +310,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         .from('orders')
         .update({
           order_number: values.orderNumber,
+          order_date: values.orderDate,
+          dealer_id: values.dealerId,
+          user_id: values.salesPersonId,
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
           round_off: values.roundOff,
@@ -350,7 +345,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       if (payment) {
         await supabase
           .from('payments')
-          .update({ amount: finalOrderAmount })
+          .update({ amount: finalOrderAmount, dealer_id: values.dealerId })
           .eq('id', payment.id);
       }
 
@@ -366,15 +361,13 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     }
   };
 
-  if (!orderId || !isOpen) return null;
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
           <DialogDescription>
-            Modify items, discounts, billing info, and order number.
+            Modify items, discounts, billing info, and order details.
           </DialogDescription>
         </DialogHeader>
         
@@ -384,60 +377,42 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           </div>
         ) : (
           <div className="space-y-6 py-4">
-            {/* Party Details Section */}
-            <div className="p-4 border rounded-md bg-muted/30 space-y-3">
-              <h3 className="text-sm font-bold flex items-center gap-2 text-primary">
-                <Building className="h-4 w-4" /> Party Details
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="space-y-1">
-                  <p className="font-semibold text-foreground">{orderData?.dealer_name}</p>
-                  <p className="flex items-start gap-1 text-muted-foreground">
-                    <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
-                    <span>{orderData?.dealer_address}, {orderData?.dealer_city}</span>
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="flex items-center gap-1 text-muted-foreground">
-                    <Phone className="h-3 w-3 shrink-0" />
-                    <span>{orderData?.dealer_phone}</span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="orderNumber">Order Number</Label>
-                <Input 
-                  id="orderNumber" 
-                  type="number" 
-                  {...form.register('orderNumber')} 
-                  disabled={isSubmitting}
-                />
+                <Input id="orderNumber" type="number" {...form.register('orderNumber')} disabled={isSubmitting} />
                 {form.formState.errors.orderNumber && <p className="text-xs text-destructive">{form.formState.errors.orderNumber.message}</p>}
               </div>
               <div className="space-y-2">
+                <Label htmlFor="orderDate">Order Date</Label>
+                <Input id="orderDate" type="date" {...form.register('orderDate')} disabled={isSubmitting} />
+                {form.formState.errors.orderDate && <p className="text-xs text-destructive">{form.formState.errors.orderDate.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Dealer</Label>
+                <Select value={form.watch('dealerId')} onValueChange={(val) => form.setValue('dealerId', val)}>
+                  <SelectTrigger><SelectValue placeholder="Select Dealer" /></SelectTrigger>
+                  <SelectContent>
+                    {dealers.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Sales Person</Label>
+                <Select value={form.watch('salesPersonId')} onValueChange={(val) => form.setValue('salesPersonId', val)}>
+                  <SelectTrigger><SelectValue placeholder="Select Sales Person" /></SelectTrigger>
+                  <SelectContent>
+                    {salesPersons.map(sp => <SelectItem key={sp.id} value={sp.id}>{sp.first_name} {sp.last_name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="billNo">Bill Number</Label>
-                <Input 
-                  id="billNo" 
-                  placeholder="e.g., INV-001"
-                  {...form.register('billNo')} 
-                  disabled={isSubmitting}
-                />
+                <Input id="billNo" placeholder="e.g., INV-001" {...form.register('billNo')} disabled={isSubmitting} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="dispatchDate">Bill Date (Dispatch Date)</Label>
-                <Input 
-                  id="dispatchDate" 
-                  type="date" 
-                  {...form.register('dispatchDate')} 
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Input value={orderData?.bill_no ? 'Dispatched' : 'Pending'} disabled className="bg-muted" />
+                <Input id="dispatchDate" type="date" {...form.register('dispatchDate')} disabled={isSubmitting} />
               </div>
             </div>
 
@@ -458,44 +433,35 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                       <div className="p-2 border-b flex items-center gap-2">
                         <Search className="h-4 w-4 text-muted-foreground" />
-                        <Input 
-                          placeholder="Search product..." 
-                          value={productSearch} 
-                          onChange={(e) => setProductSearch(e.target.value)} 
-                          className="h-8 border-none focus-visible:ring-0" 
-                        />
+                        <Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" />
                       </div>
                       <ScrollArea className="h-[250px]">
                         <div className="p-1">
-                          {filteredProducts.length === 0 ? (
-                            <div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>
-                          ) : (
-                            filteredProducts.map((product) => (
-                              <Button
-                                key={product.id}
-                                variant="ghost"
-                                className="w-full justify-start font-normal h-auto py-2"
-                                onClick={() => {
-                                  setNewItemProductId(product.id);
-                                  setNewItemUnitPrice(product.dp);
-                                  setNewItemGstPercent(parseFloat(product.gst) || 0);
-                                  setIsProductPopoverOpen(false);
-                                  setProductSearch('');
-                                }}
-                              >
-                                <div className="flex flex-col items-start w-full">
-                                  <div className="flex items-center justify-between w-full">
-                                    <div className="flex items-center">
-                                      <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                                      <span className="font-medium">{product.name} ({product.code})</span>
-                                    </div>
-                                    <span className="text-xs font-bold text-primary">₹{product.dp.toFixed(2)}</span>
+                          {filteredProducts.map((product) => (
+                            <Button
+                              key={product.id}
+                              variant="ghost"
+                              className="w-full justify-start font-normal h-auto py-2"
+                              onClick={() => {
+                                setNewItemProductId(product.id);
+                                setNewItemUnitPrice(product.dp);
+                                setNewItemGstPercent(parseFloat(product.gst) || 0);
+                                setIsProductPopoverOpen(false);
+                                setProductSearch('');
+                              }}
+                            >
+                              <div className="flex flex-col items-start w-full">
+                                <div className="flex items-center justify-between w-full">
+                                  <div className="flex items-center">
+                                    <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                    <span className="font-medium">{product.name} ({product.code})</span>
                                   </div>
-                                  <div className="text-xs text-muted-foreground ml-6">GST: {product.gst}% - Stock: {product.closing_stock}</div>
+                                  <span className="text-xs font-bold text-primary">₹{product.dp.toFixed(2)}</span>
                                 </div>
-                              </Button>
-                            ))
-                          )}
+                                <div className="text-xs text-muted-foreground ml-6">GST: {product.gst}% - Stock: {product.closing_stock}</div>
+                              </div>
+                            </Button>
+                          ))}
                         </div>
                       </ScrollArea>
                     </PopoverContent>
@@ -550,27 +516,11 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
               <div className="flex justify-between text-base font-medium"><span>Subtotal (Incl. GST):</span><span>₹{preGlobalDiscountTotal.toFixed(2)}</span></div>
               <div className="flex justify-between items-center">
                 <Label htmlFor="discountAmount" className="text-base font-medium">Additional Global Discount (₹)</Label>
-                <Input 
-                  id="discountAmount" 
-                  type="number" 
-                  step="0.01" 
-                  {...form.register('discountAmount')} 
-                  className="w-32 text-right" 
-                  min="0" 
-                  max={preGlobalDiscountTotal} 
-                  disabled={isSubmitting} 
-                />
+                <Input id="discountAmount" type="number" step="0.01" {...form.register('discountAmount')} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} disabled={isSubmitting} />
               </div>
               <div className="flex justify-between items-center">
                 <Label htmlFor="roundOff" className="text-base font-medium">Round Off (+/-)</Label>
-                <Input 
-                  id="roundOff" 
-                  type="number" 
-                  step="0.01" 
-                  {...form.register('roundOff')} 
-                  className="w-32 text-right" 
-                  disabled={isSubmitting} 
-                />
+                <Input id="roundOff" type="number" step="0.01" {...form.register('roundOff')} className="w-32 text-right" disabled={isSubmitting} />
               </div>
               <Separator className="my-2" />
               <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
