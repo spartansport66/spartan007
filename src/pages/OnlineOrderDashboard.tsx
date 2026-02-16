@@ -739,7 +739,14 @@ const OnlineOrderDashboard = () => {
                                   </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[250px] p-0">
-                                  <div className="p-2 border-b"><Input placeholder="Search..." value={productSearch} onChange={e => setProductSearch(e.target.value)} className="h-7 text-xs" /></div>
+                                  <div className="p-2 border-b">
+                                    <Input 
+                                      placeholder="Search..." 
+                                      value={productSearch} 
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProductSearch(e.target.value)} 
+                                      className="h-7 text-xs" 
+                                    />
+                                  </div>
                                   <ScrollArea className="h-[150px]">
                                     {filteredProducts.map(p => (
                                       <Button key={p.id} variant="ghost" className="w-full justify-start text-[10px] h-auto py-1" onClick={() => { handleUpdateOrderField(o.id, 'mapped_product_id', p.id); setProductSearch(''); }}>
@@ -750,8 +757,25 @@ const OnlineOrderDashboard = () => {
                                 </PopoverContent>
                               </Popover>
                             </TableCell>
-                            <TableCell><Input size={1} className="h-8 text-xs" value={o.bill_no} onChange={e => handleUpdateOrderField(o.id, 'bill_no', e.target.value)} disabled={o.dispatched} placeholder="Bill #" /></TableCell>
-                            <TableCell><Input type="date" className="h-8 text-xs" value={o.dispatch_date} onChange={e => handleUpdateOrderField(o.id, 'dispatch_date', e.target.value)} disabled={o.dispatched} /></TableCell>
+                            <TableCell>
+                              <Input 
+                                size={1} 
+                                className="h-8 text-xs" 
+                                value={o.bill_no} 
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateOrderField(o.id, 'bill_no', e.target.value)} 
+                                disabled={o.dispatched} 
+                                placeholder="Bill #" 
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input 
+                                type="date" 
+                                className="h-8 text-xs" 
+                                value={o.dispatch_date} 
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateOrderField(o.id, 'dispatch_date', e.target.value)} 
+                                disabled={o.dispatched} 
+                              />
+                            </TableCell>
                             <TableCell className="text-right font-bold text-xs">₹{o.total_amount.toFixed(2)}</TableCell>
                           </TableRow>
                         ))
