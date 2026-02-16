@@ -177,7 +177,8 @@ const OnlineOrderDashboard = () => {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(' ');
+        // Join with newline to preserve line structure for better parsing
+        const pageText = textContent.items.map((item: any) => item.str).join('\n');
 
         let order: ExtractedOrder | null = null;
         
@@ -245,19 +246,19 @@ const OnlineOrderDashboard = () => {
     const amounts = amountSection?.match(/₹\s*([\d,]+\.\d{2})/g);
     const amount = amounts ? amounts[amounts.length - 1].replace(/[₹\s,]/g, '') : "0.00";
 
-    // Extract Item Name - Look between "Description" and "HSN"
-    // Refined to handle "No Description" header and skip leading serial numbers
-    const itemMatch = text.match(/Description\s+(?:\d+\s+)?([\s\S]*?)(?=\s*HSN|Qty|Unit|Price|TOTAL|Amount|$)/i);
+    // Extract Item Name - Look for the text after a serial number (1, 2, etc) that follows "Description"
+    // This regex looks for "Description", then skips any headers, then finds a line starting with a number
+    const itemMatch = text.match(/Description[\s\S]*?\n\s*\d+\s+([\s\S]+?)(?=\n\s*HSN|Qty|Unit|Price|TOTAL|Amount|$)/i);
     const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Amazon Item";
 
     // Extract Customer Name and Address from Billing Address
     let customerName = "Unknown";
     let address = "N/A";
 
-    const billingMatch = text.match(/Billing Address\s*:\s*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
+    const billingMatch = text.match(/Billing Address\s*:\s*\n\s*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
     if (billingMatch) {
       const fullText = billingMatch[1].trim();
-      const lines = fullText.split(/\n/);
+      const lines = fullText.split('\n');
       if (lines.length > 0) {
         customerName = lines[0].trim();
         address = lines.slice(1).join(", ").trim() || "N/A";
