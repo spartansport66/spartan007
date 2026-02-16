@@ -47,6 +47,12 @@ interface OrderItemDisplay {
   total_price: number;
 }
 
+interface OnlineOrderInfo {
+  client_name: string;
+  platform_name: string;
+  platform_order_number: string | null;
+}
+
 interface OrderDisplay {
   id: string;
   order_number: number;
@@ -56,6 +62,7 @@ interface OrderDisplay {
   payment_status: string;
   items: OrderItemDisplay[];
   dispatched: boolean;
+  online_details?: OnlineOrderInfo | null;
 }
 
 const formatDate = (dateString: string) => {
@@ -157,6 +164,11 @@ const Dashboard = () => {
         payment_status,
         dispatched,
         dealers (name),
+        online_order_details (
+          client_name,
+          platform_order_number,
+          online_platforms (name)
+        ),
         sales (
           product_id,
           quantity,
@@ -186,22 +198,31 @@ const Dashboard = () => {
       showError(`Failed to load orders data: ${ordersError.message}`);
       setOrders([]);
     } else {
-      let processedOrders: OrderDisplay[] = (ordersData || []).map((order: any) => ({
-        id: order.id,
-        order_number: order.order_number,
-        order_date: order.order_date,
-        total_amount: order.total_amount,
-        dealer_name: order.dealers?.name || 'N/A',
-        payment_status: order.payment_status,
-        dispatched: order.dispatched,
-        items: (order.sales || []).map((sale: any) => ({
-          product_id: sale.product_id || '',
-          product_name: sale.products?.name || 'N/A',
-          quantity: sale.quantity,
-          unit_dp: sale.products?.dp || 0,
-          total_price: sale.total_price,
-        })),
-      }));
+      let processedOrders: OrderDisplay[] = (ordersData || []).map((order: any) => {
+        const onlineDetails = order.online_order_details?.[0] ? {
+          client_name: order.online_order_details[0].client_name,
+          platform_name: order.online_order_details[0].online_platforms?.name || 'N/A',
+          platform_order_number: order.online_order_details[0].platform_order_number,
+        } : null;
+
+        return {
+          id: order.id,
+          order_number: order.order_number,
+          order_date: order.order_date,
+          total_amount: order.total_amount,
+          dealer_name: order.dealers?.name || 'N/A',
+          payment_status: order.payment_status,
+          dispatched: order.dispatched,
+          online_details: onlineDetails,
+          items: (order.sales || []).map((sale: any) => ({
+            product_id: sale.product_id || '',
+            product_name: sale.products?.name || 'N/A',
+            quantity: sale.quantity,
+            unit_dp: sale.products?.dp || 0,
+            total_price: sale.total_price,
+          })),
+        };
+      });
 
       setOrders(processedOrders);
     }
@@ -406,7 +427,7 @@ const Dashboard = () => {
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead className="text-muted-foreground">Order No.</TableHead>
-                      <TableHead className="text-muted-foreground">Dealer</TableHead>
+                      <TableHead className="text-muted-foreground">Dealer / Online Details</TableHead>
                       <TableHead className="text-muted-foreground">Order Date</TableHead>
                       <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
                       <TableHead className="text-muted-foreground">Payment Status</TableHead>
@@ -417,7 +438,16 @@ const Dashboard = () => {
                     {orders.map((order) => (
                       <TableRow key={order.id} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
-                        <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {order.dealer_name === 'Online Order' && order.online_details ? (
+                            <div className="flex flex-col text-xs">
+                              <span className="font-bold text-blue-600 dark:text-blue-400">{order.online_details.client_name}</span>
+                              <span>{order.online_details.platform_name} | Order#: {order.online_details.platform_order_number || 'N/A'}</span>
+                            </div>
+                          ) : (
+                            order.dealer_name
+                          )}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{formatDate(order.order_date)}</TableCell>
                         <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                         <TableCell className="text-muted-foreground">{order.payment_status || 'N/A'}</TableCell>
