@@ -36,39 +36,47 @@ const MeeshoOrderExtractor = () => {
   const [showRawText, setShowRawText] = useState(false);
 
   const extractDataFromPageText = (text: string): ExtractedOrder | null => {
-    // 1. Extract Order ID
-    // Patterns: "Order ID: ...", "Sub Order ID: ...", or just a string starting with "sub_"
-    const orderNoMatch = text.match(/(?:Order ID|Sub Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i) || 
+    // 1. Extract Order ID (Meesho uses "Sub Order ID" or "Order ID")
+    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i) || 
                          text.match(/\b(sub_[a-zA-Z0-9]+)\b/i) ||
-                         text.match(/\b(\d{12,})\b/);
+                         text.match(/\b(\d{14,18})\b/);
     
     if (!orderNoMatch) return null;
-
     const orderNo = orderNoMatch[1] || orderNoMatch[0];
 
-    // 2. Extract Amount
-    // Patterns: "Total: ...", "Order Value: ...", "Collectable Amount: ...", or just a currency symbol followed by numbers
-    const amountMatch = text.match(/(?:Total|Order Value|Collectable Amount|Price)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
+    // 2. Extract Amount (Meesho uses "Collectable Amount" or "Total Price")
+    const amountMatch = text.match(/(?:Collectable Amount|Total Price|Order Value|Price)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
                         text.match(/₹\s*([\d,]+(?:\.\d{2})?)/);
-    
     const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
 
     // 3. Extract Item/Product
-    const itemMatch = text.match(/(?:Product|SKU|Item Name)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST)|$)/i);
-    const item = itemMatch ? itemMatch[1].trim() : "N/A";
+    // Meesho labels often have "Product Name" or "SKU"
+    const itemMatch = text.match(/(?:Product Name|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details)|$)/i);
+    let item = itemMatch ? itemMatch[1].trim() : "N/A";
+    if (item.toLowerCase().includes("details sku")) item = "N/A"; // Clean up header noise
 
     // 4. Extract Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
 
-    const shippingMatch = text.match(/(?:Customer Details|Shipping Address|Deliver to)[:\s]*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
+    // Meesho specific: Look for "Customer Name" and "Address" labels
+    const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to)[:\s]*([\s\S]*?)(?=\s*(?:Address|Phone|Pin|Order ID)|$)/i);
+    const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
     
-    if (shippingMatch) {
-      const fullText = shippingMatch[1].trim();
-      // Split by common delimiters to find the name (usually the first line or part)
-      const parts = fullText.split(/\n|,|,,/);
-      customerName = parts[0].trim();
-      address = parts.slice(1).join(", ").trim() || "N/A";
+    if (nameMatch) {
+      customerName = nameMatch[1].trim().split(/\n|,/)[0].trim();
+    }
+
+    if (addressMatch) {
+      address = addressMatch[1].trim().replace(/\s+/g, ' ');
+    } else {
+      // Fallback: Try to find the block between "Customer Name" and "Phone"
+      const blockMatch = text.match(/(?:Customer Name|Shipping Address)[:\s]*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID)|$)/i);
+      if (blockMatch) {
+        const parts = blockMatch[1].trim().split(/\n|,|,,/);
+        customerName = parts[0].trim();
+        address = parts.slice(1).join(", ").trim() || "N/A";
+      }
     }
 
     return { orderNo, customerName, address, item, amount };
@@ -105,7 +113,7 @@ const MeeshoOrderExtractor = () => {
       setRawText(fullDebugText);
       
       if (allExtracted.length === 0) {
-        throw new Error("No valid Meesho order patterns found in the PDF. Try checking the 'Debug View' to see the extracted text.");
+        throw new Error("No valid Meesho order patterns found. Please check the 'Debug View' to see the extracted text.");
       }
 
       setExtractedOrders(allExtracted);
