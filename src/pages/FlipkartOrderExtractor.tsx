@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, FileText, Upload, Search, Download } from 'lucide-react';
+import { Loader2, ArrowLeft, FileText, Upload, Search, Download, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -25,46 +25,46 @@ const FlipkartOrderExtractor = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [extractedOrders, setExtractedOrders] = useState<ExtractedOrder[]>([]);
+  const [rawText, setRawText] = useState<string>("");
+  const [showRawText, setShowRawText] = useState(false);
 
-  const extractDataFromText = (text: string): ExtractedOrder[] => {
-    const orders: ExtractedOrder[] = [];
-    
-    // This is a simplified extraction logic based on common Flipkart label patterns.
-    // In a real-world scenario, this would need to be more robust to handle multi-page PDFs
-    // and varying label formats.
-    
-    // Split text into potential label blocks (Flipkart labels often have distinct separators or headers)
-    const blocks = text.split(/Ordered Through/i);
-    
-    blocks.forEach(block => {
-      if (!block.trim()) return;
+  const extractDataFromPageText = (text: string): ExtractedOrder | null => {
+    // 1. Extract Order ID (Standard Flipkart format is OD followed by 18 digits)
+    const orderNoMatch = text.match(/OD\d{18}/) || text.match(/Order ID:\s*([A-Z0-9-]+)/i);
+    if (!orderNoMatch) return null;
 
-      // Regex patterns for Flipkart labels
-      const orderNoMatch = block.match(/Order ID:\s*([A-Z0-9-]+)/i) || block.match(/OD\d{18}/);
-      const amountMatch = block.match(/Total:\s*₹?\s*([\d,.]+)/i) || block.match(/Amount:\s*₹?\s*([\d,.]+)/i);
-      
-      // Customer name and address are usually near "Deliver to:"
-      const deliverToMatch = block.match(/Deliver to:\s*([\s\S]*?)(?=\n\n|Phone:|$)/i);
-      
-      // Item name is usually near the SKU or product description area
-      const itemMatch = block.match(/Product:\s*([\s\S]*?)(?=\n|Qty:|$)/i) || block.match(/SKU:\s*([\s\S]*?)(?=\n|$)/i);
+    const orderNo = orderNoMatch[0].replace('Order ID:', '').trim();
 
-      if (orderNoMatch) {
-        const addressLines = deliverToMatch ? deliverToMatch[1].trim().split('\n') : [];
-        const customerName = addressLines[0] || 'Unknown';
-        const address = addressLines.slice(1).join(', ') || 'N/A';
+    // 2. Extract Amount
+    // Look for "Total", "Amount", or the ₹ symbol followed by numbers
+    const amountMatch = text.match(/(?:Total|Amount|Collectable Amount)[:\s]*₹?\s*([\d,.]+)/i) || 
+                        text.match(/₹\s*([\d,.]+)/);
+    const amount = amountMatch ? amountMatch[1].trim() : "0.00";
 
-        orders.push({
-          orderNo: orderNoMatch[1] || orderNoMatch[0],
-          customerName,
-          address,
-          item: itemMatch ? itemMatch[1].trim() : 'N/A',
-          amount: amountMatch ? amountMatch[1] : '0.00',
-        });
-      }
-    });
+    // 3. Extract Customer Name and Address
+    // Usually follows "Deliver to:" or "Shipping Address"
+    let customerName = "Unknown";
+    let address = "N/A";
 
-    return orders;
+    const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=\s(?:Phone|Pin|Order ID|Invoice)|$)/i);
+    if (deliverToMatch) {
+      const addressLines = deliverToMatch[1].trim().split(/\s{2,}|\n/);
+      customerName = addressLines[0] || "Unknown";
+      address = addressLines.slice(1).join(", ").trim() || "N/A";
+    }
+
+    // 4. Extract Item/Product
+    // Look for "Product", "Item", or "SKU"
+    const itemMatch = text.match(/(?:Product|Item|SKU)[:\s]+([\s\S]*?)(?=\s(?:Qty|Price|Total)|$)/i);
+    const item = itemMatch ? itemMatch[1].trim() : "N/A";
+
+    return {
+      orderNo,
+      customerName,
+      address,
+      item,
+      amount
+    };
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,51 +72,63 @@ const FlipkartOrderExtractor = () => {
     if (!file) return;
 
     setLoading(true);
+    setExtractedOrders([]);
+    setRawText("");
+    
     try {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       
-      let fullText = "";
+      let allExtracted: ExtractedOrder[] = [];
+      let fullDebugText = "";
+
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
+        
+        // Join text items with spaces to preserve some structure
         const pageText = textContent.items.map((item: any) => item.str).join(' ');
-        fullText += pageText + "\n---PAGE BREAK---\n";
+        fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
+
+        const order = extractDataFromPageText(pageText);
+        if (order) {
+          allExtracted.push(order);
+        }
       }
 
-      console.log("Extracted Raw Text:", fullText);
-      const results = extractDataFromText(fullText);
+      setRawText(fullDebugText);
       
-      if (results.length === 0) {
-        // Fallback: If regex fails, show a mock result based on the provided file name
-        // to demonstrate the dashboard functionality.
-        setExtractedOrders([
-          {
-            orderNo: "OD332145678901234567",
-            customerName: "John Doe",
-            address: "123, Sample Street, Mumbai, Maharashtra - 400001",
-            item: "Spartan Cricket Bat - Grade 1",
-            amount: "4500.00"
-          },
-          {
-            orderNo: "OD332145678901234568",
-            customerName: "Jane Smith",
-            address: "456, Test Avenue, Delhi - 110001",
-            item: "Spartan Batting Gloves",
-            amount: "1200.00"
-          }
-        ]);
-        showSuccess("PDF parsed. (Using template matching for demonstration)");
-      } else {
-        setExtractedOrders(results);
-        showSuccess(`Successfully extracted ${results.length} orders!`);
+      if (allExtracted.length === 0) {
+        throw new Error("No valid Flipkart order patterns found in the PDF.");
       }
+
+      setExtractedOrders(allExtracted);
+      showSuccess(`Successfully extracted ${allExtracted.length} orders!`);
     } catch (error: any) {
       console.error("PDF Parsing Error:", error);
-      showError("Failed to parse PDF. Please ensure it is a valid Flipkart label file.");
+      showError(error.message || "Failed to parse PDF. Check the Debug View for details.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleExport = () => {
+    // Simple CSV export logic
+    const headers = ["Order No", "Customer Name", "Address", "Item", "Amount"];
+    const csvContent = [
+      headers.join(","),
+      ...extractedOrders.map(o => `"${o.orderNo}","${o.customerName}","${o.address.replace(/"/g, '""')}","${o.item}","${o.amount}"`)
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Flipkart_Orders_${new Date().getTime()}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -147,32 +159,60 @@ const FlipkartOrderExtractor = () => {
               <Upload className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">Select Flipkart Label PDF</h3>
               <p className="text-sm text-muted-foreground mb-6 text-center max-w-md">
-                The system will process the file locally in your browser to extract Customer Name, Address, Order ID, and Items.
+                The system processes the file locally in your browser. No data is sent to any external server.
               </p>
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  disabled={loading}
-                />
-                <Button disabled={loading} className="bg-blue-600 hover:bg-blue-700">
-                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                  {loading ? 'Processing PDF...' : 'Upload & Extract'}
-                </Button>
+              <div className="flex flex-col items-center gap-4">
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    disabled={loading}
+                  />
+                  <Button disabled={loading} className="bg-blue-600 hover:bg-blue-700 min-w-[200px]">
+                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                    {loading ? 'Processing PDF...' : 'Upload & Extract'}
+                  </Button>
+                </div>
+                
+                {rawText && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setShowRawText(!showRawText)}
+                    className="text-xs text-muted-foreground"
+                  >
+                    {showRawText ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
+                    {showRawText ? 'Hide Debug View' : 'Show Debug View (Raw Text)'}
+                  </Button>
+                )}
               </div>
             </div>
+
+            {showRawText && rawText && (
+              <div className="mt-6 p-4 bg-slate-950 text-slate-50 rounded-md overflow-x-auto">
+                <h4 className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-2">
+                  <AlertCircle className="h-3 w-3" /> Raw Extracted Text (Debug)
+                </h4>
+                <pre className="text-[10px] leading-relaxed whitespace-pre-wrap font-mono">
+                  {rawText}
+                </pre>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {extractedOrders.length > 0 && (
           <Card className="shadow-lg border-none">
-            <CardHeader className="border-b">
+            <CardHeader className="border-b bg-muted/30">
               <div className="flex justify-between items-center">
-                <CardTitle>Extracted Order Details</CardTitle>
-                <Button variant="outline" size="sm" className="flex items-center gap-2">
-                  <Download className="h-4 w-4" /> Export to Excel
+                <div>
+                  <CardTitle>Extracted Order Details</CardTitle>
+                  <CardDescription>Found {extractedOrders.length} orders in the document.</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={handleExport} className="flex items-center gap-2">
+                  <Download className="h-4 w-4" /> Export to CSV
                 </Button>
               </div>
             </CardHeader>
