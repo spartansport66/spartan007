@@ -233,8 +233,8 @@ const OnlineOrderDashboard = () => {
   const extractMeesho = (text: string): ExtractedOrder | null => {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     
-    // 1. Find Order No - Look for the distinct long number (e.g. 252746449405028736_1)
-    const orderNoMatch = text.match(/\b(\d{15,20}(?:_\d+)?)\b/);
+    // 1. Find Order No - Look for the distinct long number with underscore (e.g. 252746449405028736_1)
+    const orderNoMatch = text.match(/\b(\d{15,20}_\d+)\b/);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[0];
 
@@ -253,23 +253,28 @@ const OnlineOrderDashboard = () => {
       if (addressLines.length > 0) address = addressLines.join(", ");
     }
 
-    // 4. Find Item - Text between the table header row and the HSN code
-    // The header row contains "Description", "HSN", "Qty", etc.
-    const headerIdx = lines.findIndex(l => l.toLowerCase().includes("description") && l.toLowerCase().includes("total"));
+    // 4. Find Item - Text between "Description" and the HSN code (6 digits)
+    const descIdx = lines.findIndex(l => l.toLowerCase().includes("description"));
     let item = "Meesho Item";
-    if (headerIdx !== -1) {
+    if (descIdx !== -1) {
       const itemParts = [];
-      for (let k = headerIdx + 1; k < lines.length; k++) {
-        // Stop if we hit a 6-digit HSN code or a price
-        if (lines[k].match(/^\d{6}$/)) break; 
+      // Skip headers
+      let startIdx = descIdx + 1;
+      // Skip common headers if they are on separate lines
+      while (startIdx < lines.length && ["hsn", "qty", "gross", "amount", "discount", "taxable", "value", "taxes", "total"].includes(lines[startIdx].toLowerCase())) {
+        startIdx++;
+      }
+      
+      for (let k = startIdx; k < lines.length; k++) {
+        if (lines[k].match(/^\d{5,8}$/)) break; // HSN code
+        if (lines[k].toLowerCase().includes("total")) break;
         if (lines[k].includes("Rs.")) break;
         itemParts.push(lines[k]);
       }
       if (itemParts.length > 0) item = itemParts.join(" ");
     }
 
-    // 5. Find Amount - The VERY LAST "Rs." value appearing in the text
-    // This is the most reliable way for Meesho as the grand total is always at the bottom
+    // 5. Find Amount - The last "Rs." value appearing in the text
     const amounts = text.match(/Rs\.?\s*([\d,]+\.\d{2})/gi);
     const amount = amounts ? amounts[amounts.length - 1].replace(/Rs\.?\s*/i, "").replace(/,/g, "") : "0.00";
 
