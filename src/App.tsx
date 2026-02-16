@@ -25,12 +25,13 @@ import GatePassDashboard from "./pages/GatePassDashboard";
 import ProductDashboard from "./pages/ProductDashboard";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import ManagerDashboard from "./pages/ManagerDashboard";
-import WarehouseDashboard from "./pages/WarehouseDashboard"; // New Import
+import WarehouseDashboard from "./pages/WarehouseDashboard";
 import RecordStockReceipt from "./pages/RecordStockReceipt";
 import ReceivePayment from "./pages/ReceivePayment";
 import ManagePlatforms from "./pages/ManagePlatforms";
 import PurchaseDashboard from "./pages/PurchaseDashboard";
 import TransferDealers from "./pages/TransferDealers";
+import FlipkartOrderExtractor from "./pages/FlipkartOrderExtractor"; // New Import
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -48,7 +49,7 @@ const AppContent = () => {
       <Route path="/product-dashboard" element={<ProductDashboard />} />
       <Route path="/super-admin-dashboard" element={<SuperAdminDashboard />} />
       <Route path="/manager-dashboard" element={<ManagerDashboard />} />
-      <Route path="/warehouse-dashboard" element={<WarehouseDashboard />} /> {/* New Route */}
+      <Route path="/warehouse-dashboard" element={<WarehouseDashboard />} />
       <Route path="/add-dealer" element={<AddDealer />} />
       <Route path="/manage-dealers" element={<ManageDealers />} />
       <Route path="/add-product" element={<AddProduct />} />
@@ -68,6 +69,7 @@ const AppContent = () => {
       <Route path="/manage-platforms" element={<ManagePlatforms />} />
       <Route path="/purchase-dashboard" element={<PurchaseDashboard />} />
       <Route path="/transfer-dealers" element={<TransferDealers />} />
+      <Route path="/flipkart-extractor" element={<FlipkartOrderExtractor />} /> {/* New Route */}
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>
