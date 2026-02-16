@@ -167,6 +167,8 @@ const OnlineOrderDashboard = () => {
     if (!file || !selectedPlatformId) return;
 
     const platformName = platforms.find(p => p.id === selectedPlatformId)?.name.toLowerCase() || "";
+    console.log(`[OnlineOrderDashboard] Processing file for platform: ${platformName}`);
+    
     setLoading(true);
     setExtractedOrders([]);
     setRawText("");
@@ -238,7 +240,7 @@ const OnlineOrderDashboard = () => {
 
     // 2. Find Customer Name - Line immediately after "Customer Address"
     const custIdx = lines.findIndex(l => l.toLowerCase().includes("customer address"));
-    const customerName = custIdx !== -1 && lines[custIdx + 1] ? lines[custIdx + 1] : "Unknown";
+    const customerName = (custIdx !== -1 && lines[custIdx + 1]) ? lines[custIdx + 1] : "Unknown";
 
     // 3. Find Address - Text between Customer Name and "If undelivered"
     let address = "N/A";
@@ -255,29 +257,26 @@ const OnlineOrderDashboard = () => {
     const descIdx = lines.findIndex(l => l.toLowerCase().includes("description"));
     let item = "Meesho Item";
     if (descIdx !== -1) {
-      const itemLines = [];
-      // Skip headers (HSN, Qty, etc)
-      for (let k = descIdx + 1; k < lines.length; k++) {
-        if (lines[k].match(/^\d{6}$/)) break; // Stop at HSN code
-        if (lines[k].toLowerCase().includes("total")) break;
-        // Skip common table headers if they appear here
-        if (["hsn", "qty", "gross", "amount", "discount", "taxable", "value", "taxes"].includes(lines[k].toLowerCase())) continue;
-        itemLines.push(lines[k]);
+      const itemParts = [];
+      // Skip headers
+      let startIdx = descIdx + 1;
+      // Skip common headers if they are on separate lines
+      while (startIdx < lines.length && ["hsn", "qty", "gross", "amount", "discount", "taxable", "value", "taxes", "total"].includes(lines[startIdx].toLowerCase())) {
+        startIdx++;
       }
-      if (itemLines.length > 0) item = itemLines.join(" ");
+      
+      for (let k = startIdx; k < lines.length; k++) {
+        if (lines[k].match(/^\d{5,8}$/)) break; // HSN code
+        if (lines[k].toLowerCase().includes("total")) break;
+        if (lines[k].includes("Rs.")) break;
+        itemParts.push(lines[k]);
+      }
+      if (itemParts.length > 0) item = itemParts.join(" ");
     }
 
-    // 5. Find Amount - The last "Rs." value appearing after the "Total" label
-    let amount = "0.00";
-    const totalIdx = lines.findIndex(l => l.toLowerCase() === "total");
-    if (totalIdx !== -1) {
-      for (let m = lines.length - 1; m >= totalIdx; m--) {
-        if (lines[m].includes("Rs.")) {
-          amount = lines[m].replace(/Rs\./g, "").replace(/,/g, "").trim();
-          break;
-        }
-      }
-    }
+    // 5. Find Amount - The last "Rs." value appearing in the text
+    const amounts = text.match(/Rs\.?\s*([\d,]+\.\d{2})/gi);
+    const amount = amounts ? amounts[amounts.length - 1].replace(/Rs\.?\s*/i, "").replace(/,/g, "") : "0.00";
 
     return { orderNo, customerName, address, item, amount };
   };
