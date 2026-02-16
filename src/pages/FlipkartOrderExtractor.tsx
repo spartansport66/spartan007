@@ -39,8 +39,9 @@ const FlipkartOrderExtractor = () => {
     const orderNo = orderNoMatch[0].replace('Order ID:', '').trim();
 
     // 2. Extract Amount
-    const amountMatch = text.match(/(?:Total|Amount|Collectable Amount)[:\s]*₹?\s*([\d,.]+)/i) || 
-                        text.match(/₹\s*([\d,.]+)/);
+    // Look for "Total", "Amount", "Collectable", or "Payable" followed by numbers
+    const amountMatch = text.match(/(?:Total|Amount|Collectable Amount|Amount Payable|Payable)[:\s]*₹?\s*([\d,]+\.?\d*)/i) || 
+                        text.match(/₹\s*([\d,]+\.?\d*)/);
     const amount = amountMatch ? amountMatch[1].trim() : "0.00";
 
     // 3. Extract Customer Name and Address
@@ -55,7 +56,8 @@ const FlipkartOrderExtractor = () => {
     }
 
     // 4. Extract Item/Product
-    const itemMatch = text.match(/(?:Product|Item|SKU)[:\s]+([\s\S]*?)(?=\s(?:Qty|Price|Total)|$)/i);
+    // Look for "Product", "Item", "SKU", or "Description"
+    const itemMatch = text.match(/(?:Product|Item|SKU|Description)[:\s]+([\s\S]*?)(?=\s(?:Qty|Quantity|Price|Total|Amount|Rate)|$)/i);
     const item = itemMatch ? itemMatch[1].trim() : "N/A";
 
     return {
@@ -99,14 +101,14 @@ const FlipkartOrderExtractor = () => {
       setRawText(fullDebugText);
       
       if (allExtracted.length === 0) {
-        throw new Error("No valid Flipkart order patterns found in the PDF.");
+        throw new Error("No valid Flipkart order patterns found in the PDF. Please check the Debug View.");
       }
 
       setExtractedOrders(allExtracted);
       showSuccess(`Successfully extracted ${allExtracted.length} orders!`);
     } catch (error: any) {
       console.error("PDF Parsing Error:", error);
-      showError(error.message || "Failed to parse PDF. Check the Debug View for details.");
+      showError(error.message || "Failed to parse PDF.");
     } finally {
       setLoading(false);
     }
