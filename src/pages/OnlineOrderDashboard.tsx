@@ -167,7 +167,6 @@ const OnlineOrderDashboard = () => {
     if (!file || !selectedPlatformId) return;
 
     const platformName = platforms.find(p => p.id === selectedPlatformId)?.name.toLowerCase() || "";
-    console.log(`[OnlineOrderDashboard] Processing file for platform: ${platformName}`);
     
     setLoading(true);
     setExtractedOrders([]);
