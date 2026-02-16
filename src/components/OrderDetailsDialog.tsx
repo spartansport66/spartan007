@@ -120,11 +120,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
           unit_price, 
           discount_percent, 
           gst_percent, 
-          sale_date,
           products (name, code, size, hsn, gst, dp)
         `)
-        .eq('order_id', id)
-        .order('sale_date', { ascending: true }); // Ensure items are in order of addition
+        .eq('order_id', id);
 
       if (salesError) throw salesError;
 
