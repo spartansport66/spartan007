@@ -221,7 +221,7 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    // 1. Extract Order ID (Meesho uses "Sub Order ID" or "Order ID")
+    // 1. Extract Order ID - Meesho often has "Sub Order ID"
     const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i) || 
                          text.match(/\b(sub_[a-zA-Z0-9]+)\b/i) ||
                          text.match(/\b(\d{14,18})\b/);
@@ -230,71 +230,43 @@ const OnlineOrderDashboard = () => {
     const orderNo = orderNoMatch[1] || orderNoMatch[0];
 
     // 2. Extract Amount
-    const totalRowMatch = text.match(/Total\s+Rs\.\d+\.\d+\s+Rs\.([\d,]+\.\d{2})/i);
-    let amount = "0.00";
-    
-    if (totalRowMatch) {
-      amount = totalRowMatch[1].trim().replace(/,/g, '');
-    } else {
-      const amountMatch = text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount|Payable)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
-                          text.match(/₹\s*([\d,]+(?:\.\d{2})?)/);
-      amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
-    }
+    const amountMatch = text.match(/Total\s+Rs\.\s*([\d,]+\.\d{2})/i) || 
+                        text.match(/Total\s*[:\s]*₹?\s*([\d,]+\.\d{2})/i) ||
+                        text.match(/₹\s*([\d,]+\.\d{2})/);
+    const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
 
     // 3. Extract Item/Product Description
-    const itemTableMatch = text.match(/(?:Description HSN Qty|Product Details)[\s\S]*?\n\s*([\s\S]+?)(?=\s+\d{6,8}\s+\d+)/i) ||
-                           text.match(/Description[\s\S]*?\n\s*([\s\S]+?)(?=\s*HSN|Qty|Total)/i);
-    let item = "N/A";
+    const itemMatch = text.match(/Description[\s\S]*?\n\s*([\s\S]+?)(?=\s*HSN|Qty|Total|Price)/i);
+    let item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Meesho Item";
     
-    if (itemTableMatch) {
-      item = itemTableMatch[1].trim().replace(/\s+/g, ' ');
-    } else {
-      const descMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
-      if (descMatch) {
-        item = descMatch[1].trim();
-      }
+    if (item.toLowerCase().includes("hsn") || item.length > 100) {
+        item = "Meesho Item";
     }
-    
-    if (item.toLowerCase().includes("details sku")) item = "N/A";
 
-    // 4. Extract Customer Name and Address
-    let customerName = "Unknown";
-    let address = "N/A";
-
+    // 4. Extract Customer Name
     const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to|Name)[:\s]*([^\n,]+)/i);
-    if (nameMatch) {
-      customerName = nameMatch[1].trim();
-    }
+    const customerName = nameMatch ? nameMatch[1].trim() : "Unknown";
 
-    const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
-    
-    if (addressMatch) {
-      address = addressMatch[1].trim().replace(/\s+/g, ' ');
-    } else {
-      const blockMatch = text.match(/(?:Customer Name|Shipping Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID)|$)/i);
-      if (blockMatch) {
-        const parts = blockMatch[1].trim().split(/\n|,|,,/);
-        if (customerName === "Unknown") customerName = parts[0].trim();
-        address = parts.slice(1).join(", ").trim() || "N/A";
-      }
-    }
+    // 5. Extract Address
+    const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID)|$)/i);
+    const address = addressMatch ? addressMatch[1].trim().replace(/\s+/g, ' ') : "See Label";
 
     return { orderNo, customerName, address, item, amount };
   };
 
   const extractAmazon = (text: string): ExtractedOrder | null => {
-    if (!text.includes("Tax Invoice/Bill of Supply/Cash Memo")) return null;
+    if (!text.includes("Tax Invoice/Bill of Supply/Cash Memo") && !text.match(/\d{3}-\d{7}-\d{7}/)) return null;
 
     const orderNoMatch = text.match(/\d{3}-\d{7}-\d{7}/);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[0];
     
-    // Extract Amount - Look for the last currency value after "Total Amount"
+    // Extract Amount
     const amountSection = text.split(/Total\s*Amount/i)[1];
     const amounts = amountSection?.match(/₹\s*([\d,]+\.\d{2})/g);
     const amount = amounts ? amounts[amounts.length - 1].replace(/[₹\s,]/g, '') : "0.00";
 
-    // Extract Item Name - Look for the text after a serial number (1, 2, etc) that follows "Description"
+    // Extract Item Name
     const itemMatch = text.match(/Description[\s\S]*?\n\s*\d+\s+([\s\S]+?)(?=\n\s*HSN|Qty|Unit|Price|TOTAL|Amount|$)/i);
     const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Amazon Item";
 
@@ -305,10 +277,10 @@ const OnlineOrderDashboard = () => {
     const billingMatch = text.match(/Billing Address\s*:\s*\n\s*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
     if (billingMatch) {
       const fullText = billingMatch[1].trim();
-      const lines = fullText.split('\n');
+      const lines = fullText.split('\n').map(l => l.trim()).filter(l => l);
       if (lines.length > 0) {
-        customerName = lines[0].trim();
-        address = lines.slice(1).join(", ").trim() || "N/A";
+        customerName = lines[0];
+        address = lines.slice(1).join(", ");
       }
     }
 
