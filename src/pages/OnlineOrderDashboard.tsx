@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser } from 'lucide-react';
+import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -86,6 +86,8 @@ const OnlineOrderDashboard = () => {
   const [extractedOrders, setExtractedOrders] = useState<ExtractedOrder[]>([]);
   const [productSearch, setProductSearch] = useState("");
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [rawText, setRawText] = useState<string>("");
+  const [showRawText, setShowRawText] = useState(false);
 
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
@@ -166,6 +168,8 @@ const OnlineOrderDashboard = () => {
 
     const platformName = platforms.find(p => p.id === selectedPlatformId)?.name.toLowerCase() || "";
     setLoading(true);
+    setExtractedOrders([]);
+    setRawText("");
     
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -173,12 +177,14 @@ const OnlineOrderDashboard = () => {
       const pdf = await loadingTask.promise;
       
       let allExtracted: ExtractedOrder[] = [];
+      let fullDebugText = "";
 
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         // Join with newline to preserve line structure for better parsing
         const pageText = textContent.items.map((item: any) => item.str).join('\n');
+        fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
 
         let order: ExtractedOrder | null = null;
         
@@ -193,7 +199,9 @@ const OnlineOrderDashboard = () => {
         if (order) allExtracted.push(order);
       }
 
-      if (allExtracted.length === 0) throw new Error("No orders found in PDF.");
+      setRawText(fullDebugText);
+
+      if (allExtracted.length === 0) throw new Error("No orders found in PDF. Check the Debug View for extracted text.");
       setExtractedOrders(allExtracted);
       showSuccess(`Extracted ${allExtracted.length} orders.`);
     } catch (error: any) {
@@ -230,54 +238,21 @@ const OnlineOrderDashboard = () => {
     const orderNo = orderNoMatch[1] || orderNoMatch[0];
 
     // 2. Extract Amount
-    const totalRowMatch = text.match(/Total\s+Rs\.\d+\.\d+\s+Rs\.([\d,]+\.\d{2})/i);
-    let amount = "0.00";
-    
-    if (totalRowMatch) {
-      amount = totalRowMatch[1].trim().replace(/,/g, '');
-    } else {
-      const amountMatch = text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount|Payable)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
-                          text.match(/₹\s*([\d,]+(?:\.\d{2})?)/);
-      amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
-    }
+    const totalRowMatch = text.match(/Total\s+Rs\.\d+\.\d+\s+Rs\.([\d,]+\.\d{2})/i) ||
+                          text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount|Payable)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i);
+    const amount = totalRowMatch ? totalRowMatch[1].trim().replace(/,/g, '') : "0.00";
 
-    // 3. Extract Item/Product Description
-    const itemTableMatch = text.match(/(?:Description HSN Qty|Product Details)[\s\S]*?\n\s*([\s\S]+?)(?=\s+\d{6,8}\s+\d+)/i) ||
-                           text.match(/Description[\s\S]*?\n\s*([\s\S]+?)(?=\s*HSN|Qty|Total)/i);
-    let item = "N/A";
-    
-    if (itemTableMatch) {
-      item = itemTableMatch[1].trim().replace(/\s+/g, ' ');
-    } else {
-      const descMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
-      if (descMatch) {
-        item = descMatch[1].trim();
-      }
-    }
-    
-    if (item.toLowerCase().includes("details sku")) item = "N/A";
+    // 3. Extract Item
+    const itemMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
+    const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Meesho Item";
 
-    // 4. Extract Customer Name and Address
-    let customerName = "Unknown";
-    let address = "N/A";
-
+    // 4. Extract Customer Name
     const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to|Name)[:\s]*([^\n,]+)/i);
-    if (nameMatch) {
-      customerName = nameMatch[1].trim();
-    }
+    const customerName = nameMatch ? nameMatch[1].trim() : "Unknown";
 
+    // 5. Extract Address
     const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
-    
-    if (addressMatch) {
-      address = addressMatch[1].trim().replace(/\s+/g, ' ');
-    } else {
-      const blockMatch = text.match(/(?:Customer Name|Shipping Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID)|$)/i);
-      if (blockMatch) {
-        const parts = blockMatch[1].trim().split(/\n|,|,,/);
-        if (customerName === "Unknown") customerName = parts[0].trim();
-        address = parts.slice(1).join(", ").trim() || "N/A";
-      }
-    }
+    const address = addressMatch ? addressMatch[1].trim().replace(/\s+/g, ' ') : "See Label";
 
     return { orderNo, customerName, address, item, amount };
   };
@@ -562,6 +537,17 @@ const OnlineOrderDashboard = () => {
                       Stage {extractedOrders.length} Orders
                     </Button>
                   )}
+                  {rawText && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setShowRawText(!showRawText)}
+                      className="w-full text-xs text-muted-foreground"
+                    >
+                      {showRawText ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
+                      {showRawText ? 'Hide Debug View' : 'Show Debug View'}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
 
@@ -601,6 +587,16 @@ const OnlineOrderDashboard = () => {
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
+                  {showRawText && rawText && (
+                    <div className="p-4 bg-slate-950 text-slate-50 rounded-none overflow-x-auto border-b">
+                      <h4 className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-2">
+                        <AlertCircle className="h-3 w-3" /> Raw Extracted Text (Debug)
+                      </h4>
+                      <pre className="text-[10px] leading-relaxed whitespace-pre-wrap font-mono max-h-[200px] overflow-y-auto">
+                        {rawText}
+                      </pre>
+                    </div>
+                  )}
                   <ScrollArea className="h-[500px]">
                     <Table>
                       <TableHeader>
