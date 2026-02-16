@@ -229,29 +229,37 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    // 1. Order ID - Look for "Order No." followed by the ID (handling newlines)
-    const orderNoMatch = text.match(/Order No\.[\s\n]*([\d_]+)/i);
+    // 1. Order ID - Look for "Order No." followed by newline(s) and then the ID
+    const orderNoMatch = text.match(/Order No\.[\s\n]+([a-zA-Z0-9_]+)/i);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[1].trim();
 
-    // 2. Amount - Look for "Total" followed by multiple "Rs." values. We want the last one.
-    const amountSectionMatch = text.match(/Total[\s\n]*(?:Rs\.[\d,.]+\s*)+/i);
-    let amount = "0.00";
-    if (amountSectionMatch) {
-      const rsValues = amountSectionMatch[0].match(/Rs\.([\d,.]+)/g);
-      if (rsValues) {
-        amount = rsValues[rsValues.length - 1].replace(/Rs\./g, '').replace(/,/g, '');
+    // 2. Customer Name - Look for "Customer Address" followed by newline(s) and then the name
+    const nameMatch = text.match(/Customer Address[\s\n]+([^\n]+)/i);
+    const customerName = nameMatch ? nameMatch[1].trim() : "Unknown";
+
+    // 3. Address - Text between the name and "If undelivered"
+    let address = "N/A";
+    if (nameMatch) {
+      const addressMatch = text.match(new RegExp(`${customerName}[\\s\\n]+([\\s\\S]*?)(?=If undelivered|return to|$)`, 'i'));
+      if (addressMatch) {
+        address = addressMatch[1].trim().replace(/\n/g, ', ').replace(/\s+/g, ' ');
       }
     }
 
-    // 3. Customer & Address - Look for "BILL TO / SHIP TO" and split at the hyphen
-    const billToMatch = text.match(/BILL TO \/ SHIP TO[\s\n]*([^-]+)-[\s\n]*([\s\S]*?)(?=Place of Supply|Sold by|$)/i);
-    const customerName = billToMatch ? billToMatch[1].trim() : "Unknown";
-    const address = billToMatch ? billToMatch[2].trim().replace(/\n/g, ' ').replace(/\s+/g, ' ') : "N/A";
+    // 4. Item - Text between "Description" and "HSN" in the table
+    const itemMatch = text.match(/Description[\s\S]*?Total[\s\n]+([\s\S]*?)(?=\s+\d{6,8})/i);
+    let item = itemMatch ? itemMatch[1].trim().replace(/\n/g, ' ').replace(/\s+/g, ' ') : "Meesho Item";
 
-    // 4. Item - Look for text between "Total" header and the HSN (usually 6 digits)
-    const itemMatch = text.match(/Total\s*\n\s*([\s\S]*?)\s*\n\s*\d{6}/i);
-    const item = itemMatch ? itemMatch[1].trim().replace(/\n/g, ' ').replace(/\s+/g, ' ') : "Meesho Item";
+    // 5. Amount - Look for the last "Rs." value in the "Total" row
+    const totalSectionMatch = text.match(/Total[\s\n]+(?:Rs\.[\d,.]+\s*)+/i);
+    let amount = "0.00";
+    if (totalSectionMatch) {
+      const rsValues = totalSectionMatch[0].match(/Rs\.([\d,]+\.\d{2})/g);
+      if (rsValues && rsValues.length > 0) {
+        amount = rsValues[rsValues.length - 1].replace(/Rs\./g, '').replace(/,/g, '');
+      }
+    }
 
     return { orderNo, customerName, address, item, amount };
   };
