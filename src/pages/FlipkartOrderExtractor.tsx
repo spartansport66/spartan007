@@ -39,15 +39,15 @@ const FlipkartOrderExtractor = () => {
     const orderNo = orderNoMatch[0];
 
     // 2. Extract Amount
-    // Based on raw text: "TOTAL PRICE: 162.00"
+    // Pattern: TOTAL PRICE: 162.00
     const amountMatch = text.match(/TOTAL PRICE:\s*([\d,]+\.?\d*)/i);
     const amount = amountMatch ? amountMatch[1].trim() : "0.00";
 
     // 3. Extract Item/Product
-    // Based on raw text: "Total, [PRODUCT NAME], |"
-    // The product name follows the 'Total' header in the concatenated text stream
-    const itemMatch = text.match(/Total,\s*([\s\S]*?)(?=\s*,\s*\||\s*\||\s*IMEI|\s*HSN)/i);
-    const item = itemMatch ? itemMatch[1].trim() : "N/A";
+    // Pattern: Total, [PRODUCT NAME], |
+    // This targets the product name that appears immediately after the 'Total' column header in the invoice table
+    const itemMatch = text.match(/Total,\s*([\s\S]*?)(?=\s*\||\s*IMEI|\s*HSN)/i);
+    const item = itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A";
 
     // 4. Extract Customer Name and Address
     let customerName = "Unknown";
@@ -57,8 +57,8 @@ const FlipkartOrderExtractor = () => {
     const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=[,\s]+(?:FSSAI|Seller|Phone|Pin|Order ID|Invoice)|$)/i);
     if (deliverToMatch) {
       const fullAddressText = deliverToMatch[1].trim();
-      // Split by double commas or newlines which often separate name from address in these PDFs
-      const addressLines = fullAddressText.split(/,,|\n/).map(l => l.trim()).filter(Boolean);
+      // Split by common delimiters to separate name from address
+      const addressLines = fullAddressText.split(/,|\n/).map(l => l.trim()).filter(Boolean);
       customerName = addressLines[0] || "Unknown";
       address = addressLines.slice(1).join(", ").trim() || "N/A";
     }
