@@ -246,8 +246,9 @@ const OnlineOrderDashboard = () => {
     const amount = amounts ? amounts[amounts.length - 1].replace(/[₹\s,]/g, '') : "0.00";
 
     // Extract Item Name - Look between "Description" and "HSN"
-    const itemMatch = text.match(/Description\s*(?:\d+\s+)?([\s\S]*?)(?=\s*HSN:|Qty|Unit|Price|$)/i);
-    const item = itemMatch ? itemMatch[1].trim() : "Amazon Item";
+    // Refined to handle "No Description" header and skip leading serial numbers
+    const itemMatch = text.match(/Description\s+(?:\d+\s+)?([\s\S]*?)(?=\s*HSN|Qty|Unit|Price|TOTAL|Amount|$)/i);
+    const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Amazon Item";
 
     // Extract Customer Name and Address from Billing Address
     let customerName = "Unknown";
