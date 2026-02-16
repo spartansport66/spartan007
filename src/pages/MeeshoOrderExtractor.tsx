@@ -44,27 +44,34 @@ const MeeshoOrderExtractor = () => {
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[1] || orderNoMatch[0];
 
-    // 2. Extract Amount (Meesho uses "Collectable Amount" or "Total Price")
-    const amountMatch = text.match(/(?:Collectable Amount|Total Price|Order Value|Price)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
+    // 2. Extract Amount (Look for "Total", "Collectable Amount", or "Price")
+    // We look for the amount specifically associated with totals
+    const amountMatch = text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
                         text.match(/₹\s*([\d,]+(?:\.\d{2})?)/);
     const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
 
-    // 3. Extract Item/Product
-    // Meesho labels often have "Product Name" or "SKU"
-    const itemMatch = text.match(/(?:Product Name|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details)|$)/i);
+    // 3. Extract Item/Product Description
+    // Look for "Product", "Description", or "Item"
+    const itemMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
     let item = itemMatch ? itemMatch[1].trim() : "N/A";
-    if (item.toLowerCase().includes("details sku")) item = "N/A"; // Clean up header noise
+    
+    // Clean up item description if it contains header noise
+    if (item.toLowerCase().includes("details sku")) {
+      // Try a different pattern if the first one caught headers
+      const altItemMatch = text.match(/Description\s+([\s\S]*?)(?=\s*(?:Qty|Price|Total)|$)/i);
+      item = altItemMatch ? altItemMatch[1].trim() : "N/A";
+    }
 
     // 4. Extract Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
 
-    // Meesho specific: Look for "Customer Name" and "Address" labels
-    const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to)[:\s]*([\s\S]*?)(?=\s*(?:Address|Phone|Pin|Order ID)|$)/i);
+    // Look for "Customer Name" or "Ship to"
+    const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to|Name)[:\s]*([^\n,]+)/i);
     const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
     
     if (nameMatch) {
-      customerName = nameMatch[1].trim().split(/\n|,/)[0].trim();
+      customerName = nameMatch[1].trim();
     }
 
     if (addressMatch) {
@@ -239,7 +246,7 @@ const MeeshoOrderExtractor = () => {
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={handleSaveToStaging} disabled={isSaving} className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 border-none">
-                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     Save to Staging
                   </Button>
                 </div>
