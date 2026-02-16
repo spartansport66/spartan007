@@ -240,12 +240,15 @@ const OnlineOrderDashboard = () => {
 
     const orderNo = orderNoMatch[0];
     
-    // Extract Amount - specifically looking for "Total Amount"
-    const amountMatch = text.match(/Total Amount\s*[:\s]*₹?\s*([\d,]+\.\d{2})/i);
+    // Extract Amount - specifically looking for "Total Amount" or "Grand Total"
+    const amountMatch = text.match(/Total Amount\s*[:\s]*₹?\s*([\d,]+\.\d{2})/i) || 
+                        text.match(/(?:Grand Total|Total|Amount Payable)[:\s]*₹?\s*([\d,]+\.\d{2})/i) ||
+                        text.match(/₹\s*([\d,]+\.\d{2})/);
     const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
 
     // Extract Item Name - specifically looking for "Description"
-    const itemMatch = text.match(/Description\s*[:\s]+([\s\S]*?)(?=\s*(?:Qty|Price|HSN|GST|Total|Tax)|$)/i);
+    // Added "Unit" to the stop-words to prevent it from being captured as the item name
+    const itemMatch = text.match(/Description\s*[:\s]+([\s\S]*?)(?=\s*(?:Qty|Price|HSN|GST|Total|Tax|Unit)|$)/i);
     const item = itemMatch ? itemMatch[1].trim() : "Amazon Item";
 
     // Extract Customer Name from 1st line of Billing Address
@@ -255,9 +258,17 @@ const OnlineOrderDashboard = () => {
     const billingMatch = text.match(/Billing Address\s*[:\s]+([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
     if (billingMatch) {
       const fullText = billingMatch[1].trim();
-      const lines = fullText.split(/\n|,|,,/);
-      customerName = lines[0].trim();
-      address = lines.slice(1).join(", ").trim() || "N/A";
+      // Try splitting by newline first, then by comma
+      const lines = fullText.split(/\n/);
+      if (lines.length > 1) {
+        customerName = lines[0].trim();
+        address = lines.slice(1).join(", ").trim();
+      } else {
+        // If no newlines, maybe it's comma separated
+        const parts = fullText.split(/,/);
+        customerName = parts[0].trim();
+        address = parts.slice(1).join(", ").trim() || "N/A";
+      }
     }
 
     return { orderNo, customerName, address, item, amount };
