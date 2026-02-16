@@ -238,21 +238,38 @@ const OnlineOrderDashboard = () => {
     const orderNo = orderNoMatch[1] || orderNoMatch[0];
 
     // 2. Extract Amount
+    // Specifically look for the "Total" row at the bottom of the table: "Total Rs.XX.XX Rs.YY.YY"
     const totalRowMatch = text.match(/Total\s+Rs\.\d+\.\d+\s+Rs\.([\d,]+\.\d{2})/i) ||
                           text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount|Payable)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i);
     const amount = totalRowMatch ? totalRowMatch[1].trim().replace(/,/g, '') : "0.00";
 
-    // 3. Extract Item
+    // 3. Extract Item/Product Description
     const itemMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
-    const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Meesho Item";
+    let item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Meesho Item";
+    
+    if (item.toLowerCase().includes("details sku")) item = "N/A";
 
-    // 4. Extract Customer Name
+    // 4. Extract Customer Name and Address
+    let customerName = "Unknown";
+    let address = "N/A";
+
     const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to|Name)[:\s]*([^\n,]+)/i);
-    const customerName = nameMatch ? nameMatch[1].trim() : "Unknown";
+    if (nameMatch) {
+      customerName = nameMatch[1].trim();
+    }
 
-    // 5. Extract Address
     const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
-    const address = addressMatch ? addressMatch[1].trim().replace(/\s+/g, ' ') : "See Label";
+    
+    if (addressMatch) {
+      address = addressMatch[1].trim().replace(/\s+/g, ' ');
+    } else {
+      const blockMatch = text.match(/(?:Customer Name|Shipping Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID)|$)/i);
+      if (blockMatch) {
+        const parts = blockMatch[1].trim().split(/\n|,|,,/);
+        if (customerName === "Unknown") customerName = parts[0].trim();
+        address = parts.slice(1).join(", ").trim() || "N/A";
+      }
+    }
 
     return { orderNo, customerName, address, item, amount };
   };
