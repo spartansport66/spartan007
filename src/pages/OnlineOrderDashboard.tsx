@@ -229,38 +229,29 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    // 1. Extract Order ID - Look for 18-digit number (Meesho standard)
-    const orderNoMatch = text.match(/\b(\d{18}(?:_\d+)?)\b/);
+    // 1. Order ID - Look for "Order No." followed by the ID (handling newlines)
+    const orderNoMatch = text.match(/Order No\.[\s\n]*([\d_]+)/i);
     if (!orderNoMatch) return null;
-    const orderNo = orderNoMatch[1];
+    const orderNo = orderNoMatch[1].trim();
 
-    // 2. Extract Amount - Look for the last "Rs." value in the "Total" row
-    const totalRowMatch = text.match(/Total\s+([\s\S]*?)(?=\n|$)/i);
+    // 2. Amount - Look for "Total" followed by multiple "Rs." values. We want the last one.
+    const amountSectionMatch = text.match(/Total[\s\n]*(?:Rs\.[\d,.]+\s*)+/i);
     let amount = "0.00";
-    if (totalRowMatch) {
-      const amounts = totalRowMatch[1].match(/Rs\.([\d,]+\.\d{2})/g);
-      if (amounts && amounts.length > 0) {
-        amount = amounts[amounts.length - 1].replace(/Rs\./g, '').replace(/,/g, '');
+    if (amountSectionMatch) {
+      const rsValues = amountSectionMatch[0].match(/Rs\.([\d,.]+)/g);
+      if (rsValues) {
+        amount = rsValues[rsValues.length - 1].replace(/Rs\./g, '').replace(/,/g, '');
       }
     }
 
-    // 3. Extract Item - Text between Description and HSN in the table
-    const itemMatch = text.match(/Description\s*\n\s*([\s\S]*?)\s*\n\s*\d{6,8}/i);
-    let item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Meesho Item";
+    // 3. Customer & Address - Look for "BILL TO / SHIP TO" and split at the hyphen
+    const billToMatch = text.match(/BILL TO \/ SHIP TO[\s\n]*([^-]+)-[\s\n]*([\s\S]*?)(?=Place of Supply|Sold by|$)/i);
+    const customerName = billToMatch ? billToMatch[1].trim() : "Unknown";
+    const address = billToMatch ? billToMatch[2].trim().replace(/\n/g, ' ').replace(/\s+/g, ' ') : "N/A";
 
-    // 4. Extract Customer Name and Address from BILL TO / SHIP TO
-    let customerName = "Unknown";
-    let address = "N/A";
-
-    const billToMatch = text.match(/BILL TO \/ SHIP TO\s*\n\s*([\s\S]*?)(?=\s*,\s*Place of Supply|$)/i);
-    if (billToMatch) {
-      const fullText = billToMatch[1].trim();
-      const parts = fullText.split(/\s*-\s*/); // Split at the hyphen
-      if (parts.length >= 2) {
-        customerName = parts[0].trim();
-        address = parts.slice(1).join(" - ").trim().replace(/\s+/g, ' ');
-      }
-    }
+    // 4. Item - Look for text between "Total" header and the HSN (usually 6 digits)
+    const itemMatch = text.match(/Total\s*\n\s*([\s\S]*?)\s*\n\s*\d{6}/i);
+    const item = itemMatch ? itemMatch[1].trim().replace(/\n/g, ' ').replace(/\s+/g, ' ') : "Meesho Item";
 
     return { orderNo, customerName, address, item, amount };
   };
