@@ -40,13 +40,13 @@ const FlipkartOrderExtractor = () => {
 
     // 2. Extract Amount
     // Specifically target "TOTAL PRICE: XXX.XX" which appears at the end of the invoice table
-    const amountMatch = text.match(/TOTAL PRICE:\s*([\d,]+\.\d{2})/i);
+    const amountMatch = text.match(/TOTAL PRICE\s*[:\s]+\s*([\d,]+\.\d{2})/i);
     const amount = amountMatch ? amountMatch[1].trim() : "0.00";
 
     // 3. Extract Item/Product
     // In Flipkart invoices, the product name follows the "Total" column header
-    // Pattern: Total, [PRODUCT NAME], |
-    const itemMatch = text.match(/Total,\s*([^|]+)/i);
+    // We look for the text between "Total" and the first pipe "|" or "IMEI" or "HSN"
+    const itemMatch = text.match(/Total\s*,?\s*([^|]+?)(?=\s*\||\s*IMEI|\s*HSN|\s*Qty|\s*Product)/i);
     const item = itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A";
 
     // 4. Extract Customer Name and Address
@@ -63,6 +63,7 @@ const FlipkartOrderExtractor = () => {
       address = parts.slice(1).join(", ").trim() || "N/A";
     } else {
       // Fallback: Look for text immediately following the Order ID if "Deliver to" is missing
+      // This is common in some label formats where the name follows the ID
       const fallbackMatch = text.match(new RegExp(`${orderNo}\\s+([\\s\\S]*?)(?=\\s*(?:Product|Description|Qty|FSSAI|Seller|Invoice)|$)`, 'i'));
       if (fallbackMatch) {
         const fullText = fallbackMatch[1].trim();
