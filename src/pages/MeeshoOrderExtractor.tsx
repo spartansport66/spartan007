@@ -36,35 +36,39 @@ const MeeshoOrderExtractor = () => {
   const [showRawText, setShowRawText] = useState(false);
 
   const extractDataFromPageText = (text: string): ExtractedOrder | null => {
-    // 1. Extract Order ID (Meesho sub-orders usually start with 'sub_' or are long numeric strings)
-    // Pattern: Look for "Order ID" or "Sub Order ID" followed by the ID
-    const orderNoMatch = text.match(/(?:Order ID|Sub Order ID)[:\s]+([a-zA-Z0-9_]+)/i) || text.match(/sub_[a-zA-Z0-9]+/i);
+    // 1. Extract Order ID
+    // Patterns: "Order ID: ...", "Sub Order ID: ...", or just a string starting with "sub_"
+    const orderNoMatch = text.match(/(?:Order ID|Sub Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i) || 
+                         text.match(/\b(sub_[a-zA-Z0-9]+)\b/i) ||
+                         text.match(/\b(\d{12,})\b/);
+    
     if (!orderNoMatch) return null;
 
     const orderNo = orderNoMatch[1] || orderNoMatch[0];
 
     // 2. Extract Amount
-    // Meesho labels often show "Total" or "Order Value"
-    const amountMatch = text.match(/(?:Total|Order Value|Collectable Amount)[:\s]+₹?\s*([\d,]+\.\d{2})/i) || text.match(/₹\s*([\d,]+\.\d{2})/);
+    // Patterns: "Total: ...", "Order Value: ...", "Collectable Amount: ...", or just a currency symbol followed by numbers
+    const amountMatch = text.match(/(?:Total|Order Value|Collectable Amount|Price)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || 
+                        text.match(/₹\s*([\d,]+(?:\.\d{2})?)/);
+    
     const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
 
     // 3. Extract Item/Product
-    // Look for "Product" or "SKU" or "Item"
-    const itemMatch = text.match(/(?:Product|SKU|Item Name)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN)|$)/i);
+    const itemMatch = text.match(/(?:Product|SKU|Item Name)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST)|$)/i);
     const item = itemMatch ? itemMatch[1].trim() : "N/A";
 
     // 4. Extract Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
 
-    // Meesho labels usually have a "Customer Details" or "Shipping Address" block
-    const shippingMatch = text.match(/(?:Customer Details|Shipping Address|Deliver to)[:\s]+([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller)|$)/i);
+    const shippingMatch = text.match(/(?:Customer Details|Shipping Address|Deliver to)[:\s]*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
     
     if (shippingMatch) {
       const fullText = shippingMatch[1].trim();
-      const lines = fullText.split(/\n|,/);
-      customerName = lines[0].trim();
-      address = lines.slice(1).join(", ").trim() || "N/A";
+      // Split by common delimiters to find the name (usually the first line or part)
+      const parts = fullText.split(/\n|,|,,/);
+      customerName = parts[0].trim();
+      address = parts.slice(1).join(", ").trim() || "N/A";
     }
 
     return { orderNo, customerName, address, item, amount };
@@ -101,7 +105,7 @@ const MeeshoOrderExtractor = () => {
       setRawText(fullDebugText);
       
       if (allExtracted.length === 0) {
-        throw new Error("No valid Meesho order patterns found in the PDF.");
+        throw new Error("No valid Meesho order patterns found in the PDF. Try checking the 'Debug View' to see the extracted text.");
       }
 
       setExtractedOrders(allExtracted);
@@ -122,7 +126,7 @@ const MeeshoOrderExtractor = () => {
         platform_order_number: order.orderNo,
         customer_name: order.customerName,
         shipping_address: order.address,
-        flipkart_item_name: order.item, // Reusing the column for generic online item name
+        flipkart_item_name: order.item,
         amount: parseFloat(order.amount),
         created_by: user.id,
         status: 'pending'
