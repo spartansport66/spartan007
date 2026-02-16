@@ -25,11 +25,12 @@ import GatePassDashboard from "./pages/GatePassDashboard";
 import ProductDashboard from "./pages/ProductDashboard";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import ManagerDashboard from "./pages/ManagerDashboard";
-import RecordStockReceipt from "./pages/RecordStockReceipt"; // New Import
+import WarehouseDashboard from "./pages/WarehouseDashboard"; // New Import
+import RecordStockReceipt from "./pages/RecordStockReceipt";
 import ReceivePayment from "./pages/ReceivePayment";
-import ManagePlatforms from "./pages/ManagePlatforms"; // New Import
-import PurchaseDashboard from "./pages/PurchaseDashboard"; // New Import
-import TransferDealers from "./pages/TransferDealers"; // New Import
+import ManagePlatforms from "./pages/ManagePlatforms";
+import PurchaseDashboard from "./pages/PurchaseDashboard";
+import TransferDealers from "./pages/TransferDealers";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -47,6 +48,7 @@ const AppContent = () => {
       <Route path="/product-dashboard" element={<ProductDashboard />} />
       <Route path="/super-admin-dashboard" element={<SuperAdminDashboard />} />
       <Route path="/manager-dashboard" element={<ManagerDashboard />} />
+      <Route path="/warehouse-dashboard" element={<WarehouseDashboard />} /> {/* New Route */}
       <Route path="/add-dealer" element={<AddDealer />} />
       <Route path="/manage-dealers" element={<ManageDealers />} />
       <Route path="/add-product" element={<AddProduct />} />
@@ -65,7 +67,7 @@ const AppContent = () => {
       <Route path="/receive-payment" element={<ReceivePayment />} />
       <Route path="/manage-platforms" element={<ManagePlatforms />} />
       <Route path="/purchase-dashboard" element={<PurchaseDashboard />} />
-      <Route path="/transfer-dealers" element={<TransferDealers />} /> {/* New Route */}
+      <Route path="/transfer-dealers" element={<TransferDealers />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>
