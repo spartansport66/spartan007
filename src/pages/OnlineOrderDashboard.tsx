@@ -213,52 +213,61 @@ const OnlineOrderDashboard = () => {
   const extractFlipkart = (text: string): ExtractedOrder | null => {
     const orderNoMatch = text.match(/OD\d{18}/);
     if (!orderNoMatch) return null;
+    const amountMatch = text.match(/TOTAL PRICE\s*[:\s]+\s*([\d,]+\.\d{2})/i);
+    const itemMatch = text.match(/Total\s*,?\s*([^|]+?)(?=\s*\||\s*IMEI|\s*HSN|\s*Qty)/i);
+    const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=\s*(?:FSSAI|Seller|Phone|Pin|Order ID)|$)/i);
     
+    const parts = deliverToMatch ? deliverToMatch[1].trim().split(/,,|,/) : ["Unknown"];
     return {
       orderNo: orderNoMatch[0],
-      customerName: "N/A",
-      item: "N/A",
-      amount: "0.00",
+      customerName: parts[0].trim(),
+      item: itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A",
+      amount: amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00"
     };
   };
 
   const extractMeesho = (text: string): ExtractedOrder | null => {
-    // Try to find "Sub Order ID" or "Order ID" followed by the ID.
-    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID)[:\s]*([a-zA-Z0-9_]+)/i);
-    
-    if (orderNoMatch && orderNoMatch[1]) {
-      return {
-        orderNo: orderNoMatch[1],
-        customerName: "N/A",
-        item: "N/A",
-        amount: "0.00",
-      };
-    }
-    
-    // Fallback: Look for a long number that could be an order ID.
-    const fallbackMatch = text.match(/\b(\d{14,20})\b/);
-    if (fallbackMatch && fallbackMatch[1]) {
-        return {
-            orderNo: fallbackMatch[1],
-            customerName: "N/A",
-            item: "N/A",
-            amount: "0.00",
-        };
-    }
+    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i);
+    if (!orderNoMatch) return null;
+    const orderNo = orderNoMatch[1];
 
-    return null;
+    const nameMatch = text.match(/(?:Ship to|Deliver to|Name)\s*:\s*([^\n,]+)/i);
+    const customerName = nameMatch ? nameMatch[1].trim() : "Unknown";
+
+    const itemMatch = text.match(/Product Details\s+([\s\S]+?)\s+HSN Code/i);
+    const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Meesho Item";
+
+    const amountMatch = text.match(/(?:Grand Total|Collectable Amount)\s*₹?\s*([\d,]+\.\d{2})/i);
+    const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
+
+    return { orderNo, customerName, item, amount };
   };
 
   const extractAmazon = (text: string): ExtractedOrder | null => {
+    if (!text.includes("Tax Invoice/Bill of Supply/Cash Memo")) return null;
+
     const orderNoMatch = text.match(/\d{3}-\d{7}-\d{7}/);
     if (!orderNoMatch) return null;
+    const orderNo = orderNoMatch[0];
+    
+    const amountSection = text.split(/Total\s*Amount/i)[1];
+    const amounts = amountSection?.match(/₹\s*([\d,]+\.\d{2})/g);
+    const amount = amounts ? amounts[amounts.length - 1].replace(/[₹\s,]/g, '') : "0.00";
 
-    return {
-      orderNo: orderNoMatch[0],
-      customerName: "N/A",
-      item: "N/A",
-      amount: "0.00",
-    };
+    const itemMatch = text.match(/Description[\s\S]*?\n\s*\d+\s+([\s\S]+?)(?=\n\s*HSN|Qty|Unit|Price|TOTAL|Amount|$)/i);
+    const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Amazon Item";
+
+    let customerName = "Unknown";
+
+    const billingMatch = text.match(/Billing Address\s*:\s*\n\s*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
+    if (billingMatch) {
+      const lines = billingMatch[1].trim().split('\n');
+      if (lines.length > 0) {
+        customerName = lines[0].trim();
+      }
+    }
+
+    return { orderNo, customerName, item, amount };
   };
 
   // --- Processing Logic ---
