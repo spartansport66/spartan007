@@ -234,35 +234,29 @@ const OnlineOrderDashboard = () => {
   };
 
   const extractAmazon = (text: string): ExtractedOrder | null => {
-    // Check for the specific header to ensure we are on an invoice page
     if (!text.includes("Tax Invoice/Bill of Supply/Cash Memo")) return null;
 
-    // Amazon Order ID format: 40X-XXXXXXX-XXXXXXX
     const orderNoMatch = text.match(/\d{3}-\d{7}-\d{7}/);
     if (!orderNoMatch) return null;
-
     const orderNo = orderNoMatch[0];
     
-    // Extract Amount - specifically looking for "Total Amount" or "Grand Total"
-    const amountMatch = text.match(/Total Amount\s*[:\s]*₹?\s*([\d,]+\.\d{2})/i) || 
-                        text.match(/(?:Grand Total|Total|Amount Payable)[:\s]*₹?\s*([\d,]+\.\d{2})/i) ||
-                        text.match(/₹\s*([\d,]+\.\d{2})/);
-    const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
+    // Extract Amount - Look for the last currency value after "Total Amount"
+    const amountSection = text.split(/Total\s*Amount/i)[1];
+    const amounts = amountSection?.match(/₹\s*([\d,]+\.\d{2})/g);
+    const amount = amounts ? amounts[amounts.length - 1].replace(/[₹\s,]/g, '') : "0.00";
 
-    // Extract Item Name - specifically looking for "Description"
-    // Added "Unit" to the stop-words to prevent it from being captured as the item name
-    const itemMatch = text.match(/Description\s*[:\s]+([\s\S]*?)(?=\s*(?:Qty|Price|HSN|GST|Total|Tax|Unit)|$)/i);
+    // Extract Item Name - Look between "Description" and "HSN"
+    const itemMatch = text.match(/Description\s*(?:\d+\s+)?([\s\S]*?)(?=\s*HSN:|Qty|Unit|Price|$)/i);
     const item = itemMatch ? itemMatch[1].trim() : "Amazon Item";
 
-    // Extract Customer Name from 1st line of Billing Address
+    // Extract Customer Name and Address from Billing Address
     let customerName = "Unknown";
     let address = "N/A";
 
-    const billingMatch = text.match(/Billing Address\s*[:\s]+([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
+    const billingMatch = text.match(/Billing Address\s*:\s*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
     if (billingMatch) {
       const fullText = billingMatch[1].trim();
-      // Split by common delimiters to find the first line (name)
-      const lines = fullText.split(/\n|,|,,/);
+      const lines = fullText.split(/\n/);
       if (lines.length > 0) {
         customerName = lines[0].trim();
         address = lines.slice(1).join(", ").trim() || "N/A";
