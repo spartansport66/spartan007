@@ -146,7 +146,7 @@ const ProcessOnlineOrders = () => {
           client_name: stagedOrder.customer_name,
           platform_id: selectedPlatformId,
           platform_order_number: stagedOrder.platform_order_number,
-          address: stagedOrder.shipping_address,
+          address: stagedOrder.shipping_address, // This column must be added via SQL
         });
       if (onlineError) throw onlineError;
 

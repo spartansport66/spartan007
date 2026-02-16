@@ -29,6 +29,7 @@ interface OnlineOrderInfo {
   contact_no: string | null;
   city: string | null;
   state: string | null;
+  address: string | null; // Added address field
 }
 
 interface OrderDetail {
@@ -155,6 +156,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             contact_no,
             city,
             state,
+            address,
             online_platforms (name)
           `)
           .eq('order_id', id)
@@ -170,6 +172,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             contact_no: onlineData.contact_no,
             city: onlineData.city,
             state: onlineData.state,
+            address: onlineData.address,
           };
         }
       }
@@ -234,7 +237,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     
     const isOnline = orderDetails.online_order_details;
     const partyName = isOnline ? orderDetails.online_order_details!.client_name : orderDetails.dealer_name;
-    const partyAddress = isOnline ? `${orderDetails.online_order_details!.city}, ${orderDetails.online_order_details!.state}` : `${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`;
+    
+    let partyAddress = "";
+    if (isOnline) {
+      partyAddress = orderDetails.online_order_details!.address || 
+                     `${orderDetails.online_order_details!.city || ''}, ${orderDetails.online_order_details!.state || ''}`.trim();
+    } else {
+      partyAddress = `${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`;
+    }
 
     doc.setFont("helvetica", "bold");
     doc.text("PARTY DETAILS:", margin, y);
@@ -313,7 +323,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     
     const isOnline = orderDetails.online_order_details;
     const partyName = isOnline ? orderDetails.online_order_details!.client_name : orderDetails.dealer_name;
-    const partyAddress = isOnline ? `${orderDetails.online_order_details!.city}, ${orderDetails.online_order_details!.state}` : `${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`;
+    
+    let partyAddress = "";
+    if (isOnline) {
+      partyAddress = orderDetails.online_order_details!.address || 
+                     `${orderDetails.online_order_details!.city || ''}, ${orderDetails.online_order_details!.state || ''}`.trim();
+    } else {
+      partyAddress = `${orderDetails.dealer_address}, ${orderDetails.dealer_city}, ${orderDetails.dealer_state}`;
+    }
+    
     const partyPhone = isOnline ? orderDetails.online_order_details!.contact_no : orderDetails.dealer_phone;
 
     doc.setFont("helvetica", "bold");
@@ -426,7 +444,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                 <p><strong>Platform:</strong> {orderDetails.online_order_details.platform_name}</p>
                 <p><strong>Platform Order #:</strong> {orderDetails.online_order_details.platform_order_number || 'N/A'}</p>
                 <p><strong>Contact:</strong> {orderDetails.online_order_details.contact_no || 'N/A'}</p>
-                <p><strong>Location:</strong> {orderDetails.online_order_details.city}, {orderDetails.online_order_details.state}</p>
+                <p><strong>Address:</strong> {orderDetails.online_order_details.address || `${orderDetails.online_order_details.city || ''}, ${orderDetails.online_order_details.state || ''}`.trim() || 'N/A'}</p>
               </div>
             )}
             <Separator />
