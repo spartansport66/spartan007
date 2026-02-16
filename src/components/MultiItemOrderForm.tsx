@@ -300,7 +300,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       gst_amount: newItemCalculations.gstAmount,
       total_price: newItemCalculations.totalPrice,
     };
-    setOrderItems(prevItems => [newOrderItem, ...prevItems]);
+    // Changed from [newOrderItem, ...prevItems] to [...prevItems, newOrderItem]
+    setOrderItems(prevItems => [...prevItems, newOrderItem]);
     setNewItemProductId('');
     setNewItemQuantity(1);
     setNewItemUnitPrice(0);
