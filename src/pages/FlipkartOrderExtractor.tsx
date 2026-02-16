@@ -10,8 +10,11 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Set up PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Import the worker directly from the package to avoid CDN issues
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+
+// Set up PDF.js worker using the imported URL
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 interface ExtractedOrder {
   orderNo: string;
@@ -36,13 +39,11 @@ const FlipkartOrderExtractor = () => {
     const orderNo = orderNoMatch[0].replace('Order ID:', '').trim();
 
     // 2. Extract Amount
-    // Look for "Total", "Amount", or the ₹ symbol followed by numbers
     const amountMatch = text.match(/(?:Total|Amount|Collectable Amount)[:\s]*₹?\s*([\d,.]+)/i) || 
                         text.match(/₹\s*([\d,.]+)/);
     const amount = amountMatch ? amountMatch[1].trim() : "0.00";
 
     // 3. Extract Customer Name and Address
-    // Usually follows "Deliver to:" or "Shipping Address"
     let customerName = "Unknown";
     let address = "N/A";
 
@@ -54,7 +55,6 @@ const FlipkartOrderExtractor = () => {
     }
 
     // 4. Extract Item/Product
-    // Look for "Product", "Item", or "SKU"
     const itemMatch = text.match(/(?:Product|Item|SKU)[:\s]+([\s\S]*?)(?=\s(?:Qty|Price|Total)|$)/i);
     const item = itemMatch ? itemMatch[1].trim() : "N/A";
 
@@ -77,7 +77,8 @@ const FlipkartOrderExtractor = () => {
     
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      const pdf = await loadingTask.promise;
       
       let allExtracted: ExtractedOrder[] = [];
       let fullDebugText = "";
@@ -86,7 +87,6 @@ const FlipkartOrderExtractor = () => {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         
-        // Join text items with spaces to preserve some structure
         const pageText = textContent.items.map((item: any) => item.str).join(' ');
         fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
 
@@ -113,7 +113,6 @@ const FlipkartOrderExtractor = () => {
   };
 
   const handleExport = () => {
-    // Simple CSV export logic
     const headers = ["Order No", "Customer Name", "Address", "Item", "Amount"];
     const csvContent = [
       headers.join(","),
@@ -121,12 +120,9 @@ const FlipkartOrderExtractor = () => {
     ].join("\n");
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Flipkart_Orders_${new Date().getTime()}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
+    const link = document.body.appendChild(document.createElement("a"));
+    link.href = URL.createObjectURL(blob);
+    link.download = `Flipkart_Orders_${new Date().getTime()}.csv`;
     link.click();
     document.body.removeChild(link);
   };
