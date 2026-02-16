@@ -33,32 +33,35 @@ const FlipkartOrderExtractor = () => {
 
   const extractDataFromPageText = (text: string): ExtractedOrder | null => {
     // 1. Extract Order ID (Standard Flipkart format is OD followed by 18 digits)
-    const orderNoMatch = text.match(/OD\d{18}/) || text.match(/Order ID:\s*([A-Z0-9-]+)/i);
+    const orderNoMatch = text.match(/OD\d{18}/);
     if (!orderNoMatch) return null;
 
-    const orderNo = orderNoMatch[0].replace('Order ID:', '').trim();
+    const orderNo = orderNoMatch[0];
 
     // 2. Extract Amount
-    // Look for "Total", "Amount", "Collectable", or "Payable" followed by numbers
-    const amountMatch = text.match(/(?:Total|Amount|Collectable Amount|Amount Payable|Payable)[:\s]*₹?\s*([\d,]+\.?\d*)/i) || 
-                        text.match(/₹\s*([\d,]+\.?\d*)/);
+    // Pattern: TOTAL PRICE: 162.00
+    const amountMatch = text.match(/TOTAL PRICE:\s*([\d,]+\.?\d*)/i);
     const amount = amountMatch ? amountMatch[1].trim() : "0.00";
 
-    // 3. Extract Customer Name and Address
+    // 3. Extract Item/Product
+    // Pattern: Total, [PRODUCT NAME], |
+    // This targets the product name that appears immediately after the 'Total' column header in the invoice table
+    const itemMatch = text.match(/Total,\s*([\s\S]*?)(?=\s*\||\s*IMEI|\s*HSN)/i);
+    const item = itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A";
+
+    // 4. Extract Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
 
-    const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=\s(?:Phone|Pin|Order ID|Invoice)|$)/i);
+    // Pattern: Deliver to: [NAME] [ADDRESS] ... stops at FSSAI or Seller info
+    const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=[,\s]+(?:FSSAI|Seller|Phone|Pin|Order ID|Invoice)|$)/i);
     if (deliverToMatch) {
-      const addressLines = deliverToMatch[1].trim().split(/\s{2,}|\n/);
+      const fullAddressText = deliverToMatch[1].trim();
+      // Split by common delimiters to separate name from address
+      const addressLines = fullAddressText.split(/,|\n/).map(l => l.trim()).filter(Boolean);
       customerName = addressLines[0] || "Unknown";
       address = addressLines.slice(1).join(", ").trim() || "N/A";
     }
-
-    // 4. Extract Item/Product
-    // Look for "Product", "Item", "SKU", or "Description"
-    const itemMatch = text.match(/(?:Product|Item|SKU|Description)[:\s]+([\s\S]*?)(?=\s(?:Qty|Quantity|Price|Total|Amount|Rate)|$)/i);
-    const item = itemMatch ? itemMatch[1].trim() : "N/A";
 
     return {
       orderNo,
@@ -118,7 +121,7 @@ const FlipkartOrderExtractor = () => {
     const headers = ["Order No", "Customer Name", "Address", "Item", "Amount"];
     const csvContent = [
       headers.join(","),
-      ...extractedOrders.map(o => `"${o.orderNo}","${o.customerName}","${o.address.replace(/"/g, '""')}","${o.item}","${o.amount}"`)
+      ...extractedOrders.map(o => `"${o.orderNo}","${o.customerName}","${o.address.replace(/"/g, '""')}","${o.item.replace(/"/g, '""')}","${o.amount}"`)
     ].join("\n");
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
