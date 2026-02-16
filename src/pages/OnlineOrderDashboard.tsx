@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Checkbox } from '@/components/ui/checkbox';
 import * as pdfjsLib from 'pdfjs-dist';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -78,6 +79,7 @@ const OnlineOrderDashboard = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [stagedOrders, setStagedOrders] = useState<StagedOrder[]>([]);
   const [createdOrders, setCreatedOrders] = useState<CreatedOrder[]>([]);
+  const [selectedStagedIds, setSelectedStagedIds] = useState<string[]>([]);
   
   // UI states
   const [selectedPlatformId, setSelectedPlatformId] = useState<string>("");
@@ -268,6 +270,7 @@ const OnlineOrderDashboard = () => {
       if (error) throw error;
       
       showSuccess("Staging area cleared.");
+      setSelectedStagedIds([]);
       fetchInitialData();
     } catch (error: any) {
       showError(error.message);
@@ -276,14 +279,24 @@ const OnlineOrderDashboard = () => {
     }
   };
 
+  const handleSelectStagedOrder = (id: string, checked: boolean) => {
+    setSelectedStagedIds(prev => checked ? [...prev, id] : prev.filter(i => i !== id));
+  };
+
+  const handleSelectAllStaged = (checked: boolean) => {
+    setSelectedStagedIds(checked ? stagedOrders.map(o => o.id) : []);
+  };
+
   const handleBulkCreateOrders = async () => {
-    if (stagedOrders.length === 0 || !user) return;
+    if (selectedStagedIds.length === 0 || !user) return;
     setIsProcessing(true);
     try {
       const { data: dealer } = await supabase.from('dealers').select('id').eq('name', 'Online Order').single();
       if (!dealer) throw new Error("Create 'Online Order' dealer first.");
 
-      for (const staged of stagedOrders) {
+      const ordersToProcess = stagedOrders.filter(o => selectedStagedIds.includes(o.id));
+
+      for (const staged of ordersToProcess) {
         const { data: newOrder } = await supabase.from('orders').insert({
           dealer_id: dealer.id,
           user_id: user.id,
@@ -305,7 +318,8 @@ const OnlineOrderDashboard = () => {
           await supabase.from('online_order_staging').update({ status: 'processed' }).eq('id', staged.id);
         }
       }
-      showSuccess("Orders created. Now map products in the next tab.");
+      showSuccess(`${ordersToProcess.length} orders created. Now map products in the next tab.`);
+      setSelectedStagedIds([]);
       fetchInitialData();
       setActiveTab("process");
     } catch (error: any) {
@@ -494,8 +508,8 @@ const OnlineOrderDashboard = () => {
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
-                          <Button onClick={handleBulkCreateOrders} disabled={isProcessing} className="bg-indigo-600 hover:bg-indigo-700">
-                            <Play className="mr-2 h-4 w-4" /> Bulk Create Orders
+                          <Button onClick={handleBulkCreateOrders} disabled={isProcessing || selectedStagedIds.length === 0} className="bg-indigo-600 hover:bg-indigo-700">
+                            <Play className="mr-2 h-4 w-4" /> Bulk Create {selectedStagedIds.length} Orders
                           </Button>
                         </>
                       )}
@@ -505,13 +519,32 @@ const OnlineOrderDashboard = () => {
                 <CardContent className="p-0">
                   <ScrollArea className="h-[500px]">
                     <Table>
-                      <TableHeader><TableRow><TableHead>Order ID</TableHead><TableHead>Customer</TableHead><TableHead>Item</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="w-12">
+                            <Checkbox 
+                              checked={selectedStagedIds.length === stagedOrders.length && stagedOrders.length > 0}
+                              onCheckedChange={(checked) => handleSelectAllStaged(!!checked)}
+                            />
+                          </TableHead>
+                          <TableHead>Order ID</TableHead>
+                          <TableHead>Customer</TableHead>
+                          <TableHead>Item</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
                       <TableBody>
                         {stagedOrders.length === 0 ? (
-                          <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No orders in staging.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No orders in staging.</TableCell></TableRow>
                         ) : (
                           stagedOrders.map(o => (
                             <TableRow key={o.id}>
+                              <TableCell>
+                                <Checkbox 
+                                  checked={selectedStagedIds.includes(o.id)}
+                                  onCheckedChange={(checked) => handleSelectStagedOrder(o.id, !!checked)}
+                                />
+                              </TableCell>
                               <TableCell className="font-mono text-xs">{o.platform_order_number}</TableCell>
                               <TableCell className="text-xs">{o.customer_name}</TableCell>
                               <TableCell className="text-xs">{o.flipkart_item_name}</TableCell>
