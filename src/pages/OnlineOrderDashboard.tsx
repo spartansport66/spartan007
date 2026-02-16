@@ -240,24 +240,24 @@ const OnlineOrderDashboard = () => {
 
     const orderNo = orderNoMatch[0];
     
-    // Extract Amount - usually near "Grand Total" or "Total"
-    const amountMatch = text.match(/(?:Grand Total|Total|Amount Payable)[:\s]*₹?\s*([\d,]+\.\d{2})/i) || 
-                        text.match(/₹\s*([\d,]+\.\d{2})/);
+    // Extract Amount - specifically looking for "Total Amount"
+    const amountMatch = text.match(/Total Amount\s*[:\s]*₹?\s*([\d,]+\.\d{2})/i);
     const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
 
-    // Extract Item Name
-    const itemMatch = text.match(/(?:Product|Description|Item)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Price|HSN|GST|Total)|$)/i);
+    // Extract Item Name - specifically looking for "Description"
+    const itemMatch = text.match(/Description\s*[:\s]+([\s\S]*?)(?=\s*(?:Qty|Price|HSN|GST|Total|Tax)|$)/i);
     const item = itemMatch ? itemMatch[1].trim() : "Amazon Item";
 
-    // Extract Customer Name and Address
+    // Extract Customer Name from 1st line of Billing Address
     let customerName = "Unknown";
     let address = "N/A";
 
-    const shipToMatch = text.match(/(?:Ship to|Shipping Address|Deliver to)[:\s]+([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller)|$)/i);
-    if (shipToMatch) {
-      const parts = shipToMatch[1].trim().split(/\n|,|,,/);
-      customerName = parts[0].trim();
-      address = parts.slice(1).join(", ").trim() || "N/A";
+    const billingMatch = text.match(/Billing Address\s*[:\s]+([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
+    if (billingMatch) {
+      const fullText = billingMatch[1].trim();
+      const lines = fullText.split(/\n|,|,,/);
+      customerName = lines[0].trim();
+      address = lines.slice(1).join(", ").trim() || "N/A";
     }
 
     return { orderNo, customerName, address, item, amount };
