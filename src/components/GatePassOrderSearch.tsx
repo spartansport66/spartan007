@@ -28,12 +28,15 @@ interface OrderDetail {
   dealer_address: string;
   dealer_phone: string;
   sales_person_name: string;
-  dispatched: boolean; // Admin dispatch status
-  gate_pass_dispatch_time: string | null; // NEW: Gate Keeper's final dispatch time
+  dispatched: boolean;
+  gate_pass_dispatch_time: string | null;
   bill_no: string | null;
-  dispatch_date: string | null; // Admin dispatch date
+  dispatch_date: string | null;
   dispatch_number: number | null;
   items: OrderItemDetail[];
+  is_online: boolean;
+  mapped_product_id?: string | null;
+  raw_item_name?: string | null;
 }
 
 interface GatePassOrderSearchProps {
@@ -67,33 +70,25 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
     const searchNum = parseInt(search);
 
     if (isNaN(searchNum) || searchNum <= 0) {
-        showError("Please enter a valid Dispatch Number (a positive number).");
+        showError("Please enter a valid Dispatch Number.");
         setLoading(false);
         return;
     }
 
-    const selectFields = `
-      id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number, gate_pass_dispatch_time,
-      dealers (name, address, phone),
-      profiles:user_id (first_name, last_name),
-      sales (quantity, products (name, code))
-    `;
-
-    // Search ONLY by Dispatch Number
-    const query = supabase
-        .from('orders')
-        .select(selectFields)
-        .eq('dispatch_number', searchNum)
-        .limit(1)
-        .single();
-    
-    const { data, error } = await query;
-
     try {
-      if (error && error.code !== 'PGRST116') { // PGRST116 means "no rows found"
-        console.error('Supabase Query Error:', error.message);
-        throw error;
-      }
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number, gate_pass_dispatch_time,
+          dealers (name, address, phone),
+          profiles:user_id (first_name, last_name),
+          online_order_details (raw_item_name, mapped_product_id),
+          sales (quantity, products (name, code))
+        `)
+        .eq('dispatch_number', searchNum)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
 
       if (!data) {
         showError(`Dispatch Number "${search}" not found.`);
@@ -101,16 +96,21 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         return;
       }
       
-      // Check mandatory condition: Bill Number must be present for dispatch
       if (!data.bill_no) {
         showError(`Order #${data.order_number} found, but Bill Number is missing. It must be processed by the Admin first.`);
         setOrder(null);
         return;
       }
-      
-      console.log("DEBUG: Raw sales data received:", data.sales);
 
-      // Access profiles data using the explicit alias 'profiles'
+      const isOnline = (data.dealers as any)?.name === 'Online Order';
+      const onlineDetails = data.online_order_details?.[0];
+
+      if (isOnline && !onlineDetails?.mapped_product_id) {
+        showError(`Order #${data.order_number} is an online order but has not been mapped to a product yet. Please ask Admin to map it.`);
+        setOrder(null);
+        return;
+      }
+
       const salesPersonName = `${(data.profiles as any)?.first_name || ''} ${(data.profiles as any)?.last_name || ''}`.trim() || 'N/A';
 
       const formattedOrder: OrderDetail = {
@@ -123,10 +123,13 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         dealer_phone: (data.dealers as any)?.phone || 'N/A',
         sales_person_name: salesPersonName,
         dispatched: data.dispatched,
-        gate_pass_dispatch_time: data.gate_pass_dispatch_time, // NEW
+        gate_pass_dispatch_time: data.gate_pass_dispatch_time,
         bill_no: data.bill_no,
         dispatch_date: data.dispatch_date,
         dispatch_number: data.dispatch_number,
+        is_online: isOnline,
+        mapped_product_id: onlineDetails?.mapped_product_id,
+        raw_item_name: onlineDetails?.raw_item_name,
         items: (data.sales || []).map((sale: any) => ({
           product_name: sale.products?.name || 'N/A',
           quantity: sale.quantity,
@@ -147,29 +150,45 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
   }, [searchTerm]);
 
   const handleDispatchOrder = async () => {
-    if (!order || order.gate_pass_dispatch_time) return; // Check new field
+    if (!order || order.gate_pass_dispatch_time) return;
 
     setIsDispatching(true);
     try {
       const dispatchTime = new Date().toISOString();
       
-      // Update the new gate_pass_dispatch_time field
-      const { error } = await supabase
-        .from('orders')
-        .update({
-          gate_pass_dispatch_time: dispatchTime,
-        })
-        .eq('id', order.id);
-
-      if (error) {
-        console.error('Supabase Update Error during Gate Pass Dispatch:', error.message);
-        showError(`Database update failed: ${error.message}`);
-        throw error;
+      // 1. If it's an online order, we need to create the sales record now to trigger stock out
+      if (order.is_online && order.mapped_product_id && order.items.length === 0) {
+        const { data: product } = await supabase
+          .from('products')
+          .select('gst, dp')
+          .eq('id', order.mapped_product_id)
+          .single();
+        
+        if (product) {
+          const gstPercent = parseFloat(product.gst) || 0;
+          const { error: salesError } = await supabase
+            .from('sales')
+            .insert({
+              order_id: order.id,
+              product_id: order.mapped_product_id,
+              quantity: 1,
+              unit_price: order.total_amount / (1 + gstPercent / 100),
+              gst_percent: gstPercent,
+              total_price: order.total_amount,
+            });
+          if (salesError) throw salesError;
+        }
       }
 
+      // 2. Update the gate_pass_dispatch_time field
+      const { error } = await supabase
+        .from('orders')
+        .update({ gate_pass_dispatch_time: dispatchTime })
+        .eq('id', order.id);
+
+      if (error) throw error;
+
       showSuccess(`Order #${order.order_number} successfully authorized for OUT!`);
-      
-      // Update local state and notify parent
       setOrder(prev => prev ? { ...prev, gate_pass_dispatch_time: dispatchTime } : null);
       onDispatchSuccess();
 
@@ -244,7 +263,14 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
 
             <Separator />
 
-            <h4 className="text-lg font-semibold">Items to Dispatch ({order.items.length})</h4>
+            {order.is_online && !isFullyDispatched && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md text-sm">
+                <p><strong>Online Item (Raw):</strong> {order.raw_item_name}</p>
+                <p className="text-xs text-muted-foreground mt-1">This item will be mapped to inventory and stock will be deducted upon final authorization.</p>
+              </div>
+            )}
+
+            <h4 className="text-lg font-semibold">Items to Dispatch</h4>
             <div className="max-h-40 overflow-y-auto border rounded-md">
               <Table>
                 <TableHeader>
@@ -255,10 +281,16 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {order.items.length === 0 ? (
+                  {order.items.length === 0 && !order.is_online ? (
                     <TableRow>
                       <TableCell colSpan={3} className="text-center text-muted-foreground">
                         No items found for this order.
+                      </TableCell>
+                    </TableRow>
+                  ) : order.is_online && order.items.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center italic text-muted-foreground">
+                        Online order mapping pending final OUT...
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -285,7 +317,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
                   <AlertDialogHeader>
                     <AlertDialogTitle>Confirm Final Material OUT</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Are you sure you want to authorize the final physical dispatch of Order #{order.order_number}? This action will record the current time as the Gate Pass Dispatch Time.
+                      Are you sure you want to authorize the final physical dispatch of Order #{order.order_number}? This action will record the current time as the Gate Pass Dispatch Time and deduct stock from inventory.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

@@ -29,7 +29,8 @@ interface OnlineOrderInfo {
   contact_no: string | null;
   city: string | null;
   state: string | null;
-  address: string | null; // Added address field
+  address: string | null;
+  raw_item_name: string | null;
 }
 
 interface OrderDetail {
@@ -157,6 +158,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             city,
             state,
             address,
+            raw_item_name,
             online_platforms (name)
           `)
           .eq('order_id', id)
@@ -173,6 +175,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             city: onlineData.city,
             state: onlineData.state,
             address: onlineData.address,
+            raw_item_name: onlineData.raw_item_name,
           };
         }
       }
@@ -277,7 +280,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     y = Math.max(y + (addressLines.length * 5), rightY + 10);
 
     const tableColumn = ["Code", "Product Name", "Quantity"];
-    const tableRows = orderDetails.items.map(item => [item.product_code, item.product_name, item.quantity.toString()]);
+    const tableRows = orderDetails.items.length > 0 
+      ? orderDetails.items.map(item => [item.product_code, item.product_name, item.quantity.toString()])
+      : [[ "N/A", orderDetails.online_order_details?.raw_item_name || "Pending Mapping", "1" ]];
 
     autoTable(doc, {
       head: [tableColumn],
@@ -365,15 +370,17 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     y = Math.max(y + (addressLines.length * 5), rightY + 10);
 
     const tableColumn = ["Code", "Product", "Qty", "Unit Price", "Disc %", "GST %", "Total"];
-    const tableRows = orderDetails.items.map(item => [
-      item.product_code,
-      item.product_name,
-      item.quantity.toString(),
-      `₹${item.unit_price.toFixed(2)}`,
-      `${item.discount_percent}%`,
-      `${item.product_gst}%`,
-      `₹${item.total_price.toFixed(2)}`
-    ]);
+    const tableRows = orderDetails.items.length > 0 
+      ? orderDetails.items.map(item => [
+          item.product_code,
+          item.product_name,
+          item.quantity.toString(),
+          `₹${item.unit_price.toFixed(2)}`,
+          `${item.discount_percent}%`,
+          `${item.product_gst}%`,
+          `₹${item.total_price.toFixed(2)}`
+        ])
+      : [[ "N/A", orderDetails.online_order_details?.raw_item_name || "Pending Mapping", "1", `₹${orderDetails.total_amount.toFixed(2)}`, "0%", "0%", `₹${orderDetails.total_amount.toFixed(2)}` ]];
 
     autoTable(doc, { 
       head: [tableColumn], 
@@ -393,7 +400,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     });
     
     const finalY = (doc as any).lastAutoTable.finalY + 10;
-    const subtotal = orderDetails.items.reduce((sum, s) => sum + s.total_price, 0);
+    const subtotal = orderDetails.items.length > 0 
+      ? orderDetails.items.reduce((sum, s) => sum + s.total_price, 0)
+      : orderDetails.total_amount;
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
@@ -445,6 +454,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                 <p><strong>Platform Order #:</strong> {orderDetails.online_order_details.platform_order_number || 'N/A'}</p>
                 <p><strong>Contact:</strong> {orderDetails.online_order_details.contact_no || 'N/A'}</p>
                 <p><strong>Address:</strong> {orderDetails.online_order_details.address || `${orderDetails.online_order_details.city || ''}, ${orderDetails.online_order_details.state || ''}`.trim() || 'N/A'}</p>
+                <p><strong>Extracted Item (Dummy):</strong> {orderDetails.online_order_details.raw_item_name || 'N/A'}</p>
               </div>
             )}
             <Separator />
@@ -461,16 +471,29 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {orderDetails.items.map((item, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>{item.product_name} ({item.product_code})</TableCell>
-                      <TableCell className="text-right">{item.quantity}</TableCell>
-                      <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{item.discount_percent}%</TableCell>
-                      <TableCell className="text-right">{item.product_gst}%</TableCell>
-                      <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
+                  {orderDetails.items.length > 0 ? (
+                    orderDetails.items.map((item, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>{item.product_name} ({item.product_code})</TableCell>
+                        <TableCell className="text-right">{item.quantity}</TableCell>
+                        <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{item.discount_percent}%</TableCell>
+                        <TableCell className="text-right">{item.product_gst}%</TableCell>
+                        <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell className="italic text-muted-foreground">
+                        {orderDetails.online_order_details?.raw_item_name || "Pending Mapping"}
+                      </TableCell>
+                      <TableCell className="text-right">1</TableCell>
+                      <TableCell className="text-right">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">0%</TableCell>
+                      <TableCell className="text-right">0%</TableCell>
+                      <TableCell className="text-right font-medium">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </div>

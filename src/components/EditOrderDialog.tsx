@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Percent, Search, Building, Phone, MapPin, User } from 'lucide-react';
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Percent, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -64,6 +64,9 @@ interface OrderToEdit {
   bill_no: string | null;
   dispatch_date: string | null;
   items: OrderItem[];
+  is_online: boolean;
+  raw_item_name?: string | null;
+  mapped_product_id?: string | null;
 }
 
 interface EditOrderDialogProps {
@@ -82,6 +85,7 @@ const formSchema = z.object({
   billNo: z.string().nullable().optional(),
   dispatchDate: z.string().nullable().optional(),
   roundOff: z.preprocess((val) => Number(val), z.number().default(0)),
+  mappedProductId: z.string().uuid().nullable().optional(),
 });
 
 const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated }) => {
@@ -112,6 +116,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       billNo: '',
       dispatchDate: '',
       roundOff: 0,
+      mappedProductId: null,
     },
   });
 
@@ -143,6 +148,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         .from('orders')
         .select(`
           id, order_number, order_date, dealer_id, user_id, total_amount, discount_amount, round_off, bill_no, dispatch_date,
+          dealers (name),
+          online_order_details (raw_item_name, mapped_product_id),
           sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst))
         `)
         .eq('id', id)
@@ -174,9 +181,15 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         };
       });
 
+      const isOnline = (orderRaw.dealers as any)?.name === 'Online Order';
+      const onlineDetails = orderRaw.online_order_details?.[0];
+
       setOrderData({
         ...orderRaw,
         items: fetchedItems,
+        is_online: isOnline,
+        raw_item_name: onlineDetails?.raw_item_name,
+        mapped_product_id: onlineDetails?.mapped_product_id,
       });
       
       setOrderItems(fetchedItems);
@@ -189,6 +202,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         billNo: orderRaw.bill_no || '',
         dispatchDate: orderRaw.dispatch_date ? orderRaw.dispatch_date.split('T')[0] : '',
         roundOff: orderRaw.round_off || 0,
+        mappedProductId: onlineDetails?.mapped_product_id || null,
       });
 
     } catch (error: any) {
@@ -296,7 +310,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   }, [newItemProductId, products]);
 
   const handleSave = async (values: z.infer<typeof formSchema>) => {
-    if (!orderData || orderItems.length === 0) {
+    if (!orderData) return;
+    if (!orderData.is_online && orderItems.length === 0) {
       showError('Order must have at least one item.');
       return;
     }
@@ -306,6 +321,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const finalDiscountAmount = parseFloat(values.discountAmount.toFixed(2));
       const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
 
+      // 1. Update Order
       const { error: orderUpdateError } = await supabase
         .from('orders')
         .update({
@@ -323,18 +339,35 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
       if (orderUpdateError) throw orderUpdateError;
 
-      await supabase.from('sales').delete().eq('order_id', orderData.id);
-      const salesToInsert = orderItems.map(item => ({
-        order_id: orderData.id,
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unit_price: item.unit_dp,
-        discount_percent: item.discount_percent,
-        gst_percent: item.gst_percent,
-        total_price: item.total_price,
-      }));
-      await supabase.from('sales').insert(salesToInsert);
+      // 2. Update Online Details if applicable
+      if (orderData.is_online) {
+        const { error: onlineUpdateError } = await supabase
+          .from('online_order_details')
+          .update({
+            mapped_product_id: values.mappedProductId || null,
+          })
+          .eq('order_id', orderData.id);
+        if (onlineUpdateError) throw onlineUpdateError;
+      }
 
+      // 3. Update Sales Items (only if not online or if already dispatched)
+      // For online orders, we only insert into sales at Gate Pass time if not already there.
+      // But if the user is editing an existing order with sales, we update them.
+      if (orderItems.length > 0) {
+        await supabase.from('sales').delete().eq('order_id', orderData.id);
+        const salesToInsert = orderItems.map(item => ({
+          order_id: orderData.id,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          unit_price: item.unit_dp,
+          discount_percent: item.discount_percent,
+          gst_percent: item.gst_percent,
+          total_price: item.total_price,
+        }));
+        await supabase.from('sales').insert(salesToInsert);
+      }
+
+      // 4. Update Payment
       const { data: payment } = await supabase
         .from('payments')
         .select('id')
@@ -416,6 +449,29 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
               </div>
             </div>
 
+            {orderData?.is_online && (
+              <div className="p-4 border rounded-md bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 space-y-4">
+                <h3 className="font-semibold text-yellow-800 dark:text-yellow-200">Online Order Mapping</h3>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                  <strong>Extracted Item:</strong> {orderData.raw_item_name}
+                </p>
+                <div className="space-y-2">
+                  <Label>Map to Actual Product</Label>
+                  <Select 
+                    value={form.watch('mappedProductId') || "none"} 
+                    onValueChange={(val) => form.setValue('mappedProductId', val === "none" ? null : val)}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select Actual Product" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not Mapped</SelectItem>
+                      {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.code})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Stock will be deducted when the Gate Keeper authorizes the final OUT.</p>
+                </div>
+              </div>
+            )}
+
             <Separator />
 
             <div className="space-y-4">
@@ -430,7 +486,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <PopoverContent className="w-[300px] p-0" align="start">
                       <div className="p-2 border-b flex items-center gap-2">
                         <Search className="h-4 w-4 text-muted-foreground" />
                         <Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" />
@@ -530,7 +586,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
-          <Button onClick={form.handleSubmit(handleSave)} disabled={isSubmitting || orderItems.length === 0}>
+          <Button onClick={form.handleSubmit(handleSave)} disabled={isSubmitting}>
             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}
           </Button>
         </DialogFooter>
