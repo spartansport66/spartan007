@@ -146,7 +146,17 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
       const pageWidth = doc.internal.pageSize.width;
 
       for (let i = 0; i < selectedOrderIds.length; i++) {
-        const { data: orderData } = await supabase.from('orders').select(`order_number, order_date, total_amount, dispatch_number, bill_no, dealers (name, address, city, state), sales (quantity, products (name, code))`).eq('id', selectedOrderIds[i]).single();
+        const { data: orderData } = await supabase
+          .from('orders')
+          .select(`
+            order_number, order_date, total_amount, dispatch_number, bill_no, 
+            dealers (name, address, city, state), 
+            online_order_details (client_name, city, state),
+            sales (quantity, products (name, code))
+          `)
+          .eq('id', selectedOrderIds[i])
+          .single();
+          
         if (!orderData) continue;
         if (i > 0) doc.addPage();
 
@@ -157,9 +167,18 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
         doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", pageWidth / 2, 30, { align: 'center' });
         
         doc.setTextColor(0); doc.setFontSize(10); let y = 45;
+        
+        const onlineDetails = orderData.online_order_details?.[0];
+        const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
+        
+        const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name;
+        const partyAddress = isOnline 
+          ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
+          : `${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`;
+
         doc.setFont("helvetica", "bold"); doc.text("PARTY DETAILS:", margin, y);
-        doc.setFont("helvetica", "normal"); y += 5; doc.text((orderData.dealers as any).name, margin, y);
-        y += 5; const addressLines = doc.splitTextToSize(`${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`, pageWidth / 2 - margin);
+        doc.setFont("helvetica", "normal"); y += 5; doc.text(partyName, margin, y);
+        y += 5; const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
         doc.text(addressLines, margin, y);
         
         let rightY = 45; const rightColX = pageWidth / 2 + 10;
@@ -207,7 +226,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
         <div className="flex flex-wrap items-end gap-4 mb-6">
           <div className="flex-1 min-w-[150px]"><Label>Order No.</Label><Input type="number" value={filterOrderNumber} onChange={(e) => setFilterOrderNumber(e.target.value)} /></div>
           <div className="flex-1 min-w-[150px]"><Label>Dealer</Label><Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}><SelectTrigger><SelectValue placeholder="All Dealers" /></SelectTrigger><SelectContent><SelectItem value="all">All Dealers</SelectItem>{allDealers.map(d => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent></Select></div>
-          <div className="flex-1 min-w-[150px]"><Label>Date</Label><Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} /></div>
+          <div className="flex-1 min-w-[150px]"><Label>Date</Label><Input id="filterDate" type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} /></div>
           <Button onClick={fetchOrdersAndDealers} className="flex items-center gap-2"><Search className="h-4 w-4" /> Apply</Button>
           <Button variant="outline" onClick={handleClearFilters}>Clear</Button>
         </div>
