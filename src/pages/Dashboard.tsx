@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, Search, Eye, FileText, Lock, Edit, PlusCircle, Trash2 } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, Search, Eye, FileText, Lock, Edit, PlusCircle, Trash2, Printer } from 'lucide-react';
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
@@ -25,6 +25,9 @@ import DailyVisitProgressCard from '@/components/DailyVisitProgressCard';
 import SalesPersonFollowupsCard from '@/components/SalesPersonFollowupsCard';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Checkbox } from '@/components/ui/checkbox';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Product {
   id: string;
@@ -109,6 +112,9 @@ const Dashboard = () => {
   const [isSalesPersonPaymentsReportOpen, setIsSalesPersonPaymentsReportOpen] = useState(false);
   
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [isBulkPrinting, setIsBulkPrinting] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null);
 
   const handleRefreshData = useCallback(() => {
     setRefreshKey(prev => prev + 1);
@@ -143,6 +149,9 @@ const Dashboard = () => {
       const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
       setAllDealers(formattedDealers);
     }
+
+    const { data: companyInfo } = await supabase.from('company_info').select('company_name').limit(1).single();
+    setCompanyName(companyInfo?.company_name || null);
     
     setLoadingData(false);
   }, [user]);
@@ -265,6 +274,7 @@ const Dashboard = () => {
 
   const handleApplyOrderFilters = () => {
     setRefreshKey(prev => prev + 1);
+    setSelectedOrderIds([]);
   };
 
   const handleClearFilters = () => {
@@ -285,6 +295,7 @@ const Dashboard = () => {
     setFilterFromDate(thirtyDaysAgoString);
     setFilterToDate(todayString);
     setRefreshKey(prev => prev + 1);
+    setSelectedOrderIds([]);
   };
 
   const handleViewOrderDetails = (orderId: string) => {
@@ -305,13 +316,8 @@ const Dashboard = () => {
   const handleDeleteOrder = async (order: OrderDisplay) => {
     setLoadingOrders(true);
     try {
-      // 1. Remove associated payments
       await supabase.from('payments').delete().eq('order_id', order.id);
-
-      // 2. Remove associated sales items (Database triggers will handle stock restoration)
       await supabase.from('sales').delete().eq('order_id', order.id);
-
-      // 3. Delete the order
       const { error: deleteError } = await supabase.from('orders').delete().eq('id', order.id);
       if (deleteError) throw deleteError;
 
@@ -324,6 +330,95 @@ const Dashboard = () => {
     } finally {
       setLoadingOrders(false);
     }
+  };
+
+  const handleSelectOrder = (orderId: string, checked: boolean) => {
+    setSelectedOrderIds(prev => checked ? [...prev, orderId] : prev.filter(id => id !== orderId));
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedOrderIds(checked ? orders.map(o => o.id) : []);
+  };
+
+  const handleBulkPrintOrderDetails = async () => {
+    if (selectedOrderIds.length === 0) return;
+    setIsBulkPrinting(true);
+    try {
+      const doc = new jsPDF();
+      const darkBlue: [number, number, number] = [30, 58, 138];
+      const margin = 15;
+      const pageWidth = doc.internal.pageSize.width;
+
+      for (let i = 0; i < selectedOrderIds.length; i++) {
+        const { data: orderData } = await supabase.from('orders').select(`order_number, order_date, total_amount, discount_amount, dealers (name, address, phone, city, state), sales (quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code))`).eq('id', selectedOrderIds[i]).single();
+        if (!orderData) continue;
+        if (i > 0) doc.addPage();
+
+        doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 10, pageWidth, 15, 'F');
+        doc.setFontSize(18); doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold");
+        doc.text(companyName?.toUpperCase() || "ORDER INVOICE", pageWidth / 2, 20, { align: 'center' });
+
+        doc.setTextColor(0); doc.setFontSize(10); let y = 35;
+        doc.setFont("helvetica", "bold"); doc.text("PARTY DETAILS:", margin, y);
+        doc.setFont("helvetica", "normal"); y += 5; doc.text((orderData.dealers as any).name, margin, y);
+        y += 5; const addressLines = doc.splitTextToSize(`${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`, pageWidth / 2 - margin);
+        doc.text(addressLines, margin, y);
+        
+        let rightY = 35; const rightColX = pageWidth / 2 + 10;
+        doc.setFont("helvetica", "bold"); doc.text("ORDER SUMMARY:", rightColX, rightY);
+        doc.setFont("helvetica", "normal"); rightY += 5; doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
+        rightY += 5; doc.text(`Date: ${formatDate(orderData.order_date)}`, rightColX, rightY);
+        rightY += 5; doc.text(`Phone: ${(orderData.dealers as any).phone || 'N/A'}`, rightColX, rightY);
+
+        y = Math.max(y + (addressLines.length * 5), rightY + 10);
+        const tableRows = (orderData.sales || []).map((sale: any) => [
+          sale.products?.code || 'N/A', 
+          sale.products?.name || 'N/A', 
+          sale.quantity.toString(), 
+          `₹${(sale.unit_price || 0).toFixed(2)}`, 
+          `${(sale.discount_percent || 0)}%`, 
+          `${(sale.gst_percent || 0)}%`, 
+          `₹${(sale.total_price || 0).toFixed(2)}`
+        ]);
+
+        autoTable(doc, { 
+          head: [["Code", "Product", "Qty", "Unit Price", "Disc %", "GST %", "Total"]], 
+          body: tableRows, 
+          startY: y, 
+          headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 }, 
+          columnStyles: {
+            0: { cellWidth: 20, halign: 'center' },
+            1: { cellWidth: 'auto' },
+            2: { cellWidth: 15, halign: 'center' },
+            3: { cellWidth: 25, halign: 'right' },
+            4: { cellWidth: 15, halign: 'center' },
+            5: { cellWidth: 15, halign: 'center' },
+            6: { cellWidth: 25, halign: 'right' }
+          },
+          styles: { fontSize: 8, cellPadding: 2 } 
+        });
+        
+        const finalY = (doc as any).lastAutoTable.finalY + 10;
+        const subtotal = (orderData.sales || []).reduce((sum: number, s: any) => sum + s.total_price, 0);
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
+        
+        let currentY = finalY;
+        if (orderData.discount_amount > 0) {
+          currentY += 5;
+          doc.text(`Global Discount: -₹${orderData.discount_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+        }
+        
+        currentY += 7;
+        doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+        doc.text(`FINAL TOTAL: ₹${orderData.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+      }
+      doc.save(`Bulk_Order_Details_${new Date().getTime()}.pdf`);
+      showSuccess(`Generated ${selectedOrderIds.length} Order Detail PDFs.`);
+      setSelectedOrderIds([]);
+    } catch (error: any) { showError(`Failed: ${error.message}`); } finally { setIsBulkPrinting(false); }
   };
 
   if (sessionLoading || loadingData) {
@@ -390,8 +485,18 @@ const Dashboard = () => {
 
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
         <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
-          <CardTitle className="text-xl font-semibold">My Recent Orders</CardTitle>
-          <CardDescription className="text-teal-100 dark:text-teal-200">A list of your recent orders.</CardDescription>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle className="text-xl font-semibold">My Recent Orders</CardTitle>
+              <CardDescription className="text-teal-100 dark:text-teal-200">A list of your recent orders.</CardDescription>
+            </div>
+            {selectedOrderIds.length > 0 && (
+              <Button onClick={handleBulkPrintOrderDetails} disabled={isBulkPrinting} className="bg-white text-teal-600 hover:bg-teal-50">
+                {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
+                Bulk Print Invoices ({selectedOrderIds.length})
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
@@ -426,6 +531,9 @@ const Dashboard = () => {
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="bg-muted hover:bg-muted/90">
+                      <TableHead className="w-10">
+                        <Checkbox checked={selectedOrderIds.length === orders.length && orders.length > 0} onCheckedChange={(checked) => handleSelectAll(!!checked)} />
+                      </TableHead>
                       <TableHead className="text-muted-foreground">Order No.</TableHead>
                       <TableHead className="text-muted-foreground">Dealer / Online Details</TableHead>
                       <TableHead className="text-muted-foreground">Order Date</TableHead>
@@ -437,6 +545,9 @@ const Dashboard = () => {
                   <TableBody>
                     {orders.map((order) => (
                       <TableRow key={order.id} className="hover:bg-accent/50">
+                        <TableCell>
+                          <Checkbox checked={selectedOrderIds.includes(order.id)} onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)} />
+                        </TableCell>
                         <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {order.dealer_name === 'Online Order' && order.online_details ? (
