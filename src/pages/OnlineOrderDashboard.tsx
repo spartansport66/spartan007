@@ -231,53 +231,56 @@ const OnlineOrderDashboard = () => {
   const extractMeesho = (text: string): ExtractedOrder | null => {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     
-    // 1. Find Order No
-    const orderIdx = lines.findIndex((l: string) => l.includes("Order No."));
-    let orderNo = "N/A";
-    if (orderIdx !== -1) {
-      orderNo = lines[orderIdx].replace("Order No.", "").trim();
-      if (!orderNo && lines[orderIdx + 1]) orderNo = lines[orderIdx + 1];
-    }
+    // 1. Find Customer Name
+    const custAddrIdx = lines.findIndex((l: string) => l.toLowerCase().includes("customer address"));
+    if (custAddrIdx === -1) return null;
+    const customerName = lines[custAddrIdx + 1] || "Unknown";
 
-    if (orderNo === "N/A") return null;
-
-    // 2. Find Customer Name (Line after "Customer Address")
-    const custIdx = lines.findIndex((l: string) => l.includes("Customer Address"));
-    const customerName = custIdx !== -1 && lines[custIdx + 1] ? lines[custIdx + 1] : "Unknown";
-
-    // 3. Find Address (Lines between Customer Name and "If undelivered")
+    // 2. Find Address
     let address = "N/A";
-    if (custIdx !== -1) {
-      const addressLines = [];
-      for (let j = custIdx + 2; j < lines.length; j++) {
-        if (lines[j].includes("If undelivered") || lines[j].includes("return to")) break;
-        addressLines.push(lines[j]);
+    const returnToIdx = lines.findIndex((l: string) => l.toLowerCase().includes("if undelivered"));
+    if (returnToIdx > custAddrIdx + 2) {
+      address = lines.slice(custAddrIdx + 2, returnToIdx).join(", ");
+    }
+
+    // 3. Find Order No
+    const orderNoHeaderIdx = lines.findIndex((l: string) => l.toLowerCase().includes("order no."));
+    let orderNo = "N/A";
+    if (orderNoHeaderIdx !== -1) {
+      // In the vertical layout, the value is 5 lines after the header
+      if (lines[orderNoHeaderIdx + 5]) {
+        orderNo = lines[orderNoHeaderIdx + 5];
       }
-      if (addressLines.length > 0) address = addressLines.join(", ");
     }
 
-    // 4. Find Item (Line after "Description HSN Qty")
-    const itemIdx = lines.findIndex((l: string) => l.includes("Description HSN Qty"));
+    // 4. Find Item Description
+    const descIdx = lines.findIndex((l: string) => l === "Description");
     let item = "Meesho Item";
-    if (itemIdx !== -1 && lines[itemIdx + 1]) {
-      // The item name is usually the first part of the line before the HSN (6 digits)
-      item = lines[itemIdx + 1].split(/\s\d{6}/)[0].trim();
+    if (descIdx !== -1) {
+      // Item name starts after the 8 headers (Description, HSN, Qty, Gross, Discount, Taxable, Taxes, Total)
+      const itemStartIdx = descIdx + 8; 
+      const hsnIdx = lines.findIndex((l: string, idx: number) => idx > itemStartIdx && /^\d{6,8}$/.test(l));
+      if (hsnIdx !== -1) {
+        item = lines.slice(itemStartIdx, hsnIdx).join(" ");
+      }
     }
 
-    // 5. Find Amount (Last "Rs." value on the line containing "Total")
-    let totalIdx = -1;
+    // 5. Find Amount
+    let amount = "0.00";
+    let lastTotalIdx = -1;
     for (let i = lines.length - 1; i >= 0; i--) {
-      if (lines[i].includes("Total") && lines[i].includes("Rs.")) {
-        totalIdx = i;
+      if (lines[i] === "Total") {
+        lastTotalIdx = i;
         break;
       }
     }
 
-    let amount = "0.00";
-    if (totalIdx !== -1) {
-      const amountMatch = lines[totalIdx].match(/Rs\.([\d,.]+)/g);
-      if (amountMatch) {
-        amount = amountMatch[amountMatch.length - 1].replace("Rs.", "").replace(/,/g, "");
+    if (lastTotalIdx !== -1) {
+      // Look for the last Rs. value after the final "Total" label
+      for (let i = lastTotalIdx + 1; i < lastTotalIdx + 5 && i < lines.length; i++) {
+        if (lines[i].includes("Rs.")) {
+          amount = lines[i].replace(/Rs\./g, '').replace(/,/g, '').trim();
+        }
       }
     }
 
