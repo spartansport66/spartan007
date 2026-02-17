@@ -457,7 +457,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         body: tableRows,
         foot: [[{ content: 'Totals', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalOpeningBalance.toFixed(2)}`, '', '', `₹${totalSales.toFixed(2)}`, `₹${totalPaymentsReceived.toFixed(2)}`, `₹${totalNetBalance.toFixed(2)}`, '', '', '']],
         startY: 45,
-        didParseCell: (data) => {
+        willDrawCell: (data) => {
           if (data.section === 'body') {
             const dealer = data.row.raw as unknown as DealerClosingBalance;
             const opDueDays = dealer.opening_balance_due_days;
@@ -488,7 +488,12 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
           7: { cellWidth: 20, halign: 'center' }, 8: { cellWidth: 20, halign: 'center' }, 9: { cellWidth: 20, halign: 'center' }
         }
       });
-      doc.save('dealer_net_balance_report.pdf');
+      
+      const salesPersonLabel = allSalesPersons.find(sp => sp.value === filterSalesPersonId)?.label || 'All';
+      const safeSalesPersonName = salesPersonLabel.replace(/\s+/g, '_');
+      const fileName = `${safeSalesPersonName}_dealer_net_balance_report.pdf`;
+
+      doc.save(fileName);
       showSuccess('Dealer net balance report generated successfully!');
     } catch (error: any) { showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`); }
   };
