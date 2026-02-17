@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as UiTableFooter } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
 import { Loader2, Search, Printer, MessageCircle, RotateCcw, Send, ArrowUp, ArrowDown, ChevronsUpDown, DollarSign, AlertTriangle, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -457,7 +457,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         body: tableRows,
         foot: [[{ content: 'Totals', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalOpeningBalance.toFixed(2)}`, '', '', `₹${totalSales.toFixed(2)}`, `₹${totalPaymentsReceived.toFixed(2)}`, `₹${totalNetBalance.toFixed(2)}`, '', '', '']],
         startY: 45,
-        willDrawCell: (data) => {
+        didDrawCell: (data) => {
           if (data.section === 'body') {
             const dealer = data.row.raw as unknown as DealerClosingBalance;
             const opDueDays = dealer.opening_balance_due_days;
@@ -465,7 +465,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
 
             let fillColor: [number, number, number] | undefined;
             if (opDueDays > 90) fillColor = [220, 38, 38]; // red-600
-            else if (opDueDays > 60) fillColor = [234, 179, 8]; // yellow-500
+            else if (opDueDays > 60) fillColor = [202, 138, 4]; // yellow-600
             else fillColor = [22, 163, 74]; // green-600
             
             if (fillColor) {
@@ -566,9 +566,9 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                       const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
                       const opDueDays = dealer.opening_balance_due_days;
                       const rowColorClass = opDueDays === null ? 'hover:bg-accent/50' :
-                                             opDueDays > 90 ? 'bg-red-600 text-white dark:bg-red-800 dark:text-red-100 hover:bg-red-700/90 dark:hover:bg-red-800/90' :
-                                             opDueDays > 60 ? 'bg-yellow-600 text-white dark:bg-yellow-800 dark:text-yellow-100 hover:bg-yellow-700/90 dark:hover:bg-yellow-800/90' :
-                                             'bg-green-600 text-white dark:bg-green-800 dark:text-green-100 hover:bg-green-700/90 dark:hover:bg-green-800/90';
+                                             opDueDays > 90 ? 'bg-red-600 text-white dark:bg-red-800 dark:text-white hover:bg-red-700/90 dark:hover:bg-red-800/90' :
+                                             opDueDays > 60 ? 'bg-yellow-600 text-white dark:bg-yellow-800 dark:text-white hover:bg-yellow-700/90 dark:hover:bg-yellow-800/90' :
+                                             'bg-green-600 text-white dark:bg-green-800 dark:text-white hover:bg-green-700/90 dark:hover:bg-green-800/90';
 
                       return (
                         <TableRow key={dealer.id} className={cn(rowColorClass)}>
@@ -594,6 +594,17 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                       );
                     })}
                   </TableBody>
+                  <UiTableFooter>
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-right font-bold">Totals</TableCell>
+                      <TableCell className="text-right font-bold">₹{dealers.reduce((sum, d) => sum + d.opening_balance, 0).toFixed(2)}</TableCell>
+                      <TableCell colSpan={2}></TableCell>
+                      <TableCell className="text-right font-bold">₹{dealers.reduce((sum, d) => sum + d.totalSales, 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-bold">₹{dealers.reduce((sum, d) => sum + d.totalPaymentsReceived, 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-bold">₹{dealers.reduce((sum, d) => sum + d.closing_balance, 0).toFixed(2)}</TableCell>
+                      <TableCell colSpan={4}></TableCell>
+                    </TableRow>
+                  </UiTableFooter>
                 </Table>
               </div>
             )}
