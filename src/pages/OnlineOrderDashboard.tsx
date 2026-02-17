@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser, AlertCircle, Eye, EyeOff, Copy } from 'lucide-react';
+import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser, AlertCircle, Eye, EyeOff, Copy, X } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,7 +22,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import * as pdfjsLib from 'pdfjs-dist';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import OnlineOrderExcelUpload from '@/components/OnlineOrderExcelUpload'; // New Import
+import OnlineOrderExcelUpload from '@/components/OnlineOrderExcelUpload';
 
 // Import the worker directly
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -79,6 +79,7 @@ const OnlineOrderDashboard = () => {
   const [stagedOrders, setStagedOrders] = useState<StagedOrder[]>([]);
   const [createdOrders, setCreatedOrders] = useState<CreatedOrder[]>([]);
   const [selectedStagedIds, setSelectedStagedIds] = useState<string[]>([]);
+  const [selectedCreatedIds, setSelectedCreatedIds] = useState<string[]>([]);
   
   // UI states
   const [selectedPlatformId, setSelectedPlatformId] = useState<string>("");
@@ -87,6 +88,7 @@ const OnlineOrderDashboard = () => {
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [rawText, setRawText] = useState<string>("");
   const [showRawText, setShowRawText] = useState(false);
+  const [filterOrderNumberProcess, setFilterOrderNumberProcess] = useState("");
 
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
@@ -122,7 +124,7 @@ const OnlineOrderDashboard = () => {
         `)
         .eq('dealers.name', 'Online Order')
         .eq('dispatched', false)
-        .order('order_date', { ascending: false });
+        .order('order_number', { ascending: false });
 
       if (error) throw error;
 
@@ -182,7 +184,6 @@ const OnlineOrderDashboard = () => {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        // Join with newline to preserve line structure for better parsing
         const pageText = textContent.items.map((item: any) => item.str).join('\n');
         fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
 
@@ -348,6 +349,15 @@ const OnlineOrderDashboard = () => {
     setSelectedStagedIds(checked ? stagedOrders.map(o => o.id) : []);
   };
 
+  const handleSelectCreatedOrder = (id: string, checked: boolean) => {
+    setSelectedCreatedIds(prev => checked ? [...prev, id] : prev.filter(i => i !== id));
+  };
+
+  const handleSelectAllCreated = (checked: boolean) => {
+    const filteredIds = filteredCreatedOrders.map(o => o.id);
+    setSelectedCreatedIds(checked ? filteredIds : []);
+  };
+
   const handleBulkCreateOrders = async () => {
     if (selectedStagedIds.length === 0 || !user) return;
     setIsProcessing(true);
@@ -394,9 +404,9 @@ const OnlineOrderDashboard = () => {
   };
 
   const handleBulkCreateGatepass = async () => {
-    const ordersToProcess = createdOrders.filter(o => o.mapped_product_id && o.bill_no);
+    const ordersToProcess = createdOrders.filter(o => selectedCreatedIds.includes(o.id) && o.mapped_product_id && o.bill_no);
     if (ordersToProcess.length === 0) {
-      showError("Select products and enter bill numbers for orders first.");
+      showError("Select products and enter bill numbers for the selected orders first.");
       return;
     }
 
@@ -425,7 +435,8 @@ const OnlineOrderDashboard = () => {
           total_price: order.total_amount,
         });
       }
-      showSuccess("Gatepasses generated and stock updated.");
+      showSuccess("Gatepasses generated and stock updated for selected orders.");
+      setSelectedCreatedIds([]);
       fetchCreatedOrders();
     } catch (error: any) {
       showError(error.message);
@@ -435,11 +446,17 @@ const OnlineOrderDashboard = () => {
   };
 
   const handleBulkPrintInvoices = async () => {
+    if (selectedCreatedIds.length === 0) {
+      showError("Please select orders to print invoices.");
+      return;
+    }
     const doc = new jsPDF();
     const darkBlue: [number, number, number] = [30, 58, 138];
     
-    for (let i = 0; i < createdOrders.length; i++) {
-      const order = createdOrders[i];
+    const selectedOrders = createdOrders.filter(o => selectedCreatedIds.includes(o.id));
+    
+    for (let i = 0; i < selectedOrders.length; i++) {
+      const order = selectedOrders[i];
       if (i > 0) doc.addPage();
       
       doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 10, 210, 15, 'F');
@@ -457,17 +474,21 @@ const OnlineOrderDashboard = () => {
   };
 
   const handleBulkPrintGatepasses = async () => {
+    if (selectedCreatedIds.length === 0) {
+      showError("Please select orders to print gatepasses.");
+      return;
+    }
     const doc = new jsPDF();
     const darkBlue: [number, number, number] = [30, 58, 138];
     
-    const dispatched = createdOrders.filter(o => o.dispatched && o.dispatch_number);
-    if (dispatched.length === 0) {
-      showError("No dispatched orders found to print gatepasses.");
+    const selectedDispatched = createdOrders.filter(o => selectedCreatedIds.includes(o.id) && o.dispatched && o.dispatch_number);
+    if (selectedDispatched.length === 0) {
+      showError("None of the selected orders have been dispatched yet.");
       return;
     }
 
-    for (let i = 0; i < dispatched.length; i++) {
-      const order = dispatched[i];
+    for (let i = 0; i < selectedDispatched.length; i++) {
+      const order = selectedDispatched[i];
       if (i > 0) doc.addPage();
       
       doc.setFontSize(20); doc.setFont("helvetica", "bold");
@@ -495,6 +516,11 @@ const OnlineOrderDashboard = () => {
     if (!productSearch) return products;
     return products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.code.toLowerCase().includes(productSearch.toLowerCase()));
   }, [products, productSearch]);
+
+  const filteredCreatedOrders = useMemo(() => {
+    if (!filterOrderNumberProcess) return createdOrders;
+    return createdOrders.filter(o => o.order_number.toString().includes(filterOrderNumberProcess) || o.platform_order_number.toLowerCase().includes(filterOrderNumberProcess.toLowerCase()));
+  }, [createdOrders, filterOrderNumberProcess]);
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -665,24 +691,47 @@ const OnlineOrderDashboard = () => {
                     <CardDescription className="text-indigo-100">Link online items to actual products and generate gatepasses.</CardDescription>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={handleBulkPrintInvoices} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
-                      <Printer className="mr-2 h-4 w-4" /> Print Invoices
+                    <Button variant="outline" size="sm" onClick={handleBulkPrintInvoices} disabled={selectedCreatedIds.length === 0} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+                      <Printer className="mr-2 h-4 w-4" /> Print Selected Invoices ({selectedCreatedIds.length})
                     </Button>
-                    <Button variant="outline" size="sm" onClick={handleBulkPrintGatepasses} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
-                      <Truck className="mr-2 h-4 w-4" /> Print Gatepasses
+                    <Button variant="outline" size="sm" onClick={handleBulkPrintGatepasses} disabled={selectedCreatedIds.length === 0} className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+                      <Truck className="mr-2 h-4 w-4" /> Print Selected Gatepasses
                     </Button>
-                    <Button onClick={handleBulkCreateGatepass} disabled={isProcessing} className="bg-green-500 hover:bg-green-600">
+                    <Button onClick={handleBulkCreateGatepass} disabled={isProcessing || selectedCreatedIds.length === 0} className="bg-green-500 hover:bg-green-600">
                       {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-                      Generate Bulk Gatepasses
+                      Generate Gatepasses for Selected
                     </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center gap-4 max-w-sm">
+                  <div className="relative flex-grow">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search Order # or Platform ID..." 
+                      value={filterOrderNumberProcess} 
+                      onChange={(e) => setFilterOrderNumberProcess(e.target.value)} 
+                      className="pl-8"
+                    />
+                  </div>
+                  {filterOrderNumberProcess && (
+                    <Button variant="ghost" size="icon" onClick={() => setFilterOrderNumberProcess("")}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto border rounded-md">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
+                        <TableHead className="w-12">
+                          <Checkbox 
+                            checked={selectedCreatedIds.length === filteredCreatedOrders.length && filteredCreatedOrders.length > 0}
+                            onCheckedChange={(checked) => handleSelectAllCreated(!!checked)}
+                          />
+                        </TableHead>
                         <TableHead>Order #</TableHead>
                         <TableHead>Online Item</TableHead>
                         <TableHead className="w-[250px]">Map to Product</TableHead>
@@ -692,11 +741,18 @@ const OnlineOrderDashboard = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {createdOrders.length === 0 ? (
-                        <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No pending online orders to process.</TableCell></TableRow>
+                      {filteredCreatedOrders.length === 0 ? (
+                        <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No pending online orders found matching your search.</TableCell></TableRow>
                       ) : (
-                        createdOrders.map((o) => (
+                        filteredCreatedOrders.map((o) => (
                           <TableRow key={o.id} className={o.dispatched ? "opacity-50" : ""}>
+                            <TableCell>
+                              <Checkbox 
+                                checked={selectedCreatedIds.includes(o.id)}
+                                onCheckedChange={(checked) => handleSelectCreatedOrder(o.id, !!checked)}
+                                disabled={o.dispatched}
+                              />
+                            </TableCell>
                             <TableCell className="font-bold">#{o.order_number}</TableCell>
                             <TableCell>
                               <div className="flex flex-col">
