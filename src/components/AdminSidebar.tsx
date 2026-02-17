@@ -119,6 +119,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
               <FileSearch className="h-4 w-4 mr-2" /> Amazon Extractor
             </DropdownMenuItem>
           </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/spartan-extractor')}>
+              <FileSearch className="h-4 w-4 mr-2" /> Spartan Extractor
+            </DropdownMenuItem>
+          </SheetClose>
         </DropdownMenuContent>
       </DropdownMenu>
 
