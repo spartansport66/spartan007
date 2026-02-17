@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser, AlertCircle, Eye, EyeOff, Copy, X } from 'lucide-react';
+import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser, AlertCircle, Eye, EyeOff, Copy, X, Edit } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,6 +23,8 @@ import * as pdfjsLib from 'pdfjs-dist';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import OnlineOrderExcelUpload from '@/components/OnlineOrderExcelUpload';
+import OrderDetailsDialog from '@/components/OrderDetailsDialog';
+import EditOrderDialog from '@/components/EditOrderDialog';
 
 // Import the worker directly
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -89,6 +91,12 @@ const OnlineOrderDashboard = () => {
   const [rawText, setRawText] = useState<string>("");
   const [showRawText, setShowRawText] = useState(false);
   const [filterOrderNumberProcess, setFilterOrderNumberProcess] = useState("");
+
+  // Dialog states
+  const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
+  const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
+  const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false);
+  const [selectedOrderIdForEdit, setSelectedOrderIdForEdit] = useState<string | null>(null);
 
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
@@ -512,6 +520,36 @@ const OnlineOrderDashboard = () => {
     showSuccess("Debug text copied to clipboard.");
   };
 
+  const handleViewOrder = (id: string) => {
+    setSelectedOrderIdForDetails(id);
+    setIsOrderDetailsDialogOpen(true);
+  };
+
+  const handleEditOrder = (id: string) => {
+    setSelectedOrderIdForEdit(id);
+    setIsEditOrderDialogOpen(true);
+  };
+
+  const handleDeleteOrder = async (order: CreatedOrder) => {
+    setIsProcessing(true);
+    try {
+      // Delete associated records first
+      await supabase.from('payments').delete().eq('order_id', order.id);
+      await supabase.from('sales').delete().eq('order_id', order.id);
+      await supabase.from('online_order_details').delete().eq('order_id', order.id);
+      
+      const { error } = await supabase.from('orders').delete().eq('id', order.id);
+      if (error) throw error;
+
+      showSuccess(`Order #${order.order_number} deleted.`);
+      fetchCreatedOrders();
+    } catch (error: any) {
+      showError(error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const filteredProducts = useMemo(() => {
     if (!productSearch) return products;
     return products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.code.toLowerCase().includes(productSearch.toLowerCase()));
@@ -738,11 +776,12 @@ const OnlineOrderDashboard = () => {
                         <TableHead className="w-[150px]">Bill No.</TableHead>
                         <TableHead className="w-[150px]">Bill Date</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="text-center">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredCreatedOrders.length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No pending online orders found matching your search.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No pending online orders found matching your search.</TableCell></TableRow>
                       ) : (
                         filteredCreatedOrders.map((o) => (
                           <TableRow key={o.id} className={o.dispatched ? "opacity-50" : ""}>
@@ -787,6 +826,33 @@ const OnlineOrderDashboard = () => {
                             <TableCell><Input size={1} className="h-8 text-xs" value={o.bill_no} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateOrderField(o.id, 'bill_no', e.target.value)} disabled={o.dispatched} placeholder="Bill #" /></TableCell>
                             <TableCell><Input type="date" className="h-8 text-xs" value={o.dispatch_date} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateOrderField(o.id, 'dispatch_date', e.target.value)} disabled={o.dispatched} /></TableCell>
                             <TableCell className="text-right font-bold text-xs">₹{o.total_amount.toFixed(2)}</TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex justify-center gap-1">
+                                <Button variant="ghost" size="icon" onClick={() => handleViewOrder(o.id)} title="View Details">
+                                  <Eye className="h-4 w-4 text-blue-500" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleEditOrder(o.id)} title="Edit Order">
+                                  <Edit className="h-4 w-4 text-orange-500" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon" title="Delete Order">
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete Order #{o.order_number}?</AlertDialogTitle>
+                                      <AlertDialogDescription>This will permanently remove the order and its details. This action cannot be undone.</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDeleteOrder(o)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </TableCell>
                           </TableRow>
                         ))
                       )}
@@ -799,6 +865,20 @@ const OnlineOrderDashboard = () => {
         </Tabs>
       </div>
       <MadeWithDyad />
+      
+      <OrderDetailsDialog 
+        orderId={selectedOrderIdForDetails} 
+        isOpen={isOrderDetailsDialogOpen} 
+        onOpenChange={setIsOrderDetailsDialogOpen} 
+        showGatePassButton={false}
+      />
+      
+      <EditOrderDialog 
+        orderId={selectedOrderIdForEdit} 
+        isOpen={isEditOrderDialogOpen} 
+        onOpenChange={setIsEditOrderDialogOpen} 
+        onOrderUpdated={fetchCreatedOrders}
+      />
     </div>
   );
 };
