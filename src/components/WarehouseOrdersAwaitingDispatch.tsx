@@ -131,69 +131,6 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
     showSuccess("Viewed status has been reset for all orders.");
   };
 
-  const handleBulkPrintGatePasses = async () => {
-    if (selectedOrderIds.length === 0) return;
-    setIsBulkPrinting(true);
-    try {
-      const doc = new jsPDF();
-      const darkBlue: [number, number, number] = [30, 58, 138];
-      const margin = 15;
-      const pageWidth = doc.internal.pageSize.width;
-
-      for (let i = 0; i < selectedOrderIds.length; i++) {
-        const { data: orderData } = await supabase
-          .from('orders')
-          .select(`
-            order_number, order_date, total_amount, dispatch_number, bill_no, 
-            dealers (name, address, city, state), 
-            online_order_details (client_name, city, state),
-            sales (quantity, products (name, code))
-          `)
-          .eq('id', selectedOrderIds[i])
-          .single();
-          
-        if (!orderData) continue;
-        if (i > 0) doc.addPage();
-
-        doc.setFontSize(20); doc.setFont("helvetica", "bold");
-        doc.text(`Gate Pass: ${orderData.dispatch_number || 'N/A'}`, pageWidth / 2, 15, { align: 'center' });
-        doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 22, pageWidth, 12, 'F');
-        doc.setFontSize(16); doc.setTextColor(255, 255, 255);
-        doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", pageWidth / 2, 30, { align: 'center' });
-        
-        doc.setTextColor(0); doc.setFontSize(10); let y = 45;
-        
-        const onlineDetails = orderData.online_order_details?.[0];
-        const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
-        
-        const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name;
-        const partyAddress = isOnline 
-          ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
-          : `${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`;
-
-        doc.setFont("helvetica", "bold"); doc.text("PARTY DETAILS:", margin, y);
-        doc.setFont("helvetica", "normal"); y += 5; doc.text(partyName, margin, y);
-        y += 5; const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
-        doc.text(addressLines, margin, y);
-        
-        let rightY = 45; const rightColX = pageWidth / 2 + 10;
-        doc.setFont("helvetica", "bold"); doc.text("ORDER DETAILS:", rightColX, rightY);
-        doc.setFont("helvetica", "normal"); rightY += 5; doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
-        rightY += 5; doc.text(`Bill No: ${orderData.bill_no || 'N/A'}`, rightColX, rightY);
-        rightY += 5; doc.text(`Date: ${formatDate(orderData.order_date)}`, rightColX, rightY);
-
-        y = Math.max(y + (addressLines.length * 5), rightY + 10);
-        const tableRows = (orderData.sales || []).map((sale: any) => [sale.products?.code || 'N/A', sale.products?.name || 'N/A', sale.quantity.toString()]);
-        autoTable(doc, { head: [["Code", "Product Name", "Quantity"]], body: tableRows, startY: y, headStyles: { fillColor: darkBlue, halign: 'center' }, styles: { fontSize: 9, cellPadding: 3 } });
-        doc.setFont("helvetica", "bold"); doc.setFontSize(12);
-        doc.text(`TOTAL BILL AMOUNT: Rs. ${orderData.total_amount.toFixed(2)}`, pageWidth / 2, (doc as any).lastAutoTable.finalY + 15, { align: 'center' });
-      }
-      doc.save(`Bulk_Gate_Passes_${new Date().getTime()}.pdf`);
-      showSuccess(`Generated ${selectedOrderIds.length} Gate Passes.`);
-      setSelectedOrderIds([]);
-    } catch (error: any) { showError(`Failed: ${error.message}`); } finally { setIsBulkPrinting(false); }
-  };
-
   const handleBulkPrintOrderDetails = async () => {
     if (selectedOrderIds.length === 0) return;
     setIsBulkPrinting(true);
@@ -316,10 +253,6 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
             )}
             {selectedOrderIds.length > 0 && (
               <>
-                <Button onClick={handleBulkPrintGatePasses} disabled={isBulkPrinting} className="bg-white text-orange-600 hover:bg-orange-50">
-                  {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
-                  Bulk Gate Pass ({selectedOrderIds.length})
-                </Button>
                 <Button onClick={handleBulkPrintOrderDetails} disabled={isBulkPrinting} className="bg-white text-blue-600 hover:bg-blue-50">
                   {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
                   Bulk Order Details ({selectedOrderIds.length})
@@ -363,7 +296,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
           )}
         </div>
       </CardContent>
-      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} onPrint={handleOrderPrinted} />
+      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} onPrint={handleOrderPrinted} showGatePassButton={false} />
     </Card>
   );
 };
