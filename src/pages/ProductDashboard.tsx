@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { LogOut, Boxes, Package, FileUp, PlusCircle, Loader2, Menu, Lock, ShoppingCart } from 'lucide-react';
+import { LogOut, Boxes, Package, FileUp, PlusCircle, Loader2, Menu, Lock, ShoppingCart, Tag } from 'lucide-react';
 import LowStockProductsCard from '@/components/LowStockProductsCard';
 import ProductTableManager from '@/components/ProductTableManager';
 import { useSession } from '@/contexts/SessionContext';
@@ -88,6 +88,12 @@ const ProductDashboard = () => {
                 className="w-full justify-start gap-2 bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
               >
                 <FileUp className="h-4 w-4" /> Bulk Upload
+              </Button>
+              <Button
+                onClick={() => navigate('/manage-categories')}
+                className="w-full justify-start gap-2 bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                <Tag className="h-4 w-4" /> Manage Categories
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

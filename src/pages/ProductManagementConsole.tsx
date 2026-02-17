@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { ArrowLeft, PlusCircle, Boxes, AlertTriangle, FileUp, Package } from 'lucide-react'; // Added Package icon
+import { ArrowLeft, PlusCircle, Boxes, AlertTriangle, FileUp, Package, Tag } from 'lucide-react';
 import ProductTableManager from '@/components/ProductTableManager';
 import LowStockProductsCard from '@/components/LowStockProductsCard';
 import { useSession } from '@/contexts/SessionContext';
@@ -47,7 +47,7 @@ const ProductManagementConsole = () => {
         <div className="w-fit"></div> {/* Spacer for alignment */}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
         {/* Add New Product Card */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
           <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
@@ -83,6 +83,19 @@ const ProductManagementConsole = () => {
           <CardContent className="p-4 flex-grow flex items-center justify-center">
             <Button onClick={() => navigate('/material-returns')} className="w-full bg-purple-600 hover:bg-purple-700 text-white">
               <Package className="h-5 w-5 mr-2" /> Record Return
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Manage Categories Card */}
+        <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between">
+          <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
+            <CardTitle className="text-xl font-semibold">Manage Categories</CardTitle>
+            <CardDescription className="text-teal-100 dark:text-teal-200">Organize your products into categories.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 flex-grow flex items-center justify-center">
+            <Button onClick={() => navigate('/manage-categories')} className="w-full bg-teal-600 hover:bg-teal-700 text-white">
+              <Tag className="h-5 w-5 mr-2" /> Manage Categories
             </Button>
           </CardContent>
         </Card>

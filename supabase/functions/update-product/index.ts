@@ -15,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { productId, name, description, opening_stock, code, size, hsn, gst, dp } = await req.json();
+    const { productId, name, description, opening_stock, code, size, hsn, gst, dp, category_id } = await req.json();
     
     console.log(`[update-product] Updating product: ${productId}`);
 
@@ -54,6 +54,7 @@ serve(async (req) => {
     if (dp !== undefined) updateData.dp = Number(dp);
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
+    if (category_id !== undefined) updateData.category_id = category_id;
     
     // Always recalculate closing stock based on the formula: Opening + In - Out
     const newOpening = opening_stock !== undefined ? Number(opening_stock) : (currentProduct.opening_stock || 0);

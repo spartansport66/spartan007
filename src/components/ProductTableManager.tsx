@@ -39,6 +39,8 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { FormField } from '@/components/ui/form';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
 const UPDATE_PRODUCT_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/update-product";
@@ -58,6 +60,13 @@ interface Product {
   closing_stock: number;
   user_id: string;
   has_sales: boolean;
+  category_id: string | null;
+  categories: { id: string; name: string } | null;
+}
+
+interface Category {
+  id: string;
+  name: string;
 }
 
 const formSchema = z.object({
@@ -69,6 +78,7 @@ const formSchema = z.object({
   gst: z.string().optional(),
   dp: z.preprocess((val) => Number(val), z.number().min(0)),
   opening_stock: z.preprocess((val) => Number(val), z.number().int().min(0)),
+  category_id: z.string().uuid().nullable().optional(),
 });
 
 type SortKey = 'code' | 'name' | 'dp' | 'gst' | 'opening_stock' | 'stock_in' | 'stock_out' | 'calculated_closing';
@@ -84,6 +94,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
   const { user, session, loading: sessionLoading, userType } = useSession();
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -108,7 +119,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: { code: '', name: '', description: '', size: '', hsn: '', gst: '', dp: 0, opening_stock: 0 },
+    defaultValues: { code: '', name: '', description: '', size: '', hsn: '', gst: '', dp: 0, opening_stock: 0, category_id: null },
   });
 
   useEffect(() => {
@@ -122,6 +133,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
         gst: selectedProduct.gst || '',
         dp: selectedProduct.dp,
         opening_stock: selectedProduct.opening_stock,
+        category_id: selectedProduct.category_id || null,
       });
     }
   }, [selectedProduct, form]);
@@ -149,7 +161,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
     try {
       let query = supabase
         .from('products')
-        .select('id, code, name, description, size, hsn, gst, dp, opening_stock, stock_in, stock_out, closing_stock, user_id, sales(count)');
+        .select('id, code, name, description, size, hsn, gst, dp, opening_stock, stock_in, stock_out, closing_stock, user_id, sales(count), categories(id, name)');
       
       if (appliedSearchTerm) {
         query = query.or(`name.ilike.%${appliedSearchTerm}%,code.ilike.%${appliedSearchTerm}%`);
@@ -162,6 +174,12 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
         ...p,
         has_sales: (p.sales?.[0]?.count || 0) > 0,
       })));
+
+      const { data: categoriesData, error: categoriesError } = await supabase.from('categories').select('id, name');
+      if (!categoriesError) {
+        setCategories(categoriesData || []);
+      }
+
     } catch (error: any) {
       console.error('Error fetching products:', error);
       showError(`Failed to load products: ${error.message}`);
@@ -423,6 +441,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <TableHead className="cursor-pointer hover:bg-muted/80" onClick={() => handleSort('name')}>
                   <div className="flex items-center">Name <SortIcon column="name" /></div>
                 </TableHead>
+                <TableHead>Category</TableHead>
                 <TableHead className="text-right cursor-pointer hover:bg-muted/80" onClick={() => handleSort('dp')}>
                   <div className="flex items-center justify-end">DP (₹) <SortIcon column="dp" /></div>
                 </TableHead>
@@ -459,7 +478,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
             <TableBody>
               {paginatedProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     No products found matching your filters.
                   </TableCell>
                 </TableRow>
@@ -471,6 +490,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                     <TableRow key={product.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium">{product.code}</TableCell>
                       <TableCell>{product.name}</TableCell>
+                      <TableCell>{product.categories?.name || 'N/A'}</TableCell>
                       <TableCell className="text-right">₹{product.dp.toFixed(2)}</TableCell>
                       <TableCell className="text-right">{product.gst}%</TableCell>
                       <TableCell className="text-right">{product.opening_stock}</TableCell>
@@ -570,6 +590,29 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="description" className="text-right">Description</Label>
                   <Textarea id="description" {...form.register('description')} className="col-span-3" disabled={isSubmitting} />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right">Category</Label>
+                  <div className="col-span-3">
+                    <FormField
+                      control={form.control}
+                      name="category_id"
+                      render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                {cat.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="size" className="text-right">Size</Label>

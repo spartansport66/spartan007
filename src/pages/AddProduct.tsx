@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,6 +14,12 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+interface Category {
+  id: string;
+  name: string;
+}
 
 const productSchema = z.object({
   code: z.string().min(1, { message: 'Product Code is required.' }).trim(),
@@ -52,12 +58,14 @@ const productSchema = z.object({
       .transform(val => Math.round(val))
       .default(0)
   ),
+  category_id: z.string().uuid().nullable().optional(),
 });
 
 const AddProduct = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, userType } = useSession();
   const isAuthorized = userType === 'admin' || userType === 'inventory_manager';
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const form = useForm<z.infer<typeof productSchema>>({
     resolver: zodResolver(productSchema),
@@ -70,15 +78,32 @@ const AddProduct = () => {
       gst: '',
       dp: 0,
       opening_stock: 0,
+      category_id: null,
     },
   });
 
   useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const { data, error } = await supabase.from('categories').select('id, name');
+        if (error) {
+          console.warn("Could not fetch categories, table might not exist yet.", error.message);
+          setCategories([]);
+        } else {
+          setCategories(data || []);
+        }
+      } catch (e) {
+        console.error("Error in fetchCategories:", e);
+      }
+    };
+
     if (!sessionLoading && !user) {
       navigate('/login');
     } else if (!sessionLoading && user && !isAuthorized) {
       showError('Access Denied: Only authorized personnel can add products.');
       navigate('/dashboard');
+    } else if (!sessionLoading && user && isAuthorized) {
+      fetchCategories();
     }
   }, [sessionLoading, user, isAuthorized, navigate]);
 
@@ -103,6 +128,7 @@ const AddProduct = () => {
           dp: values.dp,
           opening_stock: values.opening_stock,
           closing_stock: values.opening_stock, // Initially closing equals opening
+          category_id: values.category_id || null,
         },
       ])
       .select();
@@ -183,6 +209,30 @@ const AddProduct = () => {
                       <FormControl>
                         <Textarea placeholder="e.g., High-performance laptop for professionals." {...field} value={field.value ?? ''} />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="category_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Category (Optional)</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value || ''}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a category" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {categories.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
