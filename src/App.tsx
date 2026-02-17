@@ -33,6 +33,7 @@ import PurchaseDashboard from "./pages/PurchaseDashboard";
 import TransferDealers from "./pages/TransferDealers";
 import FlipkartOrderExtractor from "./pages/FlipkartOrderExtractor";
 import MeeshoOrderExtractor from "./pages/MeeshoOrderExtractor";
+import AmazonOrderExtractor from "./pages/AmazonOrderExtractor";
 import ProcessOnlineOrders from "./pages/ProcessOnlineOrders";
 import OnlineOrderDashboard from "./pages/OnlineOrderDashboard"; // New Import
 import { SessionContextProvider } from "./contexts/SessionContext";
@@ -74,6 +75,7 @@ const AppContent = () => {
       <Route path="/transfer-dealers" element={<TransferDealers />} />
       <Route path="/flipkart-extractor" element={<FlipkartOrderExtractor />} />
       <Route path="/meesho-extractor" element={<MeeshoOrderExtractor />} />
+      <Route path="/amazon-extractor" element={<AmazonOrderExtractor />} />
       <Route path="/process-online-orders" element={<ProcessOnlineOrders />} />
       <Route path="/online-order-dashboard" element={<OnlineOrderDashboard />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
