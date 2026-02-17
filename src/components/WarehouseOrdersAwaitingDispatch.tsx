@@ -258,8 +258,10 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
       <CardHeader className="bg-orange-500 dark:bg-orange-700 text-white rounded-t-lg p-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <CardTitle className="text-xl font-semibold">Orders Awaiting Dispatch</CardTitle>
-            <CardDescription className="text-orange-100 dark:text-orange-200">View and process orders ready for dispatch.</CardDescription>
+            <CardTitle className="text-xl font-semibold">Orders Awaiting Dispatch (Total: {orders.length})</CardTitle>
+            <CardDescription className="text-orange-100 dark:text-orange-200">
+              {loading ? 'Loading...' : `Found ${orders.length} orders ready for dispatch.`}
+            </CardDescription>
           </div>
           <div className="flex gap-2">
             {viewedOrderIds.size > 0 && (
