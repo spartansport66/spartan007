@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Search, ChevronLeft, ChevronRight, Edit, Trash2 } from 'lucide-react';
+import { Loader2, Eye, Search, ChevronLeft, ChevronRight, Edit, Trash2, Printer, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
@@ -14,6 +14,9 @@ import { Label } from '@/components/ui/label';
 import { useSession } from '@/contexts/SessionContext';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { cn } from '@/lib/utils';
+import { Checkbox } from '@/components/ui/checkbox';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface DispatchedOrder {
   id: string;
@@ -41,6 +44,9 @@ const DispatchedOrdersCard: React.FC = () => {
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [isBulkPrinting, setIsBulkPrinting] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null);
 
   // Format date as dd/mm/yyyy
   const formatDate = (dateString: string | null) => {
@@ -53,6 +59,7 @@ const DispatchedOrdersCard: React.FC = () => {
   };
 
   // Filter states
+  const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDispatchNumber, setFilterDispatchNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterDispatchDate, setFilterDispatchDate] = useState<string>('');
@@ -62,6 +69,16 @@ const DispatchedOrdersCard: React.FC = () => {
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
   const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false);
   const [selectedOrderIdForEdit, setSelectedOrderIdForEdit] = useState<string | null>(null);
+
+  const fetchCompanyInfo = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from('company_info').select('company_name').limit(1).single();
+      if (error && error.code !== 'PGRST116') throw error;
+      setCompanyName(data?.company_name || null);
+    } catch (error: any) {
+      console.error('Error fetching company name:', error.message);
+    }
+  }, []);
 
   const fetchOrdersAndDealers = useCallback(async () => {
     setLoading(true);
@@ -95,6 +112,13 @@ const DispatchedOrdersCard: React.FC = () => {
         `)
         .not('dispatch_number', 'is', null) 
         .order('dispatch_number', { ascending: false });
+
+      if (filterOrderNumber) {
+        const orderNum = parseInt(filterOrderNumber);
+        if (!isNaN(orderNum)) {
+          query = query.eq('order_number', orderNum);
+        }
+      }
 
       if (filterDispatchNumber) {
         const dispatchNum = parseInt(filterDispatchNumber);
@@ -140,11 +164,12 @@ const DispatchedOrdersCard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterDispatchNumber, filterDealerId, filterDispatchDate]);
+  }, [filterOrderNumber, filterDispatchNumber, filterDealerId, filterDispatchDate]);
 
   useEffect(() => {
     fetchOrdersAndDealers();
-  }, [fetchOrdersAndDealers]);
+    fetchCompanyInfo();
+  }, [fetchOrdersAndDealers, fetchCompanyInfo]);
 
   const handleViewOrderDetails = (orderId: string) => {
     setSelectedOrderIdForDetails(orderId);
@@ -161,6 +186,7 @@ const DispatchedOrdersCard: React.FC = () => {
   };
 
   const handleClearFilters = () => {
+    setFilterOrderNumber('');
     setFilterDispatchNumber('');
     setFilterDealerId('');
     setFilterDispatchDate('');
@@ -199,20 +225,113 @@ const DispatchedOrdersCard: React.FC = () => {
     }
   };
 
+  const handleSelectOrder = (orderId: string, checked: boolean) => {
+    setSelectedOrderIds(prev => checked ? [...prev, orderId] : prev.filter(id => id !== orderId));
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedOrderIds(checked ? orders.map(o => o.id) : []);
+  };
+
+  const handleBulkPrintGatePasses = async () => {
+    if (selectedOrderIds.length === 0) return;
+    setIsBulkPrinting(true);
+    try {
+      const doc = new jsPDF();
+      const darkBlue: [number, number, number] = [30, 58, 138];
+      const margin = 15;
+      const pageWidth = doc.internal.pageSize.width;
+
+      for (let i = 0; i < selectedOrderIds.length; i++) {
+        const { data: orderData } = await supabase
+          .from('orders')
+          .select(`
+            order_number, order_date, total_amount, dispatch_number, bill_no, 
+            dealers (name, address, city, state), 
+            online_order_details (client_name, city, state),
+            sales (quantity, products (name, code))
+          `)
+          .eq('id', selectedOrderIds[i])
+          .single();
+          
+        if (!orderData) continue;
+        if (i > 0) doc.addPage();
+
+        doc.setFontSize(20); doc.setFont("helvetica", "bold");
+        doc.text(`Gate Pass: ${orderData.dispatch_number || 'N/A'}`, pageWidth / 2, 15, { align: 'center' });
+        doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 22, pageWidth, 12, 'F');
+        doc.setFontSize(16); doc.setTextColor(255, 255, 255);
+        doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", pageWidth / 2, 30, { align: 'center' });
+        
+        doc.setTextColor(0); doc.setFontSize(10); let y = 45;
+        
+        const onlineDetails = orderData.online_order_details?.[0];
+        const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
+        
+        const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name;
+        const partyAddress = isOnline 
+          ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
+          : `${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`;
+
+        doc.setFont("helvetica", "bold"); doc.text("PARTY DETAILS:", margin, y);
+        doc.setFont("helvetica", "normal"); y += 5; doc.text(partyName, margin, y);
+        y += 5; const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
+        doc.text(addressLines, margin, y);
+        
+        let rightY = 45; const rightColX = pageWidth / 2 + 10;
+        doc.setFont("helvetica", "bold"); doc.text("ORDER DETAILS:", rightColX, rightY);
+        doc.setFont("helvetica", "normal"); rightY += 5; doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
+        rightY += 5; doc.text(`Bill No: ${orderData.bill_no || 'N/A'}`, rightColX, rightY);
+        rightY += 5; doc.text(`Date: ${formatDate(orderData.order_date)}`, rightColX, rightY);
+
+        y = Math.max(y + (addressLines.length * 5), rightY + 10);
+        const tableRows = (orderData.sales || []).map((sale: any) => [sale.products?.code || 'N/A', sale.products?.name || 'N/A', sale.quantity.toString()]);
+        autoTable(doc, { head: [["Code", "Product Name", "Quantity"]], body: tableRows, startY: y, headStyles: { fillColor: darkBlue, halign: 'center' }, styles: { fontSize: 9, cellPadding: 3 } });
+        doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+        doc.text(`TOTAL BILL AMOUNT: Rs. ${orderData.total_amount.toFixed(2)}`, pageWidth / 2, (doc as any).lastAutoTable.finalY + 15, { align: 'center' });
+      }
+      doc.save(`Bulk_Gate_Passes_${new Date().getTime()}.pdf`);
+      showSuccess(`Generated ${selectedOrderIds.length} Gate Passes.`);
+      setSelectedOrderIds([]);
+    } catch (error: any) { showError(`Failed: ${error.message}`); } finally { setIsBulkPrinting(false); }
+  };
+
   // Pagination logic
   const totalPages = Math.ceil(orders.length / PAGE_SIZE);
   const displayedOrders = orders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const isAllSelected = orders.length > 0 && selectedOrderIds.length === orders.length;
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg mb-6">
       <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">Dispatched Orders</CardTitle>
-        <CardDescription className="text-teal-100 dark:text-teal-200">
-          View all orders that have been processed for dispatch.
-        </CardDescription>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <CardTitle className="text-xl font-semibold">Dispatched Orders</CardTitle>
+            <CardDescription className="text-teal-100 dark:text-teal-200">
+              View all orders that have been processed for dispatch.
+            </CardDescription>
+          </div>
+          {selectedOrderIds.length > 0 && (
+            <Button onClick={handleBulkPrintGatePasses} disabled={isBulkPrinting} className="bg-white text-teal-600 hover:bg-teal-50">
+              {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
+              Print Bulk Gatepass ({selectedOrderIds.length})
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="p-4">
         <div className="flex flex-wrap items-end gap-4 mb-6">
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterOrderNumber">Order No.</Label>
+            <Input
+              id="filterOrderNumber"
+              type="number"
+              placeholder="Filter by order no."
+              value={filterOrderNumber}
+              onChange={(e) => setFilterOrderNumber(e.target.value)}
+              className="w-full"
+            />
+          </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterDispatchNumber">Gate Pass / Dispatch No.</Label>
             <Input
@@ -272,6 +391,9 @@ const DispatchedOrdersCard: React.FC = () => {
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox checked={isAllSelected} onCheckedChange={handleSelectAll} />
+                      </TableHead>
                       <TableHead className="text-muted-foreground">Order No.</TableHead>
                       <TableHead className="text-muted-foreground">Dispatch No.</TableHead>
                       <TableHead className="text-muted-foreground">Bill No.</TableHead>
@@ -285,6 +407,9 @@ const DispatchedOrdersCard: React.FC = () => {
                   <TableBody>
                     {displayedOrders.map((order) => (
                       <TableRow key={order.id} className="hover:bg-accent/50">
+                        <TableCell>
+                          <Checkbox checked={selectedOrderIds.includes(order.id)} onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)} />
+                        </TableCell>
                         <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
                         <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
                         <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
