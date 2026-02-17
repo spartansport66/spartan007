@@ -36,6 +36,7 @@ const ProcessOnlineOrders = () => {
   const [loading, setLoading] = useState(true);
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
   const [selectedPlatformId, setSelectedPlatformId] = useState<string>("");
+  const [bulkPaymentMethod, setBulkPaymentMethod] = useState<'COD' | 'Prepaid'>('Prepaid');
 
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
@@ -89,6 +90,8 @@ const ProcessOnlineOrders = () => {
       
       if (dealerError) throw new Error("Could not find 'Online Order' dealer. Please create one first.");
 
+      const paymentStatus = bulkPaymentMethod === 'COD' ? 'pending' : 'paid';
+
       for (const stagedOrder of stagedOrders) {
         // 1. Create the Order (No sales record yet)
         const { data: newOrder, error: orderError } = await supabase
@@ -98,7 +101,7 @@ const ProcessOnlineOrders = () => {
             user_id: user.id,
             total_amount: stagedOrder.amount,
             status: 'completed',
-            payment_status: 'paid',
+            payment_status: paymentStatus,
             order_date: new Date().toISOString(),
           })
           .select('id')
@@ -189,6 +192,18 @@ const ProcessOnlineOrders = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {platforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-48">
+                  <Label className="text-white mb-1 block text-xs">Payment Method</Label>
+                  <Select value={bulkPaymentMethod} onValueChange={(value) => setBulkPaymentMethod(value as 'COD' | 'Prepaid')}>
+                    <SelectTrigger className="bg-white/10 border-white/20 text-white">
+                      <SelectValue placeholder="Select Method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Prepaid">Prepaid</SelectItem>
+                      <SelectItem value="COD">COD (Cash on Delivery)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
