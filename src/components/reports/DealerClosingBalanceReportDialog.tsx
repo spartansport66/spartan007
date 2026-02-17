@@ -402,7 +402,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     });
   }, [dealers, sortKey, sortDirection]);
 
-  const handlePrint = () => {
+  const generatePdf = (dealersToPrint: DealerClosingBalance[]) => {
+    if (dealersToPrint.length === 0) {
+      showError("No dealers to print.");
+      return;
+    }
     try {
       const doc = new jsPDF({ orientation: 'landscape' });
       const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
@@ -415,37 +419,61 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         const salesPersonLabel = allSalesPersons.find(sp => sp.value === filterSalesPersonId)?.label;
         if (salesPersonLabel) filterDetails.push(`Sales Person: ${salesPersonLabel}`);
       }
-      if (filterOpeningBalanceOverduePeriod === 'less_than_60') filterDetails.push(`Op. Bal. Overdue: <= ${OVERDUE_THRESHOLD_DAYS} Days`);
-      if (filterOpeningBalanceOverduePeriod === 'more_than_60') filterDetails.push(`Op. Bal. Overdue: > ${OVERDUE_THRESHOLD_DAYS} Days`);
-      if (filterDispatchOverduePeriod === 'less_than_60') filterDetails.push(`Dispatch Overdue: <= ${OVERDUE_THRESHOLD_DAYS} Days`);
-      if (filterDispatchOverduePeriod === 'more_than_60') filterDetails.push(`Dispatch Overdue: > ${OVERDUE_THRESHOLD_DAYS} Days`);
+      if (filterOpeningBalanceOverduePeriod !== 'all') filterDetails.push(`Op. Bal. Overdue: ${filterOpeningBalanceOverduePeriod.replace('_', ' ')}`);
+      if (filterDispatchOverduePeriod !== 'all') filterDetails.push(`Dispatch Overdue: ${filterDispatchOverduePeriod.replace('_', ' ')}`);
       if (filterDetails.length > 0) { doc.setFontSize(9); doc.text(`Filters: ${filterDetails.join(' | ')}`, doc.internal.pageSize.width / 2, 38, { align: 'center' }); }
       
-      const tableColumn = ["Dealer Name", "Op. Bal (₹)", "Op. Due Date", "Op. Due Days", "Total Sales (₹)", "Total Rcvd (₹)", "Net Bal (₹)", "Last Dispatch", "Days Since Dispatch", "Phone"];
-      const tableRows = sortedDealers.map(d => [
-        d.name,
-        d.opening_balance.toFixed(2),
-        d.opening_balance_due_date ? new Date(d.opening_balance_due_date).toLocaleDateString() : 'N/A',
-        d.opening_balance_due_days !== null ? d.opening_balance_due_days.toString() : 'N/A',
-        d.totalSales.toFixed(2),
-        d.totalPaymentsReceived.toFixed(2),
-        d.closing_balance.toFixed(2),
-        d.last_dispatch_date ? new Date(d.last_dispatch_date).toLocaleDateString() : 'N/A',
-        d.daysSinceLastDispatch !== null ? d.daysSinceLastDispatch.toString() : 'N/A',
-        d.phone || 'N/A'
-      ]);
+      const tableRows = dealersToPrint.map(d => ({
+        ...d,
+        opening_balance_str: d.opening_balance.toFixed(2),
+        totalSales_str: d.totalSales.toFixed(2),
+        totalPaymentsReceived_str: d.totalPaymentsReceived.toFixed(2),
+        closing_balance_str: d.closing_balance.toFixed(2),
+        opening_balance_due_date_str: d.opening_balance_due_date ? new Date(d.opening_balance_due_date).toLocaleDateString() : 'N/A',
+        last_dispatch_date_str: d.last_dispatch_date ? new Date(d.last_dispatch_date).toLocaleDateString() : 'N/A',
+        opening_balance_due_days_str: d.opening_balance_due_days !== null ? d.opening_balance_due_days.toString() : 'N/A',
+        daysSinceLastDispatch_str: d.daysSinceLastDispatch !== null ? d.daysSinceLastDispatch.toString() : 'N/A',
+        phone_str: d.phone || 'N/A'
+      }));
       
-      const totalNetBalance = sortedDealers.reduce((sum, d) => sum + d.closing_balance, 0);
-      const totalSales = sortedDealers.reduce((sum, d) => sum + d.totalSales, 0);
-      const totalPaymentsReceived = sortedDealers.reduce((sum, d) => sum + d.totalPaymentsReceived, 0);
-      const totalOpeningBalance = sortedDealers.reduce((sum, d) => sum + d.opening_balance, 0);
+      const totalNetBalance = dealersToPrint.reduce((sum, d) => sum + d.closing_balance, 0);
+      const totalSales = dealersToPrint.reduce((sum, d) => sum + d.totalSales, 0);
+      const totalPaymentsReceived = dealersToPrint.reduce((sum, d) => sum + d.totalPaymentsReceived, 0);
+      const totalOpeningBalance = dealersToPrint.reduce((sum, d) => sum + d.opening_balance, 0);
       
       autoTable(doc, {
-        head: [tableColumn], body: tableRows,
+        columns: [
+          { header: 'Dealer Name', dataKey: 'name' },
+          { header: 'Op. Bal (₹)', dataKey: 'opening_balance_str' },
+          { header: 'Op. Due Date', dataKey: 'opening_balance_due_date_str' },
+          { header: 'Op. Due Days', dataKey: 'opening_balance_due_days_str' },
+          { header: 'Total Sales (₹)', dataKey: 'totalSales_str' },
+          { header: 'Total Rcvd (₹)', dataKey: 'totalPaymentsReceived_str' },
+          { header: 'Net Bal (₹)', dataKey: 'closing_balance_str' },
+          { header: 'Last Dispatch', dataKey: 'last_dispatch_date_str' },
+          { header: 'Days Since Dispatch', dataKey: 'daysSinceLastDispatch_str' },
+          { header: 'Phone', dataKey: 'phone_str' },
+        ],
+        body: tableRows,
         foot: [[{ content: 'Totals', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalOpeningBalance.toFixed(2)}`, '', '', `₹${totalSales.toFixed(2)}`, `₹${totalPaymentsReceived.toFixed(2)}`, `₹${totalNetBalance.toFixed(2)}`, '', '', '']],
-        startY: 45, styles: { fontSize: 7, cellPadding: 1.5, valign: 'middle', overflow: 'linebreak' },
+        startY: 45,
+        didDrawCell: (data) => {
+          const dealer = data.row.raw as unknown as DealerClosingBalance;
+          const opDueDays = dealer.opening_balance_due_days;
+          if (opDueDays === null) return;
+          
+          let fillColor: [number, number, number] | undefined;
+          if (opDueDays > 90) fillColor = [220, 38, 38]; // red-600
+          else if (opDueDays > 60) fillColor = [234, 179, 8]; // yellow-500
+          else fillColor = [22, 163, 74]; // green-600
+          
+          if (fillColor) {
+            doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
+            doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+          }
+        },
+        styles: { fontSize: 7, cellPadding: 1.5, valign: 'middle', overflow: 'linebreak', textColor: [255, 255, 255] },
         headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
-        bodyStyles: { textColor: [0, 0, 0] },
         footStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 8 },
         margin: { top: 10, left: 5, right: 5 },
         columnStyles: {
@@ -536,9 +564,9 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                       const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
                       const opDueDays = dealer.opening_balance_due_days;
                       const rowColorClass = opDueDays === null ? 'hover:bg-accent/50' :
-                                             opDueDays > 90 ? 'bg-red-200 dark:bg-red-900/40 hover:bg-red-300/80 dark:hover:bg-red-900/60' :
-                                             opDueDays > 60 ? 'bg-yellow-200 dark:bg-yellow-900/40 hover:bg-yellow-300/80 dark:hover:bg-yellow-900/60' :
-                                             'bg-green-200 dark:bg-green-900/40 hover:bg-green-300/80 dark:hover:bg-green-900/60';
+                                             opDueDays > 90 ? 'bg-red-400 dark:bg-red-900/60 hover:bg-red-500/80 dark:hover:bg-red-900/80' :
+                                             opDueDays > 60 ? 'bg-yellow-400 dark:bg-yellow-900/60 hover:bg-yellow-500/80 dark:hover:bg-yellow-900/80' :
+                                             'bg-green-400 dark:bg-green-900/60 hover:bg-green-500/80 dark:hover:bg-green-900/80';
 
                       return (
                         <TableRow key={dealer.id} className={cn(rowColorClass)}>
@@ -574,7 +602,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             {sentDealerIds.size > 0 && (<Button variant="outline" onClick={handleResetSentStatus} disabled={isSendingWhatsApp} className="flex items-center gap-2"><RotateCcw className="h-4 w-4" /> Enable All to Resend</Button>)}
           </div>
           <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={handlePrint} disabled={dealers.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Print Report</Button>
+            <Button variant="outline" onClick={() => generatePdf(sortedDealers)} disabled={dealers.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Print Report</Button>
+            <Button variant="outline" onClick={() => generatePdf(sortedDealers.filter(d => selectedDealerIds.includes(d.id)))} disabled={selectedDealerIds.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Print Selected ({selectedDealerIds.length})</Button>
             <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
           </DialogFooter>
         </DialogContent>
