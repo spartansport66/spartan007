@@ -535,18 +535,18 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                       const isDealerSelected = selectedDealerIds.includes(dealer.id);
                       const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
                       const opDueDays = dealer.opening_balance_due_days;
-                      const opDueDaysColor = opDueDays === null ? 'text-muted-foreground' :
-                                             opDueDays > 90 ? 'text-red-600 font-semibold' :
-                                             opDueDays > 60 ? 'text-yellow-600 font-semibold' :
-                                             'text-green-600 font-semibold';
+                      const rowColorClass = opDueDays === null ? 'hover:bg-accent/50' :
+                                             opDueDays > 90 ? 'bg-red-100 dark:bg-red-900/30 hover:bg-red-200/80 dark:hover:bg-red-900/50' :
+                                             opDueDays > 60 ? 'bg-yellow-100 dark:bg-yellow-900/30 hover:bg-yellow-200/80 dark:hover:bg-yellow-900/50' :
+                                             'bg-green-100 dark:bg-green-900/30 hover:bg-green-200/80 dark:hover:bg-green-900/50';
 
                       return (
-                        <TableRow key={dealer.id} className="hover:bg-accent/50">
+                        <TableRow key={dealer.id} className={cn(rowColorClass)}>
                           <TableCell><Checkbox checked={isDealerSelected} onCheckedChange={(checked) => handleSelectDealer(dealer.id, !!checked)} disabled={isSendingWhatsApp} /></TableCell>
                           <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
                           <TableCell className="text-right text-muted-foreground">₹{dealer.opening_balance.toFixed(2)}</TableCell>
                           <TableCell className="text-center text-muted-foreground">{dealer.opening_balance_due_date ? new Date(dealer.opening_balance_due_date).toLocaleDateString() : 'N/A'}</TableCell>
-                          <TableCell className={cn("text-center", opDueDaysColor)}>
+                          <TableCell className="text-center font-semibold">
                             {opDueDays !== null ? opDueDays : 'N/A'}
                           </TableCell>
                           <TableCell className="text-right text-blue-600 font-medium">₹{dealer.totalSales.toFixed(2)}</TableCell>
