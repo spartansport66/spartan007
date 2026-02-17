@@ -31,6 +31,9 @@ interface OnlineOrderInfo {
   state: string | null;
   address: string | null;
   raw_item_name: string | null;
+  mapped_product_id?: string | null;
+  mapped_product_name?: string | null;
+  mapped_product_code?: string | null;
 }
 
 interface OrderDetail {
@@ -159,6 +162,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             state,
             address,
             raw_item_name,
+            mapped_product_id,
+            products (name, code),
             online_platforms (name)
           `)
           .eq('order_id', id)
@@ -176,6 +181,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             state: onlineData.state,
             address: onlineData.address,
             raw_item_name: onlineData.raw_item_name,
+            mapped_product_id: onlineData.mapped_product_id,
+            mapped_product_name: (onlineData.products as any)?.name || null,
+            mapped_product_code: (onlineData.products as any)?.code || null,
           };
         }
       }
@@ -282,6 +290,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     const tableColumn = ["Code", "Product Name", "Quantity"];
     const tableRows = orderDetails.items.length > 0 
       ? orderDetails.items.map(item => [item.product_code, item.product_name, item.quantity.toString()])
+      : orderDetails.online_order_details?.mapped_product_name ?
+        [[
+          orderDetails.online_order_details.mapped_product_code || 'N/A',
+          orderDetails.online_order_details.mapped_product_name,
+          "1"
+        ]]
       : [[ "N/A", orderDetails.online_order_details?.raw_item_name || "Pending Mapping", "1" ]];
 
     autoTable(doc, {
@@ -380,6 +394,16 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
           `${item.product_gst}%`,
           `₹${item.total_price.toFixed(2)}`
         ])
+      : orderDetails.online_order_details?.mapped_product_name ?
+        [[
+          orderDetails.online_order_details.mapped_product_code || 'N/A',
+          orderDetails.online_order_details.mapped_product_name,
+          "1",
+          `₹${orderDetails.total_amount.toFixed(2)}`,
+          "0%",
+          "0%",
+          `₹${orderDetails.total_amount.toFixed(2)}`
+        ]]
       : [[ "N/A", orderDetails.online_order_details?.raw_item_name || "Pending Mapping", "1", `₹${orderDetails.total_amount.toFixed(2)}`, "0%", "0%", `₹${orderDetails.total_amount.toFixed(2)}` ]];
 
     autoTable(doc, { 
@@ -455,6 +479,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                 <p><strong>Contact:</strong> {orderDetails.online_order_details.contact_no || 'N/A'}</p>
                 <p><strong>Address:</strong> {orderDetails.online_order_details.address || `${orderDetails.online_order_details.city || ''}, ${orderDetails.online_order_details.state || ''}`.trim() || 'N/A'}</p>
                 <p><strong>Extracted Item (Dummy):</strong> {orderDetails.online_order_details.raw_item_name || 'N/A'}</p>
+                {orderDetails.online_order_details.mapped_product_name && (
+                  <p className="font-bold text-green-700 dark:text-green-300">
+                    <strong>Mapped Product:</strong> {orderDetails.online_order_details.mapped_product_name} ({orderDetails.online_order_details.mapped_product_code})
+                  </p>
+                )}
               </div>
             )}
             <Separator />
@@ -482,6 +511,17 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                         <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
                       </TableRow>
                     ))
+                  ) : orderDetails.online_order_details?.mapped_product_name ? (
+                    <TableRow>
+                      <TableCell className="font-medium text-green-700">
+                        {orderDetails.online_order_details.mapped_product_name} ({orderDetails.online_order_details.mapped_product_code})
+                      </TableCell>
+                      <TableCell className="text-right">1</TableCell>
+                      <TableCell className="text-right">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">0%</TableCell>
+                      <TableCell className="text-right">0%</TableCell>
+                      <TableCell className="text-right font-medium">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                    </TableRow>
                   ) : (
                     <TableRow>
                       <TableCell className="italic text-muted-foreground">
