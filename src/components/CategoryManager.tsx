@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Plus, Trash2, Database, RotateCcw } from 'lucide-react';
+import { Loader2, Plus, Trash2, Database, RotateCcw, Edit, Save, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -52,6 +52,10 @@ const CategoryManager: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [tableMissing, setTableMissing] = useState(false);
+
+  // State for editing
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
 
   const fetchCategories = useCallback(async () => {
     setLoading(true);
@@ -118,6 +122,42 @@ const CategoryManager: React.FC = () => {
     }
   };
 
+  // --- Edit Handlers ---
+  const handleEditClick = (category: Category) => {
+    setEditingCategoryId(category.id);
+    setEditingCategoryName(category.name);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCategoryId(null);
+    setEditingCategoryName('');
+  };
+
+  const handleUpdateCategory = async () => {
+    if (!editingCategoryId || !editingCategoryName.trim()) {
+      showError('Category name cannot be empty.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .update({ name: editingCategoryName.trim() })
+        .eq('id', editingCategoryId);
+      
+      if (error) throw error;
+
+      showSuccess('Category updated successfully!');
+      handleCancelEdit();
+      fetchCategories();
+    } catch (error: any) {
+      showError(`Failed to update category: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  // --- End Edit Handlers ---
+
   if (tableMissing) {
     return (
       <div className="space-y-4 p-4">
@@ -142,7 +182,7 @@ const CategoryManager: React.FC = () => {
     <Card className="bg-card text-card-foreground shadow-lg">
       <CardHeader>
         <CardTitle>Manage Product Categories</CardTitle>
-        <CardDescription>Add or remove categories for organizing your products.</CardDescription>
+        <CardDescription>Add, edit, or remove categories for organizing your products.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <form onSubmit={handleAddCategory} className="flex items-end gap-4">
@@ -172,29 +212,59 @@ const CategoryManager: React.FC = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Category Name</TableHead>
-                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="w-32 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {categories.map((category) => (
                   <TableRow key={category.id}>
-                    <TableCell className="font-medium">{category.name}</TableCell>
-                    <TableCell>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete {category.name}?</AlertDialogTitle>
-                            <AlertDialogDescription>This action cannot be undone. Products in this category will become uncategorized.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeleteCategory(category.id)}>Delete</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                    <TableCell className="font-medium">
+                      {editingCategoryId === category.id ? (
+                        <Input
+                          value={editingCategoryName}
+                          onChange={(e) => setEditingCategoryName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleUpdateCategory();
+                            if (e.key === 'Escape') handleCancelEdit();
+                          }}
+                          autoFocus
+                        />
+                      ) : (
+                        category.name
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {editingCategoryId === category.id ? (
+                        <div className="flex gap-2 justify-end">
+                          <Button size="icon" onClick={handleUpdateCategory} disabled={isSubmitting} title="Save">
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="outline" size="icon" onClick={handleCancelEdit} title="Cancel">
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditClick(category)} title="Edit">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" title="Delete"><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete {category.name}?</AlertDialogTitle>
+                                <AlertDialogDescription>This action cannot be undone. Products in this category will become uncategorized.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteCategory(category.id)}>Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
