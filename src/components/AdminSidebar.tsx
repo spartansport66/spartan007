@@ -84,11 +84,48 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         onClick={() => navigate('/admin-dashboard')}
       />
       
-      <NavButton
-        icon={<Monitor className="h-4 w-4" />}
-        label="Online Orders"
-        onClick={() => navigate('/online-order-dashboard')}
-      />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={cn(
+              "w-full justify-start gap-2",
+              "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+            )}
+          >
+            <Monitor className="h-4 w-4" />
+            Online Orders
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-56">
+          <DropdownMenuLabel>Online Order Tools</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/online-order-dashboard')}>
+              <ListChecks className="h-4 w-4 mr-2" /> Process Orders
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/flipkart-extractor')}>
+              <FileSearch className="h-4 w-4 mr-2" /> Flipkart Extractor
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/meesho-extractor')}>
+              <FileSearch className="h-4 w-4 mr-2" /> Meesho Extractor
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/amazon-extractor')}>
+              <FileSearch className="h-4 w-4 mr-2" /> Amazon Extractor
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/spartan-extractor')}>
+              <FileSearch className="h-4 w-4 mr-2" /> Spartan Extractor
+            </DropdownMenuItem>
+          </SheetClose>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <NavButton
         icon={<DollarSign className="h-4 w-4" />}

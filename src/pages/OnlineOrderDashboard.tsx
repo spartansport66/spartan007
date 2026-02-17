@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Upload, Search, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser, AlertCircle, Eye, EyeOff, Copy } from 'lucide-react';
+import { Loader2, ArrowLeft, Upload, Search, Download, Save, ListChecks, ShoppingCart, Package, User, Play, Printer, Check, ChevronsUpDown, FileText, Truck, Trash2, Eraser, AlertCircle, Eye, EyeOff, Copy } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,8 +22,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import * as pdfjsLib from 'pdfjs-dist';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import OnlineOrderExcelUpload from '@/components/OnlineOrderExcelUpload';
-import PDFUploader from '@/components/PDFUploader';
+import OnlineOrderExcelUpload from '@/components/OnlineOrderExcelUpload'; // New Import
 
 // Import the worker directly
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -32,7 +31,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 interface ExtractedOrder {
   orderNo: string;
   customerName: string;
-  address: string;
   item: string;
   amount: string;
 }
@@ -105,10 +103,7 @@ const OnlineOrderDashboard = () => {
       setStagedOrders(stagedRes.data || []);
       setCompanyName(companyRes.data?.company_name || null);
       
-      if (platformsRes.data?.length) {
-        const flipkart = platformsRes.data.find(p => p.name.toLowerCase().includes('flipkart'));
-        setSelectedPlatformId(flipkart?.id || platformsRes.data[0].id);
-      }
+      if (platformsRes.data?.length) setSelectedPlatformId(platformsRes.data[0].id);
     } catch (error: any) {
       showError("Failed to load dashboard data.");
     } finally {
@@ -165,150 +160,47 @@ const OnlineOrderDashboard = () => {
     }
   }, [activeTab, fetchCreatedOrders]);
 
-  const extractFlipkart = (text: string): ExtractedOrder | null => {
-    const orderNoMatch = text.match(/OD\d{18}/);
-    if (!orderNoMatch) return null;
-    const orderNo = orderNoMatch[0];
-    const amountMatch = text.match(/TOTAL PRICE\s*[:\s]+\s*([\d,]+\.\d{2})/i);
-    const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
-    const itemMatch = text.match(/Total\s*,?\s*([^|]+?)(?=\s*\||\s*IMEI|\s*HSN|\s*Qty|\s*Product)/i);
-    const item = itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A";
-    let customerName = "Unknown";
-    let address = "N/A";
-    const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=\s*(?:FSSAI|Seller|Phone|Pin|Order ID|Invoice)|$)/i);
-    if (deliverToMatch) {
-      const fullText = deliverToMatch[1].trim();
-      const parts = fullText.split(/,,|,/);
-      customerName = parts[0].trim();
-      address = parts.slice(1).join(", ").trim() || "N/A";
-    } else {
-      const fallbackMatch = text.match(new RegExp(`${orderNo}\\s+([\\s\\S]*?)(?=\\s*(?:Product|Description|Qty|FSSAI|Seller|Invoice)|$)`, 'i'));
-      if (fallbackMatch) {
-        const fullText = fallbackMatch[1].trim();
-        const parts = fullText.split(/,,|,/);
-        customerName = parts[0].trim();
-        address = parts.slice(1).join(", ").trim() || "N/A";
-      }
-    }
-    return { orderNo, customerName, address, item, amount };
-  };
-
-  const extractMeesho = (text: string): ExtractedOrder | null => {
-    const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i) || text.match(/\b(sub_[a-zA-Z0-9]+)\b/i) || text.match(/\b(\d{14,18})\b/);
-    if (!orderNoMatch) return null;
-    const orderNo = orderNoMatch[1] || orderNoMatch[0];
-    const totalRowMatch = text.match(/Total\s+Rs\.\d+\.\d+\s+Rs\.([\d,]+\.\d{2})/i);
-    let amount = "0.00";
-    if (totalRowMatch) {
-      amount = totalRowMatch[1].trim().replace(/,/g, '');
-    } else {
-      const amountMatch = text.match(/(?:Total|Collectable Amount|Order Value|Price|Amount|Payable)[:\s]*₹?\s*([\d,]+(?:\.\d{2})?)/i) || text.match(/₹\s*([\d,]+(?:\.\d{2})?)/);
-      amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
-    }
-    const itemTableMatch = text.match(/(?:Description HSN Qty|Product Details)[\s\S]*?Total\s+([\s\S]*?)\s+\d{6,8}/i);
-    let item = "N/A";
-    if (itemTableMatch) {
-      item = itemTableMatch[1].trim().replace(/\s+/g, ' ');
-    } else {
-      const descMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
-      if (descMatch) item = descMatch[1].trim();
-    }
-    if (item.toLowerCase().includes("details sku")) item = "N/A";
-    let customerName = "Unknown";
-    let address = "N/A";
-    const nameMatch = text.match(/(?:Customer Name|Ship to|Deliver to|Name)[:\s]*([^\n,]+)/i);
-    if (nameMatch) customerName = nameMatch[1].trim();
-    const addressMatch = text.match(/(?:Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID|Invoice|Seller|GSTIN|Mobile)|$)/i);
-    if (addressMatch) {
-      address = addressMatch[1].trim().replace(/\s+/g, ' ');
-    } else {
-      const blockMatch = text.match(/(?:Customer Name|Shipping Address)[:\s]*([\s\S]*?)(?=\s*(?:If undelivered|return to|Phone|Pin|Order ID)|$)/i);
-      if (blockMatch) {
-        const parts = blockMatch[1].trim().split(/\n|,|,,/);
-        if (customerName === "Unknown") customerName = parts[0].trim();
-        address = parts.slice(1).join(", ").trim() || "N/A";
-      }
-    }
-    return { orderNo, customerName, address, item, amount };
-  };
-
-  const extractAmazon = (text: string): ExtractedOrder | null => {
-    if (!text.includes("Tax Invoice/Bill of Supply/Cash Memo")) return null;
-    const orderNoMatch = text.match(/\d{3}-\d{7}-\d{7}/);
-    if (!orderNoMatch) return null;
-    const orderNo = orderNoMatch[0];
-    const amountSection = text.split(/Total\s*Amount/i)[1];
-    const amounts = amountSection?.match(/₹\s*([\d,]+\.\d{2})/g);
-    const amount = amounts ? amounts[amounts.length - 1].replace(/[₹\s,]/g, '') : "0.00";
-    const itemMatch = text.match(/Description[\s\S]*?\n\s*\d+\s+([\s\S]+?)(?=\n\s*HSN|Qty|Unit|Price|TOTAL|Amount|$)/i);
-    const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Amazon Item";
-    let customerName = "Unknown";
-    let address = "N/A";
-    const billingMatch = text.match(/Billing Address\s*:\s*\n\s*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
-    if (billingMatch) {
-      const lines = billingMatch[1].trim().split('\n');
-      if (lines.length > 0) {
-        customerName = lines[0].trim();
-        address = lines.slice(1).join(', ').trim();
-      }
-    }
-    return { orderNo, customerName, address, item, amount };
-  };
-
-  const extractSpartan = (text: string): ExtractedOrder | null => {
-    const orderNoMatch = text.match(/(?:Order No|Order ID|Invoice No)\.?\s*#?\s*([A-Z0-9-]+)/i);
-    if (!orderNoMatch) return null;
-    const orderNo = orderNoMatch[1];
-    const amountMatch = text.match(/(?:Grand Total|Total Amount|Total)[:\s]*₹?\s*([\d,]+\.\d{2})/i);
-    const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
-    let item = "N/A";
-    const itemMatch = text.match(/Description[\s\S]*?\n\s*([\s\S]+?)\s+\d+\s+₹/i);
-    if (itemMatch) {
-        item = itemMatch[1].trim().replace(/\n/g, ' ');
-    } else {
-        const singleItemMatch = text.match(/(?:Product|Item)[:\s]+([^\n]+)/i);
-        if (singleItemMatch) item = singleItemMatch[1].trim();
-    }
-    let customerName = "Unknown";
-    let address = "N/A";
-    const shippingAddressMatch = text.match(/(?:Shipping Address|Deliver To)[:\s]*\n([\s\S]+?)(?=\n\s*(?:Billing Address|Phone|Email|Order Summary|GSTIN)|$)/i);
-    if (shippingAddressMatch) {
-        const lines = shippingAddressMatch[1].trim().split('\n');
-        customerName = lines[0].trim();
-        address = lines.slice(1).join(', ').trim();
-    }
-    return { orderNo, customerName, address, item, amount };
-  };
-
+  // --- Extraction Logic ---
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !selectedPlatformId) {
-      showError("Please select a platform first.");
-      return;
-    }
+    if (!file || !selectedPlatformId) return;
+
     const platformName = platforms.find(p => p.id === selectedPlatformId)?.name.toLowerCase() || "";
+    
     setLoading(true);
     setExtractedOrders([]);
     setRawText("");
+    
     try {
       const arrayBuffer = await file.arrayBuffer();
       const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
       const pdf = await loadingTask.promise;
+      
       let allExtracted: ExtractedOrder[] = [];
       let fullDebugText = "";
+
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
+        // Join with newline to preserve line structure for better parsing
         const pageText = textContent.items.map((item: any) => item.str).join('\n');
         fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
+
         let order: ExtractedOrder | null = null;
-        if (platformName.includes('flipkart')) order = extractFlipkart(pageText);
-        else if (platformName.includes('meesho')) order = extractMeesho(pageText);
-        else if (platformName.includes('amazon')) order = extractAmazon(pageText);
-        else if (platformName.includes('spartan')) order = extractSpartan(pageText);
+        
+        if (platformName.includes('flipkart')) {
+          order = extractFlipkart(pageText);
+        } else if (platformName.includes('meesho')) {
+          order = extractMeesho(pageText);
+        } else if (platformName.includes('amazon')) {
+          order = extractAmazon(pageText);
+        }
+
         if (order) allExtracted.push(order);
       }
+
       setRawText(fullDebugText);
+
       if (allExtracted.length === 0) throw new Error("No orders found in PDF. Check the Debug View for extracted text.");
       setExtractedOrders(allExtracted);
       showSuccess(`Extracted ${allExtracted.length} orders.`);
@@ -319,6 +211,89 @@ const OnlineOrderDashboard = () => {
     }
   };
 
+  const extractFlipkart = (text: string): ExtractedOrder | null => {
+    const orderNoMatch = text.match(/OD\d{18}/);
+    if (!orderNoMatch) return null;
+    const amountMatch = text.match(/TOTAL PRICE\s*[:\s]+\s*([\d,]+\.\d{2})/i);
+    const itemMatch = text.match(/Total\s*,?\s*([^|]+?)(?=\s*\||\s*IMEI|\s*HSN|\s*Qty)/i);
+    const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=\s*(?:FSSAI|Seller|Phone|Pin|Order ID)|$)/i);
+    
+    const parts = deliverToMatch ? deliverToMatch[1].trim().split(/,,|,/) : ["Unknown"];
+    return {
+      orderNo: orderNoMatch[0],
+      customerName: parts[0].trim(),
+      item: itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A",
+      amount: amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00"
+    };
+  };
+
+  const extractMeesho = (text: string): ExtractedOrder | null => {
+    const orderNoMatch = text.match(/(?:Purchase Order No\.|Order No\.)\s*([a-zA-Z0-9_]+)/i);
+    if (!orderNoMatch) return null;
+    const orderNo = orderNoMatch[1].trim().split('_')[0];
+
+    let customerName = "Unknown";
+    const nameMatch = text.match(/Customer Address\s+([^\n]+)/i);
+    if (nameMatch) {
+        customerName = nameMatch[1].trim();
+    } else {
+        const billToMatch = text.match(/BILL TO \/ SHIP TO\s+([^\n]+)/i);
+        if (billToMatch) {
+            customerName = billToMatch[1].split('-')[0].trim();
+        }
+    }
+
+    let item = "N/A";
+    const itemMatch = text.match(/Description\s+([\s\S]+?)\s+\d{6,8}/i);
+    if (itemMatch) {
+        item = itemMatch[1].trim().replace(/\n/g, ' ').replace(/\s+/g, ' ');
+    }
+
+    let amount = "0.00";
+    const totalLineMatches = text.match(/Total\s+[\s\S]*?Rs\.\s*([\d,]+\.\d{2})/g);
+    if (totalLineMatches) {
+        const lastTotalLine = totalLineMatches[totalLineMatches.length - 1];
+        const amountValueMatch = lastTotalLine.match(/Rs\.\s*([\d,]+\.\d{2})$/);
+        if (amountValueMatch) {
+            amount = amountValueMatch[1].replace(/,/g, '');
+        }
+    }
+
+    if (item === "N/A" && amount === "0.00") {
+        return null;
+    }
+
+    return { orderNo, customerName, item, amount };
+  };
+
+  const extractAmazon = (text: string): ExtractedOrder | null => {
+    if (!text.includes("Tax Invoice/Bill of Supply/Cash Memo")) return null;
+
+    const orderNoMatch = text.match(/\d{3}-\d{7}-\d{7}/);
+    if (!orderNoMatch) return null;
+    const orderNo = orderNoMatch[0];
+    
+    const amountSection = text.split(/Total\s*Amount/i)[1];
+    const amounts = amountSection?.match(/₹\s*([\d,]+\.\d{2})/g);
+    const amount = amounts ? amounts[amounts.length - 1].replace(/[₹\s,]/g, '') : "0.00";
+
+    const itemMatch = text.match(/Description[\s\S]*?\n\s*\d+\s+([\s\S]+?)(?=\n\s*HSN|Qty|Unit|Price|TOTAL|Amount|$)/i);
+    const item = itemMatch ? itemMatch[1].trim().replace(/\s+/g, ' ') : "Amazon Item";
+
+    let customerName = "Unknown";
+
+    const billingMatch = text.match(/Billing Address\s*:\s*\n\s*([\s\S]*?)(?=\s*(?:Phone|Pin|Order ID|Invoice|Seller|GSTIN)|$)/i);
+    if (billingMatch) {
+      const lines = billingMatch[1].trim().split('\n');
+      if (lines.length > 0) {
+        customerName = lines[0].trim();
+      }
+    }
+
+    return { orderNo, customerName, item, amount };
+  };
+
+  // --- Processing Logic ---
   const handleSaveToStaging = async () => {
     if (!user || extractedOrders.length === 0) return;
     setIsProcessing(true);
@@ -326,14 +301,15 @@ const OnlineOrderDashboard = () => {
       const stagingData = extractedOrders.map(order => ({
         platform_order_number: order.orderNo,
         customer_name: order.customerName,
-        shipping_address: order.address,
         flipkart_item_name: order.item,
         amount: parseFloat(order.amount),
         created_by: user.id,
         status: 'pending'
       }));
+
       const { error } = await supabase.from('online_order_staging').upsert(stagingData, { onConflict: 'platform_order_number' });
       if (error) throw error;
+
       showSuccess(`Staged ${extractedOrders.length} orders.`);
       setExtractedOrders([]);
       fetchInitialData();
@@ -347,8 +323,13 @@ const OnlineOrderDashboard = () => {
   const handleClearStaging = async () => {
     setIsProcessing(true);
     try {
-      const { error } = await supabase.from('online_order_staging').delete().eq('status', 'pending');
+      const { error } = await supabase
+        .from('online_order_staging')
+        .delete()
+        .eq('status', 'pending');
+      
       if (error) throw error;
+      
       showSuccess("Staging area cleared.");
       setSelectedStagedIds([]);
       fetchInitialData();
@@ -373,7 +354,9 @@ const OnlineOrderDashboard = () => {
     try {
       const { data: dealer } = await supabase.from('dealers').select('id').eq('name', 'Online Order').single();
       if (!dealer) throw new Error("Create 'Online Order' dealer first.");
+
       const ordersToProcess = stagedOrders.filter(o => selectedStagedIds.includes(o.id));
+
       for (const staged of ordersToProcess) {
         const { data: newOrder } = await supabase.from('orders').insert({
           dealer_id: dealer.id,
@@ -383,6 +366,7 @@ const OnlineOrderDashboard = () => {
           payment_status: 'paid',
           order_date: new Date().toISOString(),
         }).select('id').single();
+
         if (newOrder) {
           await supabase.from('online_order_details').insert({
             order_id: newOrder.id,
@@ -415,19 +399,23 @@ const OnlineOrderDashboard = () => {
       showError("Select products and enter bill numbers for orders first.");
       return;
     }
+
     setIsProcessing(true);
     try {
       for (const order of ordersToProcess) {
         const product = products.find(p => p.id === order.mapped_product_id)!;
         const gstPercent = parseFloat(product.gst) || 0;
+
         await supabase.from('orders').update({
           bill_no: order.bill_no,
           dispatch_date: order.dispatch_date,
           dispatched: true
         }).eq('id', order.id);
+
         await supabase.from('online_order_details').update({
           mapped_product_id: order.mapped_product_id
         }).eq('order_id', order.id);
+
         await supabase.from('sales').insert({
           order_id: order.id,
           product_id: order.mapped_product_id,
@@ -449,12 +437,15 @@ const OnlineOrderDashboard = () => {
   const handleBulkPrintInvoices = async () => {
     const doc = new jsPDF();
     const darkBlue: [number, number, number] = [30, 58, 138];
+    
     for (let i = 0; i < createdOrders.length; i++) {
       const order = createdOrders[i];
       if (i > 0) doc.addPage();
+      
       doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 10, 210, 15, 'F');
       doc.setFontSize(18); doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold");
       doc.text(companyName?.toUpperCase() || "ORDER INVOICE", 105, 20, { align: 'center' });
+
       doc.setTextColor(0); doc.setFontSize(10);
       doc.text(`Order No: #${order.order_number}`, 15, 40);
       doc.text(`Platform ID: ${order.platform_order_number}`, 15, 45);
@@ -468,19 +459,23 @@ const OnlineOrderDashboard = () => {
   const handleBulkPrintGatepasses = async () => {
     const doc = new jsPDF();
     const darkBlue: [number, number, number] = [30, 58, 138];
+    
     const dispatched = createdOrders.filter(o => o.dispatched && o.dispatch_number);
     if (dispatched.length === 0) {
       showError("No dispatched orders found to print gatepasses.");
       return;
     }
+
     for (let i = 0; i < dispatched.length; i++) {
       const order = dispatched[i];
       if (i > 0) doc.addPage();
+      
       doc.setFontSize(20); doc.setFont("helvetica", "bold");
       doc.text(`Gate Pass: ${order.dispatch_number}`, 105, 15, { align: 'center' });
       doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 22, 210, 12, 'F');
       doc.setFontSize(16); doc.setTextColor(255, 255, 255);
       doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", 105, 30, { align: 'center' });
+      
       doc.setTextColor(0); doc.setFontSize(10);
       doc.text(`Order: #${order.order_number}`, 15, 45);
       doc.text(`Customer: ${order.client_name}`, 15, 50);
@@ -519,69 +514,60 @@ const OnlineOrderDashboard = () => {
           </TabsList>
 
           <TabsContent value="extract" className="space-y-6">
-            <Tabs defaultValue="flipkart" className="w-full" onValueChange={(value) => {
-              const platform = platforms.find(p => p.name.toLowerCase().includes(value));
-              if (platform) setSelectedPlatformId(platform.id);
-            }}>
-              <TabsList className="grid w-full grid-cols-5">
-                <TabsTrigger value="flipkart">Flipkart</TabsTrigger>
-                <TabsTrigger value="meesho">Meesho</TabsTrigger>
-                <TabsTrigger value="amazon">Amazon</TabsTrigger>
-                <TabsTrigger value="spartan">Spartan</TabsTrigger>
-                <TabsTrigger value="excel">Excel Upload</TabsTrigger>
-              </TabsList>
-              <TabsContent value="flipkart" className="pt-6">
-                <PDFUploader platformName="Flipkart" onFileUpload={handleFileUpload} loading={loading} colorClass="bg-blue-600" hoverColorClass="hover:bg-blue-700" />
-              </TabsContent>
-              <TabsContent value="meesho" className="pt-6">
-                <PDFUploader platformName="Meesho" onFileUpload={handleFileUpload} loading={loading} colorClass="bg-pink-600" hoverColorClass="hover:bg-pink-700" />
-              </TabsContent>
-              <TabsContent value="amazon" className="pt-6">
-                <PDFUploader platformName="Amazon" onFileUpload={handleFileUpload} loading={loading} colorClass="bg-yellow-500" hoverColorClass="hover:bg-yellow-600" />
-              </TabsContent>
-              <TabsContent value="spartan" className="pt-6">
-                <PDFUploader platformName="Spartan" onFileUpload={handleFileUpload} loading={loading} colorClass="bg-gray-700" hoverColorClass="hover:bg-gray-800" />
-              </TabsContent>
-              <TabsContent value="excel" className="pt-6">
-                <OnlineOrderExcelUpload onUploadComplete={fetchInitialData} />
-              </TabsContent>
-            </Tabs>
-            
-            {rawText && (
-              <div className="flex flex-col gap-2">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => setShowRawText(!showRawText)}
-                  className="w-full text-xs text-muted-foreground"
-                >
-                  {showRawText ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
-                  {showRawText ? 'Hide Debug View' : 'Show Debug View'}
-                </Button>
-                {showRawText && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleCopyDebugText}
-                    className="w-full text-xs"
-                  >
-                    <Copy className="h-3 w-3 mr-1" /> Copy Debug Text
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {showRawText && rawText && (
-              <div className="p-4 bg-slate-950 text-slate-50 rounded-md overflow-x-auto border-b">
-                <h4 className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-2">
-                  <AlertCircle className="h-3 w-3" /> Raw Extracted Text (Debug)
-                </h4>
-                <pre className="text-[10px] leading-relaxed whitespace-pre-wrap font-mono max-h-[200px] overflow-y-auto">
-                  {rawText}
-                </pre>
-              </div>
-            )}
-
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader className="bg-blue-600 text-white rounded-t-lg">
+                  <CardTitle>Upload Labels (PDF)</CardTitle>
+                  <CardDescription className="text-blue-100">Select platform and upload PDF.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  <div className="space-y-2">
+                    <Label>Platform</Label>
+                    <Select value={selectedPlatformId} onValueChange={setSelectedPlatformId}>
+                      <SelectTrigger><SelectValue placeholder="Select Platform" /></SelectTrigger>
+                      <SelectContent>
+                        {platforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="border-2 border-dashed rounded-lg p-8 text-center hover:bg-muted/50 transition-colors relative">
+                    <input type="file" accept=".pdf" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" disabled={loading} />
+                    <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm font-medium">Click to upload PDF</p>
+                  </div>
+                  {extractedOrders.length > 0 && (
+                    <Button onClick={handleSaveToStaging} disabled={isProcessing} className="w-full bg-green-600 hover:bg-green-700">
+                      {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Stage {extractedOrders.length} Orders
+                    </Button>
+                  )}
+                  {rawText && (
+                    <div className="flex flex-col gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setShowRawText(!showRawText)}
+                        className="w-full text-xs text-muted-foreground"
+                      >
+                        {showRawText ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
+                        {showRawText ? 'Hide Debug View' : 'Show Debug View'}
+                      </Button>
+                      {showRawText && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleCopyDebugText}
+                          className="w-full text-xs"
+                        >
+                          <Copy className="h-3 w-3 mr-1" /> Copy Debug Text
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              <OnlineOrderExcelUpload onUploadComplete={fetchInitialData} />
+            </div>
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
@@ -618,6 +604,16 @@ const OnlineOrderDashboard = () => {
                 </div>
               </CardHeader>
               <CardContent className="p-0">
+                {showRawText && rawText && (
+                  <div className="p-4 bg-slate-950 text-slate-50 rounded-none overflow-x-auto border-b">
+                    <h4 className="text-xs font-bold uppercase text-slate-500 mb-2 flex items-center gap-2">
+                      <AlertCircle className="h-3 w-3" /> Raw Extracted Text (Debug)
+                    </h4>
+                    <pre className="text-[10px] leading-relaxed whitespace-pre-wrap font-mono max-h-[200px] overflow-y-auto">
+                      {rawText}
+                    </pre>
+                  </div>
+                )}
                 <ScrollArea className="h-[500px]">
                   <Table>
                     <TableHeader>
