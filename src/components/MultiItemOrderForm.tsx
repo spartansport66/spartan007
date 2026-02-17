@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatCurrency } from '@/utils/formatters';
+import ProductSearchSelector from './ProductSearchSelector';
 
 const SEND_ORDER_NOTIFICATION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/send-order-notification";
 
@@ -309,10 +310,22 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     setNewItemGstPercent(0);
   };
 
-  const updateOrderItem = (id: string, field: keyof OrderItem, value: number) => {
+  const updateOrderItem = (id: string, field: keyof OrderItem, value: any) => {
     setOrderItems(prev => prev.map(item => {
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
+        
+        // If product changed, update related fields
+        if (field === 'product_id') {
+          const product = products.find(p => p.id === value);
+          if (product) {
+            updatedItem.product_name = product.name;
+            updatedItem.product_code = product.code;
+            updatedItem.unit_dp = product.dp;
+            updatedItem.gst_percent = parseFloat(product.gst) || 0;
+          }
+        }
+
         const discount = (updatedItem.unit_dp * updatedItem.discount_percent) / 100;
         const discountedUnitPrice = Math.max(0, updatedItem.unit_dp - discount);
         updatedItem.taxable_value = discountedUnitPrice * updatedItem.quantity;
@@ -580,7 +593,14 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   <TableBody>
                     {orderItems.map(item => (
                       <TableRow key={item.id}>
-                        <TableCell className="max-w-[150px] truncate">{item.product_name} ({item.product_code})</TableCell>
+                        <TableCell className="p-1">
+                          <ProductSearchSelector
+                            products={products}
+                            selectedProductId={item.product_id}
+                            onSelect={(p) => updateOrderItem(item.id, 'product_id', p.id)}
+                            disabled={loading}
+                          />
+                        </TableCell>
                         <TableCell><Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
                         <TableCell><Input type="number" step="0.01" value={item.unit_dp} onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} className="w-24 h-8" /></TableCell>
                         <TableCell><Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
