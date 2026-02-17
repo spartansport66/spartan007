@@ -536,9 +536,9 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                       const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
                       const opDueDays = dealer.opening_balance_due_days;
                       const rowColorClass = opDueDays === null ? 'hover:bg-accent/50' :
-                                             opDueDays > 90 ? 'bg-red-100 dark:bg-red-900/30 hover:bg-red-200/80 dark:hover:bg-red-900/50' :
-                                             opDueDays > 60 ? 'bg-yellow-100 dark:bg-yellow-900/30 hover:bg-yellow-200/80 dark:hover:bg-yellow-900/50' :
-                                             'bg-green-100 dark:bg-green-900/30 hover:bg-green-200/80 dark:hover:bg-green-900/50';
+                                             opDueDays > 90 ? 'bg-red-200 dark:bg-red-900/40 hover:bg-red-300/80 dark:hover:bg-red-900/60' :
+                                             opDueDays > 60 ? 'bg-yellow-200 dark:bg-yellow-900/40 hover:bg-yellow-300/80 dark:hover:bg-yellow-900/60' :
+                                             'bg-green-200 dark:bg-green-900/40 hover:bg-green-300/80 dark:hover:bg-green-900/60';
 
                       return (
                         <TableRow key={dealer.id} className={cn(rowColorClass)}>
