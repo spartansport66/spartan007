@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { Loader2, LogOut, Package, Boxes } from 'lucide-react';
+import { Loader2, LogOut, Boxes } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import WarehouseOrdersAwaitingDispatch from '@/components/WarehouseOrdersAwaitingDispatch';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
@@ -43,12 +43,6 @@ const WarehouseDashboard = () => {
     }
   };
   
-  const handleDispatchSuccess = (dispatchedOrderId: string) => {
-    setSelectedOrderIdForDetails(dispatchedOrderId);
-    setIsOrderDetailsDialogOpen(true);
-    setRefreshKey(prev => prev + 1);
-  };
-
   if (sessionLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -75,7 +69,7 @@ const WarehouseDashboard = () => {
         </div>
 
         <div className="space-y-6">
-          <WarehouseOrdersAwaitingDispatch key={`warehouse-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} />
+          <WarehouseOrdersAwaitingDispatch key={`warehouse-dispatch-${refreshKey}`} />
         </div>
       </div>
       <MadeWithDyad />

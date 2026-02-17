@@ -9,7 +9,6 @@ import { Loader2, Eye, Search, Printer, FileText, RotateCcw } from 'lucide-react
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
-import DispatchOrderDialog from '@/components/DispatchOrderDialog';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import jsPDF from 'jspdf';
@@ -30,11 +29,9 @@ interface DealerOption {
   label: string;
 }
 
-interface WarehouseOrdersAwaitingDispatchProps {
-  onDispatchSuccess: (dispatchedOrderId: string) => void;
-}
+interface WarehouseOrdersAwaitingDispatchProps {}
 
-const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchProps> = ({ onDispatchSuccess }) => {
+const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchProps> = () => {
   const [orders, setOrders] = useState<OrderToDispatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
@@ -49,8 +46,6 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
   
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
-  const [isDispatchDialogOpen, setIsDispatchDialogOpen] = useState(false);
-  const [selectedOrderIdForDispatch, setSelectedOrderIdForDispatch] = useState<string | null>(null);
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
@@ -359,7 +354,6 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
                       <TableCell className="font-medium">#{order.order_number}</TableCell><TableCell>{order.dealer_name}</TableCell><TableCell>{formatDate(order.order_date)}</TableCell><TableCell className="text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       <TableCell className="text-center"><div className="flex justify-center gap-2">
                         <Button variant="ghost" size="icon" onClick={() => { setSelectedOrderIdForDetails(order.id); setIsOrderDetailsDialogOpen(true); }} title="View"><Eye className="h-4 w-4" /></Button>
-                        <Button variant="outline" size="sm" onClick={() => { setSelectedOrderIdForDispatch(order.id); setIsDispatchDialogOpen(true); }}>Dispatch</Button>
                       </div></TableCell>
                     </TableRow>
                   ))}
@@ -370,7 +364,6 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
         </div>
       </CardContent>
       <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} onPrint={handleOrderPrinted} />
-      <DispatchOrderDialog orderId={selectedOrderIdForDispatch} isOpen={isDispatchDialogOpen} onOpenChange={setIsDispatchDialogOpen} onDispatchSuccess={onDispatchSuccess} />
     </Card>
   );
 };
