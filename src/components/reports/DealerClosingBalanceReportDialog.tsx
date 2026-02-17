@@ -425,10 +425,10 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       
       const tableRows = dealersToPrint.map(d => ({
         ...d,
-        opening_balance_str: d.opening_balance.toFixed(2),
-        totalSales_str: d.totalSales.toFixed(2),
-        totalPaymentsReceived_str: d.totalPaymentsReceived.toFixed(2),
-        closing_balance_str: d.closing_balance.toFixed(2),
+        opening_balance_str: `Rs. ${d.opening_balance.toFixed(2)}`,
+        totalSales_str: `Rs. ${d.totalSales.toFixed(2)}`,
+        totalPaymentsReceived_str: `Rs. ${d.totalPaymentsReceived.toFixed(2)}`,
+        closing_balance_str: `Rs. ${d.closing_balance.toFixed(2)}`,
         opening_balance_due_date_str: d.opening_balance_due_date ? new Date(d.opening_balance_due_date).toLocaleDateString() : 'N/A',
         last_dispatch_date_str: d.last_dispatch_date ? new Date(d.last_dispatch_date).toLocaleDateString() : 'N/A',
         opening_balance_due_days_str: d.opening_balance_due_days !== null ? d.opening_balance_due_days.toString() : 'N/A',
@@ -444,21 +444,21 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       autoTable(doc, {
         columns: [
           { header: 'Dealer Name', dataKey: 'name' },
-          { header: 'Op. Bal (₹)', dataKey: 'opening_balance_str' },
+          { header: 'Op. Bal (Rs.)', dataKey: 'opening_balance_str' },
           { header: 'Op. Due Date', dataKey: 'opening_balance_due_date_str' },
           { header: 'Op. Due Days', dataKey: 'opening_balance_due_days_str' },
-          { header: 'Total Sales (₹)', dataKey: 'totalSales_str' },
-          { header: 'Total Rcvd (₹)', dataKey: 'totalPaymentsReceived_str' },
-          { header: 'Net Bal (₹)', dataKey: 'closing_balance_str' },
+          { header: 'Total Sales (Rs.)', dataKey: 'totalSales_str' },
+          { header: 'Total Rcvd (Rs.)', dataKey: 'totalPaymentsReceived_str' },
+          { header: 'Net Bal (Rs.)', dataKey: 'closing_balance_str' },
           { header: 'Last Dispatch', dataKey: 'last_dispatch_date_str' },
           { header: 'Days Since Dispatch', dataKey: 'daysSinceLastDispatch_str' },
           { header: 'Phone', dataKey: 'phone_str' },
         ],
         body: tableRows,
-        foot: [[{ content: 'Totals', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalOpeningBalance.toFixed(2)}`, '', '', `₹${totalSales.toFixed(2)}`, `₹${totalPaymentsReceived.toFixed(2)}`, `₹${totalNetBalance.toFixed(2)}`, '', '', '']],
+        foot: [[{ content: 'Totals', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, `Rs. ${totalOpeningBalance.toFixed(2)}`, '', '', `Rs. ${totalSales.toFixed(2)}`, `Rs. ${totalPaymentsReceived.toFixed(2)}`, `Rs. ${totalNetBalance.toFixed(2)}`, '', '', '']],
         startY: 45,
-        didParseCell: (data) => {
-          if (data.section === 'body') {
+        didDrawCell: (data) => {
+          if (data.section === 'body' && data.column.dataKey === 'opening_balance_due_days_str') {
             const dealer = data.row.raw as unknown as DealerClosingBalance;
             const opDueDays = dealer.opening_balance_due_days;
             if (opDueDays === null) return;
