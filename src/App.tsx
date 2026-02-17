@@ -29,6 +29,7 @@ import WarehouseDashboard from "./pages/WarehouseDashboard";
 import RecordStockReceipt from "./pages/RecordStockReceipt";
 import ReceivePayment from "./pages/ReceivePayment";
 import ManagePlatforms from "./pages/ManagePlatforms";
+import ManageCategories from "./pages/ManageCategories";
 import PurchaseDashboard from "./pages/PurchaseDashboard";
 import TransferDealers from "./pages/TransferDealers";
 import FlipkartOrderExtractor from "./pages/FlipkartOrderExtractor";
@@ -72,6 +73,7 @@ const AppContent = () => {
       <Route path="/record-stock-receipt" element={<RecordStockReceipt />} />
       <Route path="/receive-payment" element={<ReceivePayment />} />
       <Route path="/manage-platforms" element={<ManagePlatforms />} />
+      <Route path="/manage-categories" element={<ManageCategories />} />
       <Route path="/purchase-dashboard" element={<PurchaseDashboard />} />
       <Route path="/transfer-dealers" element={<TransferDealers />} />
       <Route path="/flipkart-extractor" element={<FlipkartOrderExtractor />} />
