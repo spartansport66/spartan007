@@ -457,8 +457,8 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         body: tableRows,
         foot: [[{ content: 'Totals', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, `Rs. ${totalOpeningBalance.toFixed(2)}`, '', '', `Rs. ${totalSales.toFixed(2)}`, `Rs. ${totalPaymentsReceived.toFixed(2)}`, `Rs. ${totalNetBalance.toFixed(2)}`, '', '', '']],
         startY: 45,
-        didDrawCell: (data) => {
-          if (data.section === 'body' && data.column.dataKey === 'opening_balance_due_days_str') {
+        willDrawCell: (data) => {
+          if (data.section === 'body') {
             const dealer = data.row.raw as unknown as DealerClosingBalance;
             const opDueDays = dealer.opening_balance_due_days;
             if (opDueDays === null) return;
@@ -474,7 +474,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
             
             if (fillColor) {
               data.cell.styles.fillColor = fillColor;
-              data.cell.styles.textColor = [255, 255, 255]; // White text for contrast
+              data.cell.styles.textColor = [255, 255, 255];
             }
           }
         },
