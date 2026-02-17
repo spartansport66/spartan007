@@ -330,58 +330,39 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !selectedDealer || orderItems.length === 0 || discountAmount < 0 || discountAmount > preGlobalDiscountTotal || !isPaymentDetailsValid) {
-      showError('Please correct all errors before submitting.');
+    if (!user || !selectedDealer || orderItems.length === 0) {
+      showError("Please select a dealer and add at least one item.");
       return;
     }
-    if (isOnlineOrder && (!clientName || !platformId)) {
-      showError('Client Name and Platform are required for online orders.');
+
+    if (!isPaymentDetailsValid) {
+      showError("Please provide valid payment details.");
       return;
     }
+
     setLoading(true);
     try {
-      const finalDiscountAmount = parseFloat(discountAmount.toFixed(2));
-      const finalOrderAmount = parseFloat(finalOrderValue.toFixed(2));
-
       // 1. Create the Order
-      const { data: newOrder, error: orderError } = await supabase
+      const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
           dealer_id: selectedDealer,
           user_id: user.id,
-          total_amount: finalOrderAmount,
-          discount_amount: finalDiscountAmount,
+          total_amount: finalOrderValue,
+          discount_amount: discountAmount,
           round_off: roundOff,
+          payment_due_date: paymentDueDate,
           status: 'completed',
           payment_status: 'pending_approval',
-          payment_due_date: paymentDueDate,
         })
-        .select('id, order_number, order_date')
+        .select('id, order_number')
         .single();
 
       if (orderError) throw orderError;
 
-      // 2. If it's an online order, save the details
-      if (isOnlineOrder) {
-        const { error: onlineOrderError } = await supabase
-          .from('online_order_details')
-          .insert({
-            order_id: newOrder.id,
-            client_name: clientName,
-            platform_id: platformId,
-            platform_order_number: platformOrderNumber,
-            contact_no: contactNo,
-            city: city,
-            state: state,
-          });
-        if (onlineOrderError) throw onlineOrderError;
-      }
-
-      await supabase.from('dealers').update({ last_billing_date: newOrder.order_date }).eq('id', selectedDealer);
-      
-      // 3. Insert Sales Items
-      const salesWithOrderId = orderItems.map(item => ({
-        order_id: newOrder.id,
+      // 2. Create Sales Items
+      const salesToInsert = orderItems.map(item => ({
+        order_id: order.id,
         product_id: item.product_id,
         quantity: item.quantity,
         unit_price: item.unit_dp,
@@ -389,52 +370,68 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         gst_percent: item.gst_percent,
         total_price: item.total_price,
       }));
-      
-      const { error: salesInsertError } = await supabase.from('sales').insert(salesWithOrderId);
-      if (salesInsertError) throw salesInsertError;
 
-      // 4. Record Payment
-      const paymentData = {
-        order_id: newOrder.id,
+      const { error: salesError } = await supabase.from('sales').insert(salesToInsert);
+      if (salesError) throw salesError;
+
+      // 3. Create Online Details if applicable
+      if (isOnlineOrder) {
+        const { error: onlineError } = await supabase.from('online_order_details').insert({
+          order_id: order.id,
+          client_name: clientName,
+          platform_id: platformId,
+          platform_order_number: platformOrderNumber,
+          contact_no: contactNo,
+          city: city,
+          state: state,
+        });
+        if (onlineError) throw onlineError;
+      }
+
+      // 4. Create Payment Record
+      const { error: paymentError } = await supabase.from('payments').insert({
+        order_id: order.id,
         dealer_id: selectedDealer,
-        amount: finalOrderAmount,
+        amount: paymentAmount,
         payment_method: paymentMethod,
-        payment_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : new Date().toISOString().split('T')[0],
+        payment_date: new Date().toISOString(),
         status: 'pending_approval',
         cheque_dd_no: paymentMethod === 'Cheque/DD' ? chequeDdNo : null,
         cheque_dd_date: paymentMethod === 'Cheque/DD' ? chequeDdDate : null,
         transaction_id: ['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod) ? transactionId : null,
-      };
+      });
+
+      if (paymentError) throw paymentError;
+
+      // 5. Trigger Notification
+      fetch(SEND_ORDER_NOTIFICATION_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id }),
+      }).catch(err => console.error("Notification failed:", err));
+
+      showSuccess(`Order #${order.order_number} placed successfully!`);
       
-      const { error: paymentInsertError } = await supabase.from('payments').insert(paymentData);
-      if (paymentInsertError) throw paymentInsertError;
-
-      // 5. Trigger Email Notification
-      try {
-        await fetch(SEND_ORDER_NOTIFICATION_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: newOrder.id }),
-        });
-      } catch (emailErr) {
-        console.error('[MultiItemOrderForm] Error triggering email:', emailErr);
-      }
-
-      showSuccess('Order placed successfully!');
+      // Reset Form
       setSelectedDealer('');
       setOrderItems([]);
       setDiscountAmount(0);
       setRoundOff(0);
       setPaymentMethod('');
-      setPaymentAmount(0);
       setChequeDdNo('');
       setChequeDdDate('');
       setTransactionId('');
+      setIsOnlineOrder(false);
+      setClientName('');
+      setPlatformId('');
+      setPlatformOrderNumber('');
+      setContactNo('');
+      setCity('');
+      setState('');
       
-      await fetchProducts();
       onOrderPlaced();
     } catch (error: any) {
-      console.error('Submit Error:', error);
+      console.error('Order Submission Error:', error);
       showError(`Failed to place order: ${error.message}`);
     } finally {
       setLoading(false);
@@ -537,10 +534,31 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   <PopoverTrigger asChild>
                     <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0}>{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <PopoverContent className="w-[400px] p-0" align="start">
                     <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
                     <ScrollArea className="h-[250px]"><div className="p-1">{filteredProducts.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>) : (
-                          filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setNewItemGstPercent(parseFloat(product.gst) || 0); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start"><div className="flex items-center"><Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span>{product.name} ({product.code})</span></div><div className="text-xs text-muted-foreground ml-6">DP: ₹{product.dp.toFixed(2)} - GST: {product.gst}% - Stock: {product.closing_stock}</div></div></Button>))
+                          filteredProducts.map((product) => (
+                            <Button 
+                              key={product.id} 
+                              variant="ghost" 
+                              className="w-full justify-start font-normal h-auto py-2" 
+                              onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setNewItemGstPercent(parseFloat(product.gst) || 0); setIsProductPopoverOpen(false); setProductSearch(''); }}
+                            >
+                              <div className="flex flex-col items-start w-full">
+                                <div className="flex items-center justify-between w-full gap-2">
+                                  <div className="flex items-center min-w-0">
+                                    <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                    <span className="font-medium truncate">{product.name}</span>
+                                  </div>
+                                  <span className="text-xs font-bold text-primary flex-shrink-0">₹{product.dp.toFixed(2)}</span>
+                                </div>
+                                <div className="text-[10px] text-muted-foreground ml-6 flex gap-2">
+                                  <span className="bg-muted px-1 rounded">Code: {product.code}</span>
+                                  <span>Stock: {product.closing_stock}</span>
+                                </div>
+                              </div>
+                            </Button>
+                          ))
                         )}</div></ScrollArea>
                   </PopoverContent>
                 </Popover>

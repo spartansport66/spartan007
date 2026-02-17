@@ -486,7 +486,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[300px] p-0" align="start">
+                    <PopoverContent className="w-[400px] p-0" align="start">
                       <div className="p-2 border-b flex items-center gap-2">
                         <Search className="h-4 w-4 text-muted-foreground" />
                         <Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" />
@@ -507,14 +507,17 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                               }}
                             >
                               <div className="flex flex-col items-start w-full">
-                                <div className="flex items-center justify-between w-full">
-                                  <div className="flex items-center">
-                                    <Check className={cn("mr-2 h-4 w-4", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                                    <span className="font-medium">{product.name} ({product.code})</span>
+                                <div className="flex items-center justify-between w-full gap-2">
+                                  <div className="flex items-center min-w-0">
+                                    <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                    <span className="font-medium truncate">{product.name}</span>
                                   </div>
-                                  <span className="text-xs font-bold text-primary">₹{product.dp.toFixed(2)}</span>
+                                  <span className="text-xs font-bold text-primary flex-shrink-0">₹{product.dp.toFixed(2)}</span>
                                 </div>
-                                <div className="text-xs text-muted-foreground ml-6">GST: {product.gst}% - Stock: {product.closing_stock}</div>
+                                <div className="text-[10px] text-muted-foreground ml-6 flex gap-2">
+                                  <span className="bg-muted px-1 rounded">Code: {product.code}</span>
+                                  <span>Stock: {product.closing_stock}</span>
+                                </div>
                               </div>
                             </Button>
                           ))}
