@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -107,6 +107,11 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
     
     targetDate.setUTCHours(0, 0, 0, 0);
     today.setUTCHours(0, 0, 0, 0);
+
+    // If the last bill date is today or in the future, the overdue period is 0 days.
+    if (targetDate.getTime() >= today.getTime()) {
+      return 0;
+    }
 
     const diffTime = today.getTime() - targetDate.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -438,7 +443,7 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
       autoTable(doc, {
         head: [tableColumn], body: tableRows,
         foot: [[{ content: 'Totals', colSpan: 1, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalOpeningBalance.toFixed(2)}`, '', '', `₹${totalSales.toFixed(2)}`, `₹${totalPaymentsReceived.toFixed(2)}`, `₹${totalNetBalance.toFixed(2)}`, '', '', '']],
-        startY: 45, styles: { fontSize: 7, cellPadding: 1.5, valign: 'middle' },
+        startY: 45, styles: { fontSize: 7, cellPadding: 1.5, valign: 'middle', overflow: 'linebreak' },
         headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
         bodyStyles: { textColor: [0, 0, 0] },
         footStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 8 },
@@ -529,13 +534,21 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                       const isDealerSent = sentDealerIds.has(dealer.id);
                       const isDealerSelected = selectedDealerIds.includes(dealer.id);
                       const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
+                      const opDueDays = dealer.opening_balance_due_days;
+                      const opDueDaysColor = opDueDays === null ? 'text-muted-foreground' :
+                                             opDueDays > 90 ? 'text-red-600 font-semibold' :
+                                             opDueDays > 60 ? 'text-yellow-600 font-semibold' :
+                                             'text-green-600 font-semibold';
+
                       return (
                         <TableRow key={dealer.id} className="hover:bg-accent/50">
                           <TableCell><Checkbox checked={isDealerSelected} onCheckedChange={(checked) => handleSelectDealer(dealer.id, !!checked)} disabled={isSendingWhatsApp} /></TableCell>
                           <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
                           <TableCell className="text-right text-muted-foreground">₹{dealer.opening_balance.toFixed(2)}</TableCell>
                           <TableCell className="text-center text-muted-foreground">{dealer.opening_balance_due_date ? new Date(dealer.opening_balance_due_date).toLocaleDateString() : 'N/A'}</TableCell>
-                          <TableCell className="text-center text-muted-foreground">{dealer.opening_balance_due_days !== null ? dealer.opening_balance_due_days : 'N/A'}</TableCell>
+                          <TableCell className={cn("text-center", opDueDaysColor)}>
+                            {opDueDays !== null ? opDueDays : 'N/A'}
+                          </TableCell>
                           <TableCell className="text-right text-blue-600 font-medium">₹{dealer.totalSales.toFixed(2)}</TableCell>
                           <TableCell className="text-right text-green-600 font-medium">₹{dealer.totalPaymentsReceived.toFixed(2)}</TableCell>
                           <TableCell className="text-right font-bold">₹{dealer.closing_balance.toFixed(2)}</TableCell>
