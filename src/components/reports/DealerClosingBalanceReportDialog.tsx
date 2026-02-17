@@ -460,19 +460,24 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
         didDrawCell: (data) => {
           const dealer = data.row.raw as unknown as DealerClosingBalance;
           const opDueDays = dealer.opening_balance_due_days;
-          if (opDueDays === null) return;
           
           let fillColor: [number, number, number] | undefined;
-          if (opDueDays > 90) fillColor = [220, 38, 38]; // red-600
-          else if (opDueDays > 60) fillColor = [234, 179, 8]; // yellow-500
-          else fillColor = [22, 163, 74]; // green-600
+          let textColor: [number, number, number] = [0, 0, 0]; // Default black
+
+          if (opDueDays !== null) {
+            if (opDueDays > 90) fillColor = [220, 38, 38]; // red-600
+            else if (opDueDays > 60) fillColor = [202, 138, 4]; // yellow-600
+            else fillColor = [22, 163, 74]; // green-600
+            textColor = [255, 255, 255]; // White for colored rows
+          }
           
           if (fillColor) {
             doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
             doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
           }
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
         },
-        styles: { fontSize: 7, cellPadding: 1.5, valign: 'middle', overflow: 'linebreak', textColor: [255, 255, 255] },
+        styles: { fontSize: 7, cellPadding: 1.5, valign: 'middle', overflow: 'linebreak' },
         headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
         footStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 8 },
         margin: { top: 10, left: 5, right: 5 },
@@ -564,25 +569,25 @@ const DealerClosingBalanceReportDialog: React.FC<DealerClosingBalanceReportDialo
                       const canSend = !isSendingWhatsApp && dealer.phone && !isDealerSent;
                       const opDueDays = dealer.opening_balance_due_days;
                       const rowColorClass = opDueDays === null ? 'hover:bg-accent/50' :
-                                             opDueDays > 90 ? 'bg-red-400 dark:bg-red-900/60 hover:bg-red-500/80 dark:hover:bg-red-900/80' :
-                                             opDueDays > 60 ? 'bg-yellow-400 dark:bg-yellow-900/60 hover:bg-yellow-500/80 dark:hover:bg-yellow-900/80' :
-                                             'bg-green-400 dark:bg-green-900/60 hover:bg-green-500/80 dark:hover:bg-green-900/80';
+                                             opDueDays > 90 ? 'bg-red-600 text-white dark:bg-red-800 dark:text-red-100 hover:bg-red-700/90 dark:hover:bg-red-800/90' :
+                                             opDueDays > 60 ? 'bg-yellow-600 text-white dark:bg-yellow-800 dark:text-yellow-100 hover:bg-yellow-700/90 dark:hover:bg-yellow-800/90' :
+                                             'bg-green-600 text-white dark:bg-green-800 dark:text-green-100 hover:bg-green-700/90 dark:hover:bg-green-800/90';
 
                       return (
                         <TableRow key={dealer.id} className={cn(rowColorClass)}>
                           <TableCell><Checkbox checked={isDealerSelected} onCheckedChange={(checked) => handleSelectDealer(dealer.id, !!checked)} disabled={isSendingWhatsApp} /></TableCell>
-                          <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">₹{dealer.opening_balance.toFixed(2)}</TableCell>
-                          <TableCell className="text-center text-muted-foreground">{dealer.opening_balance_due_date ? new Date(dealer.opening_balance_due_date).toLocaleDateString() : 'N/A'}</TableCell>
+                          <TableCell className="font-medium">{dealer.name}</TableCell>
+                          <TableCell className="text-right">₹{dealer.opening_balance.toFixed(2)}</TableCell>
+                          <TableCell className="text-center">{dealer.opening_balance_due_date ? new Date(dealer.opening_balance_due_date).toLocaleDateString() : 'N/A'}</TableCell>
                           <TableCell className="text-center font-semibold">
                             {opDueDays !== null ? opDueDays : 'N/A'}
                           </TableCell>
-                          <TableCell className="text-right text-blue-600 font-medium">₹{dealer.totalSales.toFixed(2)}</TableCell>
-                          <TableCell className="text-right text-green-600 font-medium">₹{dealer.totalPaymentsReceived.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium">₹{dealer.totalSales.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium">₹{dealer.totalPaymentsReceived.toFixed(2)}</TableCell>
                           <TableCell className="text-right font-bold">₹{dealer.closing_balance.toFixed(2)}</TableCell>
-                          <TableCell className="text-center text-muted-foreground">{dealer.last_dispatch_date ? new Date(dealer.last_dispatch_date).toLocaleDateString() : 'N/A'}</TableCell>
-                          <TableCell className="text-center text-muted-foreground">{dealer.daysSinceLastDispatch !== null ? dealer.daysSinceLastDispatch : 'N/A'}</TableCell>
-                          <TableCell className="text-center text-muted-foreground">{dealer.phone || 'N/A'}</TableCell>
+                          <TableCell className="text-center">{dealer.last_dispatch_date ? new Date(dealer.last_dispatch_date).toLocaleDateString() : 'N/A'}</TableCell>
+                          <TableCell className="text-center">{dealer.daysSinceLastDispatch !== null ? dealer.daysSinceLastDispatch : 'N/A'}</TableCell>
+                          <TableCell className="text-center">{dealer.phone || 'N/A'}</TableCell>
                           <TableCell className="text-center"><div className="flex justify-center gap-2">
                             <Button variant="ghost" size="icon" onClick={() => handleSendWhatsApp(dealer)} title={isDealerSent ? "Message Sent" : "Send WhatsApp Reminder"} disabled={!canSend}>{isSendingWhatsApp && isDealerSent ? (<Loader2 className="h-4 w-4 animate-spin" />) : (<MessageCircle className="h-4 w-4 text-blue-500" />)}</Button>
                             <Button variant="ghost" size="icon" onClick={() => handleInitiatePayment(dealer.id, dealer.name)} title="Add Payment for Outstanding Balance" disabled={loading || isSendingWhatsApp}><DollarSign className="h-4 w-4 text-green-600" /></Button>
