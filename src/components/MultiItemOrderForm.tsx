@@ -550,10 +550,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                                     <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
                                     <span className="font-medium truncate">{product.name}</span>
                                   </div>
-                                  <span className="text-xs font-bold text-primary flex-shrink-0">₹{product.dp.toFixed(2)}</span>
                                 </div>
-                                <div className="text-[10px] text-muted-foreground ml-6 flex gap-2">
-                                  <span className="bg-muted px-1 rounded">Code: {product.code}</span>
+                                <div className="text-[10px] text-muted-foreground ml-6 flex flex-wrap gap-x-3 gap-y-1">
+                                  <span className="bg-muted px-1 rounded font-mono">Code: {product.code}</span>
+                                  <span className="font-semibold text-primary">DP: ₹{product.dp.toFixed(2)}</span>
                                   <span>Stock: {product.closing_stock}</span>
                                 </div>
                               </div>
