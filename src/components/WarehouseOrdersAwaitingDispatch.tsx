@@ -22,6 +22,12 @@ interface OrderToDispatch {
   total_amount: number;
   dealer_name: string;
   dealer_id: string;
+  online_order_details?: {
+    client_name: string;
+    platform_order_number: string | null;
+    raw_item_name: string | null;
+    products: { name: string; code: string } | null;
+  } | null;
 }
 
 interface DealerOption {
@@ -77,7 +83,16 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
         setAllDealers(dealersData.map(d => ({ value: d.id, label: d.name })));
       }
 
-      let query = supabase.from('orders').select(`id, order_number, order_date, total_amount, dealers (id, name)`).eq('dispatched', false).order('order_date', { ascending: false });
+      let query = supabase
+        .from('orders')
+        .select(`
+          id, order_number, order_date, total_amount, 
+          dealers (id, name),
+          online_order_details (client_name, platform_order_number, raw_item_name, products(name, code))
+        `)
+        .eq('dispatched', false)
+        .order('order_date', { ascending: false });
+
       if (filterOrderNumber) query = query.eq('order_number', parseInt(filterOrderNumber));
       if (filterDealerId) query = query.eq('dealer_id', filterDealerId);
       if (filterDate) query = query.gte('order_date', `${filterDate}T00:00:00.000Z`).lte('order_date', `${filterDate}T23:59:59.999Z`);
@@ -94,6 +109,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
           total_amount: order.total_amount,
           dealer_name: order.dealers?.name || 'N/A',
           dealer_id: order.dealers?.id || '',
+          online_order_details: order.online_order_details?.[0] || null,
         })));
       }
     } catch (error: any) {
@@ -277,14 +293,49 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow className="bg-muted">
                     <TableHead className="w-10"><Checkbox checked={selectedOrderIds.length === orders.length && orders.length > 0} onCheckedChange={(checked) => handleSelectAll(!!checked)} /></TableHead>
-                    <TableHead>Order No.</TableHead><TableHead>Dealer Name</TableHead><TableHead>Order Date</TableHead><TableHead className="text-right">Total Amount</TableHead><TableHead className="text-center">Actions</TableHead>
+                    <TableHead>Order No.</TableHead>
+                    <TableHead>Dealer / Customer</TableHead>
+                    <TableHead>Item Details</TableHead>
+                    <TableHead>Order Date</TableHead>
+                    <TableHead className="text-right">Total Amount</TableHead>
+                    <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {orders.map((order) => (
                     <TableRow key={order.id} className={cn("hover:bg-accent/50", viewedOrderIds.has(order.id) && "opacity-50")}>
                       <TableCell><Checkbox checked={selectedOrderIds.includes(order.id)} onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)} /></TableCell>
-                      <TableCell className="font-medium">#{order.order_number}</TableCell><TableCell>{order.dealer_name}</TableCell><TableCell>{formatDate(order.order_date)}</TableCell><TableCell className="text-right">₹{order.total_amount.toFixed(2)}</TableCell>
+                      <TableCell className="font-medium">#{order.order_number}</TableCell>
+                      <TableCell>
+                        {order.dealer_name === 'Online Order' && order.online_order_details ? (
+                          <div className="flex flex-col">
+                            <span className="font-medium">{order.online_order_details.client_name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {order.online_order_details.platform_order_number || 'Online Order'}
+                            </span>
+                          </div>
+                        ) : (
+                          order.dealer_name
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {order.online_order_details ? (
+                          <div className="flex flex-col text-xs">
+                            <span className="font-semibold text-blue-600">
+                              {order.online_order_details.products ? 
+                                `${order.online_order_details.products.name} (${order.online_order_details.products.code})` : 
+                                'Not Mapped'}
+                            </span>
+                            <span className="text-muted-foreground italic">
+                              (Raw: {order.online_order_details.raw_item_name})
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">Standard Order</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{formatDate(order.order_date)}</TableCell>
+                      <TableCell className="text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       <TableCell className="text-center"><div className="flex justify-center gap-2">
                         <Button variant="ghost" size="icon" onClick={() => { setSelectedOrderIdForDetails(order.id); setIsOrderDetailsDialogOpen(true); }} title="View"><Eye className="h-4 w-4" /></Button>
                       </div></TableCell>
