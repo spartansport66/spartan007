@@ -423,7 +423,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : orderData ? (
+        ) : (
           <div className="space-y-6 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div className="space-y-2">
@@ -446,9 +446,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>{orderData.is_online ? 'Operator' : 'Sales Person'}</Label>
+                <Label>{orderData?.is_online ? 'Operator' : 'Sales Person'}</Label>
                 <Select value={form.watch('salesPersonId')} onValueChange={(val) => form.setValue('salesPersonId', val)}>
-                  <SelectTrigger><SelectValue placeholder={orderData.is_online ? 'Select Operator' : 'Select Sales Person'} /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={orderData?.is_online ? 'Select Operator' : 'Select Sales Person'} /></SelectTrigger>
                   <SelectContent>
                     {operators.map(op => <SelectItem key={op.id} value={op.id}>{op.first_name} {op.last_name}</SelectItem>)}
                   </SelectContent>
@@ -464,7 +464,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
               </div>
             </div>
 
-            {orderData.is_online && (
+            {orderData?.is_online && (
               <div className="p-4 border rounded-md bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 space-y-4">
                 <h3 className="font-semibold text-yellow-800 dark:text-yellow-200">Online Order Details</h3>
                 <div className="space-y-2">
@@ -604,15 +604,11 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
               <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
             </div>
           </div>
-        ) : (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground">Could not load order details.</p>
-          </div>
         )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
-          <Button onClick={form.handleSubmit(handleSave)} disabled={isSubmitting || !orderData}>
+          <Button onClick={form.handleSubmit(handleSave)} disabled={isSubmitting}>
             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}
           </Button>
         </DialogFooter>
