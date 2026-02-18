@@ -26,7 +26,7 @@ import ProductDashboard from "./pages/ProductDashboard";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import WarehouseDashboard from "./pages/WarehouseDashboard";
-import RecordStockReceipt from "./pages/RecordStockReceipt";
+import RecordStockReceipt from "./record-stock-receipt";
 import ReceivePayment from "./pages/ReceivePayment";
 import ManagePlatforms from "./pages/ManagePlatforms";
 import ManageCategories from "./pages/ManageCategories";
@@ -38,7 +38,8 @@ import AmazonOrderExtractor from "./pages/AmazonOrderExtractor";
 import SpartanOrderExtractor from "./pages/SpartanOrderExtractor";
 import ProcessOnlineOrders from "./pages/ProcessOnlineOrders";
 import OnlineOrderDashboard from "./pages/OnlineOrderDashboard";
-import DatabaseBackup from "./pages/DatabaseBackup"; // New Import
+import OnlineOrderDispatchDashboard from "./pages/OnlineOrderDispatchDashboard";
+import DatabaseBackup from "./pages/DatabaseBackup";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -83,7 +84,8 @@ const AppContent = () => {
       <Route path="/spartan-extractor" element={<SpartanOrderExtractor />} />
       <Route path="/process-online-orders" element={<ProcessOnlineOrders />} />
       <Route path="/online-order-dashboard" element={<OnlineOrderDashboard />} />
-      <Route path="/database-backup" element={<DatabaseBackup />} /> {/* New Route */}
+      <Route path="/online-order-dispatch" element={<OnlineOrderDispatchDashboard />} />
+      <Route path="/database-backup" element={<DatabaseBackup />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>
