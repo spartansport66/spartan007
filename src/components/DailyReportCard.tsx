@@ -10,7 +10,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 import { formatCurrency } from '@/utils/formatters';
 import { Separator } from '@/components/ui/separator';
-import { jsPDF } from "jspdf";
+import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 interface DispatchedOrder {
@@ -57,16 +57,30 @@ const DailyReportCard: React.FC = () => {
       if (ordersError) throw ordersError;
 
       let fromSalesmen = 0;
-      let fromOnline = 0;
+      let fromOnlineProcessed = 0;
       (ordersToday || []).forEach(order => {
         if ((order.dealers as any)?.name === 'Online Order') {
-          fromOnline += order.total_amount;
+          fromOnlineProcessed += order.total_amount;
         } else {
           fromSalesmen += order.total_amount;
         }
       });
 
-      // 2. Fetch Dispatched Orders Today (based on dispatch_date)
+      // 2. Fetch newly staged online orders today
+      const { data: stagedToday, error: stagedError } = await supabase
+        .from('online_order_staging')
+        .select('amount')
+        .eq('status', 'pending')
+        .gte('created_at', startOfToday)
+        .lte('created_at', endOfToday);
+      
+      if (stagedError) throw stagedError;
+
+      const fromOnlineStaged = (stagedToday || []).reduce((sum, order) => sum + (order.amount || 0), 0);
+      
+      const totalFromOnline = fromOnlineProcessed + fromOnlineStaged;
+
+      // 3. Fetch Dispatched Orders Today (based on dispatch_date)
       const { data: dispatchedToday, error: dispatchedError } = await supabase
         .from('orders')
         .select('order_number, total_amount, dispatch_number, dealers(name), profiles:user_id(first_name, last_name)')
@@ -88,8 +102,8 @@ const DailyReportCard: React.FC = () => {
 
       setData({
         ordersFromSalesmen: fromSalesmen,
-        ordersFromOnline: fromOnline,
-        totalOrdersReceived: fromSalesmen + fromOnline,
+        ordersFromOnline: totalFromOnline,
+        totalOrdersReceived: fromSalesmen + totalFromOnline,
         dispatchedOrders: dispatchedOrdersList,
         totalDispatchedValue: totalDispatched,
       });
