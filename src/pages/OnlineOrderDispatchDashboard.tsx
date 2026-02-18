@@ -304,6 +304,7 @@ const OnlineOrderDispatchDashboard = () => {
                       />
                     </TableHead>
                     <TableHead>Order #</TableHead>
+                    <TableHead>Platform Order #</TableHead>
                     <TableHead className="w-[200px]">Customer Name</TableHead>
                     <TableHead>Online Item (Raw)</TableHead>
                     <TableHead className="w-[250px]">Map to Product</TableHead>
@@ -315,7 +316,7 @@ const OnlineOrderDispatchDashboard = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredCreatedOrders.length === 0 ? (
-                    <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No pending online orders found matching your search.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No pending online orders found matching your search.</TableCell></TableRow>
                   ) : (
                     filteredCreatedOrders.map((o) => (
                       <TableRow key={o.id} className={o.dispatched ? "opacity-50" : ""}>
@@ -327,6 +328,7 @@ const OnlineOrderDispatchDashboard = () => {
                           />
                         </TableCell>
                         <TableCell className="font-bold">#{o.order_number}</TableCell>
+                        <TableCell className="font-mono text-xs">{o.platform_order_number}</TableCell>
                         <TableCell>
                           <Input 
                             className="h-8 text-xs font-medium" 
