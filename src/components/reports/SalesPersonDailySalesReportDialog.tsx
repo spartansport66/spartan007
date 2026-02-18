@@ -62,6 +62,7 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      // 1. Fetch all sales persons profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, first_name, last_name')
@@ -69,9 +70,10 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
       if (profilesError) throw profilesError;
       setAllSalesPersons((profilesData || []).map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name || ''}`.trim() })));
 
+      // 2. Fetch orders within the date range
       let query = supabase
         .from('orders')
-        .select(`total_amount, order_date, profiles:user_id (id, first_name, last_name)`)
+        .select(`total_amount, user_id`)
         .gte('order_date', `${filterFromDate}T00:00:00.000Z`)
         .lte('order_date', `${filterToDate}T23:59:59.999Z`);
 
@@ -79,29 +81,48 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
         query = query.eq('user_id', filterSalesPersonId);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
+      const { data: ordersData, error: ordersError } = await query;
+      if (ordersError) throw ordersError;
 
-      const salesByPersonAndDate: { [key: string]: DailySale } = (data || []).reduce((acc: any, order: any) => {
-        if (!order.profiles) return acc;
-        const date = new Date(order.order_date).toISOString().split('T')[0];
-        const userId = order.profiles.id;
-        const key = `${userId}-${date}`;
-
-        if (!acc[key]) {
-          acc[key] = {
-            id: key,
-            salesPersonId: userId,
-            salesPersonName: `${order.profiles.first_name} ${order.profiles.last_name || ''}`.trim(),
-            date: date,
-            totalSales: 0,
-          };
+      // 3. Aggregate sales by salesperson ID for the entire period
+      const salesByPerson: { [key: string]: number } = (ordersData || []).reduce((acc: any, order: any) => {
+        if (order.user_id) {
+          acc[order.user_id] = (acc[order.user_id] || 0) + order.total_amount;
         }
-        acc[key].totalSales += order.total_amount;
         return acc;
       }, {});
 
-      setReportData(Object.values(salesByPersonAndDate));
+      // 4. Determine the date string for the report
+      const from = new Date(filterFromDate);
+      const to = new Date(filterToDate);
+      // Adjust for timezone offset to display local date correctly
+      from.setMinutes(from.getMinutes() + from.getTimezoneOffset());
+      to.setMinutes(to.getMinutes() + to.getTimezoneOffset());
+
+      const dateRangeString = from.toDateString() === to.toDateString()
+        ? from.toLocaleDateString()
+        : `${from.toLocaleDateString()} - ${to.toLocaleDateString()}`;
+
+      // 5. Create report data for ALL salespersons
+      const reportData: DailySale[] = (profilesData || [])
+        .map(profile => {
+          // If a specific salesperson is filtered, only include them
+          if (filterSalesPersonId && profile.id !== filterSalesPersonId) {
+            return null;
+          }
+          
+          const totalSales = salesByPerson[profile.id] || 0;
+          return {
+            id: `${profile.id}-${dateRangeString}`, // Make ID unique for the period
+            salesPersonId: profile.id,
+            salesPersonName: `${profile.first_name} ${profile.last_name || ''}`.trim(),
+            date: dateRangeString, // Use the date range as the "date"
+            totalSales: totalSales,
+          };
+        })
+        .filter((item): item is DailySale => item !== null);
+
+      setReportData(reportData);
     } catch (error: any) {
       showError(`Failed to load report data: ${error.message}`);
     } finally {
@@ -158,7 +179,7 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
       doc.text("Sales Person Daily Sales Report", 14, 22);
       autoTable(doc, {
         head: [['Sales Person', 'Date', 'Total Sales (₹)']],
-        body: dataToPrint.map(d => [d.salesPersonName, new Date(d.date).toLocaleDateString(), d.totalSales.toFixed(2)]),
+        body: dataToPrint.map(d => [d.salesPersonName, d.date, d.totalSales.toFixed(2)]),
         startY: 30,
       });
       doc.save('daily_sales_report.pdf');
@@ -210,7 +231,7 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
                     <TableRow key={item.id}>
                       <TableCell><Checkbox checked={selectedIds.includes(item.id)} onCheckedChange={(checked) => handleSelectRow(item.id, !!checked)} /></TableCell>
                       <TableCell>{item.salesPersonName}</TableCell>
-                      <TableCell>{new Date(item.date).toLocaleDateString()}</TableCell>
+                      <TableCell>{item.date}</TableCell>
                       <TableCell className="text-right font-medium">₹{item.totalSales.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}
