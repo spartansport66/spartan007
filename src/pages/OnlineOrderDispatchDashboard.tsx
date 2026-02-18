@@ -74,6 +74,8 @@ const OnlineOrderDispatchDashboard = () => {
   const [filterOrderNumberProcess, setFilterOrderNumberProcess] = useState("");
   const [filterOrderDate, setFilterOrderDate] = useState("");
   const [filterGatepassDate, setFilterGatepassDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [filterGatepassOrderNumber, setFilterGatepassOrderNumber] = useState<string>('');
+  const [filterGatepassDispatchNumber, setFilterGatepassDispatchNumber] = useState<string>('');
 
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
@@ -163,6 +165,14 @@ const OnlineOrderDispatchDashboard = () => {
         query = query.gte('gate_pass_dispatch_time', startOfDay).lte('gate_pass_dispatch_time', endOfDay);
       }
 
+      if (filterGatepassOrderNumber) {
+        query = query.eq('order_number', parseInt(filterGatepassOrderNumber));
+      }
+
+      if (filterGatepassDispatchNumber) {
+        query = query.eq('dispatch_number', parseInt(filterGatepassDispatchNumber));
+      }
+
       const { data, error } = await query;
       if (error) throw error;
 
@@ -187,7 +197,7 @@ const OnlineOrderDispatchDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterGatepassDate]);
+  }, [filterGatepassDate, filterGatepassOrderNumber, filterGatepassDispatchNumber]);
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -626,6 +636,14 @@ const OnlineOrderDispatchDashboard = () => {
                 <div className="flex-grow max-w-xs">
                   <Label>Filter by Gatepass Date</Label>
                   <Input type="date" value={filterGatepassDate} onChange={(e) => setFilterGatepassDate(e.target.value)} />
+                </div>
+                <div className="flex-grow max-w-xs">
+                  <Label>Search by Order No.</Label>
+                  <Input type="number" placeholder="e.g., 12345" value={filterGatepassOrderNumber} onChange={(e) => setFilterGatepassOrderNumber(e.target.value)} />
+                </div>
+                <div className="flex-grow max-w-xs">
+                  <Label>Search by Gatepass No.</Label>
+                  <Input type="number" placeholder="e.g., 67890" value={filterGatepassDispatchNumber} onChange={(e) => setFilterGatepassDispatchNumber(e.target.value)} />
                 </div>
               </div>
               <ScrollArea className="h-[400px] border rounded-md">
