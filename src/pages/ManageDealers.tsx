@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,6 +23,7 @@ import DealerExcelUpload from '@/components/DealerExcelUpload';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface DealerBalanceFromQuery {
   opening_balance: number | null;
@@ -116,20 +117,26 @@ const ManageDealers = () => {
   const [isMonthlyCreditDialogOpen, setIsMonthlyCreditDialogOpen] = useState(false);
   const [selectedDealerForMonthlyCredit, setSelectedDealerForMonthlyCredit] = useState<Dealer | null>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-  const [companyName, setCompanyName] = useState<string | null>(null); // New state for company name
+  const [companyName, setCompanyName] = useState<string | null>(null);
 
   // Applied filter states (used for fetching data)
   const [appliedFilterDealerName, setAppliedFilterDealerName] = useState<string>('');
   const [appliedFilterCity, setAppliedFilterCity] = useState<string>('');
   const [appliedFilterState, setAppliedFilterState] = useState<string>('');
   const [appliedFilterSalesPersonId, setAppliedFilterSalesPersonId] = useState<string>('');
+  const [appliedFilterMinBalance, setAppliedFilterMinBalance] = useState<string>('');
+  const [appliedFilterMaxBalance, setAppliedFilterMaxBalance] = useState<string>('');
 
   // Pending filter states (bound to input fields)
   const [pendingFilterDealerName, setPendingFilterDealerName] = useState<string>('');
   const [pendingFilterCity, setPendingFilterCity] = useState<string>('');
   const [pendingFilterState, setPendingFilterState] = useState<string>('');
   const [pendingFilterSalesPersonId, setPendingFilterSalesPersonId] = useState<string>('');
+  const [pendingFilterMinBalance, setPendingFilterMinBalance] = useState<string>('');
+  const [pendingFilterMaxBalance, setPendingFilterMaxBalance] = useState<string>('');
   
+  const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -470,6 +477,8 @@ const ManageDealers = () => {
     setAppliedFilterCity(pendingFilterCity);
     setAppliedFilterState(pendingFilterState);
     setAppliedFilterSalesPersonId(pendingFilterSalesPersonId);
+    setAppliedFilterMinBalance(pendingFilterMinBalance);
+    setAppliedFilterMaxBalance(pendingFilterMaxBalance);
     // fetchDealers will be called by the useEffect due to dependency change
   };
 
@@ -478,10 +487,14 @@ const ManageDealers = () => {
     setPendingFilterCity('');
     setPendingFilterState('');
     setPendingFilterSalesPersonId('');
+    setPendingFilterMinBalance('');
+    setPendingFilterMaxBalance('');
     setAppliedFilterDealerName('');
     setAppliedFilterCity('');
     setAppliedFilterState('');
     setAppliedFilterSalesPersonId('');
+    setAppliedFilterMinBalance('');
+    setAppliedFilterMaxBalance('');
     // fetchDealers will be called by the useEffect due to dependency change
   };
 
@@ -590,6 +603,93 @@ const ManageDealers = () => {
     }
   };
 
+  const handlePrintSelected = () => {
+    if (selectedDealerIds.length === 0) {
+      showError("No dealers selected to print.");
+      return;
+    }
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait'
+      });
+
+      const companyNameText = companyName ? companyName.toUpperCase() : "COMPANY NAME";
+      doc.setFontSize(18);
+      doc.text(companyNameText, doc.internal.pageSize.width / 2, 15, { align: 'center' });
+      doc.setFontSize(14);
+      doc.text("Selected Dealers Balance Report", doc.internal.pageSize.width / 2, 22, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.width / 2, 28, { align: 'center' });
+
+      const selectedDealersData = dealers.filter(d => selectedDealerIds.includes(d.id));
+
+      const tableColumn = ["Dealer Name", "City", "Contact No", "Current Balance"];
+      const tableRows = selectedDealersData.map(dealer => [
+        dealer.name,
+        dealer.city || 'N/A',
+        dealer.phone || 'N/A',
+        `₹${dealer.current_balance.toFixed(2)}`,
+      ]);
+
+      const totalCurrentBalance = selectedDealersData.reduce((sum, dealer) => sum + dealer.current_balance, 0);
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        foot: [
+          [
+            { content: 'Total Balance', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
+            `₹${totalCurrentBalance.toFixed(2)}`,
+          ]
+        ],
+        startY: 35,
+        styles: {
+          fontSize: 10,
+          cellPadding: 3,
+        },
+        headStyles: {
+          fillColor: [30, 58, 138],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+        },
+        footStyles: {
+          fillColor: [220, 220, 220],
+          textColor: [0, 0, 0],
+          fontStyle: 'bold',
+        },
+        columnStyles: {
+          3: { halign: 'right' },
+        }
+      });
+
+      doc.save('selected_dealers_balance_report.pdf');
+      showSuccess('Selected dealers report generated successfully!');
+    } catch (error: any) {
+      console.error('Error generating selected dealers PDF:', error);
+      showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`);
+    }
+  };
+
+  const filteredDealers = useMemo(() => {
+    return dealers.filter(dealer => {
+      const minBalance = appliedFilterMinBalance ? parseFloat(appliedFilterMinBalance) : -Infinity;
+      const maxBalance = appliedFilterMaxBalance ? parseFloat(appliedFilterMaxBalance) : Infinity;
+      
+      const balance = dealer.current_balance;
+      
+      return balance >= minBalance && balance <= maxBalance;
+    });
+  }, [dealers, appliedFilterMinBalance, appliedFilterMaxBalance]);
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedDealerIds(checked ? filteredDealers.map(d => d.id) : []);
+  };
+
+  const handleSelectDealer = (dealerId: string, checked: boolean) => {
+    setSelectedDealerIds(prev => checked ? [...prev, dealerId] : prev.filter(id => id !== dealerId));
+  };
+
   if (sessionLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
@@ -686,6 +786,28 @@ const ManageDealers = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="flex-1 min-w-[120px]">
+                  <Label htmlFor="filterMinBalance">Min Balance</Label>
+                  <Input
+                    id="filterMinBalance"
+                    type="number"
+                    placeholder="e.g., 10000"
+                    value={pendingFilterMinBalance}
+                    onChange={(e) => setPendingFilterMinBalance(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="flex-1 min-w-[120px]">
+                  <Label htmlFor="filterMaxBalance">Max Balance</Label>
+                  <Input
+                    id="filterMaxBalance"
+                    type="number"
+                    placeholder="e.g., 50000"
+                    value={pendingFilterMaxBalance}
+                    onChange={(e) => setPendingFilterMaxBalance(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
                 <Button onClick={handleApplyFilters} className="flex items-center gap-2">
                   <Search className="h-4 w-4" /> Apply Filters
                 </Button>
@@ -695,10 +817,18 @@ const ManageDealers = () => {
                 <Button variant="outline" onClick={handlePrint} disabled={dealers.length === 0} className="flex items-center gap-2">
                   <Printer className="h-4 w-4" /> Print Report
                 </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={handlePrintSelected} 
+                  disabled={selectedDealerIds.length === 0}
+                  className="flex items-center gap-2"
+                >
+                  <Printer className="h-4 w-4" /> Print Selected ({selectedDealerIds.length})
+                </Button>
               </div>
 
               <div className="overflow-x-auto flex-grow overflow-y-auto border rounded-md">
-                {dealers.length === 0 ? (
+                {filteredDealers.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">
                     No dealers found. Add a new dealer to get started!
                   </p>
@@ -706,6 +836,13 @@ const ManageDealers = () => {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted hover:bg-muted/90">
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={filteredDealers.length > 0 && selectedDealerIds.length === filteredDealers.length}
+                            onCheckedChange={handleSelectAll}
+                            aria-label="Select all"
+                          />
+                        </TableHead>
                         <TableHead className="text-muted-foreground">Name</TableHead>
                         <TableHead className="text-muted-foreground">Contact Person</TableHead>
                         <TableHead className="text-muted-foreground">Email</TableHead>
@@ -723,8 +860,15 @@ const ManageDealers = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {dealers.map((dealer) => (
+                      {filteredDealers.map((dealer) => (
                         <TableRow key={dealer.id} className="hover:bg-accent/50">
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedDealerIds.includes(dealer.id)}
+                              onCheckedChange={(checked) => handleSelectDealer(dealer.id, !!checked)}
+                              aria-label={`Select dealer ${dealer.name}`}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium text-foreground">{dealer.name}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.contact_person || 'N/A'}</TableCell>
                           <TableCell className="text-muted-foreground">{dealer.email || 'N/A'}</TableCell>
