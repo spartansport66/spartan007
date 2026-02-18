@@ -47,6 +47,15 @@ interface Product {
   gst: string;
 }
 
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 const OnlineOrderDispatchDashboard = () => {
   const navigate = useNavigate();
   const { user, isAdmin, userType, loading: sessionLoading } = useSession();
@@ -319,13 +328,176 @@ const OnlineOrderDispatchDashboard = () => {
     return createdOrders.filter(o => o.order_number.toString().includes(filterOrderNumberProcess) || o.platform_order_number.toLowerCase().includes(filterOrderNumberProcess.toLowerCase()));
   }, [createdOrders, filterOrderNumberProcess]);
 
-  if (sessionLoading || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const handlePrintSingleOrderDetails = async (order: OnlineOrder) => {
+    if (!order) return;
+    setIsProcessing(true);
+    try {
+      const doc = new jsPDF();
+      const darkBlue: [number, number, number] = [30, 58, 138];
+      const margin = 15;
+      const pageWidth = doc.internal.pageSize.width;
+
+      const { data: orderData } = await supabase
+        .from('orders')
+        .select(`
+          order_number, order_date, total_amount, discount_amount, 
+          dealers (name, address, phone, city, state), 
+          online_order_details (client_name, city, state, contact_no, online_platforms (name), platform_order_number),
+          sales (quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code))
+        `)
+        .eq('id', order.id)
+        .single();
+        
+      if (!orderData) throw new Error("Order not found");
+
+      doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 10, pageWidth, 15, 'F');
+      doc.setFontSize(18); doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold");
+      doc.text(companyName?.toUpperCase() || "ORDER INVOICE", pageWidth / 2, 20, { align: 'center' });
+
+      doc.setTextColor(0); doc.setFontSize(10); let y = 35;
+      
+      const onlineDetails = orderData.online_order_details?.[0];
+      const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
+      
+      const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name;
+      const partyAddress = isOnline 
+        ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
+        : `${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`;
+      const partyPhone = isOnline ? onlineDetails.contact_no : (orderData.dealers as any).phone;
+
+      doc.setFont("helvetica", "bold"); doc.text("PARTY DETAILS:", margin, y);
+      doc.setFont("helvetica", "normal"); y += 5; doc.text(partyName, margin, y);
+      y += 5; const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
+      doc.text(addressLines, margin, y);
+      
+      let rightY = 35; const rightColX = pageWidth / 2 + 10;
+      doc.setFont("helvetica", "bold"); doc.text("ORDER SUMMARY:", rightColX, rightY);
+      doc.setFont("helvetica", "normal"); rightY += 5; doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
+      rightY += 5; doc.text(`Date: ${formatDate(orderData.order_date)}`, rightColX, rightY);
+      rightY += 5; doc.text(`Phone: ${partyPhone || 'N/A'}`, rightColX, rightY);
+
+      if (isOnline) {
+        rightY += 5; doc.text(`Platform: ${(onlineDetails.online_platforms as any)?.name || 'N/A'}`, rightColX, rightY);
+        rightY += 5; doc.text(`Platform Order #: ${onlineDetails.platform_order_number || 'N/A'}`, rightColX, rightY);
+      }
+
+      y = Math.max(y + (addressLines.length * 5), rightY + 10);
+      const tableRows = (orderData.sales || []).map((sale: any) => [
+        sale.products?.code || 'N/A', 
+        sale.products?.name || 'N/A', 
+        sale.quantity.toString(), 
+        `₹${(sale.unit_price || 0).toFixed(2)}`, 
+        `${(sale.discount_percent || 0)}%`, 
+        `${(sale.gst_percent || 0)}%`, 
+        `₹${(sale.total_price || 0).toFixed(2)}`
+      ]);
+
+      autoTable(doc, { 
+        head: [["Code", "Product", "Qty", "Unit Price", "Disc %", "GST %", "Total"]], 
+        body: tableRows, 
+        startY: y, 
+        headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 }, 
+        columnStyles: {
+          0: { cellWidth: 20, halign: 'center' },
+          1: { cellWidth: 'auto' },
+          2: { cellWidth: 15, halign: 'center' },
+          3: { cellWidth: 25, halign: 'right' },
+          4: { cellWidth: 15, halign: 'center' },
+          5: { cellWidth: 15, halign: 'center' },
+          6: { cellWidth: 25, halign: 'right' }
+        },
+        styles: { fontSize: 8, cellPadding: 2 } 
+      });
+      
+      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      const subtotal = (orderData.sales || []).reduce((sum: number, s: any) => sum + s.total_price, 0);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
+      
+      let currentY = finalY;
+      if (orderData.discount_amount > 0) {
+        currentY += 5;
+        doc.text(`Global Discount: -₹${orderData.discount_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+      }
+      
+      currentY += 7;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+      doc.text(`FINAL TOTAL: ₹${orderData.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+      
+      doc.save(`Order_Details_${order.order_number}.pdf`);
+      showSuccess("Order details PDF generated.");
+    } catch (error: any) {
+      showError(`Failed to print order details: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePrintSingleGatepass = async (order: OnlineOrder) => {
+    if (!order) return;
+    setIsProcessing(true);
+    try {
+      const doc = new jsPDF();
+      const darkBlue: [number, number, number] = [30, 58, 138];
+      const margin = 15;
+      const pageWidth = doc.internal.pageSize.width;
+
+      const { data: orderData } = await supabase
+        .from('orders')
+        .select(`
+          order_number, order_date, total_amount, dispatch_number, bill_no, 
+          dealers (name, address, city, state), 
+          online_order_details (client_name, city, state),
+          sales (quantity, products (name, code))
+        `)
+        .eq('id', order.id)
+        .single();
+        
+      if (!orderData) throw new Error("Order not found");
+
+      doc.setFontSize(20); doc.setFont("helvetica", "bold");
+      doc.text(`Gate Pass: ${orderData.dispatch_number || 'N/A'}`, pageWidth / 2, 15, { align: 'center' });
+      doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 22, pageWidth, 12, 'F');
+      doc.setFontSize(16); doc.setTextColor(255, 255, 255);
+      doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", pageWidth / 2, 30, { align: 'center' });
+      
+      doc.setTextColor(0); doc.setFontSize(10); let y = 45;
+      
+      const onlineDetails = orderData.online_order_details?.[0];
+      const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
+      
+      const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name;
+      const partyAddress = isOnline 
+        ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
+        : `${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`;
+
+      doc.setFont("helvetica", "bold"); doc.text("PARTY DETAILS:", margin, y);
+      doc.setFont("helvetica", "normal"); y += 5; doc.text(partyName, margin, y);
+      y += 5; const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
+      doc.text(addressLines, margin, y);
+      
+      let rightY = 45; const rightColX = pageWidth / 2 + 10;
+      doc.setFont("helvetica", "bold"); doc.text("ORDER DETAILS:", rightColX, rightY);
+      doc.setFont("helvetica", "normal"); rightY += 5; doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
+      rightY += 5; doc.text(`Bill No: ${orderData.bill_no || 'N/A'}`, rightColX, rightY);
+      rightY += 5; doc.text(`Date: ${formatDate(orderData.order_date)}`, rightColX, rightY);
+
+      y = Math.max(y + (addressLines.length * 5), rightY + 10);
+      const tableRows = (orderData.sales || []).map((sale: any) => [sale.products?.code || 'N/A', sale.products?.name || 'N/A', sale.quantity.toString()]);
+      autoTable(doc, { head: [["Code", "Product Name", "Quantity"]], body: tableRows, startY: y, headStyles: { fillColor: darkBlue, halign: 'center' }, styles: { fontSize: 9, cellPadding: 3 } });
+      doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+      doc.text(`TOTAL BILL AMOUNT: Rs. ${orderData.total_amount.toFixed(2)}`, pageWidth / 2, (doc as any).lastAutoTable.finalY + 15, { align: 'center' });
+      
+      doc.save(`GatePass_${order.dispatch_number}.pdf`);
+      showSuccess("Gate Pass PDF generated.");
+    } catch (error: any) {
+      showError(`Failed to print Gate Pass: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -465,11 +637,12 @@ const OnlineOrderDispatchDashboard = () => {
                       <TableHead>Bill No.</TableHead>
                       <TableHead>Gatepass Time</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {gatepassCreatedOrders.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No gatepass created orders found.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No gatepass created orders found.</TableCell></TableRow>
                     ) : (
                       gatepassCreatedOrders.map(o => (
                         <TableRow key={o.id}>
@@ -479,6 +652,13 @@ const OnlineOrderDispatchDashboard = () => {
                           <TableCell>{o.bill_no}</TableCell>
                           <TableCell>{o.gate_pass_dispatch_time ? new Date(o.gate_pass_dispatch_time).toLocaleString() : 'N/A'}</TableCell>
                           <TableCell className="text-right">₹{o.total_amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex justify-center gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => handleViewOrder(o.id)} title="View Details"><Eye className="h-4 w-4 text-blue-500" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => handlePrintSingleOrderDetails(o)} title="Print Order"><FileText className="h-4 w-4 text-green-500" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => handlePrintSingleGatepass(o)} title="Print Gate Pass"><Printer className="h-4 w-4 text-gray-500" /></Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
