@@ -46,6 +46,9 @@ const Index = () => {
           } else if (userType === 'warehouse_keeper') {
             console.log('Redirecting to warehouse dashboard');
             navigate('/warehouse-dashboard');
+          } else if (userType === 'online_orders') {
+            console.log('Redirecting to online order dispatch dashboard');
+            navigate('/online-order-dispatch-dashboard');
           } else if (userType === 'sales_person') {
             console.log('Redirecting to user dashboard');
             navigate('/dashboard');
