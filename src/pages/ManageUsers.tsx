@@ -40,7 +40,7 @@ interface UserProfile {
   email: string;
   first_name: string | null;
   last_name: string | null;
-  user_type: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'warehouse_keeper';
+  user_type: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'warehouse_keeper' | 'online_orders';
   is_admin: boolean;
   raw_app_meta_data: { provider?: string; providers?: string[]; };
   banned_until: string | null;
@@ -64,7 +64,7 @@ const userFormSchema = z.object({
   lastName: z.string().optional(),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional().or(z.literal('')),
-  userType: z.enum(['admin', 'sales_person', 'gate_keeper', 'inventory_manager', 'manager', 'warehouse_keeper'], { message: 'Please select a user type.' }),
+  userType: z.enum(['admin', 'sales_person', 'gate_keeper', 'inventory_manager', 'manager', 'warehouse_keeper', 'online_orders'], { message: 'Please select a user type.' }),
   assignedDealerIds: z.array(z.string().uuid()).optional(),
 });
 
@@ -467,7 +467,7 @@ const ManageUsers = () => {
                 </FormItem>
               )} />
               <FormField control={createForm.control} name="userType" render={({ field }) => (
-                <FormItem><FormLabel>User Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a user type" /></SelectTrigger></FormControl><SelectContent><SelectItem value="sales_person">Sales Person</SelectItem><SelectItem value="admin">Admin</SelectItem><SelectItem value="gate_keeper">Gate Keeper</SelectItem><SelectItem value="inventory_manager">Inventory Manager</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="warehouse_keeper">Warehouse Keeper</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                <FormItem><FormLabel>User Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a user type" /></SelectTrigger></FormControl><SelectContent><SelectItem value="sales_person">Sales Person</SelectItem><SelectItem value="admin">Admin</SelectItem><SelectItem value="gate_keeper">Gate Keeper</SelectItem><SelectItem value="inventory_manager">Inventory Manager</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="warehouse_keeper">Warehouse Keeper</SelectItem><SelectItem value="online_orders">Online Orders</SelectItem></SelectContent></Select><FormMessage /></FormItem>
               )} />
               <DialogFooter><Button type="submit" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create User'}</Button></DialogFooter>
             </form>
@@ -497,6 +497,9 @@ const ManageUsers = () => {
                     </FormControl>
                     <FormMessage />
                   </FormItem>
+                )} />
+                <FormField control={editForm.control} name="userType" render={({ field }) => (
+                  <FormItem><FormLabel>User Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a user type" /></SelectTrigger></FormControl><SelectContent><SelectItem value="sales_person">Sales Person</SelectItem><SelectItem value="admin">Admin</SelectItem><SelectItem value="gate_keeper">Gate Keeper</SelectItem><SelectItem value="inventory_manager">Inventory Manager</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="warehouse_keeper">Warehouse Keeper</SelectItem><SelectItem value="online_orders">Online Orders</SelectItem></SelectContent></Select><FormMessage /></FormItem>
                 )} />
                 {selectedUser.user_type === 'sales_person' && (
                   <div className="grid gap-4 mt-4">

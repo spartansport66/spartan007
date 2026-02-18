@@ -22,7 +22,7 @@ const formSchema = z.object({
   lastName: z.string().min(1, { message: 'Last name is required.' }),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
-  userType: z.enum(['admin', 'sales_person', 'dealer', 'sales_head', 'gate_keeper', 'inventory_manager', 'manager', 'warehouse_keeper']),
+  userType: z.enum(['admin', 'sales_person', 'gate_keeper', 'inventory_manager', 'manager', 'warehouse_keeper', 'online_orders']),
 });
 
 const AdminPanel = () => {
@@ -129,7 +129,7 @@ const AdminPanel = () => {
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="userType" render={({ field }) => (
-                  <FormItem><FormLabel>User Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a user type" /></SelectTrigger></FormControl><SelectContent><SelectItem value="sales_person">Sales Person</SelectItem><SelectItem value="admin">Admin</SelectItem><SelectItem value="gate_keeper">Gate Keeper</SelectItem><SelectItem value="inventory_manager">Inventory Manager</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="warehouse_keeper">Warehouse Keeper</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                  <FormItem><FormLabel>User Type</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a user type" /></SelectTrigger></FormControl><SelectContent><SelectItem value="sales_person">Sales Person</SelectItem><SelectItem value="admin">Admin</SelectItem><SelectItem value="gate_keeper">Gate Keeper</SelectItem><SelectItem value="inventory_manager">Inventory Manager</SelectItem><SelectItem value="manager">Manager</SelectItem><SelectItem value="warehouse_keeper">Warehouse Keeper</SelectItem><SelectItem value="online_orders">Online Orders</SelectItem></SelectContent></Select><FormMessage /></FormItem>
                 )} />
                 <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create User'}</Button>
               </form>

@@ -9,7 +9,7 @@ interface SessionContextType {
   user: User | null;
   loading: boolean;
   isAdmin: boolean;
-  userType: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null;
+  userType: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | 'online_orders' | null;
   mustResetPassword: boolean; // Added mustResetPassword
 }
 
@@ -20,7 +20,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [userType, setUserType] = useState<'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null>(null);
+  const [userType, setUserType] = useState<'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | 'online_orders' | null>(null);
   const [mustResetPassword, setMustResetPassword] = useState(false); // Initialize mustResetPassword
 
   useEffect(() => {
@@ -42,7 +42,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
             console.log('Profile data:', profile);
             const isAdminUser = profile.user_type === 'admin' || profile.user_type === 'super_admin';
             setIsAdmin(isAdminUser);
-            setUserType(profile.user_type as 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null);
+            setUserType(profile.user_type as any);
             setMustResetPassword(profile.must_reset_password === true); // Set mustResetPassword
             console.log('isAdmin set to:', isAdminUser);
             console.log('userType set to:', profile.user_type);
@@ -80,7 +80,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
               console.log('Profile updated:', profile);
               const isAdminUser = profile.user_type === 'admin' || profile.user_type === 'super_admin';
               setIsAdmin(isAdminUser);
-              setUserType(profile.user_type as 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | null);
+              setUserType(profile.user_type as any);
               setMustResetPassword(profile.must_reset_password === true); // Set mustResetPassword
               console.log('isAdmin updated to:', isAdminUser);
               console.log('userType updated to:', profile.user_type);
