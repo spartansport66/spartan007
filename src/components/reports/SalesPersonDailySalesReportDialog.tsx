@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react';
+import { Loader2, Search, Printer, ArrowUp, ArrowDown, ChevronsUpDown, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
@@ -169,7 +169,7 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
     setSelectedIds(prev => checked ? [...prev, id] : prev.filter(selectedId => selectedId !== id));
   };
 
-  const handlePrint = (dataToPrint: DailySale[]) => {
+  const handlePrintPdf = (dataToPrint: DailySale[]) => {
     if (dataToPrint.length === 0) {
       showError("No data selected to print.");
       return;
@@ -186,6 +186,93 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
       showSuccess('Report generated successfully!');
     } catch (error: any) {
       showError(`Failed to generate PDF: ${error.message}`);
+    }
+  };
+
+  const handleDownloadJpg = (dataToPrint: DailySale[]) => {
+    if (dataToPrint.length === 0) {
+      showError("No data selected to print.");
+      return;
+    }
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error("Could not create canvas context");
+
+      const width = 1200;
+      const rowHeight = 40;
+      const headerHeight = 120;
+      const footerHeight = 50;
+      const height = headerHeight + (dataToPrint.length * rowHeight) + footerHeight;
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = '#1e3a8a';
+      ctx.fillRect(0, 0, width, 80);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 28px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(companyName?.toUpperCase() || "DAILY SALES REPORT", width / 2, 50);
+
+      ctx.fillStyle = '#333333';
+      ctx.font = '18px Arial';
+      const todayStr = new Date().toLocaleDateString('en-IN');
+      ctx.fillText(`Date: ${todayStr}`, width / 2, 110);
+
+      let y = headerHeight + 20;
+      const colPositions = [50, 400, 1150];
+      ctx.font = 'bold 16px Arial';
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'left';
+      ctx.fillText('Sales Person', colPositions[0], y);
+      ctx.fillText('Date Range', colPositions[1], y);
+      ctx.textAlign = 'right';
+      ctx.fillText('Total Sales (₹)', colPositions[2], y);
+      y += 10;
+      ctx.strokeStyle = '#cccccc';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(colPositions[0], y);
+      ctx.lineTo(colPositions[2], y);
+      ctx.stroke();
+      y += 20;
+
+      ctx.font = '16px Arial';
+      dataToPrint.forEach(item => {
+          ctx.fillStyle = '#333333';
+          ctx.textAlign = 'left';
+          ctx.fillText(item.salesPersonName, colPositions[0], y);
+          ctx.fillText(item.date, colPositions[1], y);
+          ctx.textAlign = 'right';
+          ctx.font = 'bold 16px Arial';
+          ctx.fillText(`₹${item.totalSales.toFixed(2)}`, colPositions[2], y);
+          ctx.font = '16px Arial';
+          y += rowHeight;
+      });
+
+      ctx.strokeStyle = '#cccccc';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(colPositions[0], y - 10);
+      ctx.lineTo(colPositions[2], y - 10);
+      ctx.stroke();
+      
+      const totalSales = dataToPrint.reduce((sum, item) => sum + item.totalSales, 0);
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(`Total: ₹${totalSales.toFixed(2)}`, colPositions[2], y + 10);
+
+      const link = document.createElement('a');
+      link.download = `Daily_Sales_Report_${todayStr.replace(/\//g, '-')}.jpg`;
+      link.href = canvas.toDataURL('image/jpeg', 0.9);
+      link.click();
+      
+      showSuccess("Daily report JPG downloaded successfully.");
+    } catch (error: any) {
+        showError(`Failed to generate JPG: ${error.message}`);
     }
   };
 
@@ -242,7 +329,8 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
         </div>
 
         <DialogFooter className="pt-4">
-          <Button variant="outline" onClick={() => handlePrint(sortedData.filter(d => selectedIds.includes(d.id)))} disabled={selectedIds.length === 0}><Printer className="mr-2 h-4 w-4" /> Print Selected ({selectedIds.length})</Button>
+          <Button variant="outline" onClick={() => handlePrintPdf(sortedData.filter(d => selectedIds.includes(d.id)))} disabled={selectedIds.length === 0}><Printer className="mr-2 h-4 w-4" /> Print PDF ({selectedIds.length})</Button>
+          <Button variant="outline" onClick={() => handleDownloadJpg(sortedData.filter(d => selectedIds.includes(d.id)))} disabled={selectedIds.length === 0}><ImageIcon className="mr-2 h-4 w-4" /> Download JPG ({selectedIds.length})</Button>
           <Button onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>
