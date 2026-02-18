@@ -73,7 +73,7 @@ const OnlineOrderDispatchDashboard = () => {
   
   const [filterOrderNumberProcess, setFilterOrderNumberProcess] = useState("");
   const [filterOrderDate, setFilterOrderDate] = useState("");
-  const [filterGatepassDate, setFilterGatepassDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [filterGatepassDate, setFilterGatepassDate] = useState<string>('');
   const [filterGatepassOrderNumber, setFilterGatepassOrderNumber] = useState<string>('');
   const [filterGatepassDispatchNumber, setFilterGatepassDispatchNumber] = useState<string>('');
 
@@ -156,13 +156,14 @@ const OnlineOrderDispatchDashboard = () => {
           online_order_details!inner(client_name, raw_item_name, platform_order_number, mapped_product_id, products(name, code))
         `)
         .eq('dealers.name', 'Online Order')
-        .not('gate_pass_dispatch_time', 'is', null)
-        .order('gate_pass_dispatch_time', { ascending: false });
+        .eq('dispatched', true)
+        .is('gate_pass_dispatch_time', null)
+        .order('dispatch_date', { ascending: false });
 
       if (filterGatepassDate) {
         const startOfDay = `${filterGatepassDate}T00:00:00.000Z`;
         const endOfDay = `${filterGatepassDate}T23:59:59.999Z`;
-        query = query.gte('gate_pass_dispatch_time', startOfDay).lte('gate_pass_dispatch_time', endOfDay);
+        query = query.gte('dispatch_date', startOfDay).lte('dispatch_date', endOfDay);
       }
 
       if (filterGatepassOrderNumber) {
@@ -629,12 +630,12 @@ const OnlineOrderDispatchDashboard = () => {
                   <Printer className="mr-2 h-4 w-4" /> Print Selected Gatepasses ({selectedGatepassCreatedIds.length})
                 </Button>
               </div>
-              <CardDescription className="text-green-100">Showing all gatepasses created for online orders.</CardDescription>
+              <CardDescription className="text-green-100">Showing all orders with a generated gatepass, awaiting final dispatch by the gatekeeper.</CardDescription>
             </CardHeader>
             <CardContent className="p-4 space-y-4">
               <div className="flex items-end gap-4">
                 <div className="flex-grow max-w-xs">
-                  <Label>Filter by Gatepass Date</Label>
+                  <Label>Filter by Dispatch Date</Label>
                   <Input type="date" value={filterGatepassDate} onChange={(e) => setFilterGatepassDate(e.target.value)} />
                 </div>
                 <div className="flex-grow max-w-xs">
@@ -652,24 +653,26 @@ const OnlineOrderDispatchDashboard = () => {
                     <TableRow>
                       <TableHead className="w-12"><Checkbox checked={selectedGatepassCreatedIds.length === gatepassCreatedOrders.length && gatepassCreatedOrders.length > 0} onCheckedChange={(checked) => handleSelectAllGatepassCreated(!!checked)} /></TableHead>
                       <TableHead>Order #</TableHead>
+                      <TableHead>Dispatch No.</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Bill No.</TableHead>
-                      <TableHead>Gatepass Time</TableHead>
+                      <TableHead>Dispatch Date</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {gatepassCreatedOrders.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No gatepass created orders found.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No gatepass created orders found.</TableCell></TableRow>
                     ) : (
                       gatepassCreatedOrders.map(o => (
                         <TableRow key={o.id}>
                           <TableCell><Checkbox checked={selectedGatepassCreatedIds.includes(o.id)} onCheckedChange={(checked) => handleSelectGatepassCreated(o.id, !!checked)} /></TableCell>
                           <TableCell>#{o.order_number}</TableCell>
+                          <TableCell>{o.dispatch_number}</TableCell>
                           <TableCell>{o.client_name}</TableCell>
                           <TableCell>{o.bill_no}</TableCell>
-                          <TableCell>{o.gate_pass_dispatch_time ? new Date(o.gate_pass_dispatch_time).toLocaleString() : 'N/A'}</TableCell>
+                          <TableCell>{formatDate(o.dispatch_date)}</TableCell>
                           <TableCell className="text-right">₹{o.total_amount.toFixed(2)}</TableCell>
                           <TableCell className="text-center">
                             <div className="flex justify-center gap-1">
