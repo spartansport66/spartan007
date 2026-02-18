@@ -63,6 +63,7 @@ const DispatchedOrdersCard: React.FC = () => {
   const [filterDispatchNumber, setFilterDispatchNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterDispatchDate, setFilterDispatchDate] = useState<string>('');
+  const [filterGatePassNull, setFilterGatePassNull] = useState<boolean>(false);
 
   // Dialog states
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
@@ -87,7 +88,6 @@ const DispatchedOrdersCard: React.FC = () => {
       const { data: dealersData, error: dealersError } = await supabase
         .from('dealers')
         .select('id, name');
-
       if (dealersError) {
         console.error('Error fetching dealers for filter:', dealersError.message);
         showError('Failed to load dealers for filter.');
@@ -97,48 +97,36 @@ const DispatchedOrdersCard: React.FC = () => {
       }
 
       // Build the base query for dispatched orders
+      // We use dispatch_number not null to identify dispatched orders
       let query = supabase
         .from('orders')
         .select(`
-          id,
-          order_number,
-          order_date,
-          total_amount,
-          gate_pass_dispatch_time,
-          dispatch_number,
-          bill_no,
-          dispatch_date,
+          id, order_number, order_date, total_amount, gate_pass_dispatch_time, dispatch_number, bill_no, dispatch_date,
           dealers (id, name)
         `)
         .not('dispatch_number', 'is', null) 
         .order('dispatch_number', { ascending: false });
 
+      // Apply filters
       if (filterOrderNumber) {
-        const orderNum = parseInt(filterOrderNumber);
-        if (!isNaN(orderNum)) {
-          query = query.eq('order_number', orderNum);
-        }
+        query = query.eq('order_number', parseInt(filterOrderNumber));
       }
-
       if (filterDispatchNumber) {
-        const dispatchNum = parseInt(filterDispatchNumber);
-        if (!isNaN(dispatchNum)) {
-          query = query.eq('dispatch_number', dispatchNum);
-        }
+        query = query.eq('dispatch_number', parseInt(filterDispatchNumber));
       }
-
       if (filterDealerId) {
         query = query.eq('dealer_id', filterDealerId);
       }
-
       if (filterDispatchDate) {
         const startOfDay = `${filterDispatchDate}T00:00:00.000Z`;
         const endOfDay = `${filterDispatchDate}T23:59:59.999Z`;
         query = query.gte('dispatch_date', startOfDay).lte('dispatch_date', endOfDay);
       }
+      if (filterGatePassNull) {
+        query = query.is('gate_pass_dispatch_time', null);
+      }
 
       const { data: ordersData, error: ordersError } = await query;
-
       if (ordersError) {
         console.error('Error fetching dispatched orders:', ordersError.message);
         showError('Failed to load dispatched orders.');
@@ -164,7 +152,7 @@ const DispatchedOrdersCard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterOrderNumber, filterDispatchNumber, filterDealerId, filterDispatchDate]);
+  }, [filterOrderNumber, filterDispatchNumber, filterDealerId, filterDispatchDate, filterGatePassNull]);
 
   useEffect(() => {
     fetchOrdersAndDealers();
@@ -190,6 +178,7 @@ const DispatchedOrdersCard: React.FC = () => {
     setFilterDispatchNumber('');
     setFilterDealerId('');
     setFilterDispatchDate('');
+    setFilterGatePassNull(false);
   };
 
   const handleDeleteOrder = async (orderId: string, orderNumber: number) => {
@@ -370,6 +359,14 @@ const DispatchedOrdersCard: React.FC = () => {
               className="w-full"
             />
           </div>
+          <div className="flex items-center space-x-2 self-center pt-6">
+            <Checkbox
+              id="filterGatePassNull"
+              checked={filterGatePassNull}
+              onCheckedChange={(checked) => setFilterGatePassNull(!!checked)}
+            />
+            <Label htmlFor="filterGatePassNull">Awaiting Gate Pass</Label>
+          </div>
           <Button onClick={fetchOrdersAndDealers} className="flex items-center gap-2">
             <Search className="h-4 w-4" /> Apply Filters
           </Button>
@@ -401,7 +398,7 @@ const DispatchedOrdersCard: React.FC = () => {
                       <TableHead className="text-muted-foreground">Dispatch Date</TableHead>
                       <TableHead className="text-muted-foreground">Gate Pass</TableHead>
                       <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
-                      <TableHead className="text-muted-foreground text-center">Actions</TableHead>
+                      {isAdmin && <TableHead className="text-muted-foreground text-center">Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -417,25 +414,25 @@ const DispatchedOrdersCard: React.FC = () => {
                         <TableCell className="text-muted-foreground">{formatDate(order.dispatch_date)}</TableCell>
                         <TableCell className="text-muted-foreground">{formatDate(order.gate_pass_dispatch_time)}</TableCell>
                         <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex justify-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleViewOrderDetails(order.id)}
-                              title="View Order Details"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditOrder(order.id)}
-                              title="Edit Order"
-                            >
-                              <Edit className="h-4 w-4 text-orange-600" />
-                            </Button>
-                            {isAdmin && (
+                        {isAdmin && (
+                          <TableCell className="text-center">
+                            <div className="flex justify-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleViewOrderDetails(order.id)}
+                                title="View Order Details"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditOrder(order.id)}
+                                title="Edit Order"
+                              >
+                                <Edit className="h-4 w-4 text-orange-600" />
+                              </Button>
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button variant="ghost" size="icon" title="Delete Order" disabled={isDeleting}>
@@ -457,9 +454,9 @@ const DispatchedOrdersCard: React.FC = () => {
                                   </AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>
-                            )}
-                          </div>
-                        </TableCell>
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
