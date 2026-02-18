@@ -431,7 +431,8 @@ const OnlineOrderDashboard = () => {
         }).eq('id', order.id);
 
         await supabase.from('online_order_details').update({
-          mapped_product_id: order.mapped_product_id
+          mapped_product_id: order.mapped_product_id,
+          client_name: order.client_name // Save the updated client name
         }).eq('order_id', order.id);
 
         await supabase.from('sales').insert({
@@ -552,7 +553,8 @@ const OnlineOrderDashboard = () => {
 
   const filteredProducts = useMemo(() => {
     if (!productSearch) return products;
-    return products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.code.toLowerCase().includes(productSearch.toLowerCase()));
+    const search = productSearch.toLowerCase();
+    return products.filter(p => p.name.toLowerCase().includes(search) || p.code.toLowerCase().includes(search));
   }, [products, productSearch]);
 
   const filteredCreatedOrders = useMemo(() => {
@@ -771,7 +773,8 @@ const OnlineOrderDashboard = () => {
                           />
                         </TableHead>
                         <TableHead>Order #</TableHead>
-                        <TableHead>Online Item</TableHead>
+                        <TableHead className="w-[200px]">Customer Name</TableHead>
+                        <TableHead>Online Item (Raw)</TableHead>
                         <TableHead className="w-[250px]">Map to Product</TableHead>
                         <TableHead className="w-[150px]">Bill No.</TableHead>
                         <TableHead className="w-[150px]">Bill Date</TableHead>
@@ -781,7 +784,7 @@ const OnlineOrderDashboard = () => {
                     </TableHeader>
                     <TableBody>
                       {filteredCreatedOrders.length === 0 ? (
-                        <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No pending online orders found matching your search.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No pending online orders found matching your search.</TableCell></TableRow>
                       ) : (
                         filteredCreatedOrders.map((o) => (
                           <TableRow key={o.id} className={o.dispatched ? "opacity-50" : ""}>
@@ -794,10 +797,16 @@ const OnlineOrderDashboard = () => {
                             </TableCell>
                             <TableCell className="font-bold">#{o.order_number}</TableCell>
                             <TableCell>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-medium">{o.client_name}</span>
-                                <span className="text-[10px] text-muted-foreground">{o.raw_item_name}</span>
-                              </div>
+                              <Input 
+                                className="h-8 text-xs font-medium" 
+                                value={o.client_name} 
+                                onChange={(e) => handleUpdateOrderField(o.id, 'client_name', e.target.value)}
+                                disabled={o.dispatched}
+                                placeholder="Customer Name"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-[10px] text-muted-foreground italic">{o.raw_item_name}</span>
                             </TableCell>
                             <TableCell>
                               <Popover>
