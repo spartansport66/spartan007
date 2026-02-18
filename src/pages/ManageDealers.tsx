@@ -663,7 +663,16 @@ const ManageDealers = () => {
         }
       });
 
-      doc.save('selected_dealers_balance_report.pdf');
+      let fileName = 'selected_dealers_balance_report.pdf';
+      if (appliedFilterSalesPersonId) {
+        const salesPerson = allSalesPersons.find(sp => sp.id === appliedFilterSalesPersonId);
+        if (salesPerson) {
+          const safeName = `${salesPerson.first_name}_${salesPerson.last_name || ''}`.replace(/\s+/g, '_');
+          fileName = `${safeName}_selected_dealers.pdf`;
+        }
+      }
+
+      doc.save(fileName);
       showSuccess('Selected dealers report generated successfully!');
     } catch (error: any) {
       console.error('Error generating selected dealers PDF:', error);
