@@ -448,194 +448,98 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="space-y-6 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="orderNumber">Order Number</Label>
-                <Input id="orderNumber" type="number" {...form.register('orderNumber')} disabled={isSubmitting} />
-                {form.formState.errors.orderNumber && <p className="text-xs text-destructive">{form.formState.errors.orderNumber.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="orderDate">Order Date</Label>
-                <Input id="orderDate" type="date" {...form.register('orderDate')} disabled={isSubmitting} />
-                {form.formState.errors.orderDate && <p className="text-xs text-destructive">{form.formState.errors.orderDate.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label>Dealer</Label>
-                <Select value={form.watch('dealerId')} onValueChange={(val) => form.setValue('dealerId', val)}>
-                  <SelectTrigger><SelectValue placeholder="Select Dealer" /></SelectTrigger>
-                  <SelectContent>
-                    {dealers.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>{orderData?.is_online ? 'Operator' : 'Sales Person'}</Label>
-                <Select value={currentSalesPersonId} onValueChange={(val) => form.setValue('salesPersonId', val)}>
-                  <SelectTrigger><SelectValue placeholder={orderData?.is_online ? 'Select Operator' : 'Select Sales Person'} /></SelectTrigger>
-                  <SelectContent>
-                    {userListToRender.map(op => <SelectItem key={op.id} value={op.id}>{op.first_name} {op.last_name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="billNo">Bill Number</Label>
-                <Input id="billNo" placeholder="e.g., INV-001" {...form.register('billNo')} disabled={isSubmitting} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dispatchDate">Bill Date (Dispatch Date)</Label>
-                <Input id="dispatchDate" type="date" {...form.register('dispatchDate')} disabled={isSubmitting} />
-              </div>
-            </div>
-
-            {orderData?.is_online && (
-              <div className="p-4 border rounded-md bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 space-y-4">
-                <h3 className="font-semibold text-yellow-800 dark:text-yellow-200">Online Order Details</h3>
-                <div className="space-y-2">
-                  <Label>Platform Order #</Label>
-                  <Input value={orderData.platform_order_number || 'N/A'} readOnly className="bg-muted" />
-                </div>
-                <FormField
-                  control={form.control}
-                  name="clientName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Customer Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter customer name" {...field} value={field.value || ''} disabled={isSubmitting} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                  <strong>Extracted Item:</strong> {orderData.raw_item_name}
-                </p>
-                <div className="space-y-2">
-                  <Label>Map to Actual Product</Label>
-                  <Select 
-                    value={form.watch('mappedProductId') || "none"} 
-                    onValueChange={(val) => form.setValue('mappedProductId', val === "none" ? null : val)}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Select Actual Product" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Not Mapped</SelectItem>
-                      {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.code})</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">Stock will be deducted when the Gate Keeper authorizes the final OUT.</p>
-                </div>
-              </div>
-            )}
-
-            <Separator />
-
-            <div className="space-y-4">
-              <Label className="text-lg font-semibold">Add/Modify Items</Label>
-              <div className="flex flex-col gap-4 p-4 border rounded-md bg-muted/50">
-                <div className="w-full">
-                  <Label>Product</Label>
-                  <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>
-                        {currentProductDisplay}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
-                      <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
-                      <ScrollArea className="h-[250px]"><div className="p-1">{filteredProducts.map((product) => (
-                            <Button 
-                              key={product.id} 
-                              variant="ghost" 
-                              className="w-full justify-start font-normal h-auto py-2" 
-                              onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setNewItemGstPercent(parseFloat(product.gst) || 0); setIsProductPopoverOpen(false); setProductSearch(''); }}
-                            >
-                              <div className="flex flex-col items-start w-full">
-                                <div className="flex items-center justify-between w-full gap-2">
-                                  <div className="flex items-center min-w-0">
-                                    <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                                    <span className="font-medium truncate">{product.name}</span>
-                                  </div>
-                                </div>
-                                <div className="text-[10px] text-muted-foreground ml-6 flex flex-wrap gap-x-3 gap-y-1">
-                                  <span className="bg-muted px-1 rounded font-mono">Code: {product.code}</span>
-                                  <span className="font-semibold text-primary">DP: ₹{product.dp.toFixed(2)}</span>
-                                  <span>Stock: {product.closing_stock}</span>
-                                </div>
-                              </div>
-                            </Button>
-                          ))}</div></ScrollArea>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 items-end">
-                  <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
-                  <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
-                  <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(parseFloat(e.target.value) || 0)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
-                  <div><Label>GST (%)</Label><Input type="number" step="0.1" value={newItemGstPercent} onChange={(e) => setNewItemGstPercent(parseFloat(e.target.value) || 0)} min="0" /></div>
-                  <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemCalculations.totalPrice.toFixed(2)}</div></div>
-                </div>
-                <Button type="button" onClick={addOrderItem} disabled={isSubmitting} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleSave)} className="space-y-6 py-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                <FormField control={form.control} name="orderNumber" render={({ field }) => (<FormItem><FormLabel>Order Number</FormLabel><FormControl><Input type="number" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="orderDate" render={({ field }) => (<FormItem><FormLabel>Order Date</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="dealerId" render={({ field }) => (<FormItem><FormLabel>Dealer</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select Dealer" /></SelectTrigger></FormControl><SelectContent>{dealers.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="salesPersonId" render={({ field }) => (<FormItem><FormLabel>{orderData?.is_online ? 'Operator' : 'Sales Person'}</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder={orderData?.is_online ? 'Select Operator' : 'Select Sales Person'} /></SelectTrigger></FormControl><SelectContent>{userListToRender.map(op => <SelectItem key={op.id} value={op.id}>{op.first_name} {op.last_name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="billNo" render={({ field }) => (<FormItem><FormLabel>Bill Number</FormLabel><FormControl><Input placeholder="e.g., INV-001" {...field} value={field.value || ''} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="dispatchDate" render={({ field }) => (<FormItem><FormLabel>Bill Date (Dispatch Date)</FormLabel><FormControl><Input type="date" {...field} value={field.value || ''} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
               </div>
 
-              {orderItems.length > 0 && (
-                <div className="max-h-[350px] overflow-y-auto border rounded-md">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead className="w-24">Qty</TableHead>
-                        <TableHead className="w-32">DP (₹)</TableHead>
-                        <TableHead className="w-24">Disc %</TableHead>
-                        <TableHead className="w-24">GST %</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
-                        <TableHead className="w-10"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {orderItems.map(item => (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.product_name} ({item.product_code})</TableCell>
-                          <TableCell><Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
-                          <TableCell><Input type="number" step="0.01" value={item.unit_dp} onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
-                          <TableCell><Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
-                          <TableCell><Input type="number" step="0.1" value={item.gst_percent} onChange={(e) => updateOrderItem(item.id, 'gst_percent', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
-                          <TableCell className="text-right font-bold text-green-600">₹{item.total_price.toFixed(2)}</TableCell>
-                          <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              {orderData?.is_online && (
+                <div className="p-4 border rounded-md bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 space-y-4">
+                  <h3 className="font-semibold text-yellow-800 dark:text-yellow-200">Online Order Details</h3>
+                  <div className="space-y-2">
+                    <Label>Platform Order #</Label>
+                    <Input value={orderData.platform_order_number || 'N/A'} readOnly className="bg-muted" />
+                  </div>
+                  <FormField control={form.control} name="clientName" render={({ field }) => (<FormItem><FormLabel>Customer Name</FormLabel><FormControl><Input placeholder="Enter customer name" {...field} value={field.value || ''} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300"><strong>Extracted Item:</strong> {orderData.raw_item_name}</p>
+                  <FormField control={form.control} name="mappedProductId" render={({ field }) => (<FormItem><FormLabel>Map to Actual Product</FormLabel><Select onValueChange={field.onChange} value={field.value || "none"}><FormControl><SelectTrigger><SelectValue placeholder="Select Actual Product" /></SelectTrigger></FormControl><SelectContent><SelectItem value="none">Not Mapped</SelectItem>{products.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.code})</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Stock will be deducted when the Gate Keeper authorizes the final OUT.</p><FormMessage /></FormItem>)} />
                 </div>
               )}
-            </div>
 
-            <div className="p-4 bg-muted rounded-md space-y-2">
-              <div className="flex justify-between text-sm"><span>Taxable Value (Excl. GST):</span><span>₹{totalTaxableValue.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm"><span>Total GST:</span><span>₹{totalGstAmount.toFixed(2)}</span></div>
-              <Separator className="my-1" />
-              <div className="flex justify-between text-base font-medium"><span>Subtotal (Incl. GST):</span><span>₹{preGlobalDiscountTotal.toFixed(2)}</span></div>
-              <div className="flex justify-between items-center">
-                <Label htmlFor="discountAmount" className="text-base font-medium">Additional Global Discount (₹)</Label>
-                <Input id="discountAmount" type="number" step="0.01" {...form.register('discountAmount')} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} disabled={isSubmitting} />
+              <Separator />
+
+              <div className="space-y-4">
+                <Label className="text-lg font-semibold">Add/Modify Items</Label>
+                <div className="flex flex-col gap-4 p-4 border rounded-md bg-muted/50">
+                  <div className="w-full">
+                    <Label>Product</Label>
+                    <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0" align="start">
+                        <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
+                        <ScrollArea className="h-[250px]"><div className="p-1">{filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setNewItemGstPercent(parseFloat(product.gst) || 0); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start w-full"><div className="flex items-center justify-between w-full gap-2"><div className="flex items-center min-w-0"><Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span className="font-medium truncate">{product.name}</span></div></div><div className="text-[10px] text-muted-foreground ml-6 flex flex-wrap gap-x-3 gap-y-1"><span className="bg-muted px-1 rounded font-mono">Code: {product.code}</span><span className="font-semibold text-primary">DP: ₹{product.dp.toFixed(2)}</span><span>Stock: {product.closing_stock}</span></div></div></Button>))}</div></ScrollArea>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 items-end">
+                    <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
+                    <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
+                    <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(parseFloat(e.target.value) || 0)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
+                    <div><Label>GST (%)</Label><Input type="number" step="0.1" value={newItemGstPercent} onChange={(e) => setNewItemGstPercent(parseFloat(e.target.value) || 0)} min="0" /></div>
+                    <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemCalculations.totalPrice.toFixed(2)}</div></div>
+                  </div>
+                  <Button type="button" onClick={addOrderItem} disabled={isSubmitting} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
+                </div>
+
+                {orderItems.length > 0 && (
+                  <div className="max-h-[350px] overflow-y-auto border rounded-md">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Product</TableHead><TableHead className="w-24">Qty</TableHead><TableHead className="w-32">DP (₹)</TableHead><TableHead className="w-24">Disc %</TableHead><TableHead className="w-24">GST %</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {orderItems.map(item => (
+                          <TableRow key={item.id}>
+                            <TableCell className="font-medium">{item.product_name} ({item.product_code})</TableCell>
+                            <TableCell><Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
+                            <TableCell><Input type="number" step="0.01" value={item.unit_dp} onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
+                            <TableCell><Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
+                            <TableCell><Input type="number" step="0.1" value={item.gst_percent} onChange={(e) => updateOrderItem(item.id, 'gst_percent', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
+                            <TableCell className="text-right font-bold text-green-600">₹{item.total_price.toFixed(2)}</TableCell>
+                            <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
-              <div className="flex justify-between items-center">
-                <Label htmlFor="roundOff" className="text-base font-medium">Round Off (+/-)</Label>
-                <Input id="roundOff" type="number" step="0.01" {...form.register('roundOff')} className="w-32 text-right" disabled={isSubmitting} />
+
+              <div className="p-4 bg-muted rounded-md space-y-2">
+                <div className="flex justify-between text-sm"><span>Taxable Value (Excl. GST):</span><span>₹{totalTaxableValue.toFixed(2)}</span></div>
+                <div className="flex justify-between text-sm"><span>Total GST:</span><span>₹{totalGstAmount.toFixed(2)}</span></div>
+                <Separator className="my-1" />
+                <div className="flex justify-between text-base font-medium"><span>Subtotal (Incl. GST):</span><span>₹{preGlobalDiscountTotal.toFixed(2)}</span></div>
+                <FormField control={form.control} name="discountAmount" render={({ field }) => (<FormItem className="flex justify-between items-center"><FormLabel className="text-base font-medium">Additional Global Discount (₹)</FormLabel><FormControl><Input type="number" step="0.01" {...field} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} disabled={isSubmitting} /></FormControl></FormItem>)} />
+                <FormField control={form.control} name="roundOff" render={({ field }) => (<FormItem className="flex justify-between items-center"><FormLabel className="text-base font-medium">Round Off (+/-)</FormLabel><FormControl><Input type="number" step="0.01" {...field} className="w-32 text-right" disabled={isSubmitting} /></FormControl></FormItem>)} />
+                <Separator className="my-2" />
+                <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
               </div>
-              <Separator className="my-2" />
-              <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
-            </div>
-          </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
-          <Button onClick={form.handleSubmit(handleSave)} disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
