@@ -156,7 +156,7 @@ const OnlineOrderDispatchDashboard = () => {
           online_order_details!inner(client_name, raw_item_name, platform_order_number, mapped_product_id, products(name, code))
         `)
         .eq('dealers.name', 'Online Order')
-        .eq('dispatched', true)
+        .not('dispatch_number', 'is', null)
         .is('gate_pass_dispatch_time', null)
         .order('dispatch_date', { ascending: false });
 
