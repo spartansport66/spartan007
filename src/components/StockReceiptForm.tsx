@@ -43,7 +43,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase.from('products').select('id, name, code').order('name');
+        const { data, error } = await supabase.from('products').select('id, name, code').order('name').limit(10000);
         if (error) throw error;
         setProducts(data || []);
       } catch (error: any) {

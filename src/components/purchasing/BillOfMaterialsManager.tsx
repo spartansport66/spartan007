@@ -45,8 +45,8 @@ const BillOfMaterialsManager: React.FC = () => {
     setLoading(true);
     try {
       const [productsRes, materialsRes] = await Promise.all([
-        supabase.from('products').select('id, name, code').order('name'),
-        supabase.from('raw_materials').select('id, name, code').order('name'),
+        supabase.from('products').select('id, name, code').order('name').limit(10000),
+        supabase.from('raw_materials').select('id, name, code').order('name').limit(10000),
       ]);
       if (productsRes.error) throw productsRes.error;
       if (materialsRes.error) throw materialsRes.error;

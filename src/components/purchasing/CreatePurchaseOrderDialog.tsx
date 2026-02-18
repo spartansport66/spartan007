@@ -58,7 +58,7 @@ const CreatePurchaseOrderDialog: React.FC<CreatePurchaseOrderDialogProps> = ({ i
     try {
       const [suppliersRes, materialsRes] = await Promise.all([
         supabase.from('suppliers').select('id, name').order('name'),
-        supabase.from('raw_materials').select('id, name, code').order('name'),
+        supabase.from('raw_materials').select('id, name, code').order('name').limit(10000),
       ]);
       if (suppliersRes.error) throw suppliersRes.error;
       if (materialsRes.error) throw materialsRes.error;

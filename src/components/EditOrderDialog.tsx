@@ -131,7 +131,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const fetchInitialData = useCallback(async () => {
     try {
       const [productsRes, dealersRes, usersRes] = await Promise.all([
-        supabase.from('products').select('id, code, name, dp, closing_stock, gst').order('name'),
+        supabase.from('products').select('id, code, name, dp, closing_stock, gst').order('name').limit(10000),
         supabase.from('dealers').select('id, name').order('name'),
         supabase.from('profiles').select('id, first_name, last_name, user_type').in('user_type', ['sales_person', 'online_orders', 'admin']).order('first_name'),
       ]);
