@@ -201,27 +201,37 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
 
       const width = 1200;
       const rowHeight = 40;
-      const headerHeight = 120;
-      const footerHeight = 50;
+      const headerHeight = 150; // More space for titles
+      const footerHeight = 60;
       const height = headerHeight + (dataToPrint.length * rowHeight) + footerHeight;
       canvas.width = width;
       canvas.height = height;
 
+      // Background
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
 
+      // Header Background
       ctx.fillStyle = '#1e3a8a';
       ctx.fillRect(0, 0, width, 80);
+      
+      // Main Title (Company Name)
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 28px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(companyName?.toUpperCase() || "DAILY SALES REPORT", width / 2, 50);
+      ctx.fillText(companyName?.toUpperCase() || "SALES REPORT", width / 2, 50);
 
+      // Subtitle
       ctx.fillStyle = '#333333';
-      ctx.font = '18px Arial';
-      const todayStr = new Date().toLocaleDateString('en-IN');
-      ctx.fillText(`Date: ${todayStr}`, width / 2, 110);
+      ctx.font = 'bold 22px Arial';
+      ctx.fillText("Today's Sales by Sales Persons", width / 2, 110);
 
+      // Date Range
+      const dateRange = dataToPrint.length > 0 ? dataToPrint[0].date : 'N/A';
+      ctx.font = '16px Arial';
+      ctx.fillText(`For Period: ${dateRange}`, width / 2, 135);
+
+      // Table Header
       let y = headerHeight + 20;
       const colPositions = [50, 400, 1150];
       ctx.font = 'bold 16px Arial';
@@ -240,6 +250,7 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
       ctx.stroke();
       y += 20;
 
+      // Table Body
       ctx.font = '16px Arial';
       dataToPrint.forEach(item => {
           ctx.fillStyle = '#333333';
@@ -253,6 +264,7 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
           y += rowHeight;
       });
 
+      // Separator line before total
       ctx.strokeStyle = '#cccccc';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -260,13 +272,17 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
       ctx.lineTo(colPositions[2], y - 10);
       ctx.stroke();
       
+      // Total
       const totalSales = dataToPrint.reduce((sum, item) => sum + item.totalSales, 0);
       ctx.font = 'bold 18px Arial';
       ctx.textAlign = 'right';
+      ctx.fillStyle = '#000000';
       ctx.fillText(`Total: ₹${totalSales.toFixed(2)}`, colPositions[2], y + 10);
 
+      // Trigger Download
+      const todayStr = new Date().toLocaleDateString('en-IN');
       const link = document.createElement('a');
-      link.download = `Daily_Sales_Report_${todayStr.replace(/\//g, '-')}.jpg`;
+      link.download = `Sales_Report_${todayStr.replace(/\//g, '-')}.jpg`;
       link.href = canvas.toDataURL('image/jpeg', 0.9);
       link.click();
       
