@@ -667,8 +667,15 @@ const ManageDealers = () => {
       if (appliedFilterSalesPersonId) {
         const salesPerson = allSalesPersons.find(sp => sp.id === appliedFilterSalesPersonId);
         if (salesPerson) {
-          const safeName = `${salesPerson.first_name}_${salesPerson.last_name || ''}`.replace(/\s+/g, '_');
-          fileName = `${safeName}_selected_dealers.pdf`;
+          const safeName = `${salesPerson.first_name}_${salesPerson.last_name || ''}`.replace(/\s+/g, '_').replace(/_{2,}/g, '_');
+          
+          const allZeroBalance = selectedDealersData.every(d => d.current_balance === 0);
+
+          if (allZeroBalance && selectedDealersData.length > 0) {
+            fileName = `${safeName}_zero_balance_dealers.pdf`;
+          } else {
+            fileName = `${safeName}_selected_dealers_balance_report.pdf`;
+          }
         }
       }
 
