@@ -17,6 +17,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useSession } from '@/contexts/SessionContext';
 
 interface Product {
   id: string;
@@ -89,11 +90,12 @@ const formSchema = z.object({
 });
 
 const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated }) => {
+  const { user, session } = useSession();
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
-  const [salesPersons, setSalesPersons] = useState<SalesPerson[]>([]);
+  const [operators, setOperators] = useState<SalesPerson[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [orderData, setOrderData] = useState<OrderToEdit | null>(null);
 
@@ -122,19 +124,19 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   const fetchInitialData = useCallback(async () => {
     try {
-      const [productsRes, dealersRes, salesPersonsRes] = await Promise.all([
+      const [productsRes, dealersRes, operatorsRes] = await Promise.all([
         supabase.from('products').select('id, code, name, dp, closing_stock, gst').order('name'),
         supabase.from('dealers').select('id, name').order('name'),
-        supabase.from('profiles').select('id, first_name, last_name').eq('user_type', 'sales_person').order('first_name'),
+        supabase.from('profiles').select('id, first_name, last_name').or('user_type.eq.online_orders,user_type.eq.admin').order('first_name'),
       ]);
 
       if (productsRes.error) throw productsRes.error;
       if (dealersRes.error) throw dealersRes.error;
-      if (salesPersonsRes.error) throw salesPersonsRes.error;
+      if (operatorsRes.error) throw operatorsRes.error;
 
       setProducts(productsRes.data || []);
       setDealers(dealersRes.data || []);
-      setSalesPersons(salesPersonsRes.data || []);
+      setOperators(operatorsRes.data || []);
     } catch (error: any) {
       console.error('Error fetching initial data:', error.message);
       showError('Failed to load form data.');
@@ -184,20 +186,24 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const isOnline = (orderRaw.dealers as any)?.name === 'Online Order';
       const onlineDetails = orderRaw.online_order_details?.[0];
 
-      setOrderData({
+      const orderToSet = {
         ...orderRaw,
         items: fetchedItems,
         is_online: isOnline,
         raw_item_name: onlineDetails?.raw_item_name,
         mapped_product_id: onlineDetails?.mapped_product_id,
-      });
+      };
+      setOrderData(orderToSet);
       
       setOrderItems(fetchedItems);
+      
+      const defaultSalesPersonId = (isOnline && user) ? user.id : orderRaw.user_id;
+
       form.reset({
         orderNumber: orderRaw.order_number,
         orderDate: orderRaw.order_date ? orderRaw.order_date.split('T')[0] : '',
         dealerId: orderRaw.dealer_id,
-        salesPersonId: orderRaw.user_id,
+        salesPersonId: defaultSalesPersonId,
         discountAmount: orderRaw.discount_amount || 0,
         billNo: orderRaw.bill_no || '',
         dispatchDate: orderRaw.dispatch_date ? orderRaw.dispatch_date.split('T')[0] : '',
@@ -211,7 +217,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     } finally {
       setLoading(false);
     }
-  }, [form]);
+  }, [form, user]);
 
   useEffect(() => {
     if (isOpen && orderId) {
@@ -431,11 +437,11 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Sales Person</Label>
+                <Label>{orderData?.is_online ? 'Operator' : 'Sales Person'}</Label>
                 <Select value={form.watch('salesPersonId')} onValueChange={(val) => form.setValue('salesPersonId', val)}>
-                  <SelectTrigger><SelectValue placeholder="Select Sales Person" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={orderData?.is_online ? 'Select Operator' : 'Select Sales Person'} /></SelectTrigger>
                   <SelectContent>
-                    {salesPersons.map(sp => <SelectItem key={sp.id} value={sp.id}>{sp.first_name} {sp.last_name}</SelectItem>)}
+                    {operators.map(op => <SelectItem key={op.id} value={op.id}>{op.first_name} {op.last_name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -491,20 +497,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                         <Search className="h-4 w-4 text-muted-foreground" />
                         <Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" />
                       </div>
-                      <ScrollArea className="h-[250px]">
-                        <div className="p-1">
-                          {filteredProducts.map((product) => (
-                            <Button
-                              key={product.id}
-                              variant="ghost"
-                              className="w-full justify-start font-normal h-auto py-2"
-                              onClick={() => {
-                                setNewItemProductId(product.id);
-                                setNewItemUnitPrice(product.dp);
-                                setNewItemGstPercent(parseFloat(product.gst) || 0);
-                                setIsProductPopoverOpen(false);
-                                setProductSearch('');
-                              }}
+                      <ScrollArea className="h-[250px]"><div className="p-1">{filteredProducts.map((product) => (
+                            <Button 
+                              key={product.id} 
+                              variant="ghost" 
+                              className="w-full justify-start font-normal h-auto py-2" 
+                              onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setNewItemGstPercent(parseFloat(product.gst) || 0); setIsProductPopoverOpen(false); setProductSearch(''); }}
                             >
                               <div className="flex flex-col items-start w-full">
                                 <div className="flex items-center justify-between w-full gap-2">
@@ -520,9 +518,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                 </div>
                               </div>
                             </Button>
-                          ))}
-                        </div>
-                      </ScrollArea>
+                          ))}</div></ScrollArea>
                     </PopoverContent>
                   </Popover>
                 </div>
