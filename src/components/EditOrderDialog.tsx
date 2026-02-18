@@ -94,6 +94,38 @@ const formSchema = z.object({
   clientName: z.string().optional(),
 });
 
+// Helper function to fetch all products with pagination
+const fetchAllProducts = async (): Promise<Product[]> => {
+  let allProducts: Product[] = [];
+  let page = 0;
+  const pageSize = 1000; // A common page size for Supabase
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, code, name, dp, closing_stock, gst')
+      .order('name', { ascending: true })
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+
+    if (error) {
+      console.error("Error fetching products page:", error);
+      throw error;
+    }
+
+    if (data) {
+      allProducts.push(...data);
+    }
+
+    if (!data || data.length < pageSize) {
+      hasMore = false;
+    } else {
+      page++;
+    }
+  }
+  return allProducts;
+};
+
 const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated }) => {
   const { user, session } = useSession();
   const [loading, setLoading] = useState(true);
@@ -130,17 +162,16 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   const fetchInitialData = useCallback(async () => {
     try {
-      const [productsRes, dealersRes, usersRes] = await Promise.all([
-        supabase.from('products').select('id, code, name, dp, closing_stock, gst').order('name').limit(10000),
+      const [productsData, dealersRes, usersRes] = await Promise.all([
+        fetchAllProducts(),
         supabase.from('dealers').select('id, name').order('name'),
         supabase.from('profiles').select('id, first_name, last_name, user_type').in('user_type', ['sales_person', 'online_orders', 'admin']).order('first_name'),
       ]);
 
-      if (productsRes.error) throw productsRes.error;
       if (dealersRes.error) throw dealersRes.error;
       if (usersRes.error) throw usersRes.error;
 
-      setProducts(productsRes.data || []);
+      setProducts(productsData || []);
       setDealers(dealersRes.data || []);
       setAssignableUsers(usersRes.data || []);
     } catch (error: any) {
