@@ -73,7 +73,7 @@ const OnlineOrderDispatchDashboard = () => {
   
   const [filterOrderNumberProcess, setFilterOrderNumberProcess] = useState("");
   const [filterOrderDate, setFilterOrderDate] = useState("");
-  const [filterGatepassDate, setFilterGatepassDate] = useState("");
+  const [filterGatepassDate, setFilterGatepassDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
@@ -619,14 +619,9 @@ const OnlineOrderDispatchDashboard = () => {
                   <Printer className="mr-2 h-4 w-4" /> Print Selected Gatepasses ({selectedGatepassCreatedIds.length})
                 </Button>
               </div>
+              <CardDescription className="text-green-100">Showing all gatepasses created today for online orders.</CardDescription>
             </CardHeader>
             <CardContent className="p-4 space-y-4">
-              <div className="flex items-end gap-4">
-                <div className="flex-grow max-w-xs">
-                  <Label>Filter by Gatepass Date</Label>
-                  <Input type="date" value={filterGatepassDate} onChange={(e) => setFilterGatepassDate(e.target.value)} />
-                </div>
-              </div>
               <ScrollArea className="h-[400px] border rounded-md">
                 <Table>
                   <TableHeader>
