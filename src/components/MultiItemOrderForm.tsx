@@ -112,6 +112,13 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     return orderItems.reduce((total, item) => total + item.total_price, 0);
   }, [orderItems]);
 
+  useEffect(() => {
+    const subtotalAfterDiscount = preGlobalDiscountTotal - discountAmount;
+    const roundedTotal = Math.round(subtotalAfterDiscount);
+    const calculatedRoundOff = roundedTotal - subtotalAfterDiscount;
+    setRoundOff(parseFloat(calculatedRoundOff.toFixed(2)));
+  }, [preGlobalDiscountTotal, discountAmount]);
+
   const finalOrderValue = useMemo(() => {
     return Math.max(0, preGlobalDiscountTotal - discountAmount + roundOff);
   }, [preGlobalDiscountTotal, discountAmount, roundOff]);

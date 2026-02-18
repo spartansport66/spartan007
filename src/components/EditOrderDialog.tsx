@@ -249,6 +249,14 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   const discountAmountValue = form.watch('discountAmount');
   const roundOffValue = form.watch('roundOff');
+
+  useEffect(() => {
+    const subtotalAfterDiscount = preGlobalDiscountTotal - (Number(discountAmountValue) || 0);
+    const roundedTotal = Math.round(subtotalAfterDiscount);
+    const calculatedRoundOff = roundedTotal - subtotalAfterDiscount;
+    form.setValue('roundOff', parseFloat(calculatedRoundOff.toFixed(2)));
+  }, [preGlobalDiscountTotal, discountAmountValue, form]);
+
   const finalOrderValue = useMemo(() => {
     const discount = Number(discountAmountValue) || 0;
     const roundOff = Number(roundOffValue) || 0;
