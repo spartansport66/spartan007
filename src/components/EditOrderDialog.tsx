@@ -18,6 +18,7 @@ import * as z from 'zod';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSession } from '@/contexts/SessionContext';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 
 interface Product {
   id: string;
@@ -68,6 +69,8 @@ interface OrderToEdit {
   is_online: boolean;
   raw_item_name?: string | null;
   mapped_product_id?: string | null;
+  client_name?: string | null;
+  platform_order_number?: string | null;
 }
 
 interface EditOrderDialogProps {
@@ -87,6 +90,7 @@ const formSchema = z.object({
   dispatchDate: z.string().nullable().optional(),
   roundOff: z.preprocess((val) => Number(val), z.number().default(0)),
   mappedProductId: z.string().uuid().nullable().optional(),
+  clientName: z.string().optional(),
 });
 
 const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated }) => {
@@ -119,6 +123,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       dispatchDate: '',
       roundOff: 0,
       mappedProductId: null,
+      clientName: '',
     },
   });
 
@@ -151,7 +156,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         .select(`
           id, order_number, order_date, dealer_id, user_id, total_amount, discount_amount, round_off, bill_no, dispatch_date,
           dealers (name),
-          online_order_details (raw_item_name, mapped_product_id),
+          online_order_details (client_name, platform_order_number, raw_item_name, mapped_product_id),
           sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst))
         `)
         .eq('id', id)
@@ -186,12 +191,14 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const isOnline = (orderRaw.dealers as any)?.name === 'Online Order';
       const onlineDetails = orderRaw.online_order_details?.[0];
 
-      const orderToSet = {
+      const orderToSet: OrderToEdit = {
         ...orderRaw,
         items: fetchedItems,
         is_online: isOnline,
         raw_item_name: onlineDetails?.raw_item_name,
         mapped_product_id: onlineDetails?.mapped_product_id,
+        client_name: onlineDetails?.client_name,
+        platform_order_number: onlineDetails?.platform_order_number,
       };
       setOrderData(orderToSet);
       
@@ -209,6 +216,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         dispatchDate: orderRaw.dispatch_date ? orderRaw.dispatch_date.split('T')[0] : '',
         roundOff: orderRaw.round_off || 0,
         mappedProductId: onlineDetails?.mapped_product_id || null,
+        clientName: onlineDetails?.client_name || '',
       });
 
     } catch (error: any) {
@@ -351,6 +359,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           .from('online_order_details')
           .update({
             mapped_product_id: values.mappedProductId || null,
+            client_name: values.clientName,
           })
           .eq('order_id', orderData.id);
         if (onlineUpdateError) throw onlineUpdateError;
@@ -457,7 +466,24 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
             {orderData?.is_online && (
               <div className="p-4 border rounded-md bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 space-y-4">
-                <h3 className="font-semibold text-yellow-800 dark:text-yellow-200">Online Order Mapping</h3>
+                <h3 className="font-semibold text-yellow-800 dark:text-yellow-200">Online Order Details</h3>
+                <div className="space-y-2">
+                  <Label>Platform Order #</Label>
+                  <Input value={orderData.platform_order_number || 'N/A'} readOnly className="bg-muted" />
+                </div>
+                <FormField
+                  control={form.control}
+                  name="clientName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Customer Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter customer name" {...field} value={field.value || ''} disabled={isSubmitting} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <p className="text-sm text-yellow-700 dark:text-yellow-300">
                   <strong>Extracted Item:</strong> {orderData.raw_item_name}
                 </p>
@@ -493,10 +519,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[400px] p-0" align="start">
-                      <div className="p-2 border-b flex items-center gap-2">
-                        <Search className="h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" />
-                      </div>
+                      <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
                       <ScrollArea className="h-[250px]"><div className="p-1">{filteredProducts.map((product) => (
                             <Button 
                               key={product.id} 
