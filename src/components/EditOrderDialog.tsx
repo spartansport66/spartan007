@@ -38,7 +38,6 @@ interface SalesPerson {
   id: string;
   first_name: string;
   last_name: string;
-  user_type: string;
 }
 
 interface OrderItem {
@@ -100,7 +99,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
-  const [assignableUsers, setAssignableUsers] = useState<SalesPerson[]>([]);
+  const [operators, setOperators] = useState<SalesPerson[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [orderData, setOrderData] = useState<OrderToEdit | null>(null);
 
@@ -130,19 +129,19 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   const fetchInitialData = useCallback(async () => {
     try {
-      const [productsRes, dealersRes, usersRes] = await Promise.all([
+      const [productsRes, dealersRes, operatorsRes] = await Promise.all([
         supabase.from('products').select('id, code, name, dp, closing_stock, gst').order('name'),
         supabase.from('dealers').select('id, name').order('name'),
-        supabase.from('profiles').select('id, first_name, last_name, user_type').in('user_type', ['sales_person', 'online_orders', 'admin']).order('first_name'),
+        supabase.from('profiles').select('id, first_name, last_name').or('user_type.eq.online_orders,user_type.eq.admin').order('first_name'),
       ]);
 
       if (productsRes.error) throw productsRes.error;
       if (dealersRes.error) throw dealersRes.error;
-      if (usersRes.error) throw usersRes.error;
+      if (operatorsRes.error) throw operatorsRes.error;
 
       setProducts(productsRes.data || []);
       setDealers(dealersRes.data || []);
-      setAssignableUsers(usersRes.data || []);
+      setOperators(operatorsRes.data || []);
     } catch (error: any) {
       console.error('Error fetching initial data:', error.message);
       showError('Failed to load form data.');
@@ -234,15 +233,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       fetchOrderDetails(orderId);
     }
   }, [isOpen, orderId, fetchInitialData, fetchOrderDetails]);
-
-  const usersForDropdown = useMemo(() => {
-    if (!orderData) return [];
-    if (orderData.is_online) {
-      return assignableUsers.filter(u => u.user_type === 'online_orders' || u.user_type === 'admin');
-    } else {
-      return assignableUsers.filter(u => u.user_type === 'sales_person');
-    }
-  }, [orderData, assignableUsers]);
 
   const totalTaxableValue = useMemo(() => {
     return orderItems.reduce((total, item) => total + item.taxable_value, 0);
@@ -460,7 +450,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                 <Select value={form.watch('salesPersonId')} onValueChange={(val) => form.setValue('salesPersonId', val)}>
                   <SelectTrigger><SelectValue placeholder={orderData?.is_online ? 'Select Operator' : 'Select Sales Person'} /></SelectTrigger>
                   <SelectContent>
-                    {usersForDropdown.map(p => <SelectItem key={p.id} value={p.id}>{p.first_name} {p.last_name}</SelectItem>)}
+                    {operators.map(op => <SelectItem key={op.id} value={op.id}>{op.first_name} {op.last_name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
