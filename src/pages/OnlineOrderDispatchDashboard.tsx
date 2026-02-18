@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Check, Trash2, ListChecks, Package, User, Play, Printer, ChevronsUpDown, FileText, Truck, Eraser, AlertCircle, Eye, EyeOff, Copy, X, Edit, Search } from 'lucide-react';
+import { Loader2, ArrowLeft, Check, Trash2, ListChecks, Package, User, Play, Printer, ChevronsUpDown, FileText, Truck, Eraser, AlertCircle, Eye, EyeOff, Copy, X, Edit, Search, LogOut } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -56,7 +56,6 @@ const OnlineOrderDispatchDashboard = () => {
   const [selectedCreatedIds, setSelectedCreatedIds] = useState<string[]>([]);
   
   const [productSearch, setProductSearch] = useState("");
-  const [companyName, setCompanyName] = useState<string | null>(null);
   const [filterOrderNumberProcess, setFilterOrderNumberProcess] = useState("");
 
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
@@ -67,15 +66,11 @@ const OnlineOrderDispatchDashboard = () => {
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
     try {
-      const [productsRes, companyRes] = await Promise.all([
-        supabase.from('products').select('id, name, code, dp, gst').order('name'),
-        supabase.from('company_info').select('company_name').limit(1).single()
-      ]);
-
-      setProducts(productsRes.data || []);
-      setCompanyName(companyRes.data?.company_name || null);
+      const { data, error } = await supabase.from('products').select('id, name, code, dp, gst').order('name');
+      if (error) throw error;
+      setProducts(data || []);
     } catch (error: any) {
-      showError("Failed to load initial data.");
+      showError("Failed to load product data.");
     } finally {
       setLoading(false);
     }
@@ -218,6 +213,21 @@ const OnlineOrderDispatchDashboard = () => {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error && error.message !== 'Auth session missing!') {
+        showError(`Logout failed: ${error.message}.`);
+      } else {
+        showSuccess('Logged out successfully!');
+      }
+    } catch (error: any) {
+      showError(`An unexpected error occurred during logout: ${error.message}.`);
+    } finally {
+      navigate('/');
+    }
+  };
+
   const filteredProducts = useMemo(() => {
     if (!productSearch) return products;
     const search = productSearch.toLowerCase();
@@ -245,7 +255,9 @@ const OnlineOrderDispatchDashboard = () => {
             <ArrowLeft className="h-4 w-4" /> Back to Dashboard
           </Button>
           <h1 className="text-3xl font-bold text-primary">Online Order Dispatch</h1>
-          <div className="w-fit"></div>
+          <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2">
+            <LogOut className="h-4 w-4" /> Logout
+          </Button>
         </div>
 
         <Card>

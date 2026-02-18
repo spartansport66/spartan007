@@ -101,12 +101,12 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <DropdownMenuSeparator />
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => navigate('/online-order-dashboard')}>
-              <ListChecks className="h-4 w-4 mr-2" /> Process Orders
+              <ListChecks className="h-4 w-4 mr-2" /> Extract & Stage Orders
             </DropdownMenuItem>
           </SheetClose>
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => navigate('/online-order-dispatch-dashboard')}>
-              <Truck className="h-4 w-4 mr-2" /> Dispatch Dashboard
+              <Truck className="h-4 w-4 mr-2" /> Map & Dispatch
             </DropdownMenuItem>
           </SheetClose>
           <DropdownMenuSeparator />
