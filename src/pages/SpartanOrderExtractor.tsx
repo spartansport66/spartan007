@@ -44,26 +44,18 @@ const SpartanOrderExtractor = () => {
     const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
 
     // 3. Item
+    // Look for the text after "1" and before a 6-8 digit HSN code.
+    const itemMatch = text.match(/1\s+([\s\S]+?)\s+\d{6,8}/i);
     let item = "N/A";
-    // Try to find the item in a table structure. Look for a line starting with '1'
-    // followed by the item name, then an HSN code. This is a common pattern.
-    const itemMatch = text.match(/^1\s+([^\n]+?)\s+\d{6,8}/m);
     if (itemMatch) {
-        item = itemMatch[1].trim();
-    } else {
-        // Fallback: Look for the text between the "Description" header and the "HSN" header.
-        // This is less reliable as spacing can vary.
-        const fallbackItemMatch = text.match(/Description\n([\s\S]+?)\nHSN/i);
-        if (fallbackItemMatch) {
-            item = fallbackItemMatch[1].trim().split('\n')[0].trim();
-        }
+        // Clean up the item name, remove newlines and extra spaces
+        item = itemMatch[1].trim().replace(/\s+/g, ' ');
     }
 
     // 4. Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
-    // Capture the block after "Bill To:" until a known next section starts.
-    const billToBlockMatch = text.match(/Bill To:\s*\n([\s\S]+?)(?=\nGST No|\nState Code|\nShip To:|$)/i);
+    const billToBlockMatch = text.match(/Bill To:\s*\n([\s\S]+?)(?=GST No|State Code|GSTIN)/i);
     if (billToBlockMatch) {
         const billToBlock = billToBlockMatch[1].trim();
         const lines = billToBlock.split('\n').map(line => line.trim()).filter(line => line);
@@ -77,7 +69,6 @@ const SpartanOrderExtractor = () => {
 
     // Final check
     if (item === "N/A" || customerName === "Unknown" || amount === "0.00") {
-        console.log("Spartan Extraction Failed:", { orderNo, item, customerName, amount });
         return null;
     }
 
