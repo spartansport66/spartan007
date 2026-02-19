@@ -34,28 +34,31 @@ const SpartanOrderExtractor = () => {
   const [showRawText, setShowRawText] = useState(false);
 
   const extractSpartan = (text: string): ExtractedOrder | null => {
-    // 1. Order Number
+    // 1. Order Number - More flexible regex
     const orderNoMatch = text.match(/Invoice Number\s*[-#:]\s*(\d+)/i);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[1];
 
-    // 2. Amount
-    const amountMatch = text.match(/Total Amount\s*(?:Rs\.?\s*)?([\d,]+\.\d{2})/i);
+    // 2. Amount - More flexible regex
+    const amountMatch = text.match(/(?:Total Amount|Grand Total)\s*(?:Rs\.?\s*)?([\d,]+\.\d{2})/i);
     const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
 
-    // 3. Item
-    // Look for the text after "1" and before a 6-8 digit HSN code.
-    const itemMatch = text.match(/1\s+([\s\S]+?)\s+\d{6,8}/i);
+    // 3. Item - More robust regex
+    // Looks for the line after the table headers that starts with '1'
+    const itemMatch = text.match(/TOTAL \(Including GST\)\s*\n\s*1\s+([^\n]+)/i);
     let item = "N/A";
     if (itemMatch) {
-        // Clean up the item name, remove newlines and extra spaces
-        item = itemMatch[1].trim().replace(/\s+/g, ' ');
+        // The item name is the first part, before the HSN code (a long number)
+        const itemLine = itemMatch[1].trim();
+        const hsnSplit = itemLine.split(/\s+\d{6,8}\s+/); // Split by HSN code
+        item = hsnSplit[0].trim();
     }
 
-    // 4. Customer Name and Address
+    // 4. Customer Name and Address - More robust regex
     let customerName = "Unknown";
     let address = "N/A";
-    const billToBlockMatch = text.match(/Bill To:\s*\n([\s\S]+?)(?=GST No|State Code|GSTIN)/i);
+    // Capture the block after "Bill To:" until one of the stop words
+    const billToBlockMatch = text.match(/Bill To:\s*\n([\s\S]+?)(?=GST No|State Code|GSTIN|Invoice Number|Date of Issue)/i);
     if (billToBlockMatch) {
         const billToBlock = billToBlockMatch[1].trim();
         const lines = billToBlock.split('\n').map(line => line.trim()).filter(line => line);
@@ -67,7 +70,7 @@ const SpartanOrderExtractor = () => {
         }
     }
 
-    // Final check
+    // Final check - if any of the core details are missing, it's not a valid entry.
     if (item === "N/A" || customerName === "Unknown" || amount === "0.00") {
         return null;
     }
