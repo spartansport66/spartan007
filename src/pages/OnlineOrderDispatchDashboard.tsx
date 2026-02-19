@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -60,6 +60,7 @@ const formatDate = (dateString: string | null) => {
 
 const OnlineOrderDispatchDashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isAdmin, userType, loading: sessionLoading } = useSession();
   const [activeTab, setActiveTab] = useState("process");
   const [loading, setLoading] = useState(true);
@@ -84,6 +85,16 @@ const OnlineOrderDispatchDashboard = () => {
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
   const [isEditOrderDialogOpen, setIsEditOrderDialogOpen] = useState(false);
   const [selectedOrderIdForEdit, setSelectedOrderIdForEdit] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    if (tab === 'invoice-process') {
+      setActiveTab('invoice-process');
+    } else {
+      setActiveTab('process');
+    }
+  }, [location.search]);
 
   const fetchInitialData = useCallback(async () => {
     setLoading(true);

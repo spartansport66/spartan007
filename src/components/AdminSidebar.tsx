@@ -111,6 +111,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
               <Truck className="h-4 w-4 mr-2" /> Map & Dispatch
             </DropdownMenuItem>
           </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/online-order-dispatch-dashboard?tab=invoice-process')}>
+              <FileText className="h-4 w-4 mr-2" /> Process from Invoice
+            </DropdownMenuItem>
+          </SheetClose>
           <DropdownMenuSeparator />
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => navigate('/flipkart-extractor')}>
