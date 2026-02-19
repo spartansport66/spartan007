@@ -34,8 +34,8 @@ const SpartanOrderExtractor = () => {
   const [showRawText, setShowRawText] = useState(false);
 
   const extractSpartan = (text: string): ExtractedOrder | null => {
-    // 1. Order Number
-    const orderNoMatch = text.match(/Invoice Number\s*[-#:]\s*(\d+)/i);
+    // 1. Order Number - More flexible separator
+    const orderNoMatch = text.match(/Invoice Number\s*[-#:]?\s*(\d+)/i);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[1];
 
@@ -43,19 +43,14 @@ const SpartanOrderExtractor = () => {
     const amountMatch = text.match(/Total Amount\s*(?:Rs\.?\s*)?([\d,]+\.\d{2})/i);
     const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
 
-    // 3. Item
-    // Look for the text after "1" and before a 6-8 digit HSN code.
-    const itemMatch = text.match(/1\s+([\s\S]+?)\s+\d{6,8}/i);
-    let item = "N/A";
-    if (itemMatch) {
-        // Clean up the item name, remove newlines and extra spaces
-        item = itemMatch[1].trim().replace(/\s+/g, ' ');
-    }
+    // 3. Item - More robust against whitespace issues
+    const itemMatch = text.match(/TOTAL \(Including GST\)\s+1\s+([^\n]+)/i);
+    const item = itemMatch ? itemMatch[1].trim() : "N/A";
 
-    // 4. Customer Name and Address
+    // 4. Customer Name and Address - More robust end condition
     let customerName = "Unknown";
     let address = "N/A";
-    const billToBlockMatch = text.match(/Bill To:\s*\n([\s\S]+?)(?=GST No|State Code|GSTIN)/i);
+    const billToBlockMatch = text.match(/Bill To:\s*([\s\S]+?)(?=Invoice Date|Ship To:|GST No|State Code|GSTIN)/i);
     if (billToBlockMatch) {
         const billToBlock = billToBlockMatch[1].trim();
         const lines = billToBlock.split('\n').map(line => line.trim()).filter(line => line);
