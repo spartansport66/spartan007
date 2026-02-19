@@ -35,8 +35,6 @@ interface OrderDetail {
   dispatch_number: number | null;
   items: OrderItemDetail[];
   is_online: boolean;
-  mapped_product_id?: string | null;
-  raw_item_name?: string | null;
 }
 
 interface GatePassOrderSearchProps {
@@ -82,7 +80,6 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
           id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number, gate_pass_dispatch_time,
           dealers (name, address, phone),
           profiles:user_id (first_name, last_name),
-          online_order_details (raw_item_name, mapped_product_id),
           sales (quantity, products (name, code))
         `)
         .eq('dispatch_number', searchNum)
@@ -103,10 +100,10 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
       }
 
       const isOnline = (data.dealers as any)?.name === 'Online Order';
-      const onlineDetails = data.online_order_details?.[0];
+      const hasSalesItems = data.sales && data.sales.length > 0;
 
-      if (isOnline && !onlineDetails?.mapped_product_id) {
-        showError(`Order #${data.order_number} is an online order but has not been mapped to a product yet. Please ask Admin to map it.`);
+      if (isOnline && !data.gate_pass_dispatch_time && !hasSalesItems) {
+        showError(`Order #${data.order_number} is an online order that has not been processed by an admin yet. Stock has not been assigned.`);
         setOrder(null);
         return;
       }
@@ -128,8 +125,6 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         dispatch_date: data.dispatch_date,
         dispatch_number: data.dispatch_number,
         is_online: isOnline,
-        mapped_product_id: onlineDetails?.mapped_product_id,
-        raw_item_name: onlineDetails?.raw_item_name,
         items: (data.sales || []).map((sale: any) => ({
           product_name: sale.products?.name || 'N/A',
           quantity: sale.quantity,
@@ -156,31 +151,10 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
     try {
       const dispatchTime = new Date().toISOString();
       
-      // 1. If it's an online order, we need to create the sales record now to trigger stock out
-      if (order.is_online && order.mapped_product_id && order.items.length === 0) {
-        const { data: product } = await supabase
-          .from('products')
-          .select('gst, dp')
-          .eq('id', order.mapped_product_id)
-          .single();
-        
-        if (product) {
-          const gstPercent = parseFloat(product.gst) || 0;
-          const { error: salesError } = await supabase
-            .from('sales')
-            .insert({
-              order_id: order.id,
-              product_id: order.mapped_product_id,
-              quantity: 1,
-              unit_price: order.total_amount / (1 + gstPercent / 100),
-              gst_percent: gstPercent,
-              total_price: order.total_amount,
-            });
-          if (salesError) throw salesError;
-        }
-      }
+      // The sales record for online orders is now created during the admin dispatch step.
+      // The gate keeper's only responsibility is to set the gate_pass_dispatch_time.
 
-      // 2. Update the gate_pass_dispatch_time field
+      // Update the gate_pass_dispatch_time field
       const { error } = await supabase
         .from('orders')
         .update({ gate_pass_dispatch_time: dispatchTime })
@@ -263,13 +237,6 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
 
             <Separator />
 
-            {order.is_online && !isFullyDispatched && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md text-sm">
-                <p><strong>Online Item (Raw):</strong> {order.raw_item_name}</p>
-                <p className="text-xs text-muted-foreground mt-1">This item will be mapped to inventory and stock will be deducted upon final authorization.</p>
-              </div>
-            )}
-
             <h4 className="text-lg font-semibold">Items to Dispatch</h4>
             <div className="max-h-40 overflow-y-auto border rounded-md">
               <Table>
@@ -281,16 +248,10 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {order.items.length === 0 && !order.is_online ? (
+                  {order.items.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={3} className="text-center text-muted-foreground">
                         No items found for this order.
-                      </TableCell>
-                    </TableRow>
-                  ) : order.is_online && order.items.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center italic text-muted-foreground">
-                        Online order mapping pending final OUT...
                       </TableCell>
                     </TableRow>
                   ) : (
