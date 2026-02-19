@@ -39,7 +39,8 @@ import SpartanOrderExtractor from "./pages/SpartanOrderExtractor";
 import ProcessOnlineOrders from "./pages/ProcessOnlineOrders";
 import OnlineOrderDashboard from "./pages/OnlineOrderDashboard";
 import DatabaseBackup from "./pages/DatabaseBackup";
-import OnlineOrderDispatchDashboard from "./pages/OnlineOrderDispatchDashboard"; // New Import
+import OnlineOrderDispatchDashboard from "./pages/OnlineOrderDispatchDashboard";
+import ManualOrderEntry from "./pages/ManualOrderEntry"; // New Import
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -85,7 +86,8 @@ const AppContent = () => {
       <Route path="/process-online-orders" element={<ProcessOnlineOrders />} />
       <Route path="/online-order-dashboard" element={<OnlineOrderDashboard />} />
       <Route path="/database-backup" element={<DatabaseBackup />} />
-      <Route path="/online-order-dispatch-dashboard" element={<OnlineOrderDispatchDashboard />} /> {/* New Route */}
+      <Route path="/online-order-dispatch-dashboard" element={<OnlineOrderDispatchDashboard />} />
+      <Route path="/manual-order-entry" element={<ManualOrderEntry />} /> {/* New Route */}
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>

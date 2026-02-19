@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Check, Trash2, ListChecks, Package, User, Play, Printer, ChevronsUpDown, FileText, Truck, Eraser, AlertCircle, Eye, EyeOff, Copy, X, Edit, Search, LogOut } from 'lucide-react';
+import { Loader2, ArrowLeft, Check, Trash2, ListChecks, Package, User, Play, Printer, ChevronsUpDown, FileText, Truck, Eraser, AlertCircle, Eye, EyeOff, Copy, X, Edit, Search, LogOut, Keyboard } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -397,9 +397,14 @@ const OnlineOrderDispatchDashboard = () => {
             <ArrowLeft className="h-4 w-4" /> Back to Dashboard
           </Button>
           <h1 className="text-3xl font-bold text-primary">Online Order Dispatch</h1>
-          <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2">
-            <LogOut className="h-4 w-4" /> Logout
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => navigate('/manual-order-entry')} className="flex items-center gap-2">
+              <Keyboard className="h-4 w-4" /> Manual Entry
+            </Button>
+            <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2">
+              <LogOut className="h-4 w-4" /> Logout
+            </Button>
+          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -443,7 +448,12 @@ const OnlineOrderDispatchDashboard = () => {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
-                        <TableHead className="w-12"><Checkbox checked={selectedCreatedIds.length === filteredCreatedOrders.length && filteredCreatedOrders.length > 0} onCheckedChange={(checked) => handleSelectAllCreated(!!checked)} /></TableHead>
+                        <TableHead className="w-12">
+                          <Checkbox 
+                            checked={selectedCreatedIds.length === filteredCreatedOrders.length && filteredCreatedOrders.length > 0}
+                            onCheckedChange={(checked) => handleSelectAllCreated(!!checked)}
+                          />
+                        </TableHead>
                         <TableHead>Order #</TableHead>
                         <TableHead>Platform Order #</TableHead>
                         <TableHead className="w-[200px]">Customer Name</TableHead>
@@ -457,11 +467,17 @@ const OnlineOrderDispatchDashboard = () => {
                     </TableHeader>
                     <TableBody>
                       {filteredCreatedOrders.length === 0 ? (
-                        <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No pending online orders found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No pending online orders found matching your search.</TableCell></TableRow>
                       ) : (
                         filteredCreatedOrders.map((o) => (
                           <TableRow key={o.id} id={`order-row-${o.id}`} className={o.dispatched ? "opacity-50" : ""}>
-                            <TableCell><Checkbox checked={selectedCreatedIds.includes(o.id)} onCheckedChange={(checked) => handleSelectCreatedOrder(o.id, !!checked)} disabled={o.dispatched} /></TableCell>
+                            <TableCell>
+                              <Checkbox 
+                                checked={selectedCreatedIds.includes(o.id)}
+                                onCheckedChange={(checked) => handleSelectCreatedOrder(o.id, !!checked)}
+                                disabled={o.dispatched}
+                              />
+                            </TableCell>
                             <TableCell className="font-bold">#{o.order_number}</TableCell>
                             <TableCell className="font-mono text-xs">{o.platform_order_number}</TableCell>
                             <TableCell><Input className="h-8 text-xs font-medium" value={o.client_name} onChange={(e) => handleUpdateOrderField(o.id, 'client_name', e.target.value)} disabled={o.dispatched} placeholder="Customer Name" /></TableCell>
