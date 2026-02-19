@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Check, Trash2, ListChecks, Package, User, Play, Printer, ChevronsUpDown, FileText, Truck, Eraser, AlertCircle, Eye, EyeOff, Copy, X, Edit, Search, LogOut, Keyboard } from 'lucide-react';
+import { Loader2, ArrowLeft, Check, Trash2, ListChecks, Package, User, Play, Printer, ChevronsUpDown, FileText, Truck, Eraser, AlertCircle, Eye, EyeOff, Copy, X, Edit, Keyboard, LogOut, Search } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -347,6 +347,7 @@ const OnlineOrderDispatchDashboard = () => {
   const handleDeleteOrder = async (order: OnlineOrder) => {
     setIsProcessing(true);
     try {
+      // Delete associated records first
       await supabase.from('payments').delete().eq('order_id', order.id);
       await supabase.from('sales').delete().eq('order_id', order.id);
       await supabase.from('online_order_details').delete().eq('order_id', order.id);
@@ -358,6 +359,27 @@ const OnlineOrderDispatchDashboard = () => {
       fetchCreatedOrders();
     } catch (error: any) {
       showError(error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBulkDeleteOrders = async () => {
+    if (selectedCreatedIds.length === 0) return;
+    setIsProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .delete()
+        .in('id', selectedCreatedIds);
+
+      if (error) throw error;
+
+      showSuccess(`${selectedCreatedIds.length} order(s) deleted successfully.`);
+      setSelectedCreatedIds([]);
+      fetchCreatedOrders();
+    } catch (error: any) {
+      showError(`Failed to delete orders: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
@@ -425,10 +447,38 @@ const OnlineOrderDispatchDashboard = () => {
                     <CardTitle>Map & Dispatch Orders</CardTitle>
                     <CardDescription className="text-indigo-100">Link online items to actual products and generate gatepasses.</CardDescription>
                   </div>
-                  <Button onClick={handleBulkCreateGatepass} disabled={isProcessing || selectedCreatedIds.length === 0} className="bg-green-500 hover:bg-green-600">
-                    {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-                    Generate Gatepasses for Selected
-                  </Button>
+                  <div className="flex gap-2">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={isProcessing || selectedCreatedIds.length === 0}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Selected ({selectedCreatedIds.length})
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will permanently delete the {selectedCreatedIds.length} selected order(s) and all associated data. This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleBulkDeleteOrders} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                    <Button onClick={handleBulkCreateGatepass} disabled={isProcessing || selectedCreatedIds.length === 0} className="bg-green-500 hover:bg-green-600">
+                      {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                      Generate Gatepasses for Selected
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="p-4 space-y-4">
