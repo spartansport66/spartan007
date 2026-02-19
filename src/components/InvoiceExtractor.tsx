@@ -29,38 +29,51 @@ const InvoiceExtractor: React.FC<InvoiceExtractorProps> = ({ onDataExtracted }) 
   const [showRawText, setShowRawText] = useState(false);
 
   const extractDataFromText = (text: string): ExtractedInvoiceData | null => {
-    const orderNoMatch = text.match(/Order Number\s*:\s*(\d+)/i);
-    const billNoMatch = text.match(/Invoice Number\s*:\s*([^\n]+)/i);
-    const billDateMatch = text.match(/Invoice Date\s*:\s*([^\n]+)/i);
-    const totalAmountMatch = text.match(/Total Amount\s*Rs\.?\s*([\d,]+\.\d{2})/i);
+    // This function is updated to handle the Spartan invoice format.
+    
+    // Using more flexible regex to capture values that might be on new lines or have varied spacing.
+    const orderNoMatch = text.match(/Order No\.?\s*(?:Dt\.)?\s*:?\s*(\d+)/i);
+    const billNoMatch = text.match(/Invoice No\.?\s*:\s*([^\n\r]+)/i);
+    const billDateMatch = text.match(/Dated\s*:\s*([^\n\r]+)/i);
+    const totalAmountMatch = text.match(/Grand Total\s+([\d,]+\.\d{2})/i);
 
     if (!orderNoMatch || !billNoMatch || !billDateMatch || !totalAmountMatch) {
-      console.error("Failed to find one or more required fields: Order No, Bill No, Bill Date, Total Amount.");
+      console.error("Spartan invoice pattern not fully matched. Check PDF text in Debug View. Could not find one or more of: Order No, Invoice No, Dated, Grand Total.");
       return null;
     }
 
     const orderNo = orderNoMatch[1].trim();
     const billNo = billNoMatch[1].trim();
-    const billDate = new Date(billDateMatch[1].trim()).toISOString().split('T')[0];
+    
+    const dateParts = billDateMatch[1].trim().split('-');
+    let billDate = new Date().toISOString().split('T')[0];
+    if (dateParts.length === 3) {
+        // Assuming DD-MM-YYYY, converting to YYYY-MM-DD for consistency
+        billDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+    }
+    
     const totalAmount = parseFloat(totalAmountMatch[1].replace(/,/g, ''));
 
     const items: ExtractedInvoiceData['items'] = [];
-    const itemBlockMatch = text.match(/GST %\s+Total\s+([\s\S]+?)\s+TOTAL \(Including GST\)/i);
-    if (itemBlockMatch) {
-      const itemLine = itemBlockMatch[1].trim();
-      const nameMatch = itemLine.match(/^([\s\S]+?)\s+\d{4,}/);
-      const name = nameMatch ? nameMatch[1].trim().replace(/\s+/g, ' ') : "Unknown Item";
-      
-      const numbers = itemLine.match(/(\d+\.\d{2})/g);
-      if (numbers && numbers.length >= 2) {
-        const quantity = 1; // Assuming 1 for now
-        const unitPrice = parseFloat(numbers[0]);
-        const totalPrice = parseFloat(numbers[1]);
-        items.push({ name, quantity, unitPrice, totalPrice });
-      }
+    
+    // Try to find the item block. This is a best-effort extraction.
+    const itemsBlockMatch = text.match(/Amount\s*%\s*([\s\S]+?)\s*Total/i);
+    if (itemsBlockMatch) {
+        const itemContent = itemsBlockMatch[1];
+        // This regex is designed for the specific multi-line format of the item description.
+        const itemRegex = /\d+\s+([^\n]+)\s+\d{6,}\s+(\d+)\s+PCS\s+([\d.]+)\s+[\d.]+\s+([\d.]+)\n\n([^\n]+)/;
+        const match = itemContent.match(itemRegex);
+        if (match) {
+            const name = `${match[1].trim()} ${match[5].trim()}`;
+            const quantity = parseInt(match[2], 10);
+            const unitPrice = parseFloat(match[3]);
+            const totalPrice = parseFloat(match[4]);
+            items.push({ name, quantity, unitPrice, totalPrice });
+        }
     }
 
     if (items.length === 0) {
+      // Fallback if the complex table parsing fails
       items.push({ name: "Extracted Item (Manual Mapping Needed)", quantity: 1, unitPrice: totalAmount, totalPrice: totalAmount });
     }
 
