@@ -15,6 +15,7 @@ interface DispatchedOrder {
   dispatch_number: number;
   gate_pass_dispatch_time: string;
   dealer_name: string;
+  platform_order_number: string | null;
 }
 
 const GatePassDispatchedOrdersCard: React.FC = () => {
@@ -34,7 +35,8 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
           bill_no,
           dispatch_number,
           gate_pass_dispatch_time,
-          dealers (name)
+          dealers (name),
+          online_order_details (platform_order_number)
         `)
         .not('gate_pass_dispatch_time', 'is', null)
         .order('gate_pass_dispatch_time', { ascending: false })
@@ -49,6 +51,7 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
         dispatch_number: order.dispatch_number,
         gate_pass_dispatch_time: order.gate_pass_dispatch_time,
         dealer_name: order.dealers?.name || 'N/A',
+        platform_order_number: order.online_order_details?.[0]?.platform_order_number || null,
       }));
       setOrders(formattedOrders);
     } catch (error: any) {
@@ -91,7 +94,7 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead>Dispatch #</TableHead>
                       <TableHead>Order #</TableHead>
-                      <TableHead>Dealer</TableHead>
+                      <TableHead>Dealer / Platform Order</TableHead>
                       <TableHead>Gate Pass Time</TableHead>
                       <TableHead className="text-center">Details</TableHead>
                     </TableRow>
@@ -101,7 +104,12 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
                       <TableRow key={order.id} className="hover:bg-accent/50">
                         <TableCell className="font-medium">{order.dispatch_number}</TableCell>
                         <TableCell>#{order.order_number}</TableCell>
-                        <TableCell>{order.dealer_name}</TableCell>
+                        <TableCell>
+                          {order.dealer_name}
+                          {order.platform_order_number && (
+                            <span className="block text-xs text-muted-foreground font-mono">{order.platform_order_number}</span>
+                          )}
+                        </TableCell>
                         <TableCell>{new Date(order.gate_pass_dispatch_time).toLocaleString()}</TableCell>
                         <TableCell className="text-center">
                           <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Details">

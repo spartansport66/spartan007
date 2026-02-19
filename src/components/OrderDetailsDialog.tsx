@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { Loader2, Printer, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
+import { useSession } from '@/contexts/SessionContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -83,6 +84,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   onPrint,
   showGatePassButton = true,
 }) => {
+  const { userType } = useSession();
+  const isGateKeeper = userType === 'gate_keeper';
   const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
@@ -493,10 +496,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                   <TableRow>
                     <TableHead>Product</TableHead>
                     <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">DP</TableHead>
-                    <TableHead className="text-right">Disc %</TableHead>
-                    <TableHead className="text-right">GST %</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
+                    {!isGateKeeper && (
+                      <>
+                        <TableHead className="text-right">DP</TableHead>
+                        <TableHead className="text-right">Disc %</TableHead>
+                        <TableHead className="text-right">GST %</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                      </>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -505,10 +512,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                       <TableRow key={idx}>
                         <TableCell>{item.product_name} ({item.product_code})</TableCell>
                         <TableCell className="text-right">{item.quantity}</TableCell>
-                        <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">{item.discount_percent}%</TableCell>
-                        <TableCell className="text-right">{item.product_gst}%</TableCell>
-                        <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
+                        {!isGateKeeper && (
+                          <>
+                            <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">{item.discount_percent}%</TableCell>
+                            <TableCell className="text-right">{item.product_gst}%</TableCell>
+                            <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
+                          </>
+                        )}
                       </TableRow>
                     ))
                   ) : orderDetails.online_order_details?.mapped_product_name ? (
@@ -517,10 +528,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                         {orderDetails.online_order_details.mapped_product_name} ({orderDetails.online_order_details.mapped_product_code})
                       </TableCell>
                       <TableCell className="text-right">1</TableCell>
-                      <TableCell className="text-right">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">0%</TableCell>
-                      <TableCell className="text-right">0%</TableCell>
-                      <TableCell className="text-right font-medium">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                      {!isGateKeeper && (
+                        <>
+                          <TableCell className="text-right">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">0%</TableCell>
+                          <TableCell className="text-right">0%</TableCell>
+                          <TableCell className="text-right font-medium">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                        </>
+                      )}
                     </TableRow>
                   ) : (
                     <TableRow>
@@ -528,21 +543,27 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                         {orderDetails.online_order_details?.raw_item_name || "Pending Mapping"}
                       </TableCell>
                       <TableCell className="text-right">1</TableCell>
-                      <TableCell className="text-right">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">0%</TableCell>
-                      <TableCell className="text-right">0%</TableCell>
-                      <TableCell className="text-right font-medium">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                      {!isGateKeeper && (
+                        <>
+                          <TableCell className="text-right">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">0%</TableCell>
+                          <TableCell className="text-right">0%</TableCell>
+                          <TableCell className="text-right font-medium">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                        </>
+                      )}
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
-            <div className="text-right space-y-1">
-              {orderDetails.discount_amount > 0 && (
-                <p className="text-sm text-muted-foreground">Global Discount: -₹{orderDetails.discount_amount.toFixed(2)}</p>
-              )}
-              <p className="text-lg font-bold">Final Total: ₹{orderDetails.total_amount.toFixed(2)}</p>
-            </div>
+            {!isGateKeeper && (
+              <div className="text-right space-y-1">
+                {orderDetails.discount_amount > 0 && (
+                  <p className="text-sm text-muted-foreground">Global Discount: -₹{orderDetails.discount_amount.toFixed(2)}</p>
+                )}
+                <p className="text-lg font-bold">Final Total: ₹{orderDetails.total_amount.toFixed(2)}</p>
+              </div>
+            )}
           </div>
         ) : null}
         <DialogFooter className="flex flex-wrap gap-2">
