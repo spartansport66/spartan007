@@ -35,36 +35,39 @@ const SpartanOrderExtractor = () => {
 
   const extractSpartan = (text: string): ExtractedOrder | null => {
     // 1. Order Number
-    const orderNoMatch = text.match(/Invoice Number\s*[-#:]?\s*(\d+)/i);
+    const orderNoMatch = text.match(/Invoice Number\s*:\s*(\d+)/i);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[1];
 
     // 2. Amount
-    const amountMatch = text.match(/Total Amount\s*(?:Rs\.?\s*)?([\d,]+\.\d{2})/i);
+    const amountMatch = text.match(/Total Amount\s*Rs\.?\s*([\d,]+\.\d{2})/i);
     const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
 
-    // 3. Item Description
-    const itemMatch = text.match(/TOTAL \(Including GST\)\s+1\s+([^\n]+)/i);
-    let item = "N/A";
-    if (itemMatch) {
-        item = itemMatch[1].trim().replace(/\s+/g, ' ');
-    }
-
-    // 4. Customer Name and Address
+    // 3. Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
     const billToBlockMatch = text.match(/Bill To:\s*\n([\s\S]+?)(?=Invoice Date|Ship To:|GST No|State Code|GSTIN)/i);
     if (billToBlockMatch) {
-        const billToBlock = billToBlockMatch[1].trim();
-        const lines = billToBlock.split('\n').map(line => line.trim()).filter(line => line);
+        const lines = billToBlockMatch[1].trim().split('\n').map(line => line.trim()).filter(Boolean);
         if (lines.length > 0) {
             customerName = lines[0];
-            if (lines.length > 1) {
-                address = lines.slice(1).join(', ');
-            }
+            address = lines.slice(1).join(', ');
         }
     }
 
+    // 4. Item Description (more robust)
+    let item = "N/A";
+    const itemBlockMatch = text.match(/GST %\s+Total\s+([\s\S]+?)\s+TOTAL \(Including GST\)/i);
+    if (itemBlockMatch) {
+        const itemLine = itemBlockMatch[1].trim();
+        // The item name is everything before the HSN code (a long number, usually 8+ digits)
+        const itemNameMatch = itemLine.match(/^([\s\S]+?)\s+\d{8,}/);
+        if (itemNameMatch) {
+            item = itemNameMatch[1].trim().replace(/\s+/g, ' ');
+        }
+    }
+
+    // Final check to ensure we got something meaningful
     if (item === "N/A" || customerName === "Unknown" || amount === "0.00") {
         return null;
     }
