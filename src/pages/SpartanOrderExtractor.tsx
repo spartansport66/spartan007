@@ -34,19 +34,19 @@ const SpartanOrderExtractor = () => {
   const [showRawText, setShowRawText] = useState(false);
 
   const extractSpartan = (text: string): ExtractedOrder | null => {
-    // 1. Order Number
-    const orderNoMatch = text.match(/Invoice Number\s*:\s*(\d+)/i);
+    // 1. Order Number (More flexible)
+    const orderNoMatch = text.match(/(?:Order No|Invoice No)\.?\s*:?\s*(\d+)/i);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[1];
 
-    // 2. Amount
-    const amountMatch = text.match(/Total Amount\s*Rs\.?\s*([\d,]+\.\d{2})/i);
+    // 2. Amount (More flexible)
+    const amountMatch = text.match(/(?:Grand Total|Total Amount)\s*Rs\.?\s*([\d,]+\.\d{2})/i);
     const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
 
     // 3. Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
-    const billToBlockMatch = text.match(/Bill To:\s*\n([\s\S]+?)(?=Invoice Date|Ship To:|GST No|State Code|GSTIN)/i);
+    const billToBlockMatch = text.match(/Bill To:\s*-?\s*\n([\s\S]+?)(?=Invoice Date|Ship To:|GST No|State Code|GSTIN)/i);
     if (billToBlockMatch) {
         const lines = billToBlockMatch[1].trim().split('\n').map(line => line.trim()).filter(Boolean);
         if (lines.length > 0) {
@@ -55,21 +55,17 @@ const SpartanOrderExtractor = () => {
         }
     }
 
-    // 4. Item Description (more robust)
+    // 4. Item Description (New, more robust logic)
     let item = "N/A";
-    const itemBlockMatch = text.match(/GST %\s+Total\s+([\s\S]+?)\s+TOTAL \(Including GST\)/i);
+    // Look for the block between the headers and the "Total" line
+    const itemBlockMatch = text.match(/Amount\n\n\d+\s+([\s\S]+?)\s+\d{6,}/i);
     if (itemBlockMatch) {
-        const itemLine = itemBlockMatch[1].trim();
-        // The item name is everything before the HSN code (a long number, usually 8+ digits)
-        const itemNameMatch = itemLine.match(/^([\s\S]+?)\s+\d{8,}/);
-        if (itemNameMatch) {
-            item = itemNameMatch[1].trim().replace(/\s+/g, ' ');
-        }
+        item = itemBlockMatch[1].trim().replace(/\s+/g, ' ');
     }
 
-    // Final check to ensure we got something meaningful
+    // Final check
     if (item === "N/A" || customerName === "Unknown" || amount === "0.00") {
-        return null;
+        console.warn("Spartan Extractor: Could not extract all fields for order:", orderNo);
     }
 
     return { orderNo, customerName, address, item, amount };
