@@ -50,12 +50,17 @@ const SpartanOrderExtractor = () => {
 
     let customerName = "Unknown";
     let address = "N/A";
-    // Match the "Bill To:" block
-    const billToMatch = text.match(/Bill To:\s*\n([^\n]+)\n([\s\S]+?)(?=GST No|State Code)/i);
-    if (billToMatch) {
-        customerName = billToMatch[1].trim();
-        // Clean up address, removing extra spaces and joining with commas
-        address = billToMatch[2].trim().replace(/\s*\n\s*/g, ', ');
+    // Match the "Bill To:" block and parse it line by line
+    const billToBlockMatch = text.match(/Bill To:\s*\n([\s\S]+?)(?=GST No|State Code)/i);
+    if (billToBlockMatch) {
+        const billToBlock = billToBlockMatch[1].trim();
+        const lines = billToBlock.split('\n').map(line => line.trim()).filter(line => line); // Get non-empty lines
+        if (lines.length > 0) {
+            customerName = lines[0];
+            if (lines.length > 1) {
+                address = lines.slice(1).join(', ');
+            }
+        }
     }
 
     // If core details are missing, it's not a valid entry
