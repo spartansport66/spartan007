@@ -19,6 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSession } from '@/contexts/SessionContext';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Textarea } from '@/components/ui/textarea';
 
 interface Product {
   id: string;
@@ -90,7 +91,6 @@ const formSchema = z.object({
   billNo: z.string().nullable().optional(),
   dispatchDate: z.string().nullable().optional(),
   roundOff: z.preprocess((val) => Number(val), z.number().default(0)),
-  mappedProductId: z.string().uuid().nullable().optional(),
   clientName: z.string().optional(),
 });
 
@@ -155,7 +155,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       billNo: '',
       dispatchDate: '',
       roundOff: 0,
-      mappedProductId: null,
       clientName: '',
     },
   });
@@ -247,7 +246,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         billNo: orderRaw.bill_no || '',
         dispatchDate: orderRaw.dispatch_date ? orderRaw.dispatch_date.split('T')[0] : '',
         roundOff: orderRaw.round_off || 0,
-        mappedProductId: onlineDetails?.mapped_product_id || null,
         clientName: onlineDetails?.client_name || '',
       });
 
@@ -398,7 +396,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         const { error: onlineUpdateError } = await supabase
           .from('online_order_details')
           .update({
-            mapped_product_id: values.mappedProductId || null,
             client_name: values.clientName,
           })
           .eq('order_id', orderData.id);
@@ -507,7 +504,6 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                   </div>
                   <FormField control={form.control} name="clientName" render={({ field }) => (<FormItem><FormLabel>Customer Name</FormLabel><FormControl><Input placeholder="Enter customer name" {...field} value={field.value || ''} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
                   <p className="text-sm text-yellow-700 dark:text-yellow-300"><strong>Extracted Item:</strong> {orderData.raw_item_name}</p>
-                  <FormField control={form.control} name="mappedProductId" render={({ field }) => (<FormItem><FormLabel>Map to Actual Product</FormLabel><Select onValueChange={field.onChange} value={field.value || "none"}><FormControl><SelectTrigger><SelectValue placeholder="Select Actual Product" /></SelectTrigger></FormControl><SelectContent><SelectItem value="none">Not Mapped</SelectItem>{products.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.code})</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Stock will be deducted when the Gate Keeper authorizes the final OUT.</p><FormMessage /></FormItem>)} />
                 </div>
               )}
 
