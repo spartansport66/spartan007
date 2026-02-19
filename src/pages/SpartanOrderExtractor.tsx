@@ -34,7 +34,7 @@ const SpartanOrderExtractor = () => {
   const [showRawText, setShowRawText] = useState(false);
 
   const extractSpartan = (text: string): ExtractedOrder | null => {
-    // 1. Order Number - More flexible separator
+    // 1. Order Number
     const orderNoMatch = text.match(/Invoice Number\s*[-#:]?\s*(\d+)/i);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[1];
@@ -43,14 +43,17 @@ const SpartanOrderExtractor = () => {
     const amountMatch = text.match(/Total Amount\s*(?:Rs\.?\s*)?([\d,]+\.\d{2})/i);
     const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
 
-    // 3. Item - More robust against whitespace issues
+    // 3. Item Description
     const itemMatch = text.match(/TOTAL \(Including GST\)\s+1\s+([^\n]+)/i);
-    const item = itemMatch ? itemMatch[1].trim() : "N/A";
+    let item = "N/A";
+    if (itemMatch) {
+        item = itemMatch[1].trim().replace(/\s+/g, ' ');
+    }
 
-    // 4. Customer Name and Address - More robust end condition
+    // 4. Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
-    const billToBlockMatch = text.match(/Bill To:\s*([\s\S]+?)(?=Invoice Date|Ship To:|GST No|State Code|GSTIN)/i);
+    const billToBlockMatch = text.match(/Bill To:\s*\n([\s\S]+?)(?=Invoice Date|Ship To:|GST No|State Code|GSTIN)/i);
     if (billToBlockMatch) {
         const billToBlock = billToBlockMatch[1].trim();
         const lines = billToBlock.split('\n').map(line => line.trim()).filter(line => line);
@@ -62,7 +65,6 @@ const SpartanOrderExtractor = () => {
         }
     }
 
-    // Final check
     if (item === "N/A" || customerName === "Unknown" || amount === "0.00") {
         return null;
     }
@@ -89,7 +91,6 @@ const SpartanOrderExtractor = () => {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        // Joining with newline is crucial for preserving the document's line structure
         const pageText = textContent.items.map((item: any) => item.str).join('\n');
         fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
 
