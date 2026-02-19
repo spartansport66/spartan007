@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,12 +8,13 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { Loader2, LogOut, ArrowLeft, Truck } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import GatePassOrderSearch from '@/components/GatePassOrderSearch';
-import GatePassDispatchedOrdersCard from '@/components/GatePassDispatchedOrdersCard'; // NEW IMPORT
+import GatePassDispatchedOrdersCard from '@/components/GatePassDispatchedOrdersCard';
+import GatePassQueueCard from '@/components/GatePassQueueCard'; // NEW IMPORT
 
 const GatePassDashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, userType } = useSession();
-  const [refreshKey, setRefreshKey] = useState(0); // To force refresh of search component if needed
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -42,7 +43,6 @@ const GatePassDashboard = () => {
   };
   
   const handleDispatchSuccess = () => {
-    // Force refresh of both the search component (to clear it) and the dispatched list
     setRefreshKey(prev => prev + 1);
   };
 
@@ -61,7 +61,7 @@ const GatePassDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
-      <div className="w-full max-w-4xl">
+      <div className="w-full max-w-7xl">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-primary flex items-center gap-2">
             <Truck className="h-6 w-6" /> Gate Pass Dashboard
@@ -71,9 +71,14 @@ const GatePassDashboard = () => {
           </Button>
         </div>
 
-        <div className="space-y-6">
-          <GatePassOrderSearch key={`search-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} />
-          <GatePassDispatchedOrdersCard key={`dispatched-${refreshKey}`} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-1 space-y-6">
+            <GatePassOrderSearch key={`search-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} />
+          </div>
+          <div className="lg:col-span-2 space-y-6">
+            <GatePassQueueCard key={`queue-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} />
+            <GatePassDispatchedOrdersCard key={`dispatched-${refreshKey}`} />
+          </div>
         </div>
       </div>
       <MadeWithDyad />
