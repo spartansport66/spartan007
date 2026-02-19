@@ -36,8 +36,7 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
           bill_no,
           dispatch_number,
           gate_pass_dispatch_time,
-          dealers (name),
-          online_order_details (platform_order_number, client_name)
+          dealers (name)
         `)
         .not('gate_pass_dispatch_time', 'is', null)
         .order('gate_pass_dispatch_time', { ascending: false })
@@ -45,16 +44,32 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
 
       if (ordersError) throw ordersError;
 
-      const formattedOrders: DispatchedOrder[] = (ordersData || []).map((order: any) => ({
-        id: order.id,
-        order_number: order.order_number,
-        bill_no: order.bill_no || 'N/A',
-        dispatch_number: order.dispatch_number,
-        gate_pass_dispatch_time: order.gate_pass_dispatch_time,
-        dealer_name: order.dealers?.name || 'N/A',
-        platform_order_number: order.online_order_details?.[0]?.platform_order_number || null,
-        client_name: order.online_order_details?.[0]?.client_name || null,
-      }));
+      const onlineOrderIds = (ordersData || []).filter(o => (o.dealers as any)?.name === 'Online Order').map(o => o.id);
+      let onlineDetailsMap = new Map();
+
+      if (onlineOrderIds.length > 0) {
+        const { data: onlineDetails, error: functionError } = await supabase.functions.invoke('get-online-order-details', {
+          body: { orderIds: onlineOrderIds },
+        });
+
+        if (functionError) throw functionError;
+
+        (onlineDetails || []).forEach((d: any) => onlineDetailsMap.set(d.order_id, d));
+      }
+
+      const formattedOrders: DispatchedOrder[] = (ordersData || []).map((order: any) => {
+        const details = onlineDetailsMap.get(order.id);
+        return {
+          id: order.id,
+          order_number: order.order_number,
+          bill_no: order.bill_no || 'N/A',
+          dispatch_number: order.dispatch_number,
+          gate_pass_dispatch_time: order.gate_pass_dispatch_time,
+          dealer_name: (order.dealers as any)?.name || 'N/A',
+          platform_order_number: details?.platform_order_number || null,
+          client_name: details?.client_name || null,
+        };
+      });
       setOrders(formattedOrders);
     } catch (error: any) {
       showError(`Failed to load dispatched orders: ${error.message}`);

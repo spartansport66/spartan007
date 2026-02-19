@@ -41,8 +41,7 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
           order_number,
           bill_no,
           dispatch_number,
-          dealers (name),
-          online_order_details (platform_order_number, client_name)
+          dealers (name)
         `)
         .eq('dispatched', true)
         .is('gate_pass_dispatch_time', null)
@@ -50,15 +49,31 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
 
       if (error) throw error;
 
-      const formattedQueue: QueueOrder[] = (data || []).map((order: any) => ({
-        id: order.id,
-        order_number: order.order_number,
-        dealer_name: order.dealers?.name || 'N/A',
-        bill_no: order.bill_no,
-        dispatch_number: order.dispatch_number,
-        platform_order_number: order.online_order_details?.[0]?.platform_order_number || null,
-        client_name: order.online_order_details?.[0]?.client_name || null,
-      }));
+      const onlineOrderIds = (data || []).filter(o => (o.dealers as any)?.name === 'Online Order').map(o => o.id);
+      let onlineDetailsMap = new Map();
+
+      if (onlineOrderIds.length > 0) {
+        const { data: onlineDetails, error: functionError } = await supabase.functions.invoke('get-online-order-details', {
+          body: { orderIds: onlineOrderIds },
+        });
+
+        if (functionError) throw functionError;
+
+        (onlineDetails || []).forEach((d: any) => onlineDetailsMap.set(d.order_id, d));
+      }
+
+      const formattedQueue: QueueOrder[] = (data || []).map((order: any) => {
+        const details = onlineDetailsMap.get(order.id);
+        return {
+          id: order.id,
+          order_number: order.order_number,
+          dealer_name: (order.dealers as any)?.name || 'N/A',
+          bill_no: order.bill_no,
+          dispatch_number: order.dispatch_number,
+          platform_order_number: details?.platform_order_number || null,
+          client_name: details?.client_name || null,
+        };
+      });
 
       setQueue(formattedQueue);
     } catch (error: any) {

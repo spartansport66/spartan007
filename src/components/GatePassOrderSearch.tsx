@@ -85,8 +85,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
           id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number, gate_pass_dispatch_time,
           dealers (name, address, phone),
           profiles:user_id (first_name, last_name),
-          sales (quantity, products (name, code)),
-          online_order_details (client_name, address, contact_no)
+          sales (quantity, products (name, code))
         `)
         .eq('dispatch_number', searchNum)
         .single();
@@ -114,6 +113,17 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         return;
       }
 
+      let onlineOrderDetails = null;
+      if (isOnline) {
+        const { data: onlineDetailsData, error: functionError } = await supabase.functions.invoke('get-online-order-details', {
+          body: { orderIds: [data.id] },
+        });
+        if (functionError) throw functionError;
+        if (onlineDetailsData && onlineDetailsData.length > 0) {
+          onlineOrderDetails = onlineDetailsData[0];
+        }
+      }
+
       const salesPersonName = `${(data.profiles as any)?.first_name || ''} ${(data.profiles as any)?.last_name || ''}`.trim() || 'N/A';
 
       const formattedOrder: OrderDetail = {
@@ -131,7 +141,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         dispatch_date: data.dispatch_date,
         dispatch_number: data.dispatch_number,
         is_online: isOnline,
-        online_order_details: data.online_order_details?.[0] || null,
+        online_order_details: onlineOrderDetails,
         items: (data.sales || []).map((sale: any) => ({
           product_name: sale.products?.name || 'N/A',
           quantity: sale.quantity,
@@ -158,10 +168,6 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
     try {
       const dispatchTime = new Date().toISOString();
       
-      // The sales record for online orders is now created during the admin dispatch step.
-      // The gate keeper's only responsibility is to set the gate_pass_dispatch_time.
-
-      // Update the gate_pass_dispatch_time field
       const { error } = await supabase
         .from('orders')
         .update({ gate_pass_dispatch_time: dispatchTime })
