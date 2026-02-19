@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Truck, Search, Edit, Printer, FileText, RotateCcw } from 'lucide-react';
+import { Loader2, Eye, Truck, Search, ChevronLeft, ChevronRight, Edit, Printer, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
@@ -15,7 +15,6 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { cn } from '@/lib/utils';
 
 interface OrderToDispatch {
   id: string;
@@ -35,19 +34,23 @@ interface OrdersToDispatchCardProps {
   onDispatchSuccess: (dispatchedOrderId: string) => void;
 }
 
+const PAGE_SIZE = 5;
+
 const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchSuccess }) => {
   const [orders, setOrders] = useState<OrderToDispatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isBulkPrinting, setIsBulkPrinting] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
-  const [viewedOrderIds, setViewedOrderIds] = useState<Set<string>>(new Set());
 
+  // Filter states
   const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
   const [filterDate, setFilterDate] = useState<string>('');
   
+  // Dialog states
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
   const [isDispatchDialogOpen, setIsDispatchDialogOpen] = useState(false);
@@ -77,34 +80,60 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
   const fetchOrdersAndDealers = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: dealersData, error: dealersError } = await supabase.from('dealers').select('id, name');
+      // Fetch all dealers for the filter dropdown
+      const { data: dealersData, error: dealersError } = await supabase
+        .from('dealers')
+        .select('id, name');
       if (dealersError) {
+        console.error('Error fetching dealers for filter:', dealersError.message);
         showError('Failed to load dealers for filter.');
         setAllDealers([]);
       } else {
         setAllDealers(dealersData.map(d => ({ value: d.id, label: d.name })));
       }
 
-      let query = supabase.from('orders').select(`id, order_number, order_date, total_amount, dealers (id, name)`).eq('dispatched', false).order('order_date', { ascending: true });
-      if (filterOrderNumber) query = query.eq('order_number', parseInt(filterOrderNumber));
-      if (filterDealerId) query = query.eq('dealer_id', filterDealerId);
-      if (filterDate) query = query.gte('order_date', `${filterDate}T00:00:00.000Z`).lte('order_date', `${filterDate}T23:59:59.999Z`);
+      // Build the query for orders awaiting dispatch
+      let query = supabase
+        .from('orders')
+        .select(`
+          id, order_number, order_date, total_amount,
+          dealers (id, name)
+        `)
+        .eq('dispatched', false)
+        .order('order_date', { ascending: true });
+
+      // Apply filters
+      if (filterOrderNumber) {
+        query = query.eq('order_number', parseInt(filterOrderNumber));
+      }
+      if (filterDealerId) {
+        query = query.eq('dealer_id', filterDealerId);
+      }
+      if (filterDate) {
+        const startOfDay = `${filterDate}T00:00:00.000Z`;
+        const endOfDay = `${filterDate}T23:59:59.999Z`;
+        query = query.gte('order_date', startOfDay).lte('order_date', endOfDay);
+      }
 
       const { data: ordersData, error: ordersError } = await query;
       if (ordersError) {
-        showError('Failed to load orders.');
+        console.error('Error fetching orders to dispatch:', ordersError.message);
+        showError('Failed to load orders to dispatch.');
         setOrders([]);
       } else {
-        setOrders((ordersData || []).map((order: any) => ({
+        const formattedOrders: OrderToDispatch[] = (ordersData || []).map((order: any) => ({
           id: order.id,
           order_number: order.order_number,
           order_date: order.order_date,
           total_amount: order.total_amount,
           dealer_name: order.dealers?.name || 'N/A',
           dealer_id: order.dealers?.id || '',
-        })));
+        }));
+        setOrders(formattedOrders);
+        setCurrentPage(1); // Reset to first page on new fetch
       }
     } catch (error: any) {
+      console.error('Error in fetchOrdersAndDealers:', error.message);
       showError('An unexpected error occurred.');
     } finally {
       setLoading(false);
@@ -116,12 +145,27 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
     fetchCompanyInfo();
   }, [fetchOrdersAndDealers, fetchCompanyInfo]);
 
-  const handleSelectOrder = (orderId: string, checked: boolean) => {
-    setSelectedOrderIds(prev => checked ? [...prev, orderId] : prev.filter(id => id !== orderId));
+  const handleViewOrderDetails = (orderId: string) => {
+    setSelectedOrderIdForDetails(orderId);
+    setIsOrderDetailsDialogOpen(true);
   };
 
-  const handleSelectAll = (checked: boolean) => {
-    setSelectedOrderIds(checked ? orders.map(o => o.id) : []);
+  const handleDispatchClick = (order: OrderToDispatch) => {
+    if (order.dealer_name === 'Online Order') {
+      showError("Online orders must be dispatched from the 'Online Order Dispatch' dashboard to map products correctly.");
+      return;
+    }
+    setSelectedOrderIdForDispatch(order.id);
+    setIsDispatchDialogOpen(true);
+  };
+
+  const handleEditOrder = (orderId: string) => {
+    setSelectedOrderIdForEdit(orderId);
+    setIsEditOrderDialogOpen(true);
+  };
+
+  const handleOrderUpdated = () => {
+    fetchOrdersAndDealers();
   };
 
   const handleClearFilters = () => {
@@ -130,80 +174,12 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
     setFilterDate('');
   };
 
-  const handleOrderUpdated = () => {
-    fetchOrdersAndDealers();
+  const handleSelectOrder = (orderId: string, checked: boolean) => {
+    setSelectedOrderIds(prev => checked ? [...prev, orderId] : prev.filter(id => id !== orderId));
   };
 
-  const handleOrderPrinted = (orderId: string) => {
-    setViewedOrderIds(prev => new Set(prev).add(orderId));
-  };
-
-  const handleResetViews = () => {
-    setViewedOrderIds(new Set());
-    showSuccess("Viewed status has been reset for all orders.");
-  };
-
-  const handleBulkPrintGatePasses = async () => {
-    if (selectedOrderIds.length === 0) return;
-    setIsBulkPrinting(true);
-    try {
-      const doc = new jsPDF();
-      const darkBlue: [number, number, number] = [30, 58, 138];
-      const margin = 15;
-      const pageWidth = doc.internal.pageSize.width;
-
-      for (let i = 0; i < selectedOrderIds.length; i++) {
-        const { data: orderData } = await supabase
-          .from('orders')
-          .select(`
-            order_number, order_date, total_amount, dispatch_number, bill_no, 
-            dealers (name, address, city, state), 
-            online_order_details (client_name, city, state),
-            sales (quantity, products (name, code))
-          `)
-          .eq('id', selectedOrderIds[i])
-          .single();
-          
-        if (!orderData) continue;
-        if (i > 0) doc.addPage();
-
-        doc.setFontSize(20); doc.setFont("helvetica", "bold");
-        doc.text(`Gate Pass: ${orderData.dispatch_number || 'N/A'}`, pageWidth / 2, 15, { align: 'center' });
-        doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 22, pageWidth, 12, 'F');
-        doc.setFontSize(16); doc.setTextColor(255, 255, 255);
-        doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", pageWidth / 2, 30, { align: 'center' });
-        
-        doc.setTextColor(0); doc.setFontSize(10); let y = 45;
-        
-        const onlineDetails = orderData.online_order_details?.[0];
-        const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
-        
-        const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name;
-        const partyAddress = isOnline 
-          ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
-          : `${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`;
-
-        doc.setFont("helvetica", "bold"); doc.text("PARTY DETAILS:", margin, y);
-        doc.setFont("helvetica", "normal"); y += 5; doc.text(partyName, margin, y);
-        y += 5; const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
-        doc.text(addressLines, margin, y);
-        
-        let rightY = 45; const rightColX = pageWidth / 2 + 10;
-        doc.setFont("helvetica", "bold"); doc.text("ORDER DETAILS:", rightColX, rightY);
-        doc.setFont("helvetica", "normal"); rightY += 5; doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
-        rightY += 5; doc.text(`Bill No: ${orderData.bill_no || 'N/A'}`, rightColX, rightY);
-        rightY += 5; doc.text(`Date: ${formatDate(orderData.order_date)}`, rightColX, rightY);
-
-        y = Math.max(y + (addressLines.length * 5), rightY + 10);
-        const tableRows = (orderData.sales || []).map((sale: any) => [sale.products?.code || 'N/A', sale.products?.name || 'N/A', sale.quantity.toString()]);
-        autoTable(doc, { head: [["Code", "Product Name", "Quantity"]], body: tableRows, startY: y, headStyles: { fillColor: darkBlue, halign: 'center' }, styles: { fontSize: 9, cellPadding: 3 } });
-        doc.setFont("helvetica", "bold"); doc.setFontSize(12);
-        doc.text(`TOTAL BILL AMOUNT: Rs. ${orderData.total_amount.toFixed(2)}`, pageWidth / 2, (doc as any).lastAutoTable.finalY + 15, { align: 'center' });
-      }
-      doc.save(`Bulk_Gate_Passes_${new Date().getTime()}.pdf`);
-      showSuccess(`Generated ${selectedOrderIds.length} Gate Passes.`);
-      setSelectedOrderIds([]);
-    } catch (error: any) { showError(`Failed: ${error.message}`); } finally { setIsBulkPrinting(false); }
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedOrderIds(checked ? orders.map(o => o.id) : []);
   };
 
   const handleBulkPrintOrderDetails = async () => {
@@ -312,74 +288,191 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
     } catch (error: any) { showError(`Failed: ${error.message}`); } finally { setIsBulkPrinting(false); }
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(orders.length / PAGE_SIZE);
+  const displayedOrders = orders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const isAllSelected = orders.length > 0 && selectedOrderIds.length === orders.length;
+
   return (
     <Card className="bg-card text-card-foreground shadow-lg mb-6">
       <CardHeader className="bg-orange-500 dark:bg-orange-700 text-white rounded-t-lg p-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <CardTitle className="text-xl font-semibold">Orders Awaiting Dispatch</CardTitle>
-            <CardDescription className="text-orange-100 dark:text-orange-200">Manage orders ready for dispatch.</CardDescription>
+            <CardDescription className="text-orange-100 dark:text-orange-200">
+              Manage orders ready for dispatch.
+            </CardDescription>
           </div>
-          <div className="flex gap-2">
-            {viewedOrderIds.size > 0 && (
-              <Button onClick={handleResetViews} variant="secondary" size="sm" className="bg-white/20 hover:bg-white/30 text-white">
-                <RotateCcw className="h-4 w-4 mr-2" /> Reset Views
-              </Button>
-            )}
-            {selectedOrderIds.length > 0 && (
-              <>
-                <Button onClick={handleBulkPrintGatePasses} disabled={isBulkPrinting} className="bg-white text-orange-600 hover:bg-orange-50">
-                  {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
-                  Bulk Gate Pass ({selectedOrderIds.length})
-                </Button>
-                <Button onClick={handleBulkPrintOrderDetails} disabled={isBulkPrinting} className="bg-white text-blue-600 hover:bg-blue-50">
-                  {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-                  Bulk Order Details ({selectedOrderIds.length})
-                </Button>
-              </>
-            )}
-          </div>
+          {selectedOrderIds.length > 0 && (
+            <Button onClick={handleBulkPrintOrderDetails} disabled={isBulkPrinting} className="bg-white text-blue-600 hover:bg-blue-50">
+              {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
+              Bulk Order Details ({selectedOrderIds.length})
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-4">
         <div className="flex flex-wrap items-end gap-4 mb-6">
-          <div className="flex-1 min-w-[150px]"><Label>Order No.</Label><Input type="number" value={filterOrderNumber} onChange={(e) => setFilterOrderNumber(e.target.value)} /></div>
-          <div className="flex-1 min-w-[150px]"><Label>Dealer</Label><Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}><SelectTrigger><SelectValue placeholder="All Dealers" /></SelectTrigger><SelectContent><SelectItem value="all">All Dealers</SelectItem>{allDealers.map(d => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent></Select></div>
-          <div className="flex-1 min-w-[150px]"><Label>Date</Label><Input id="filterDate" type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} /></div>
-          <Button onClick={fetchOrdersAndDealers} className="flex items-center gap-2"><Search className="h-4 w-4" /> Apply</Button>
-          <Button variant="outline" onClick={handleClearFilters}>Clear</Button>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterOrderNumber">Order No.</Label>
+            <Input
+              id="filterOrderNumber"
+              type="number"
+              placeholder="Filter by order no."
+              value={filterOrderNumber}
+              onChange={(e) => setFilterOrderNumber(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterDealer">Dealer</Label>
+            <Select
+              value={filterDealerId || "all"}
+              onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}
+            >
+              <SelectTrigger id="filterDealer" className="w-full">
+                <SelectValue placeholder="Filter by dealer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Dealers</SelectItem>
+                {allDealers.map(dealer => (
+                  <SelectItem key={dealer.value} value={dealer.value}>{dealer.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterDate">Date</Label>
+            <Input
+              id="filterDate"
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <Button onClick={fetchOrdersAndDealers} className="flex items-center gap-2">
+            <Search className="h-4 w-4" /> Apply Filters
+          </Button>
+          <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">
+            Clear Filters
+          </Button>
         </div>
         <div className="overflow-x-auto">
-          {loading ? (<div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>) : orders.length === 0 ? (<p className="text-center text-muted-foreground py-8">No orders found.</p>) : (
-            <div className="max-h-[400px] overflow-y-auto border rounded-md">
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
-                  <TableRow className="bg-muted">
-                    <TableHead className="w-10"><Checkbox checked={selectedOrderIds.length === orders.length && orders.length > 0} onCheckedChange={(checked) => handleSelectAll(!!checked)} /></TableHead>
-                    <TableHead>Order No.</TableHead><TableHead>Dealer Name</TableHead><TableHead>Order Date</TableHead><TableHead className="text-right">Total Amount</TableHead><TableHead className="text-center">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((order) => (
-                    <TableRow key={order.id} className={cn("hover:bg-accent/50", viewedOrderIds.has(order.id) && "opacity-50")}>
-                      <TableCell><Checkbox checked={selectedOrderIds.includes(order.id)} onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)} /></TableCell>
-                      <TableCell className="font-medium">#{order.order_number}</TableCell><TableCell>{order.dealer_name}</TableCell><TableCell>{formatDate(order.order_date)}</TableCell><TableCell className="text-right">₹{order.total_amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-center"><div className="flex justify-center gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => { setSelectedOrderIdForDetails(order.id); setIsOrderDetailsDialogOpen(true); }} title="View"><Eye className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => { setSelectedOrderIdForEdit(order.id); setIsEditOrderDialogOpen(true); }} title="Edit"><Edit className="h-4 w-4 text-orange-600" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => { setSelectedOrderIdForDispatch(order.id); setIsDispatchDialogOpen(true); }} title="Dispatch"><Truck className="h-4 w-4 text-green-600" /></Button>
-                      </div></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading orders...</p>
             </div>
+          ) : orders.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No orders awaiting dispatch found matching your criteria.</p>
+          ) : (
+            <>
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox checked={isAllSelected} onCheckedChange={handleSelectAll} />
+                      </TableHead>
+                      <TableHead className="text-muted-foreground">Order No.</TableHead>
+                      <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                      <TableHead className="text-muted-foreground">Order Date</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
+                      <TableHead className="text-muted-foreground text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {displayedOrders.map((order) => (
+                      <TableRow key={order.id} className="hover:bg-accent/50">
+                        <TableCell>
+                          <Checkbox checked={selectedOrderIds.includes(order.id)} onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)} />
+                        </TableCell>
+                        <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatDate(order.order_date)}</TableCell>
+                        <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleViewOrderDetails(order.id)}
+                              title="View Order Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditOrder(order.id)}
+                              title="Edit Order"
+                            >
+                              <Edit className="h-4 w-4 text-orange-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDispatchClick(order)}
+                              title="Dispatch Order"
+                            >
+                              <Truck className="h-4 w-4 text-green-600" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 px-2">
+                  <p className="text-sm text-muted-foreground">
+                    Showing page {currentPage} of {totalPages} ({orders.length} total orders)
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </CardContent>
-      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} onPrint={handleOrderPrinted} />
-      <DispatchOrderDialog orderId={selectedOrderIdForDispatch} isOpen={isDispatchDialogOpen} onOpenChange={setIsDispatchDialogOpen} onDispatchSuccess={handleOrderUpdated} />
-      <EditOrderDialog orderId={selectedOrderIdForEdit} isOpen={isEditOrderDialogOpen} onOpenChange={setIsEditOrderDialogOpen} onOrderUpdated={handleOrderUpdated} />
+      <OrderDetailsDialog
+        orderId={selectedOrderIdForDetails}
+        isOpen={isOrderDetailsDialogOpen}
+        onOpenChange={setIsOrderDetailsDialogOpen}
+      />
+      <DispatchOrderDialog
+        orderId={selectedOrderIdForDispatch}
+        isOpen={isDispatchDialogOpen}
+        onOpenChange={setIsDispatchDialogOpen}
+        onDispatchSuccess={onDispatchSuccess}
+      />
+      <EditOrderDialog
+        orderId={selectedOrderIdForEdit}
+        isOpen={isEditOrderDialogOpen}
+        onOpenChange={setIsEditOrderDialogOpen}
+        onOrderUpdated={handleOrderUpdated}
+      />
     </Card>
   );
 };
