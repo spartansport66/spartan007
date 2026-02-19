@@ -16,6 +16,7 @@ interface DispatchedOrder {
   gate_pass_dispatch_time: string;
   dealer_name: string;
   platform_order_number: string | null;
+  client_name: string | null;
 }
 
 const GatePassDispatchedOrdersCard: React.FC = () => {
@@ -36,7 +37,7 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
           dispatch_number,
           gate_pass_dispatch_time,
           dealers (name),
-          online_order_details (platform_order_number)
+          online_order_details (platform_order_number, client_name)
         `)
         .not('gate_pass_dispatch_time', 'is', null)
         .order('gate_pass_dispatch_time', { ascending: false })
@@ -52,6 +53,7 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
         gate_pass_dispatch_time: order.gate_pass_dispatch_time,
         dealer_name: order.dealers?.name || 'N/A',
         platform_order_number: order.online_order_details?.[0]?.platform_order_number || null,
+        client_name: order.online_order_details?.[0]?.client_name || null,
       }));
       setOrders(formattedOrders);
     } catch (error: any) {
@@ -94,7 +96,7 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead>Dispatch #</TableHead>
                       <TableHead>Order #</TableHead>
-                      <TableHead>Dealer / Platform Order</TableHead>
+                      <TableHead>Dealer / Customer</TableHead>
                       <TableHead>Gate Pass Time</TableHead>
                       <TableHead className="text-center">Details</TableHead>
                     </TableRow>
@@ -105,9 +107,15 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
                         <TableCell className="font-medium">{order.dispatch_number}</TableCell>
                         <TableCell>#{order.order_number}</TableCell>
                         <TableCell>
-                          {order.dealer_name}
-                          {order.platform_order_number && (
-                            <span className="block text-xs text-muted-foreground font-mono">{order.platform_order_number}</span>
+                          {order.dealer_name === 'Online Order' && order.client_name ? (
+                            <>
+                              <span className="font-medium">{order.client_name}</span>
+                              {order.platform_order_number && (
+                                <span className="block text-xs text-muted-foreground font-mono">{order.platform_order_number}</span>
+                              )}
+                            </>
+                          ) : (
+                            order.dealer_name
                           )}
                         </TableCell>
                         <TableCell>{new Date(order.gate_pass_dispatch_time).toLocaleString()}</TableCell>

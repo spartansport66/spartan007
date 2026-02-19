@@ -17,6 +17,7 @@ interface QueueOrder {
   bill_no: string | null;
   dispatch_number: number | null;
   platform_order_number: string | null;
+  client_name: string | null;
 }
 
 interface GatePassQueueCardProps {
@@ -41,7 +42,7 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
           bill_no,
           dispatch_number,
           dealers (name),
-          online_order_details (platform_order_number)
+          online_order_details (platform_order_number, client_name)
         `)
         .eq('dispatched', true)
         .is('gate_pass_dispatch_time', null)
@@ -56,6 +57,7 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
         bill_no: order.bill_no,
         dispatch_number: order.dispatch_number,
         platform_order_number: order.online_order_details?.[0]?.platform_order_number || null,
+        client_name: order.online_order_details?.[0]?.client_name || null,
       }));
 
       setQueue(formattedQueue);
@@ -115,7 +117,7 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
                   <TableRow>
                     <TableHead>Dispatch #</TableHead>
                     <TableHead>Order #</TableHead>
-                    <TableHead>Dealer / Platform Order</TableHead>
+                    <TableHead>Dealer / Customer</TableHead>
                     <TableHead>Bill No.</TableHead>
                     <TableHead className="text-center">Action</TableHead>
                   </TableRow>
@@ -126,9 +128,15 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
                       <TableCell className="font-medium">{order.dispatch_number}</TableCell>
                       <TableCell>#{order.order_number}</TableCell>
                       <TableCell>
-                        {order.dealer_name}
-                        {order.platform_order_number && (
-                          <span className="block text-xs text-muted-foreground font-mono">{order.platform_order_number}</span>
+                        {order.dealer_name === 'Online Order' && order.client_name ? (
+                          <>
+                            <span className="font-medium">{order.client_name}</span>
+                            {order.platform_order_number && (
+                              <span className="block text-xs text-muted-foreground font-mono">{order.platform_order_number}</span>
+                            )}
+                          </>
+                        ) : (
+                          order.dealer_name
                         )}
                       </TableCell>
                       <TableCell>{order.bill_no}</TableCell>
