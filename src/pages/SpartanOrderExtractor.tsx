@@ -34,63 +34,42 @@ const SpartanOrderExtractor = () => {
   const [showRawText, setShowRawText] = useState(false);
 
   const extractSpartan = (text: string): ExtractedOrder | null => {
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+    // 1. Order Number
+    const orderNoMatch = text.match(/Invoice Number\s*[-#:]\s*(\d+)/i);
+    if (!orderNoMatch) return null;
+    const orderNo = orderNoMatch[1];
 
-    let orderNo = "";
-    let amount = "0.00";
+    // 2. Amount
+    const amountMatch = text.match(/Total Amount\s*(?:Rs\.?\s*)?([\d,]+\.\d{2})/i);
+    const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
+
+    // 3. Item
+    // Look for the text after "1" and before a 6-8 digit HSN code.
+    const itemMatch = text.match(/1\s+([\s\S]+?)\s+\d{6,8}/i);
     let item = "N/A";
+    if (itemMatch) {
+        // Clean up the item name, remove newlines and extra spaces
+        item = itemMatch[1].trim().replace(/\s+/g, ' ');
+    }
+
+    // 4. Customer Name and Address
     let customerName = "Unknown";
     let address = "N/A";
-
-    // Method 1: Find Order Number
-    lines.forEach(line => {
-      const orderMatch = line.match(/Invoice Number\s*[-#:]\s*(\d+)/i);
-      if (orderMatch) {
-        orderNo = orderMatch[1];
-      }
-    });
-
-    // If no order number, it's not a valid page.
-    if (!orderNo) return null;
-
-    // Method 2: Find Total Amount
-    lines.forEach(line => {
-      const amountMatch = line.match(/Total Amount\s*(?:Rs\.?\s*)?([\d,]+\.\d{2})/i);
-      if (amountMatch) {
-        amount = amountMatch[1].replace(/,/g, '');
-      }
-    });
-
-    // Method 3: Find Bill To section and parse Name/Address
-    const billToIndex = lines.findIndex(line => line.match(/^Bill To:/i));
-    if (billToIndex !== -1) {
-        if (lines.length > billToIndex + 1) {
-            customerName = lines[billToIndex + 1];
-        }
-        let addressLines = [];
-        for (let i = billToIndex + 2; i < lines.length; i++) {
-            if (lines[i].match(/GST No|State Code|GSTIN|Phone:|Mobile:/i)) {
-                break;
+    const billToBlockMatch = text.match(/Bill To:\s*\n([\s\S]+?)(?=GST No|State Code|GSTIN)/i);
+    if (billToBlockMatch) {
+        const billToBlock = billToBlockMatch[1].trim();
+        const lines = billToBlock.split('\n').map(line => line.trim()).filter(line => line);
+        if (lines.length > 0) {
+            customerName = lines[0];
+            if (lines.length > 1) {
+                address = lines.slice(1).join(', ');
             }
-            addressLines.push(lines[i]);
-        }
-        if (addressLines.length > 0) {
-            address = addressLines.join(', ');
         }
     }
 
-    // Method 4: Find Item Description
-    const itemHeaderIndex = lines.findIndex(line => line.match(/Description\s+HSN\s+Qty/i));
-    if (itemHeaderIndex !== -1 && lines.length > itemHeaderIndex + 1) {
-        const itemLine = lines[itemHeaderIndex + 1];
-        const itemMatch = itemLine.match(/^\d+\s+([\s\S]+?)\s+\d{6,8}/);
-        if (itemMatch) {
-            item = itemMatch[1].trim().replace(/\s+/g, ' ');
-        }
-    }
-
+    // Final check
     if (item === "N/A" || customerName === "Unknown" || amount === "0.00") {
-        console.warn("Spartan Extractor: Could not find all required fields, but proceeding with partial data.", { orderNo, customerName, item, amount });
+        return null;
     }
 
     return { orderNo, customerName, address, item, amount };
