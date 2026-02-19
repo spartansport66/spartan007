@@ -34,31 +34,33 @@ const SpartanOrderExtractor = () => {
   const [showRawText, setShowRawText] = useState(false);
 
   const extractSpartan = (text: string): ExtractedOrder | null => {
-    const orderNoMatch = text.match(/(?:Order No|Order ID|Invoice No)\.?\s*#?\s*([A-Z0-9-]+)/i);
+    // Match "Invoice Number - #1461"
+    const orderNoMatch = text.match(/(?:Invoice Number)\s*-\s*#(\d+)/i);
     if (!orderNoMatch) return null;
     const orderNo = orderNoMatch[1];
 
-    const amountMatch = text.match(/(?:Grand Total|Total Amount|Total)[:\s]*₹?\s*([\d,]+\.\d{2})/i);
+    // Match "Total Amount Rs. 1002" or "Total Amount Rs. 1092"
+    const amountMatch = text.match(/Total Amount\s+Rs\.\s*([\d,]+(?:\.\d{2})?)/i);
     const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
 
-    let item = "N/A";
-    const itemMatch = text.match(/Description[\s\S]*?\n\s*([\s\S]+?)\s+\d+\s+₹/i);
-    if (itemMatch) {
-        item = itemMatch[1].trim().replace(/\n/g, ' ');
-    } else {
-        const singleItemMatch = text.match(/(?:Product|Item)[:\s]+([^\n]+)/i);
-        if (singleItemMatch) {
-            item = singleItemMatch[1].trim();
-        }
-    }
+    // Match the product name which appears after the table headers
+    // The headers end with "TOTAL (Including GST)"
+    const itemMatch = text.match(/TOTAL \(Including GST\)\s*\n\s*([\s\S]+?)\n/i);
+    const item = itemMatch ? itemMatch[1].trim() : "N/A";
 
     let customerName = "Unknown";
     let address = "N/A";
-    const shippingAddressMatch = text.match(/(?:Shipping Address|Deliver To)[:\s]*\n([\s\S]+?)(?=\n\s*(?:Billing Address|Phone|Email|Order Summary|GSTIN)|$)/i);
-    if (shippingAddressMatch) {
-        const lines = shippingAddressMatch[1].trim().split('\n');
-        customerName = lines[0].trim();
-        address = lines.slice(1).join(', ').trim();
+    // Match the "Bill To:" block
+    const billToMatch = text.match(/Bill To:\s*\n\s*([^\n]+)\n([\s\S]+?)(?=GST No|State Code)/i);
+    if (billToMatch) {
+        customerName = billToMatch[1].trim();
+        // Clean up address, removing extra spaces and joining with commas
+        address = billToMatch[2].trim().replace(/\s*\n\s*/g, ', ');
+    }
+
+    // If core details are missing, it's not a valid entry
+    if (item === "N/A" || customerName === "Unknown" || amount === "0.00") {
+        return null;
     }
 
     return { orderNo, customerName, address, item, amount };
@@ -83,7 +85,7 @@ const SpartanOrderExtractor = () => {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(' ');
+        const pageText = textContent.items.map((item: any) => item.str).join('\n');
         fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
 
         const order = extractSpartan(pageText);
