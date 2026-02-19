@@ -49,20 +49,20 @@ const FlipkartOrderExtractor = () => {
     let customerName = "Unknown";
     let address = "N/A";
 
-    const deliverToMatch = text.match(/(?:Deliver to|Shipping Address)[:\s]+([\s\S]*?)(?=\s*(?:FSSAI|Seller|Phone|Pin|Order ID|Invoice)|$)/i);
+    const addressBlockMatch = text.match(/(?:Deliver to|Shipping Address|Billing Address)[:\s]+([\s\S]*?)(?=\s*(?:FSSAI|Seller|Phone|Pin|Order ID|Invoice)|$)/i);
     
-    if (deliverToMatch) {
-      const fullText = deliverToMatch[1].trim();
+    if (addressBlockMatch) {
+      const fullText = addressBlockMatch[1].trim();
       const parts = fullText.split(/,,|,/);
       customerName = parts[0].trim();
-      address = parts.slice(1).join(", ").trim() || "N/A";
+      address = parts.slice(1).join(", ").trim().replace(/\s+/g, ' ') || "N/A";
     } else {
       const fallbackMatch = text.match(new RegExp(`${orderNo}\\s+([\\s\\S]*?)(?=\\s*(?:Product|Description|Qty|FSSAI|Seller|Invoice)|$)`, 'i'));
       if (fallbackMatch) {
         const fullText = fallbackMatch[1].trim();
         const parts = fullText.split(/,,|,/);
         customerName = parts[0].trim();
-        address = parts.slice(1).join(", ").trim() || "N/A";
+        address = parts.slice(1).join(", ").trim().replace(/\s+/g, ' ') || "N/A";
       }
     }
 
