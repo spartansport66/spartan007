@@ -35,6 +35,11 @@ interface OrderDetail {
   dispatch_number: number | null;
   items: OrderItemDetail[];
   is_online: boolean;
+  online_order_details?: {
+    client_name: string;
+    address: string | null;
+    contact_no: string | null;
+  } | null;
 }
 
 interface GatePassOrderSearchProps {
@@ -80,7 +85,8 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
           id, order_number, order_date, total_amount, dispatched, bill_no, dispatch_date, dispatch_number, gate_pass_dispatch_time,
           dealers (name, address, phone),
           profiles:user_id (first_name, last_name),
-          sales (quantity, products (name, code))
+          sales (quantity, products (name, code)),
+          online_order_details (client_name, address, contact_no)
         `)
         .eq('dispatch_number', searchNum)
         .single();
@@ -109,15 +115,16 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
       }
 
       const salesPersonName = `${(data.profiles as any)?.first_name || ''} ${(data.profiles as any)?.last_name || ''}`.trim() || 'N/A';
+      const onlineDetails = data.online_order_details?.[0] || null;
 
       const formattedOrder: OrderDetail = {
         id: data.id,
         order_number: data.order_number,
         order_date: data.order_date,
         total_amount: data.total_amount,
-        dealer_name: (data.dealers as any)?.name || 'N/A',
-        dealer_address: (data.dealers as any)?.address || 'N/A',
-        dealer_phone: (data.dealers as any)?.phone || 'N/A',
+        dealer_name: isOnline ? onlineDetails?.client_name || 'Online Customer' : (data.dealers as any)?.name || 'N/A',
+        dealer_address: isOnline ? onlineDetails?.address || 'N/A' : (data.dealers as any)?.address || 'N/A',
+        dealer_phone: isOnline ? onlineDetails?.contact_no || 'N/A' : (data.dealers as any)?.phone || 'N/A',
         sales_person_name: salesPersonName,
         dispatched: data.dispatched,
         gate_pass_dispatch_time: data.gate_pass_dispatch_time,
@@ -125,6 +132,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
         dispatch_date: data.dispatch_date,
         dispatch_number: data.dispatch_number,
         is_online: isOnline,
+        online_order_details: onlineDetails,
         items: (data.sales || []).map((sale: any) => ({
           product_name: sale.products?.name || 'N/A',
           quantity: sale.quantity,
@@ -218,7 +226,7 @@ const GatePassOrderSearch: React.FC<GatePassOrderSearchProps> = ({ onDispatchSuc
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
-                <p><span className="font-semibold">Dealer:</span> {order.dealer_name}</p>
+                <p><span className="font-semibold">Dealer/Customer:</span> {order.dealer_name}</p>
                 <p><span className="font-semibold">Address:</span> {order.dealer_address}</p>
                 <p><span className="font-semibold">Phone:</span> {order.dealer_phone}</p>
                 <p><span className="font-semibold">Sales Person:</span> {order.sales_person_name}</p>
