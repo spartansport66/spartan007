@@ -43,10 +43,36 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase.from('products').select('id, name, code').order('name').limit(10000);
-        if (error) throw error;
-        setProducts(data || []);
+        const allProducts: Product[] = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('products')
+            .select('id, name, code')
+            .order('name')
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            allProducts.push(...data);
+            console.log(`Products fetched page ${page + 1}: ${data.length}, total so far: ${allProducts.length}`);
+          }
+
+          if (!data || data.length < pageSize) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        }
+
+        console.log('Total products fetched:', allProducts.length);
+        setProducts(allProducts);
       } catch (error: any) {
+        console.error('Products fetch error:', error);
         showError(`Failed to load products: ${error.message}`);
       } finally {
         setLoading(false);
@@ -119,9 +145,9 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                <div className="p-2 border-b"><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8" /></div>
-                <ScrollArea className="h-[200px]"><div className="p-1">{filteredProducts.map((p) => (<Button key={p.id} variant="ghost" className="w-full justify-start font-normal" onClick={() => { setSelectedProductId(p.id); setIsPopoverOpen(false); }}><Check className={cn("mr-2 h-4 w-4", selectedProductId === p.id ? "opacity-100" : "opacity-0")} />{p.name} ({p.code})</Button>))}</div></ScrollArea>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 max-h-[600px]">
+                <div className="p-2 border-b sticky top-0 bg-white z-10"><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8" /></div>
+                <ScrollArea className="h-full"><div className="p-1">{filteredProducts.length === 0 ? <div className="p-4 text-center text-sm text-muted-foreground">No products found</div> : filteredProducts.map((p) => (<Button key={p.id} variant="ghost" className="w-full justify-start font-normal text-sm py-1.5" onClick={() => { setSelectedProductId(p.id); setIsPopoverOpen(false); }}><Check className={cn("mr-2 h-4 w-4 flex-shrink-0", selectedProductId === p.id ? "opacity-100" : "opacity-0")} /><span className="truncate">{p.name} ({p.code})</span></Button>))}</div></ScrollArea>
               </PopoverContent>
             </Popover>
           </div>

@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, ArrowDown, ArrowUp, DollarSign, Package, Users, ShoppingCart, Printer, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,12 +35,21 @@ const DailyReportCard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const today = new Date().toISOString().split('T')[0];
+  const [fromDate, setFromDate] = useState<string>(today);
+  const [toDate, setToDate] = useState<string>(today);
 
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      const startOfToday = getStartOfUTCDayISO();
-      const endOfToday = getEndOfUTCDayISO();
+      if (!fromDate || !toDate) {
+        showError("Please select both a 'from' and 'to' date.");
+        setLoading(false);
+        return;
+      }
+
+      const startOfToday = getStartOfUTCDayISO(new Date(fromDate));
+      const endOfToday = getEndOfUTCDayISO(new Date(toDate));
 
       // Fetch Company Info for the report header
       const { data: companyInfo } = await supabase
@@ -113,7 +124,7 @@ const DailyReportCard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fromDate, toDate]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -264,30 +275,52 @@ const DailyReportCard: React.FC = () => {
   return (
     <Card className="bg-card text-card-foreground shadow-lg w-full border-2 border-primary/20">
       <CardHeader className="bg-muted/30 p-4 md:p-6">
-        <div className="flex justify-between items-start">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div>
             <CardTitle className="text-xl md:text-2xl font-bold text-primary">Daily Report</CardTitle>
             <CardDescription>Live summary for {todayDate}</CardDescription>
           </div>
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleDownloadJPG}
-              disabled={loading || !data}
-              className="flex items-center gap-2"
-            >
-              <ImageIcon className="h-4 w-4" /> Download JPG
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handlePrintSummary}
-              disabled={loading || !data}
-              className="flex items-center gap-2"
-            >
-              <Printer className="h-4 w-4" /> Print PDF
-            </Button>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full">
+            <div className="flex flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="from-date">From</Label>
+                <Input id="from-date" type="date" className="w-36 sm:w-auto" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="to-date">To</Label>
+                <Input id="to-date" type="date" className="w-36 sm:w-auto" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+              <Button onClick={fetchDashboardData} disabled={loading} size="sm" className="w-full sm:w-auto text-xs sm:text-sm py-1">
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <span className="inline">Load</span>
+              </Button>
+
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleDownloadJPG}
+                disabled={loading || !data}
+                className="w-full sm:w-auto text-xs sm:text-sm py-1 flex items-center justify-center gap-2"
+              >
+                <ImageIcon className="h-4 w-4" />
+                <span className="hidden xs:inline sm:inline">Download JPG</span>
+              </Button>
+
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handlePrintSummary}
+                disabled={loading || !data}
+                className="w-full sm:w-auto text-xs sm:text-sm py-1 flex items-center justify-center gap-2"
+              >
+                <Printer className="h-4 w-4" />
+                <span className="hidden xs:inline sm:inline">Print PDF</span>
+              </Button>
+            </div>
           </div>
         </div>
       </CardHeader>

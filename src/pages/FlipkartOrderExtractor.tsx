@@ -24,6 +24,7 @@ interface ExtractedOrder {
   address: string;
   item: string;
   amount: string;
+  invoiceNo?: string;
 }
 
 const FlipkartOrderExtractor = () => {
@@ -43,8 +44,11 @@ const FlipkartOrderExtractor = () => {
     const amountMatch = text.match(/TOTAL PRICE\s*[:\s]+\s*([\d,]+\.\d{2})/i);
     const amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
 
-    const itemMatch = text.match(/Total\s*,?\s*([^|]+?)(?=\s*\||\s*IMEI|\s*HSN|\s*Qty|\s*Product)/i);
-    const item = itemMatch ? itemMatch[1].trim().replace(/^,\s*/, '') : "N/A";
+    // Capture the full item description including pipe-separated codes (keep everything until IMEI/HSN/Qty/Product)
+    const itemMatch = text.match(/Total\s*,?\s*([\s\S]*?)(?=\s*IMEI|\s*HSN|\s*Qty|\s*Product|$)/i);
+    let item = itemMatch ? itemMatch[1].trim() : "N/A";
+    // normalize spacing and preserve pipe separators (e.g. "... | SSCHB604 | ...")
+    item = item.replace(/\s*\|\s*/g, ' | ').replace(/\s+/g, ' ').replace(/^,\s*/, '').replace(/^\|+|\|+$/g, '').trim();
 
     let customerName = "Unknown";
     let address = "N/A";
@@ -85,16 +89,59 @@ const FlipkartOrderExtractor = () => {
       let allExtracted: ExtractedOrder[] = [];
       let fullDebugText = "";
 
+      // more permissive invoice regex (captures common formats like INV-123/45, 12345, INV.123)
+      const invoiceRegex = /(?:Invoice(?:\s+No(?:\.|:)?| Number)?|Bill\s*No(?:\.|:)?)[:#\s-]*([A-Z0-9\.\/-]{3,})/i;
+      // explicit label matcher capturing the rest of the line after 'Invoice No' or 'Invoice Number'
+      const labelRegex = /Invoice\s*(?:No(?:\.|:)?|Number(?:\.|:)?)\s*[:\-]?\s*([^\r\n]+)/i;
+
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         const pageText = textContent.items.map((item: any) => item.str).join(' ');
         fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
+        // try to extract invoice on this page using label-first strategy
+        const pageLabelMatch = pageText.match(labelRegex);
+        let pageInvoice: string | undefined;
+        if (pageLabelMatch) {
+          pageInvoice = pageLabelMatch[1].trim();
+        } else {
+          const pageInvoiceMatch = pageText.match(invoiceRegex);
+          pageInvoice = pageInvoiceMatch ? pageInvoiceMatch[1].trim() : undefined;
+        }
+
+        // Clean the captured value: prefer a token containing digits, otherwise reject non-numeric false-positives
+        if (pageInvoice) {
+          const tokenWithDigits = pageInvoice.match(/[A-Z0-9\-\/\.]*\d+[A-Z0-9\-\/\.]*/i);
+          if (tokenWithDigits) {
+            pageInvoice = tokenWithDigits[0];
+          } else if (!/\d/.test(pageInvoice)) {
+            pageInvoice = undefined;
+          }
+        }
 
         const order = extractDataFromPageText(pageText);
         if (order) {
-          allExtracted.push(order);
+          allExtracted.push(pageInvoice ? { ...order, invoiceNo: pageInvoice } : order);
         }
+      }
+      // fallback: try to extract a shared invoice/bill number from the whole document (label-first)
+      const docLabelMatch = fullDebugText.match(labelRegex);
+      let docInvoiceNo: string | undefined;
+      if (docLabelMatch) {
+        docInvoiceNo = docLabelMatch[1].trim();
+      } else {
+        const docInvoiceMatch = fullDebugText.match(invoiceRegex);
+        docInvoiceNo = docInvoiceMatch ? docInvoiceMatch[1].trim() : undefined;
+      }
+      if (docInvoiceNo) {
+        const docTokenWithDigits = docInvoiceNo.match(/[A-Z0-9\-\/\.]*\d+[A-Z0-9\-\/\.]*/i);
+        if (docTokenWithDigits) docInvoiceNo = docTokenWithDigits[0];
+        else docInvoiceNo = undefined;
+      }
+
+      // attach document-level invoiceNo to any entries missing it
+      if (docInvoiceNo) {
+        allExtracted = allExtracted.map(a => ({ ...a, invoiceNo: a.invoiceNo || docInvoiceNo }));
       }
 
       setRawText(fullDebugText);
@@ -123,6 +170,7 @@ const FlipkartOrderExtractor = () => {
         shipping_address: order.address,
         flipkart_item_name: order.item,
         amount: parseFloat(order.amount),
+        bill_no: order.invoiceNo || '',
         created_by: user.id,
         status: 'pending'
       }));
@@ -237,17 +285,19 @@ const FlipkartOrderExtractor = () => {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead className="font-bold">Order No.</TableHead>
-                      <TableHead className="font-bold">Customer Name</TableHead>
-                      <TableHead className="font-bold">Address</TableHead>
-                      <TableHead className="font-bold">Item Description</TableHead>
-                      <TableHead className="font-bold text-right">Amount (₹)</TableHead>
-                    </TableRow>
+                        <TableHead className="font-bold">Order No.</TableHead>
+                        <TableHead className="font-bold">Invoice No.</TableHead>
+                        <TableHead className="font-bold">Customer Name</TableHead>
+                        <TableHead className="font-bold">Address</TableHead>
+                        <TableHead className="font-bold">Item Description</TableHead>
+                        <TableHead className="font-bold text-right">Amount (₹)</TableHead>
+                      </TableRow>
                   </TableHeader>
                   <TableBody>
                     {extractedOrders.map((order, index) => (
                       <TableRow key={index} className="hover:bg-muted/30">
                         <TableCell className="font-mono text-xs font-semibold text-blue-600">{order.orderNo}</TableCell>
+                        <TableCell className="text-xs font-medium">{order.invoiceNo || '—'}</TableCell>
                         <TableCell className="font-medium">{order.customerName}</TableCell>
                         <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={order.address}>
                           {order.address}

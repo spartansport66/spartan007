@@ -29,7 +29,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart }) => {
       <CardContent className="flex-grow">
         <p className="text-lg text-muted-foreground">Size: {product.size || 'N/A'}</p>
         <p className="text-lg text-muted-foreground">HSN: {product.hsn || 'N/A'}</p>
-        <p className="text-lg text-muted-foreground">GST: {product.gst || 'N/A'}%</p>
+        <p className="text-lg text-muted-foreground">GST: {(() => { const raw = parseFloat(product.gst as any) || 0; const display = raw > 0 && raw <= 1 ? raw * 100 : raw; return display ? String(Number(display)) + '%' : 'N/A'; })()}</p>
         <p className="text-2xl font-bold text-accent-foreground mb-2">DP: ₹{product.dp}</p>
         <p className="text-sm text-muted-foreground">In Stock: {product.closing_stock}</p>
       </CardContent>

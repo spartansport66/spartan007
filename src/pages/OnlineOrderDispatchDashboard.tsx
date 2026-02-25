@@ -99,13 +99,33 @@ const OnlineOrderDispatchDashboard = () => {
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
     try {
-      const [productsRes, companyRes] = await Promise.all([
-        supabase.from('products').select('id, name, code, dp, gst').order('name'),
-        supabase.from('company_info').select('company_name').limit(1).single()
-      ]);
+      // Fetch all products with pagination
+      const allProducts: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (productsRes.error) throw productsRes.error;
-      setProducts(productsRes.data || []);
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, name, code, dp, gst')
+          .order('name')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allProducts.push(...data);
+        }
+        if (!data || data.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
+
+      const companyRes = await supabase.from('company_info').select('company_name').limit(1).single();
+
+      setProducts(allProducts);
       setCompanyName(companyRes.data?.company_name || null);
     } catch (error: any) {
       showError("Failed to load dashboard data.");
@@ -253,14 +273,13 @@ const OnlineOrderDispatchDashboard = () => {
           ...o,
           bill_no: data.billNo,
           dispatch_date: data.billDate,
-          mapped_product_id: matchedProduct?.id || o.mapped_product_id,
         };
       }
       return o;
     }));
 
     setActiveTab("process");
-    showSuccess(`Matched Order #${data.orderNo}. Details have been pre-filled in the 'Map & Dispatch' tab.`);
+    showSuccess(`Matched Order #${data.orderNo}. Details have been pre-filled in the Dispatch tab.`);
     // Optional: scroll to the element
     setTimeout(() => {
       const element = document.getElementById(`order-row-${matchedOrder.id}`);
@@ -275,17 +294,21 @@ const OnlineOrderDispatchDashboard = () => {
   };
 
   const handleBulkCreateGatepass = async () => {
-    const ordersToProcess = createdOrders.filter(o => selectedCreatedIds.includes(o.id) && o.mapped_product_id && o.bill_no);
+    const ordersToProcess = createdOrders.filter(o => selectedCreatedIds.includes(o.id) && o.bill_no);
     if (ordersToProcess.length === 0) {
-      showError("Select products and enter bill numbers for the selected orders first.");
+      showError("Enter bill numbers for the selected orders first.");
       return;
     }
 
     setIsProcessing(true);
     try {
       for (const order of ordersToProcess) {
-        const product = products.find(p => p.id === order.mapped_product_id)!;
-        const gstPercent = parseFloat(product.gst) || 0;
+        const product = products.find(p => p.id === order.mapped_product_id);
+        let gstPercent = 0;
+        if (product) {
+          gstPercent = parseFloat(product.gst) || 0;
+          if (gstPercent > 0 && gstPercent <= 1) gstPercent = gstPercent * 100;
+        }
 
         await supabase.from('orders').update({
           bill_no: order.bill_no,
@@ -294,15 +317,14 @@ const OnlineOrderDispatchDashboard = () => {
         }).eq('id', order.id);
 
         await supabase.from('online_order_details').update({
-          mapped_product_id: order.mapped_product_id,
           client_name: order.client_name
         }).eq('order_id', order.id);
 
         await supabase.from('sales').insert({
           order_id: order.id,
-          product_id: order.mapped_product_id,
+          product_id: product?.id || null,
           quantity: 1,
-          unit_price: order.total_amount / (1 + gstPercent / 100),
+          unit_price: gstPercent > 0 ? order.total_amount / (1 + gstPercent / 100) : order.total_amount,
           gst_percent: gstPercent,
           total_price: order.total_amount,
         });
@@ -368,12 +390,20 @@ const OnlineOrderDispatchDashboard = () => {
     if (selectedCreatedIds.length === 0) return;
     setIsProcessing(true);
     try {
-      const { error } = await supabase
-        .from('orders')
-        .delete()
-        .in('id', selectedCreatedIds);
+      // Delete dependent records first to satisfy FK constraints
+      let res;
 
-      if (error) throw error;
+      res = await supabase.from('payments').delete().in('order_id', selectedCreatedIds);
+      if (res.error) throw res.error;
+
+      res = await supabase.from('sales').delete().in('order_id', selectedCreatedIds);
+      if (res.error) throw res.error;
+
+      res = await supabase.from('online_order_details').delete().in('order_id', selectedCreatedIds);
+      if (res.error) throw res.error;
+
+      res = await supabase.from('orders').delete().in('id', selectedCreatedIds);
+      if (res.error) throw res.error;
 
       showSuccess(`${selectedCreatedIds.length} order(s) deleted successfully.`);
       setSelectedCreatedIds([]);
@@ -430,8 +460,8 @@ const OnlineOrderDispatchDashboard = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
-            <TabsTrigger value="process" className="text-lg py-3"><ListChecks className="mr-2 h-5 w-5" /> 1. Map & Dispatch</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 mb-8">
+            <TabsTrigger value="process" className="text-lg py-3"><ListChecks className="mr-2 h-5 w-5" /> 1. Dispatch</TabsTrigger>
             <TabsTrigger value="invoice-process" className="text-lg py-3"><FileText className="mr-2 h-5 w-5" /> 2. Process from Invoice</TabsTrigger>
           </TabsList>
 
@@ -444,8 +474,8 @@ const OnlineOrderDispatchDashboard = () => {
               <CardHeader className="bg-indigo-600 text-white rounded-t-lg">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
-                    <CardTitle>Map & Dispatch Orders</CardTitle>
-                    <CardDescription className="text-indigo-100">Link online items to actual products and generate gatepasses.</CardDescription>
+                    <CardTitle>Dispatch Orders</CardTitle>
+                    <CardDescription className="text-indigo-100">Enter bill details and generate gatepasses for online orders.</CardDescription>
                   </div>
                   <div className="flex gap-2">
                     <AlertDialog>
@@ -508,7 +538,6 @@ const OnlineOrderDispatchDashboard = () => {
                         <TableHead>Platform Order #</TableHead>
                         <TableHead className="w-[200px]">Customer Name</TableHead>
                         <TableHead>Online Item (Raw)</TableHead>
-                        <TableHead className="w-[250px]">Map to Product</TableHead>
                         <TableHead className="w-[150px]">Bill No.</TableHead>
                         <TableHead className="w-[150px]">Bill Date</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
@@ -517,7 +546,7 @@ const OnlineOrderDispatchDashboard = () => {
                     </TableHeader>
                     <TableBody>
                       {filteredCreatedOrders.length === 0 ? (
-                        <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No pending online orders found matching your search.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No pending online orders found matching your search.</TableCell></TableRow>
                       ) : (
                         filteredCreatedOrders.map((o) => (
                           <TableRow key={o.id} id={`order-row-${o.id}`} className={o.dispatched ? "opacity-50" : ""}>
@@ -532,26 +561,6 @@ const OnlineOrderDispatchDashboard = () => {
                             <TableCell className="font-mono text-xs">{o.platform_order_number}</TableCell>
                             <TableCell><Input className="h-8 text-xs font-medium" value={o.client_name} onChange={(e) => handleUpdateOrderField(o.id, 'client_name', e.target.value)} disabled={o.dispatched} placeholder="Customer Name" /></TableCell>
                             <TableCell><span className="text-[10px] text-muted-foreground italic">{o.raw_item_name}</span></TableCell>
-                            <TableCell>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <Button variant="outline" size="sm" className="w-full justify-between text-left font-normal h-auto py-1" disabled={o.dispatched}>
-                                    {o.mapped_product_id ? (<span className="text-[10px] truncate">{products.find(p => p.id === o.mapped_product_id)?.name}</span>) : (<span className="text-[10px] text-muted-foreground">Select Product...</span>)}
-                                    <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[250px] p-0">
-                                  <div className="p-2 border-b"><Input placeholder="Search..." value={productSearch} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProductSearch(e.target.value)} className="h-7 text-xs" /></div>
-                                  <ScrollArea className="h-[150px]">
-                                    {filteredProducts.map(p => (
-                                      <Button key={p.id} variant="ghost" className="w-full justify-start text-[10px] h-auto py-1" onClick={() => { handleUpdateOrderField(o.id, 'mapped_product_id', p.id); setProductSearch(''); }}>
-                                        {p.name} ({p.code})
-                                      </Button>
-                                    ))}
-                                  </ScrollArea>
-                                </PopoverContent>
-                              </Popover>
-                            </TableCell>
                             <TableCell><Input size={1} className="h-8 text-xs" value={o.bill_no || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateOrderField(o.id, 'bill_no', e.target.value)} disabled={o.dispatched} placeholder="Bill #" /></TableCell>
                             <TableCell><Input type="date" className="h-8 text-xs" value={o.dispatch_date || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateOrderField(o.id, 'dispatch_date', e.target.value)} disabled={o.dispatched} /></TableCell>
                             <TableCell className="text-right font-bold text-xs">₹{o.total_amount.toFixed(2)}</TableCell>

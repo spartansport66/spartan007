@@ -43,6 +43,7 @@ interface StagedOrder {
   customer_name: string;
   flipkart_item_name: string;
   amount: number;
+  bill_no?: string;
 }
 
 interface CreatedOrder {
@@ -101,15 +102,38 @@ const OnlineOrderDashboard = () => {
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
     try {
-      const [platformsRes, productsRes, stagedRes, companyRes] = await Promise.all([
+      // Fetch all products with pagination
+      const allProducts: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, name, code, dp, gst')
+          .order('name')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allProducts.push(...data);
+        }
+        if (!data || data.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
+
+      const [platformsRes, stagedRes, companyRes] = await Promise.all([
         supabase.from('online_platforms').select('*').order('name'),
-        supabase.from('products').select('id, name, code, dp, gst').order('name'),
         supabase.from('online_order_staging').select('*').eq('status', 'pending').order('created_at', { ascending: false }),
         supabase.from('company_info').select('company_name').limit(1).single()
       ]);
 
       setPlatforms(platformsRes.data || []);
-      setProducts(productsRes.data || []);
+      setProducts(allProducts);
       setStagedOrders(stagedRes.data || []);
       setCompanyName(companyRes.data?.company_name || null);
       
@@ -422,7 +446,8 @@ const OnlineOrderDashboard = () => {
     try {
       for (const order of ordersToProcess) {
         const product = products.find(p => p.id === order.mapped_product_id)!;
-        const gstPercent = parseFloat(product.gst) || 0;
+        let gstPercent = parseFloat(product.gst) || 0;
+        if (gstPercent > 0 && gstPercent <= 1) gstPercent = gstPercent * 100;
 
         await supabase.from('orders').update({
           bill_no: order.bill_no,
@@ -691,6 +716,7 @@ const OnlineOrderDashboard = () => {
                           />
                         </TableHead>
                         <TableHead>Order ID</TableHead>
+                        <TableHead>Bill No.</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead>Item</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
@@ -698,7 +724,7 @@ const OnlineOrderDashboard = () => {
                     </TableHeader>
                     <TableBody>
                       {stagedOrders.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No orders in staging.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No orders in staging.</TableCell></TableRow>
                       ) : (
                         stagedOrders.map(o => (
                           <TableRow key={o.id}>
@@ -709,6 +735,7 @@ const OnlineOrderDashboard = () => {
                               />
                             </TableCell>
                             <TableCell className="font-mono text-xs">{o.platform_order_number}</TableCell>
+                            <TableCell className="text-xs">{o.bill_no || '—'}</TableCell>
                             <TableCell className="text-xs">{o.customer_name}</TableCell>
                             <TableCell className="text-xs">{o.flipkart_item_name}</TableCell>
                             <TableCell className="text-right font-bold">₹{o.amount.toFixed(2)}</TableCell>

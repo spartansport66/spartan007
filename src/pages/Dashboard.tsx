@@ -15,14 +15,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import SalesPersonPerformanceCard from '@/components/SalesPersonPerformanceCard';
-import PaymentStatusCard from '@/components/PaymentStatusCard';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import SalesPersonSalesReport from '@/components/reports/SalesPersonSalesReport';
 import SalesPersonDealerReport from '@/components/reports/SalesPersonDealerReport';
 import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsReport';
 import DailyVisitProgressCard from '@/components/DailyVisitProgressCard';
-import SalesPersonFollowupsCard from '@/components/SalesPersonFollowupsCard';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Checkbox } from '@/components/ui/checkbox';
@@ -481,22 +479,20 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <SalesPersonPerformanceCard key={`performance-${refreshKey}`} />
-        <DailyVisitProgressCard key={`visits-${refreshKey}`} />
-      </div>
-      
       <div className="grid grid-cols-1 mb-6">
-        <SalesPersonFollowupsCard key={`followups-${refreshKey}`} />
+        <SalesPersonPerformanceCard key={`performance-${refreshKey}`} />
+      </div>
+      {/* DailyVisitProgressCard hidden */}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+        {/* other cards */}
       </div>
 
       <div className="mb-6">
         <MultiItemOrderForm onOrderPlaced={handleRefreshData} />
       </div>
 
-      <div className="mb-6">
-        <PaymentStatusCard key={`payment-status-${refreshKey}`} />
-      </div>
+      {/* PaymentStatusCard hidden per request */}
 
       <Card className="bg-card text-card-foreground shadow-lg mb-6">
         <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
@@ -553,13 +549,13 @@ const Dashboard = () => {
                       <TableHead className="text-muted-foreground">Dealer / Online Details</TableHead>
                       <TableHead className="text-muted-foreground">Order Date</TableHead>
                       <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
-                      <TableHead className="text-muted-foreground">Payment Status</TableHead>
+                      {/* Payment Status column hidden */}
                       <TableHead className="text-muted-foreground text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.map((order) => (
-                      <TableRow key={order.id} className="hover:bg-accent/50">
+                    {orders.map(order => (
+                      <TableRow key={order.id} className="align-top">
                         <TableCell>
                           <Checkbox checked={selectedOrderIds.includes(order.id)} onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)} />
                         </TableCell>
@@ -576,7 +572,7 @@ const Dashboard = () => {
                         </TableCell>
                         <TableCell className="text-muted-foreground">{formatDate(order.order_date)}</TableCell>
                         <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
-                        <TableCell className="text-muted-foreground">{order.payment_status || 'N/A'}</TableCell>
+                        {/* Payment status hidden in recent orders list */}
                         <TableCell className="text-center">
                           <div className="flex justify-center gap-2">
                             <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Order Details"><Eye className="h-4 w-4" /></Button>

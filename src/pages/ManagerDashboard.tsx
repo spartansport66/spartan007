@@ -60,10 +60,13 @@ const ManagerDashboard = () => {
 
   if (sessionLoading || loadingData) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-2 text-lg text-gray-700 dark:text-gray-300 mb-4">Loading manager dashboard...</p>
-        <Button onClick={handleLogout} variant="destructive" className="flex items-center gap-2"><LogOut className="h-4 w-4" />Force Logout</Button>
+        <p className="ml-0 sm:ml-2 text-base sm:text-lg text-gray-700 dark:text-gray-300 mb-4">Loading manager dashboard...</p>
+        <Button onClick={handleLogout} variant="destructive" size="sm" className="flex items-center gap-2" aria-label="Force Logout">
+          <LogOut className="h-4 w-4" />
+          <span className="hidden sm:inline">Force Logout</span>
+        </Button>
       </div>
     );
   }
@@ -71,42 +74,53 @@ const ManagerDashboard = () => {
   if (userType !== 'manager') return null;
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl sm:text-4xl font-bold text-primary flex items-center gap-2">
-          <UserCog className="h-8 w-8" />
-          Manager Dashboard
-        </h1>
-        <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2">
-          <LogOut className="h-4 w-4" />
-          Logout
-        </Button>
-      </div>
+    <div className="min-h-screen bg-background text-foreground p-3 sm:p-6 lg:p-8">
+      <div className="max-w-screen-lg mx-auto">
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-primary flex items-center gap-2">
+            <UserCog className="h-6 w-6 sm:h-8 sm:w-8" />
+            <span className="text-lg sm:text-xl md:text-2xl">Manager Dashboard</span>
+          </h1>
 
-      <div className="mb-6">
-        <DailyReportCard />
-      </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleViewPaymentsReport} variant="ghost" size="sm" className="hidden sm:flex items-center gap-2">
+              Reports
+            </Button>
 
-      {/* Dashboard Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <PaymentOverviewCard 
-          key={`payment-overview-${refreshKey}`} 
-          onViewReport={handleViewPaymentsReport} 
+            <Button onClick={handleLogout} variant="outline" size="sm" className="flex items-center gap-2" aria-label="Logout">
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Logout</span>
+            </Button>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <DailyReportCard />
+        </div>
+
+        {/* Dashboard Content */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <PaymentOverviewCard 
+            key={`payment-overview-${refreshKey}`} 
+            onViewReport={handleViewPaymentsReport} 
+          />
+          <TodaySalesCard />
+        </div>
+
+        <div className="mt-6">
+          <MadeWithDyad />
+        </div>
+
+        {/* Dialogs */}
+        <PaymentsReportDialog 
+          key={paymentsReportDialogKey} 
+          isOpen={isPaymentsReportOpen} 
+          onOpenChange={setIsPaymentsReportOpen} 
+          initialFilterStatus={paymentsReportInitialStatus} 
+          initialFilterFromDate={paymentsReportInitialFromDate} 
+          initialFilterToDate={paymentsReportInitialToDate} 
         />
-        <TodaySalesCard />
       </div>
-
-      <MadeWithDyad />
-
-      {/* Dialogs */}
-      <PaymentsReportDialog 
-        key={paymentsReportDialogKey} 
-        isOpen={isPaymentsReportOpen} 
-        onOpenChange={setIsPaymentsReportOpen} 
-        initialFilterStatus={paymentsReportInitialStatus} 
-        initialFilterFromDate={paymentsReportInitialFromDate} 
-        initialFilterToDate={paymentsReportInitialToDate} 
-      />
     </div>
   );
 };

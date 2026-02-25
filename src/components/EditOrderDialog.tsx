@@ -141,8 +141,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [newItemProductId, setNewItemProductId] = useState<string>('');
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
   const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
-  const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<number>(0);
-  const [newItemGstPercent, setNewItemGstPercent] = useState<number>(0);
+  const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<string>('0');
+  const [newItemGstPercent, setNewItemGstPercent] = useState<string>('0');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -293,9 +293,11 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   }, [preGlobalDiscountTotal, discountAmountValue, roundOffValue]);
 
   const newItemCalculations = useMemo(() => {
-    const taxableUnitPrice = newItemUnitPrice * (1 - newItemDiscountPercent / 100);
+    const discPercent = parseFloat(newItemDiscountPercent as any) || 0;
+    const gstPercent = parseFloat(newItemGstPercent as any) || 0;
+    const taxableUnitPrice = newItemUnitPrice * (1 - discPercent / 100);
     const taxableValue = taxableUnitPrice * newItemQuantity;
-    const gstAmount = (taxableValue * newItemGstPercent) / 100;
+    const gstAmount = (taxableValue * gstPercent) / 100;
     const totalPrice = taxableValue + gstAmount;
 
     return { taxableValue, gstAmount, totalPrice };
@@ -316,8 +318,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       product_name: product.name,
       product_code: product.code,
       unit_dp: newItemUnitPrice,
-      discount_percent: newItemDiscountPercent,
-      gst_percent: newItemGstPercent,
+      discount_percent: parseFloat(newItemDiscountPercent as any) || 0,
+      gst_percent: parseFloat(newItemGstPercent as any) || 0,
       taxable_value: newItemCalculations.taxableValue,
       gst_amount: newItemCalculations.gstAmount,
       total_price: newItemCalculations.totalPrice,
@@ -326,8 +328,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
     setNewItemProductId('');
     setNewItemQuantity(1);
     setNewItemUnitPrice(0);
-    setNewItemDiscountPercent(0);
-    setNewItemGstPercent(0);
+    setNewItemDiscountPercent('0');
+    setNewItemGstPercent('0');
   };
 
   const updateOrderItem = (id: string, field: keyof OrderItem, value: number) => {
@@ -520,15 +522,46 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                       </PopoverTrigger>
                       <PopoverContent className="w-[400px] p-0" align="start">
                         <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
-                        <ScrollArea className="h-[250px]"><div className="p-1">{filteredProducts.map((product) => (<Button key={product.id} variant="ghost" className="w-full justify-start font-normal h-auto py-2" onClick={() => { setNewItemProductId(product.id); setNewItemUnitPrice(product.dp); setNewItemGstPercent(parseFloat(product.gst) || 0); setIsProductPopoverOpen(false); setProductSearch(''); }}><div className="flex flex-col items-start w-full"><div className="flex items-center justify-between w-full gap-2"><div className="flex items-center min-w-0"><Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} /><span className="font-medium truncate">{product.name}</span></div></div><div className="text-[10px] text-muted-foreground ml-6 flex flex-wrap gap-x-3 gap-y-1"><span className="bg-muted px-1 rounded font-mono">Code: {product.code}</span><span className="font-semibold text-primary">DP: ₹{product.dp.toFixed(2)}</span><span>Stock: {product.closing_stock}</span></div></div></Button>))}</div></ScrollArea>
+                        <ScrollArea className="h-[250px]"><div className="p-1">
+                          {filteredProducts.map((product) => (
+                            <Button
+                              key={product.id}
+                              variant="ghost"
+                              className="w-full justify-start font-normal h-auto py-2"
+                              onClick={() => {
+                                const rawGst = parseFloat(product.gst) || 0;
+                                const gstNormalized = rawGst > 0 && rawGst <= 1 ? rawGst * 100 : rawGst;
+                                setNewItemProductId(product.id);
+                                setNewItemUnitPrice(product.dp);
+                                setNewItemGstPercent(String(gstNormalized));
+                                setIsProductPopoverOpen(false);
+                                setProductSearch('');
+                              }}
+                            >
+                              <div className="flex flex-col items-start w-full">
+                                <div className="flex items-center justify-between w-full gap-2">
+                                  <div className="flex items-center min-w-0">
+                                    <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                    <span className="font-medium truncate">{product.name}</span>
+                                  </div>
+                                </div>
+                                <div className="text-[10px] text-muted-foreground ml-6 flex flex-wrap gap-x-3 gap-y-1">
+                                  <span className="bg-muted px-1 rounded font-mono">Code: {product.code}</span>
+                                  <span className="font-semibold text-primary">DP: ₹{product.dp.toFixed(2)}</span>
+                                  <span>Stock: {product.closing_stock}</span>
+                                </div>
+                              </div>
+                            </Button>
+                          ))}
+                        </div></ScrollArea>
                       </PopoverContent>
                     </Popover>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 items-end">
                     <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
                     <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
-                    <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(parseFloat(e.target.value) || 0)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
-                    <div><Label>GST (%)</Label><Input type="number" step="0.1" value={newItemGstPercent} onChange={(e) => setNewItemGstPercent(parseFloat(e.target.value) || 0)} min="0" /></div>
+                    <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(e.target.value)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
+                    <div><Label>GST (%)</Label><Input type="number" step="0.1" value={newItemGstPercent} onChange={(e) => setNewItemGstPercent(e.target.value)} min="0" /></div>
                     <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemCalculations.totalPrice.toFixed(2)}</div></div>
                   </div>
                   <Button type="button" onClick={addOrderItem} disabled={isSubmitting} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>

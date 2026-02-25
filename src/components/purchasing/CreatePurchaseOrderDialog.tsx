@@ -56,14 +56,34 @@ const CreatePurchaseOrderDialog: React.FC<CreatePurchaseOrderDialogProps> = ({ i
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [suppliersRes, materialsRes] = await Promise.all([
-        supabase.from('suppliers').select('id, name').order('name'),
-        supabase.from('raw_materials').select('id, name, code').order('name').limit(10000),
-      ]);
+      // Fetch all raw materials with pagination
+      const allMaterials: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('raw_materials')
+          .select('id, name, code')
+          .order('name')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allMaterials.push(...data);
+        }
+        if (!data || data.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
+
+      const suppliersRes = await supabase.from('suppliers').select('id, name').order('name');
+
       if (suppliersRes.error) throw suppliersRes.error;
-      if (materialsRes.error) throw materialsRes.error;
       setSuppliers(suppliersRes.data || []);
-      setRawMaterials(materialsRes.data || []);
+      setRawMaterials(allMaterials);
     } catch (error: any) {
       showError(`Failed to load data: ${error.message}`);
     } finally {

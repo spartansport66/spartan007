@@ -44,14 +44,53 @@ const BillOfMaterialsManager: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [productsRes, materialsRes] = await Promise.all([
-        supabase.from('products').select('id, name, code').order('name').limit(10000),
-        supabase.from('raw_materials').select('id, name, code').order('name').limit(10000),
-      ]);
-      if (productsRes.error) throw productsRes.error;
-      if (materialsRes.error) throw materialsRes.error;
-      setProducts(productsRes.data || []);
-      setRawMaterials(materialsRes.data || []);
+      // Fetch all products with pagination
+      const allProducts: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, name, code')
+          .order('name')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allProducts.push(...data);
+        }
+        if (!data || data.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
+
+      // Fetch all raw materials with pagination
+      const allMaterials: any[] = [];
+      page = 0;
+      hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('raw_materials')
+          .select('id, name, code')
+          .order('name')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allMaterials.push(...data);
+        }
+        if (!data || data.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
+
+      setProducts(allProducts);
+      setRawMaterials(allMaterials);
     } catch (error: any) {
       showError(`Failed to load initial data: ${error.message}`);
     } finally {

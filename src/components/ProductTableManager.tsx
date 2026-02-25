@@ -485,6 +485,8 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
               ) : (
                 paginatedProducts.map((product) => {
                   const calculatedClosingStock = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+                  const rawGst = parseFloat(product.gst as any) || 0;
+                  const gstDisplay = rawGst > 0 && rawGst <= 1 ? rawGst * 100 : rawGst;
                   
                   return (
                     <TableRow key={product.id} className="hover:bg-accent/50">
@@ -492,7 +494,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                       <TableCell>{product.name}</TableCell>
                       <TableCell>{product.categories?.name || 'N/A'}</TableCell>
                       <TableCell className="text-right">₹{product.dp.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{product.gst}%</TableCell>
+                      <TableCell className="text-right">{String(Number(gstDisplay))}%</TableCell>
                       <TableCell className="text-right">{product.opening_stock}</TableCell>
                       <TableCell className="text-right text-green-600">+{product.stock_in}</TableCell>
                       <TableCell className="text-right text-red-600">-{product.stock_out}</TableCell>
