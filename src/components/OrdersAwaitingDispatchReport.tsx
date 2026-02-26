@@ -124,7 +124,7 @@ const OrdersAwaitingDispatchReport: React.FC<OrdersAwaitingDispatchReportProps> 
         `#${o.order_number}`,
         o.dealer_name,
         o.sales_person_name,
-        `₹${o.total_amount.toFixed(2)}`,
+        `Rs.${o.total_amount.toFixed(2)}`,
         o.order_date
       ]);
 
@@ -133,7 +133,7 @@ const OrdersAwaitingDispatchReport: React.FC<OrdersAwaitingDispatchReportProps> 
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        foot: [[{ content: 'Total', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalAmount.toFixed(2)}`, '']],
+        foot: [[{ content: 'Total', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, `Rs.${totalAmount.toFixed(2)}`, '']],
         startY: 35,
         styles: { fontSize: 8, cellPadding: 2 },
         headStyles: { fillColor: [22, 163, 74], textColor: [255, 255, 255], fontStyle: 'bold' },

@@ -280,17 +280,17 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
 
       // Title
       doc.setFontSize(16);
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.text('Item-wise Dealer Sales Report', pageWidth / 2, 15, { align: 'center' });
 
       // Company name
       doc.setFontSize(12);
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.text(companyName, pageWidth / 2, 22, { align: 'center' });
 
       // Product info
       doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
       doc.text(`Product: ${selectedProductName}`, margin, 32);
       doc.text(`Code: ${selectedProductCode}`, margin, 38);
 
@@ -308,7 +308,7 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
       // Reset text color for table
       doc.setTextColor(0);
 
-      const tableColumn = ["Order No.", "Dealer Name", "Salesman Name", "Quantity", "Amount (₹)"];
+      const tableColumn = ["Order No.", "Dealer Name", "Salesman Name", "Quantity", "Amount (Rs.)"];
       const tableRows = allIndividualSales.map(sale => [
         sale.order_number.toString(),
         sale.dealer_name,
@@ -354,7 +354,7 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
           // Add footer with totals
           const bottomY = data.cursor?.y || doc.internal.pageSize.getHeight() - 30;
           doc.setFontSize(10);
-          doc.setFont(undefined, 'bold');
+          doc.setFont('helvetica', 'bold');
           doc.text(`TOTALS:`, margin, bottomY + 5);
           doc.text(`${totalQuantity}`, margin + 60, bottomY + 5);
           doc.text(`${totalSalesAmount.toFixed(2)}`, margin + 100, bottomY + 5);
@@ -497,7 +497,7 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
                     <TableHead className="font-bold">Dealer Name</TableHead>
                     <TableHead className="font-bold">Salesman Name</TableHead>
                     <TableHead className="text-right font-bold">Quantity</TableHead>
-                    <TableHead className="text-right font-bold">Amount (₹)</TableHead>
+                    <TableHead className="text-right font-bold">Amount (Rs.)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

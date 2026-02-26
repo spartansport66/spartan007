@@ -178,8 +178,8 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
       const doc = new jsPDF();
       doc.text("Sales Person Daily Sales Report", 14, 22);
       autoTable(doc, {
-        head: [['Sales Person', 'Date', 'Total Sales (₹)']],
-        body: dataToPrint.map(d => [d.salesPersonName, d.date, d.totalSales.toFixed(2)]),
+        head: [['Sales Person', 'Date', 'Total Sales (Rs.)']],
+        body: dataToPrint.map(d => [d.salesPersonName, d.date, `Rs.${d.totalSales.toFixed(2)}`]),
         startY: 30,
       });
       doc.save('daily_sales_report.pdf');
@@ -240,7 +240,7 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
       ctx.fillText('Sales Person', colPositions[0], y);
       ctx.fillText('Date Range', colPositions[1], y);
       ctx.textAlign = 'right';
-      ctx.fillText('Total Sales (₹)', colPositions[2], y);
+      ctx.fillText('Total Sales (Rs.)', colPositions[2], y);
       y += 10;
       ctx.strokeStyle = '#cccccc';
       ctx.lineWidth = 1;
@@ -259,7 +259,7 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
           ctx.fillText(item.date, colPositions[1], y);
           ctx.textAlign = 'right';
           ctx.font = 'bold 16px Arial';
-          ctx.fillText(`₹${item.totalSales.toFixed(2)}`, colPositions[2], y);
+          ctx.fillText(`Rs.${item.totalSales.toFixed(2)}`, colPositions[2], y);
           ctx.font = '16px Arial';
           y += rowHeight;
       });
@@ -277,7 +277,7 @@ const SalesPersonDailySalesReportDialog: React.FC<SalesPersonDailySalesReportDia
       ctx.font = 'bold 18px Arial';
       ctx.textAlign = 'right';
       ctx.fillStyle = '#000000';
-      ctx.fillText(`Total: ₹${totalSales.toFixed(2)}`, colPositions[2], y + 10);
+      ctx.fillText(`Total: Rs.${totalSales.toFixed(2)}`, colPositions[2], y + 10);
 
       // Trigger Download
       const todayStr = new Date().toLocaleDateString('en-IN');

@@ -558,7 +558,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
               daysOverdueDisplay = entry.days_overdue.toString();
             }
           } else if (entry.type === 'payment') {
-            statusDetails = `${entry.payment_method} (Amt: ₹${entry.credit.toFixed(2)})`;
+            statusDetails = `${entry.payment_method} (Amt: Rs.${entry.credit.toFixed(2)})`;
           } else if (entry.type === 'opening_balance') {
             statusDetails = 'N/A';
           }
@@ -599,7 +599,7 @@ const SalesPersonAccountStatementReportDialog: React.FC<SalesPersonAccountStatem
 
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
-        doc.text(`Final Closing Balance: ₹${dealerStatement.final_balance.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
+        doc.text(`Final Closing Balance: Rs.${dealerStatement.final_balance.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
         yPos += 10;
       }
 

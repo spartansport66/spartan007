@@ -105,7 +105,7 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
       doc.setTextColor(100);
       doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, 28, { align: 'center' });
 
-      const tableColumn = ["Code", "Product Name", "Current Stock", "DP (₹)"];
+      const tableColumn = ["Code", "Product Name", "Current Stock", "DP (Rs.)"];
       const tableRows = lowStockProducts.map(product => {
         const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
         return [

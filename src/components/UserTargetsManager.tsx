@@ -324,7 +324,7 @@ const UserTargetsManager: React.FC<UserTargetsManagerProps> = ({ user, onTargets
             name="targetAmount"
             render={({ field }) => (
               <FormItem>
-                <Label>Target Amount (₹)</Label>
+                <Label>Target Amount (Rs.)</Label>
                 <FormControl>
                   <Input type="number" step="0.01" placeholder="e.g., 50000.00" {...field} />
                 </FormControl>

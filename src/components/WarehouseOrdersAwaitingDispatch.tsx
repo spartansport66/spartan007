@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatCurrency } from '@/utils/format';
 import { cn } from '@/lib/utils';
 
 interface OrderToDispatch {
@@ -207,10 +208,10 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
           sale.products?.code || 'N/A', 
           sale.products?.name || 'N/A', 
           sale.quantity.toString(), 
-          `₹${(sale.unit_price || 0).toFixed(2)}`, 
+          `Rs.${(sale.unit_price || 0).toFixed(2)}`, 
           `${(sale.discount_percent || 0)}%`, 
           `${(sale.gst_percent || 0)}%`, 
-          `₹${(sale.total_price || 0).toFixed(2)}`
+          `Rs.${(sale.total_price || 0).toFixed(2)}`
         ]);
 
         autoTable(doc, { 
@@ -235,17 +236,17 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
         
         doc.setFont("helvetica", "normal");
         doc.setFontSize(10);
-        doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
+        doc.text(`Subtotal: Rs.${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
         
         let currentY = finalY;
         if (orderData.discount_amount > 0) {
           currentY += 5;
-          doc.text(`Global Discount: -₹${orderData.discount_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+          doc.text(`Global Discount: -Rs.${orderData.discount_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
         }
         
         currentY += 7;
         doc.setFont("helvetica", "bold"); doc.setFontSize(12);
-        doc.text(`FINAL TOTAL: ₹${orderData.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+        doc.text(`FINAL TOTAL: Rs.${orderData.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
       }
       doc.save(`Bulk_Order_Details_${new Date().getTime()}.pdf`);
       showSuccess(`Generated ${selectedOrderIds.length} Order Detail PDFs.`);
@@ -337,7 +338,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
                         )}
                       </TableCell>
                       <TableCell>{formatDate(order.order_date)}</TableCell>
-                      <TableCell className="text-right">₹{order.total_amount.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(order.total_amount)}</TableCell>
                       <TableCell className="text-center"><div className="flex justify-center gap-2">
                         <Button variant="ghost" size="icon" onClick={() => { setSelectedOrderIdForDetails(order.id); setIsOrderDetailsDialogOpen(true); }} title="View"><Eye className="h-4 w-4" /></Button>
                       </div></TableCell>

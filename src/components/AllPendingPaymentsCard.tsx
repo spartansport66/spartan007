@@ -279,7 +279,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
         return [
           p.order_number === 0 ? 'General Balance' : `#${p.order_number}`,
           p.dealer_name,
-          `₹${p.amount.toFixed(2)}`,
+          `Rs.${p.amount.toFixed(2)}`,
           displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1),
           displayDate
         ];
@@ -290,7 +290,7 @@ const AllPendingPaymentsCard: React.FC<AllPendingPaymentsCardProps> = ({ onPayme
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        foot: [[{ content: 'Total', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, `₹${totalAmount.toFixed(2)}`, '', '']],
+        foot: [[{ content: 'Total', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, `Rs.${totalAmount.toFixed(2)}`, '', '']],
         startY: 35,
         styles: { fontSize: 8, cellPadding: 2 },
         headStyles: { fillColor: [22, 163, 74], textColor: [255, 255, 255], fontStyle: 'bold' },

@@ -8,6 +8,7 @@ import { Loader2, Printer, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
+import { formatCurrency } from '@/utils/format';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -392,22 +393,22 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
           item.product_code,
           item.product_name,
           item.quantity.toString(),
-          `₹${item.unit_price.toFixed(2)}`,
+          `Rs.${item.unit_price.toFixed(2)}`,
           `${item.discount_percent}%`,
           `${item.product_gst}%`,
-          `₹${item.total_price.toFixed(2)}`
+          `Rs.${item.total_price.toFixed(2)}`
         ])
       : orderDetails.online_order_details?.mapped_product_name ?
         [[
           orderDetails.online_order_details.mapped_product_code || 'N/A',
           orderDetails.online_order_details.mapped_product_name,
           "1",
-          `₹${orderDetails.total_amount.toFixed(2)}`,
+          `Rs.${orderDetails.total_amount.toFixed(2)}`,
           "0%",
           "0%",
-          `₹${orderDetails.total_amount.toFixed(2)}`
+          `Rs.${orderDetails.total_amount.toFixed(2)}`
         ]]
-      : [[ "N/A", orderDetails.online_order_details?.raw_item_name || "Pending Mapping", "1", `₹${orderDetails.total_amount.toFixed(2)}`, "0%", "0%", `₹${orderDetails.total_amount.toFixed(2)}` ]];
+      : [[ "N/A", orderDetails.online_order_details?.raw_item_name || "Pending Mapping", "1", `Rs.${orderDetails.total_amount.toFixed(2)}`, "0%", "0%", `Rs.${orderDetails.total_amount.toFixed(2)}` ]];
 
     autoTable(doc, { 
       head: [tableColumn], 
@@ -433,18 +434,18 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
+    doc.text(`Subtotal: Rs.${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
     
     let currentY = finalY;
     if (orderDetails.discount_amount > 0) {
       currentY += 5;
-      doc.text(`Global Discount: -₹${orderDetails.discount_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+      doc.text(`Global Discount: -Rs.${orderDetails.discount_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
     }
     
     currentY += 7;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text(`FINAL TOTAL: ₹${orderDetails.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+    doc.text(`FINAL TOTAL: Rs.${orderDetails.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
 
     doc.save(`Order_Details_${orderDetails.order_number}.pdf`);
     if (onPrint) {
@@ -514,10 +515,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                         <TableCell className="text-right">{item.quantity}</TableCell>
                         {!isGateKeeper && (
                           <>
-                            <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.unit_price)}</TableCell>
                             <TableCell className="text-right">{item.discount_percent}%</TableCell>
                             <TableCell className="text-right">{item.product_gst}%</TableCell>
-                            <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-medium">{formatCurrency(item.total_price)}</TableCell>
                           </>
                         )}
                       </TableRow>
@@ -530,10 +531,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                       <TableCell className="text-right">1</TableCell>
                       {!isGateKeeper && (
                         <>
-                          <TableCell className="text-right">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(orderDetails.total_amount)}</TableCell>
                           <TableCell className="text-right">0%</TableCell>
                           <TableCell className="text-right">0%</TableCell>
-                          <TableCell className="text-right font-medium">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(orderDetails.total_amount)}</TableCell>
                         </>
                       )}
                     </TableRow>
@@ -545,10 +546,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                       <TableCell className="text-right">1</TableCell>
                       {!isGateKeeper && (
                         <>
-                          <TableCell className="text-right">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(orderDetails.total_amount)}</TableCell>
                           <TableCell className="text-right">0%</TableCell>
                           <TableCell className="text-right">0%</TableCell>
-                          <TableCell className="text-right font-medium">₹{orderDetails.total_amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(orderDetails.total_amount)}</TableCell>
                         </>
                       )}
                     </TableRow>
@@ -559,9 +560,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             {!isGateKeeper && (
               <div className="text-right space-y-1">
                 {orderDetails.discount_amount > 0 && (
-                  <p className="text-sm text-muted-foreground">Global Discount: -₹{orderDetails.discount_amount.toFixed(2)}</p>
+                  <p className="text-sm text-muted-foreground">Global Discount: -{formatCurrency(orderDetails.discount_amount)}</p>
                 )}
-                <p className="text-lg font-bold">Final Total: ₹{orderDetails.total_amount.toFixed(2)}</p>
+                <p className="text-lg font-bold">Final Total: {formatCurrency(orderDetails.total_amount)}</p>
               </div>
             )}
           </div>

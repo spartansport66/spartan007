@@ -527,8 +527,8 @@ const ManageDealers = () => {
         dealer.state || 'N/A',
         dealer.country || 'N/A',
         `₹${dealer.opening_balance.toFixed(2)}`,
-        `₹${dealer.current_balance.toFixed(2)}`, // Use calculated current balance
-        `₹${dealer.current_month_credit_limit.toFixed(2)}`,
+        `Rs.${dealer.current_balance.toFixed(2)}`, // Use calculated current balance
+        `Rs.${dealer.current_month_credit_limit.toFixed(2)}`,
         dealer.allotted_credit_days, 
         dealer.last_billing_date ? new Date(dealer.last_billing_date).toLocaleDateString() : 'N/A', // New: Display last_billing_date
         dealer.assigned_sales_persons.length > 0
@@ -546,9 +546,9 @@ const ManageDealers = () => {
         foot: [
           [
             { content: 'Totals', colSpan: 8, styles: { halign: 'right', fontStyle: 'bold' } },
-            `₹${totalOpeningBalance.toFixed(2)}`,
-            `₹${totalCurrentBalance.toFixed(2)}`, // Display total current balance
-            `₹${totalMonthlyCreditLimit.toFixed(2)}`,
+            `Rs.${totalOpeningBalance.toFixed(2)}`,
+            `Rs.${totalCurrentBalance.toFixed(2)}`, // Display total current balance
+            `Rs.${totalMonthlyCreditLimit.toFixed(2)}`,
             '', // Credit Days
             '', // Last Billing Date
             '', // Assigned To
@@ -629,7 +629,7 @@ const ManageDealers = () => {
         dealer.name,
         dealer.city || 'N/A',
         dealer.phone || 'N/A',
-        `₹${dealer.current_balance.toFixed(2)}`,
+        `Rs.${dealer.current_balance.toFixed(2)}`,
       ]);
 
       const totalCurrentBalance = selectedDealersData.reduce((sum, dealer) => sum + dealer.current_balance, 0);
@@ -640,7 +640,7 @@ const ManageDealers = () => {
         foot: [
           [
             { content: 'Total Balance', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } },
-            `₹${totalCurrentBalance.toFixed(2)}`,
+            `Rs.${totalCurrentBalance.toFixed(2)}`,
           ]
         ],
         startY: 35,
