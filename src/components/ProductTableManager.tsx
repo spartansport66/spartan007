@@ -40,6 +40,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { FormField } from '@/components/ui/form';
 
 // IMPORTANT: Replace with the actual URL of your deployed Edge Function
@@ -106,6 +107,9 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
   const [appliedStockFilter, setAppliedStockFilter] = useState<number | null>(null);
   const [stockFilterGreater, setStockFilterGreater] = useState<string>('');
   const [appliedStockFilterGreater, setAppliedStockFilterGreater] = useState<number | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('__all__');
+  const [appliedCategoryId, setAppliedCategoryId] = useState<string | null>(null);
+  const [groupByCategory, setGroupByCategory] = useState<boolean>(false);
 
   // Sort states
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -161,7 +165,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
     try {
       let query = supabase
         .from('products')
-        .select('id, code, name, description, size, hsn, gst, dp, opening_stock, stock_in, stock_out, closing_stock, user_id, sales(count), categories(id, name)');
+        .select('id, code, name, description, size, hsn, gst, dp, opening_stock, stock_in, stock_out, closing_stock, category_id, user_id, sales(count), categories(id, name)');
       
       if (appliedSearchTerm) {
         query = query.or(`name.ilike.%${appliedSearchTerm}%,code.ilike.%${appliedSearchTerm}%`);
@@ -199,6 +203,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
     setAppliedSearchTerm(searchTerm);
     setAppliedStockFilter(stockFilter ? Number(stockFilter) : null);
     setAppliedStockFilterGreater(stockFilterGreater ? Number(stockFilterGreater) : null);
+    setAppliedCategoryId(selectedCategoryId === '__all__' ? null : selectedCategoryId);
     setCurrentPage(1); // Reset to first page on filter change
   };
 
@@ -209,6 +214,8 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
     setAppliedStockFilter(null);
     setStockFilterGreater('');
     setAppliedStockFilterGreater(null);
+    setSelectedCategoryId('__all__');
+    setAppliedCategoryId(null);
     setCurrentPage(1); // Reset to first page on clear
   };
 
@@ -280,8 +287,9 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
       
       const matchesLess = appliedStockFilter === null || calculatedClosing <= appliedStockFilter;
       const matchesGreater = appliedStockFilterGreater === null || calculatedClosing >= appliedStockFilterGreater;
-      
-      return matchesLess && matchesGreater;
+      const matchesCategory = appliedCategoryId === null || product.category_id === appliedCategoryId;
+
+      return matchesLess && matchesGreater && matchesCategory;
     });
 
     return filtered.sort((a, b) => {
@@ -304,7 +312,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
         return sortDirection === 'asc' ? comparison : -comparison;
       }
     });
-  }, [products, appliedStockFilter, appliedStockFilterGreater, sortKey, sortDirection]);
+  }, [products, appliedStockFilter, appliedStockFilterGreater, appliedCategoryId, sortKey, sortDirection]);
 
   // Pagination logic
   const totalPages = Math.ceil(sortedAndFilteredProducts.length / PAGE_SIZE);
@@ -334,6 +342,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
       if (appliedSearchTerm) filterDetails.push(`Search: "${appliedSearchTerm}"`);
       if (appliedStockFilter !== null) filterDetails.push(`Stock <= ${appliedStockFilter}`);
       if (appliedStockFilterGreater !== null) filterDetails.push(`Stock >= ${appliedStockFilterGreater}`);
+      if (appliedCategoryId) filterDetails.push(`Category: ${categories.find(c => c.id === appliedCategoryId)?.name || appliedCategoryId}`);
 
       if (filterDetails.length > 0) {
         doc.setFontSize(9);
@@ -341,51 +350,75 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
       }
 
       const tableColumn = ["Code", "Product Name", "Opening", "Stock In", "Stock Out", "Closing", "DP (₹)"];
-      const tableRows = sortedAndFilteredProducts.map(product => {
-        const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
-        return [
-          product.code,
-          product.name,
-          product.opening_stock.toString(),
-          `+${product.stock_in}`,
-          `-${product.stock_out}`,
-          calculatedClosing.toString(),
-          product.dp.toFixed(2),
-        ];
-      });
 
-      autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        startY: 45,
-        styles: {
-          fontSize: 8,
-          cellPadding: 2,
-          valign: 'middle',
-        },
-        headStyles: {
-          fillColor: [30, 58, 138],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          halign: 'center',
-        },
-        bodyStyles: {
-          textColor: [0, 0, 0],
-        },
-        margin: { top: 10, left: 10, right: 10 },
-        columnStyles: {
-          0: { cellWidth: 30 },
-          1: { cellWidth: 'auto' },
-          2: { cellWidth: 25, halign: 'right' },
-          3: { cellWidth: 25, halign: 'right' },
-          4: { cellWidth: 25, halign: 'right' },
-          5: { cellWidth: 25, halign: 'right' },
-          6: { cellWidth: 30, halign: 'right' },
-        }
-      });
+      if (groupByCategory) {
+        const groups = sortedAndFilteredProducts.reduce((acc: Record<string, Product[]>, p) => {
+          const catName = p.categories?.name || 'Uncategorized';
+          if (!acc[catName]) acc[catName] = [];
+          acc[catName].push(p);
+          return acc;
+        }, {});
 
-      doc.save('product_inventory_report.pdf');
-      showSuccess('Product report generated successfully!');
+        const groupNames = Object.keys(groups);
+        groupNames.forEach((gName, idx) => {
+          if (idx > 0) doc.addPage();
+          doc.setFontSize(16);
+          doc.text(gName, doc.internal.pageSize.width / 2, 35, { align: 'center' });
+
+          const rows = (groups[gName] || []).map(product => {
+            const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+            return [
+              product.code,
+              product.name,
+              product.opening_stock.toString(),
+              `+${product.stock_in}`,
+              `-${product.stock_out}`,
+              calculatedClosing.toString(),
+              product.dp.toFixed(2),
+            ];
+          });
+
+          autoTable(doc, {
+            head: [tableColumn],
+            body: rows,
+            startY: 40,
+            styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
+            headStyles: { fillColor: [30, 58, 138], textColor: [255,255,255], fontStyle: 'bold', halign: 'center' },
+            margin: { top: 10, left: 10, right: 10 },
+            columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 25, halign: 'right' }, 3: { cellWidth: 25, halign: 'right' }, 4: { cellWidth: 25, halign: 'right' }, 5: { cellWidth: 25, halign: 'right' }, 6: { cellWidth: 30, halign: 'right' } }
+          });
+        });
+
+        doc.save('product_inventory_report_by_category.pdf');
+        showSuccess('Category-wise product report generated successfully!');
+      } else {
+        const tableRows = sortedAndFilteredProducts.map(product => {
+          const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
+          return [
+            product.code,
+            product.name,
+            product.opening_stock.toString(),
+            `+${product.stock_in}`,
+            `-${product.stock_out}`,
+            calculatedClosing.toString(),
+            product.dp.toFixed(2),
+          ];
+        });
+
+        autoTable(doc, {
+          head: [tableColumn],
+          body: tableRows,
+          startY: 45,
+          styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
+          headStyles: { fillColor: [30, 58, 138], textColor: [255,255,255], fontStyle: 'bold', halign: 'center' },
+          bodyStyles: { textColor: [0,0,0] },
+          margin: { top: 10, left: 10, right: 10 },
+          columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 25, halign: 'right' }, 3: { cellWidth: 25, halign: 'right' }, 4: { cellWidth: 25, halign: 'right' }, 5: { cellWidth: 25, halign: 'right' }, 6: { cellWidth: 30, halign: 'right' } }
+        });
+
+        doc.save('product_inventory_report.pdf');
+        showSuccess('Product report generated successfully!');
+      }
     } catch (error: any) {
       console.error('Error generating PDF:', error);
       showError(`Failed to generate report: ${error.message || 'An unknown error occurred.'}`);
@@ -419,6 +452,20 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
             <Label htmlFor="productSearch">Search</Label>
             <Input id="productSearch" placeholder="Name or Code" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
+          <div className="flex-1 min-w-[200px]">
+            <Label>Category</Label>
+            <Select value={selectedCategoryId} onValueChange={(val) => setSelectedCategoryId(val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="All categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Categories</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex-1 min-w-[150px]">
             <Label htmlFor="stockFilterGreater">Closing Stock Greater Than</Label>
             <Input id="stockFilterGreater" type="number" placeholder="e.g. 10" value={stockFilterGreater} onChange={(e) => setStockFilterGreater(e.target.value)} />
@@ -429,6 +476,10 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
           </div>
           <Button onClick={handleApplyFilters}><Search className="h-4 w-4 mr-2" /> Apply Filters</Button>
           <Button variant="outline" onClick={handleClearFilters}>Clear</Button>
+          <div className="flex items-center gap-2 ml-2">
+            <Checkbox checked={groupByCategory} onCheckedChange={(v) => setGroupByCategory(Boolean(v))} />
+            <Label className="m-0">Group report by category</Label>
+          </div>
         </div>
         
         <div className="overflow-x-auto border rounded-md">
