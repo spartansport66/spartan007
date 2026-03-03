@@ -229,6 +229,13 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     }
   }, [isOpen, orderId, fetchOrderDetails, fetchCompanyInfo]);
 
+  const hasActualItems = orderDetails ? orderDetails.items.some(i => {
+    if (i.product_name && i.product_name !== 'Pending Mapping' && i.product_name !== 'N/A') return true;
+    // some sales rows might include product_id even if product_name is placeholder
+    if ((i as any).product_id) return true;
+    return false;
+  }) : false;
+
   const handlePrintGatePass = () => {
     if (!orderDetails) return;
     const doc = new jsPDF();
@@ -291,8 +298,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
     y = Math.max(y + (addressLines.length * 5), rightY + 10);
 
+    const hasActualItems = orderDetails.items.some(i => {
+      // consider product_name meaningful if it's not the placeholder text
+      if (i.product_name && i.product_name !== 'Pending Mapping' && i.product_name !== 'N/A') return true;
+      if (i.product_id) return true;
+      return false;
+    });
+
     const tableColumn = ["Code", "Product Name", "Quantity"];
-    const tableRows = orderDetails.items.length > 0 
+    const tableRows = hasActualItems
       ? orderDetails.items.map(item => [item.product_code, item.product_name, item.quantity.toString()])
       : orderDetails.online_order_details?.mapped_product_name ?
         [[
@@ -387,8 +401,14 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
     y = Math.max(y + (addressLines.length * 5), rightY + 10);
 
+    const hasActualItems2 = orderDetails.items.some(i => {
+      if (i.product_name && i.product_name !== 'Pending Mapping' && i.product_name !== 'N/A') return true;
+      if (i.product_id) return true;
+      return false;
+    });
+
     const tableColumn = ["Code", "Product", "Qty", "Unit Price", "Disc %", "GST %", "Total"];
-    const tableRows = orderDetails.items.length > 0 
+    const tableRows = hasActualItems2
       ? orderDetails.items.map(item => [
           item.product_code,
           item.product_name,
@@ -508,7 +528,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {orderDetails.items.length > 0 ? (
+                  {hasActualItems ? (
                     orderDetails.items.map((item, idx) => (
                       <TableRow key={idx}>
                         <TableCell>{item.product_name} ({item.product_code})</TableCell>

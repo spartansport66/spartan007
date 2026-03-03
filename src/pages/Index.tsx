@@ -31,6 +31,9 @@ const Index = () => {
           } else if (userType === 'super_admin') {
             console.log('Redirecting to super admin dashboard');
             navigate('/super-admin-dashboard');
+          } else if (userType === 'sales_hod') {
+            console.log('Redirecting to Sales HOD dashboard');
+            navigate('/sales-hod-dashboard');
           } else if (userType === 'admin') {
             console.log('Redirecting to admin dashboard');
             navigate('/admin-dashboard');

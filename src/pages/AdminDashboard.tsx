@@ -10,6 +10,8 @@ import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog,
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
+import ApprovedHODOrdersCard from '@/components/ApprovedHODOrdersCard';
+import DisapprovedHODOrdersCard from '@/components/DisapprovedHODOrdersCard';
 import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
 import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
 import AdminTotalPendingOrdersCard from '@/components/AdminTotalPendingOrdersCard';
@@ -269,6 +271,7 @@ const AdminDashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} /><DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} /></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><ApprovedHODOrdersCard key={`approved-hod-${refreshKey}`} /><DisapprovedHODOrdersCard key={`disapproved-hod-${refreshKey}`} /></div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} /><AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} /></div>
       <MadeWithDyad />

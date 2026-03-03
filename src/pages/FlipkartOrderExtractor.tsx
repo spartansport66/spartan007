@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, FileText, Upload, Search, Download, AlertCircle, Eye, EyeOff, Save, ListChecks } from 'lucide-react';
+import { Loader2, ArrowLeft, FileText, Upload, Search, Download, AlertCircle, Eye, EyeOff, Save, ListChecks, Trash2 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +30,8 @@ interface ExtractedOrder {
   invoiceNo?: string;
 }
 
+interface Product { id: string; name: string; code?: string; size?: string | number | null; dp?: number; gst?: string | number }
+
 const FlipkartOrderExtractor = () => {
   const navigate = useNavigate();
   const { user } = useSession();
@@ -35,6 +40,66 @@ const FlipkartOrderExtractor = () => {
   const [extractedOrders, setExtractedOrders] = useState<ExtractedOrder[]>([]);
   const [rawText, setRawText] = useState<string>("");
   const [showRawText, setShowRawText] = useState(false);
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [matchedMap, setMatchedMap] = useState<Record<number, { matches: Product[]; selectedId?: string; search?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }>>({});
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const { data, error } = await supabase.from('products').select('id, name, code, size, dp, gst').order('name');
+        if (error) throw error;
+        setProducts(data || []);
+      } catch (err: any) {
+        console.error('Failed to fetch products:', err.message);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  const normalize = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const extractNumericToken = (text: string) => { const match = text.match(/\b(\d{2,})\b/); return match ? match[1] : undefined; };
+
+  useEffect(() => {
+    if (products.length === 0) return;
+    
+    const enriched = products.map(p => ({
+      ...p,
+      normCode: p.code ? normalize(p.code) : '',
+      normName: p.name ? normalize(p.name) : '',
+      numericParts: (p.code || '').match(/\d{2,}/g) || []
+    }));
+
+    const map: typeof matchedMap = {} as any;
+    extractedOrders.forEach((ord, idx) => {
+      const text = ord.item || '';
+      const numericToken = extractNumericToken(text);
+      const normText = normalize(text);
+
+      let candidates = enriched.filter((p: any) => {
+        if (!p.code && !p.name) return false;
+        if (p.normCode && normText.includes(p.normCode)) return true;
+        if (numericToken) {
+          if (p.numericParts.some((np: string) => np.includes(numericToken) || numericToken.includes(np))) return true;
+          if ((p.normCode || '').includes(numericToken)) return true;
+        }
+        if (p.normName && normText.includes(p.normName.substring(0, Math.min(12, p.normName.length)))) return true;
+        const textTokens = normText.split(/\s+/).filter((t: string) => t.length > 2);
+        const productTokens = (p.normName || '').split(/\s+/).filter((t: string) => t.length > 2);
+        if (textTokens.length > 0 && productTokens.length > 0) {
+          const intersect = textTokens.filter((t: string) => productTokens.includes(t));
+          if (intersect.length >= 2) return true;
+        }
+        return false;
+      });
+
+      const candidateProducts: Product[] = candidates.map((c: any) => ({ id: c.id, name: c.name, code: c.code, size: c.size }));
+      map[idx] = { matches: candidateProducts, selectedId: candidateProducts.length === 1 ? candidateProducts[0].id : undefined, debug: { numericToken, normText, candidateCodes: candidateProducts.map(cp => (cp.code || '').toString()) } };
+    });
+    setMatchedMap(map);
+  }, [products, extractedOrders]);
+
+  const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   const extractDataFromPageText = (text: string): ExtractedOrder | null => {
     const orderNoMatch = text.match(/OD\d{18}/);
@@ -294,18 +359,85 @@ const FlipkartOrderExtractor = () => {
                       </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {extractedOrders.map((order, index) => (
-                      <TableRow key={index} className="hover:bg-muted/30">
-                        <TableCell className="font-mono text-xs font-semibold text-blue-600">{order.orderNo}</TableCell>
-                        <TableCell className="text-xs font-medium">{order.invoiceNo || '—'}</TableCell>
-                        <TableCell className="font-medium">{order.customerName}</TableCell>
-                        <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={order.address}>
-                          {order.address}
-                        </TableCell>
-                        <TableCell className="text-sm">{order.item}</TableCell>
-                        <TableCell className="text-right font-bold text-green-600">₹{order.amount}</TableCell>
-                      </TableRow>
-                    ))}
+                    {extractedOrders.map((order, index) => {
+                      const candidates = matchedMap[index]?.matches || [];
+                      const selectedId = matchedMap[index]?.selectedId;
+                      const searchTerm = matchedMap[index]?.search || '';
+                      const selected = selectedId ? products.find(p => p.id === selectedId) : null;
+
+                      return (
+                        <TableRow key={index} className="hover:bg-muted/30">
+                          <TableCell className="font-mono text-xs font-semibold text-blue-600">{order.orderNo}</TableCell>
+                          <TableCell className="text-xs font-medium">{order.invoiceNo || '—'}</TableCell>
+                          <TableCell className="font-medium">{order.customerName}</TableCell>
+                          <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={order.address}>
+                            {order.address}
+                          </TableCell>
+                          <TableCell className="text-sm min-w-[600px]">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="link" className="p-0 h-auto whitespace-normal text-left text-sm font-medium break-words">
+                                  {`Select product (${candidates.length})`}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[600px] max-w-[90vw] p-3 max-h-96 flex flex-col">
+                                <div className="space-y-2 flex-1 overflow-auto">
+                                  {candidates.length > 0 && (
+                                    <>
+                                      <h4 className="font-semibold text-xs uppercase text-muted-foreground">Best Matches ({candidates.length})</h4>
+                                      {candidates.slice(0, 5).map(p => (
+                                        <button
+                                          key={p.id}
+                                          onClick={() => {
+                                            const newOrders = [...extractedOrders];
+                                            newOrders[index].item = `${order.item} — ${p.code || p.name}`;
+                                            setExtractedOrders(newOrders);
+                                            setMatchedMap(m => ({ ...m, [index]: { ...m[index], selectedId: p.id } }));
+                                          }}
+                                          className="w-full text-left p-2 bg-blue-50 hover:bg-blue-100 rounded-md text-xs border border-blue-200 cursor-pointer"
+                                        >
+                                          <div className="font-bold text-blue-900 whitespace-normal break-words">{p.code || p.name}</div>
+                                          {p.code && <div className="text-blue-700">{p.code}</div>}
+                                        </button>
+                                      ))}
+                                    </>
+                                  )}
+                                  <div className="border-t pt-2 mt-2">
+                                    <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-2">All Products</h4>
+                                    <Input
+                                      placeholder="Search products..."
+                                      value={searchTerm}
+                                      onChange={(e) => setMatchedMap(m => ({ ...m, [index]: { ...m[index], search: e.target.value } }))}
+                                      className="mb-2 text-xs"
+                                    />
+                                    <ScrollArea className="max-h-48">
+                                      {(searchTerm ? products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.code?.toLowerCase().includes(searchTerm.toLowerCase())) : products).map(p => (
+                                        <button
+                                          key={p.id}
+                                          onClick={() => {
+                                            const newOrders = [...extractedOrders];
+                                            newOrders[index].item = `${order.item} — ${p.code || p.name}`;
+                                            setExtractedOrders(newOrders);
+                                            setMatchedMap(m => ({ ...m, [index]: { ...m[index], selectedId: p.id } }));
+                                          }}
+                                          className="w-full text-left p-2 hover:bg-gray-100 text-xs border-b last:border-b-0 cursor-pointer"
+                                        >
+                                          <div className="font-medium whitespace-normal break-words">{p.code || p.name}</div>
+                                          {p.code && <div className="text-muted-foreground text-xs">{p.code}</div>}
+                                        </button>
+                                      ))}
+                                    </ScrollArea>
+                                  </div>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                            <div className="mt-1 text-xs text-muted-foreground break-words whitespace-pre-wrap">{order.item}</div>
+                            {selected && <div className="mt-1 text-xs font-bold text-blue-600">✓ {selected.name}</div>}
+                          </TableCell>
+                          <TableCell className="text-right font-bold text-green-600">₹{order.amount}</TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

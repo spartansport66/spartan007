@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Truck, Search, ChevronLeft, ChevronRight, Edit, Printer, FileText } from 'lucide-react';
+import { Loader2, Eye, Truck, Search, ChevronLeft, ChevronRight, Edit, Printer, FileText, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
@@ -289,6 +289,129 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
     } catch (error: any) { showError(`Failed: ${error.message}`); } finally { setIsBulkPrinting(false); }
   };
 
+  const handlePrintSelectedSummary = async () => {
+    if (selectedOrderIds.length === 0) return;
+    setIsBulkPrinting(true);
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      doc.setFontSize(14);
+      doc.text(companyName?.toUpperCase() || 'SELECTED ORDERS', pageWidth / 2, 15, { align: 'center' });
+
+      const selected = orders
+        .filter(o => selectedOrderIds.includes(o.id))
+        .sort((a, b) => new Date(a.order_date).getTime() - new Date(b.order_date).getTime());
+
+      const tableColumn = ['Order No.', 'Dealer Name', 'Order Date', 'Amount'];
+      const tableRows = selected.map(o => [
+        `#${o.order_number}`,
+        o.dealer_name,
+        formatDate(o.order_date),
+        formatCurrency(o.total_amount),
+      ]);
+
+      const total = selected.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        foot: [[{ content: 'Total', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, formatCurrency(total)]],
+        startY: 30,
+        styles: { fontSize: 10, cellPadding: 3 },
+        headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255] },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          1: { cellWidth: 70 },
+          2: { cellWidth: 40, halign: 'center' },
+          3: { cellWidth: 30, halign: 'right' },
+        }
+      });
+
+      doc.save(`Selected_Orders_${new Date().getTime()}.pdf`);
+      showSuccess(`Printed ${selected.length} selected orders.`);
+      setSelectedOrderIds([]);
+    } catch (error: any) {
+      showError(`Failed to print: ${error.message}`);
+    } finally {
+      setIsBulkPrinting(false);
+    }
+  };
+
+  const handleDownloadSelectedJpg = (quality = 0.9) => {
+    if (selectedOrderIds.length === 0) return;
+    try {
+      const selected = orders
+        .filter(o => selectedOrderIds.includes(o.id))
+        .sort((a, b) => new Date(a.order_date).getTime() - new Date(b.order_date).getTime());
+
+      const width = 1200;
+      const rowHeight = 44;
+      const headerHeight = 130;
+      const footerHeight = 70;
+      const height = headerHeight + (selected.length * rowHeight) + footerHeight;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Could not create canvas context');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = '#1e3a8a';
+      ctx.fillRect(0, 0, width, headerHeight - 20);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 28px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(companyName?.toUpperCase() || 'SELECTED ORDERS', width / 2, 50);
+      ctx.font = '18px Arial';
+      ctx.fillStyle = '#333333';
+      ctx.fillText('Selected Orders Summary', width / 2, 82);
+      ctx.fillStyle = '#000000';
+      ctx.font = '14px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(`Generated: ${new Date().toLocaleString()}`, 40, headerHeight - 30);
+
+      let y = headerHeight;
+      const colPositions = [60, 260, 820, 1060];
+      ctx.font = 'bold 16px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText('Order No.', colPositions[0], y);
+      ctx.fillText('Dealer', colPositions[1], y);
+      ctx.textAlign = 'center';
+      ctx.fillText('Order Date', colPositions[2], y);
+      ctx.textAlign = 'right';
+      ctx.fillText('Amount', colPositions[3], y);
+      y += 20;
+      ctx.strokeStyle = '#dddddd'; ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(width - 40, y); ctx.stroke();
+      y += 24;
+
+      ctx.font = '14px Arial';
+      selected.forEach(item => {
+        ctx.textAlign = 'left';
+        ctx.fillText(`#${item.order_number}`, colPositions[0], y);
+        ctx.fillText(item.dealer_name, colPositions[1], y);
+        ctx.textAlign = 'center';
+        ctx.fillText(formatDate(item.order_date), colPositions[2], y);
+        ctx.textAlign = 'right';
+        ctx.fillText(formatCurrency(item.total_amount), colPositions[3], y);
+        y += rowHeight;
+      });
+
+      const total = selected.reduce((s, o) => s + (o.total_amount || 0), 0);
+      ctx.font = 'bold 16px Arial'; ctx.textAlign = 'right'; ctx.fillText(`Total: ${formatCurrency(total)}`, width - 60, y + 8);
+
+      const link = document.createElement('a');
+      link.download = `Selected_Orders_${new Date().getTime()}.jpg`;
+      link.href = canvas.toDataURL('image/jpeg', quality);
+      link.click();
+      setSelectedOrderIds([]);
+      showSuccess(`Downloaded ${selected.length} orders as JPG.`);
+    } catch (error: any) {
+      showError(`Failed to generate JPG: ${error.message}`);
+    }
+  };
+
   // Pagination logic
   const totalPages = Math.ceil(orders.length / PAGE_SIZE);
   const displayedOrders = orders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -305,10 +428,19 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
             </CardDescription>
           </div>
           {selectedOrderIds.length > 0 && (
-            <Button onClick={handleBulkPrintOrderDetails} disabled={isBulkPrinting} className="bg-white text-blue-600 hover:bg-blue-50">
-              {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-              Bulk Order Details ({selectedOrderIds.length})
-            </Button>
+            <>
+              <Button onClick={handlePrintSelectedSummary} disabled={isBulkPrinting} className="bg-white text-blue-600 hover:bg-blue-50">
+                {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
+                Print Selected ({selectedOrderIds.length})
+              </Button>
+              <Button onClick={() => handleDownloadSelectedJpg()} disabled={isBulkPrinting} className="bg-white text-blue-600 hover:bg-blue-50">
+                <ImageIcon className="h-4 w-4 mr-2" /> JPG ({selectedOrderIds.length})
+              </Button>
+              <Button onClick={handleBulkPrintOrderDetails} disabled={isBulkPrinting} className="bg-white text-blue-600 hover:bg-blue-50">
+                {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
+                Bulk Order Details ({selectedOrderIds.length})
+              </Button>
+            </>
           )}
         </div>
       </CardHeader>

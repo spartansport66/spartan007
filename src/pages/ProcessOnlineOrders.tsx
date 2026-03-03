@@ -1,21 +1,21 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, Trash2, Package, User, Play } from 'lucide-react';
+import { Loader2, ArrowLeft, Play, Trash2, Copy, User, Package } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface StagedOrder {
   id: string;
@@ -47,11 +47,64 @@ const ProcessOnlineOrders: React.FC = () => {
   const [stagedOrders, setStagedOrders] = useState<StagedOrder[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [platforms, setPlatforms] = useState<any[]>([]);
-  const [selectedPlatformId, setSelectedPlatformId] = useState<string | null>(null);
+  const [selectedPlatformId, setSelectedPlatformId] = useState<string | undefined>(undefined);
   const [bulkPaymentMethod, setBulkPaymentMethod] = useState<'COD' | 'Prepaid'>('COD');
 
   const [matchedMap, setMatchedMap] = useState<Record<string, { matches: Product[]; selectedId?: string; search?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }>>({});
   const [selectedStagedIds, setSelectedStagedIds] = useState<string[]>([]);
+  const [bulkMapPopoverOpen, setBulkMapPopoverOpen] = useState(false);
+  const [bulkMapSearch, setBulkMapSearch] = useState('');
+  const [unmappedIds, setUnmappedIds] = useState<string[]>([]);
+  
+  const handleApplyProductToMatching = async (sourceId: string) => {
+    const src = stagedOrders.find(s => s.id === sourceId);
+    const selId = matchedMap[sourceId]?.selectedId;
+    if (!src || !selId) return;
+    const baseText = src.flipkart_item_name.split('—')[0].trim();
+    const prod = products.find(p => p.id === selId);
+    const suffix = prod ? ` — ${prod.name}` : '';
+
+    const toUpdate = stagedOrders.filter(s => {
+      const txt = s.flipkart_item_name.split('—')[0].trim();
+      return txt === baseText && s.id !== sourceId;
+    });
+
+    if (toUpdate.length === 0) {
+      showError('No other orders with same extracted name found.');
+      return;
+    }
+
+    setMatchedMap(prev => {
+      const next = { ...prev };
+      toUpdate.forEach(s => {
+        if (!next[s.id]) next[s.id] = { matches: [] } as any;
+        next[s.id].selectedId = selId;
+      });
+      return next;
+    });
+
+    setStagedOrders(prev => prev.map(s => {
+      if (toUpdate.find(u => u.id === s.id)) {
+        if (!s.flipkart_item_name.includes(suffix)) {
+          return { ...s, flipkart_item_name: s.flipkart_item_name + suffix };
+        }
+      }
+      return s;
+    }));
+
+    try {
+      for (const s of toUpdate) {
+        await supabase
+          .from('online_order_staging')
+          .update({ flipkart_item_name: s.flipkart_item_name + suffix })
+          .eq('id', s.id);
+      }
+      showSuccess(`Mapped ${toUpdate.length} matching order(s).`);
+    } catch (e) {
+      console.error('Apply matching error', e);
+      showError('Failed to map matching orders.');
+    }
+  };
 
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
@@ -111,6 +164,11 @@ const ProcessOnlineOrders: React.FC = () => {
   // Matching heuristics: build matchedMap when products or stagedOrders change
   useEffect(() => {
     if (!products || products.length === 0 || stagedOrders.length === 0) return;
+    // preserve any manually chosen selections when recomputing the map
+    const prevSelected: Record<string, string | undefined> = {};
+    Object.keys(matchedMap).forEach(k => {
+      if (matchedMap[k].selectedId) prevSelected[k] = matchedMap[k].selectedId;
+    });
     const map: Record<string, { matches: Product[]; selectedId?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }> = {};
     const sizeRegex = /Size[:\s]*([0-9]+)/i;
 
@@ -168,9 +226,30 @@ const ProcessOnlineOrders: React.FC = () => {
 
       const candidateProducts: Product[] = candidates.map((c: any) => ({ id: c.id, name: c.name, code: c.code, size: c.size }));
 
+      // attempt to infer a selected id from previous choice, unique candidate,
+      // or suffix appended to the extracted name (" — ProductName").
+      let selectedId: string | undefined = undefined;
+      if (prevSelected[s.id]) {
+        selectedId = prevSelected[s.id];
+      } else if (candidateProducts.length === 1) {
+        selectedId = candidateProducts[0].id;
+      } else {
+        // inspect suffix after last '—'
+        const parts = (s.flipkart_item_name || '').split('—').map(p => p.trim());
+        if (parts.length > 1) {
+          const suffix = parts.slice(1).join('—');
+          const prod = products.find(p => {
+            const name = (p.name || '').toString();
+            const code = (p.code || '').toString();
+            return name === suffix || code === suffix || name.includes(suffix) || suffix.includes(name);
+          });
+          if (prod) selectedId = prod.id;
+        }
+      }
+
       map[s.id] = {
         matches: candidateProducts,
-        selectedId: candidateProducts.length === 1 ? candidateProducts[0].id : undefined,
+        selectedId,
         debug: {
           numericToken,
           normText,
@@ -206,6 +285,28 @@ const ProcessOnlineOrders: React.FC = () => {
     );
   }
 
+  // Attempt to extract product name and SKU from raw extracted text when
+  // no mapped product exists. This is a lightweight heuristic for cases like
+  // "SUPER VOLLEY LEATHER - 3 VB 502A-1 950699 ..."
+  function extractNameSku(text: string | undefined): { name?: string; sku?: string } | null {
+    if (!text) return null;
+    const t = text.replace(/\s+/g, ' ').trim();
+    // Try to find an SKU-like token: letters, optional space, digits and optional suffix with hyphen
+    const skuRegex = /\b([A-Z]{1,}[A-Z0-9\s]*\d[A-Z0-9\-]*)\b/; // e.g. VB 502A-1
+    const m = t.match(skuRegex);
+    if (m && m.index !== undefined) {
+      const sku = m[1].trim();
+      // product name is text before the SKU token
+      let name = t.slice(0, m.index).trim();
+      // remove trailing separators or quantity markers
+      name = name.replace(/[-–—\|,:\s]+$/g, '').trim();
+      // strip common column headings accidentally captured
+      name = name.replace(/(HSN|Quantity|Unit Price|TAX|CGST|SGST|TOTAL).*$/i, '').trim();
+      return { name: name || undefined, sku: sku || undefined };
+    }
+    return null;
+  }
+
   useEffect(() => {
     if (!isAdmin) {
       navigate('/dashboard');
@@ -213,6 +314,48 @@ const ProcessOnlineOrders: React.FC = () => {
     }
     fetchInitialData();
   }, [isAdmin, navigate, fetchInitialData]);
+
+  const handleBulkMap = async (product: Product) => {
+    if (selectedStagedIds.length === 0) return;
+    // close the popover immediately so it doesn't reopen while we're
+    // doing the async work below
+    setBulkMapPopoverOpen(false);
+
+    // update local state
+    setMatchedMap(prev => {
+      const next = { ...prev };
+      selectedStagedIds.forEach(id => {
+        if (!next[id]) next[id] = { matches: [] } as any;
+        next[id].selectedId = product.id;
+      });
+      return next;
+    });
+    setStagedOrders(prev => prev.map(s => {
+      if (selectedStagedIds.includes(s.id)) {
+        const suffix = ` — ${product.name}`;
+        if (!s.flipkart_item_name.includes(suffix)) {
+          return { ...s, flipkart_item_name: s.flipkart_item_name + suffix };
+        }
+      }
+      return s;
+    }));
+    // update db rows one by one (concatenation handled in JS to avoid raw SQL)
+    try {
+      for (const id of selectedStagedIds) {
+        // fetch current value and append suffix if needed
+        const { data: row } = await supabase.from('online_order_staging').select('flipkart_item_name').eq('id', id).single();
+        const suffix = ` — ${product.name}`;
+        if (row && !row.flipkart_item_name?.includes(suffix)) {
+          await supabase.from('online_order_staging').update({ flipkart_item_name: (row.flipkart_item_name || '') + suffix }).eq('id', id);
+        }
+      }
+      showSuccess(`Mapped product "${product.name}" to ${selectedStagedIds.length} order(s).`);
+    } catch (e) {
+      console.error('Bulk map error', e);
+      showError('Failed to save mapping to staging rows.');
+    }
+    setBulkMapPopoverOpen(false);
+  };
 
   const handleBulkProcess = async () => {
     if (stagedOrders.length === 0) return;
@@ -224,6 +367,14 @@ const ProcessOnlineOrders: React.FC = () => {
 
     setIsProcessingBulk(true);
     let successCount = 0;
+
+    // warn if some orders have no mapped product; they will still be created but
+    // without a mapping. this gives the user a heads-up so they can choose to map
+    // before running the action next time.
+    const unmappedCount = stagedOrders.filter(s => !matchedMap[s.id]?.selectedId).length;
+    if (unmappedCount > 0) {
+      showError(`${unmappedCount} staged order(s) have no product mapped.`);
+    }
 
     try {
       const { data: dealerData, error: dealerError } = await supabase
@@ -257,6 +408,17 @@ const ProcessOnlineOrders: React.FC = () => {
         }
 
         const selectedProductId = (matchedMap[stagedOrder.id] && matchedMap[stagedOrder.id].selectedId) ? matchedMap[stagedOrder.id].selectedId : null;
+
+        // derive raw name that includes suffix if a product is picked
+        let rawName = stagedOrder.flipkart_item_name || '';
+        if (selectedProductId) {
+          const selProd = products.find(p => p.id === selectedProductId);
+          if (selProd) {
+            const suffix = ` — ${selProd.name}`;
+            if (!rawName.includes(suffix)) rawName = rawName + suffix;
+          }
+        }
+
         const { error: onlineError } = await supabase
           .from('online_order_details')
           .insert({
@@ -265,13 +427,21 @@ const ProcessOnlineOrders: React.FC = () => {
             platform_id: selectedPlatformId,
             platform_order_number: stagedOrder.platform_order_number,
             address: stagedOrder.shipping_address,
-            raw_item_name: stagedOrder.flipkart_item_name,
+            raw_item_name: rawName,
             mapped_product_id: selectedProductId,
           });
 
         if (onlineError) {
           console.error(`Error creating details for ${stagedOrder.platform_order_number}:`, onlineError);
           continue;
+        }
+
+        // persist the exact text we saved above back into the staging row
+        if (rawName !== stagedOrder.flipkart_item_name) {
+          await supabase
+            .from('online_order_staging')
+            .update({ flipkart_item_name: rawName })
+            .eq('id', stagedOrder.id);
         }
 
         await supabase
@@ -282,7 +452,8 @@ const ProcessOnlineOrders: React.FC = () => {
         successCount++;
       }
 
-      showSuccess(`Successfully created ${successCount} orders. You can now map products and add bill numbers in the Dispatch section.`);
+      showSuccess(`Successfully created ${successCount} orders. You can now map products and add bill numbers in the Dispatch section.` +
+        (successCount > 0 ? ' Selected products have been recorded.' : ''));
       fetchInitialData();
     } catch (error: any) {
       console.error("Bulk Processing Error:", error);
@@ -300,6 +471,38 @@ const ProcessOnlineOrders: React.FC = () => {
 
     setIsProcessingBulk(true);
     let successCount = 0;
+
+    // try to auto‑infer mappings from the suffix in the extracted name
+    selectedStagedIds.forEach(id => {
+      if (!matchedMap[id]?.selectedId) {
+        const staged = stagedOrders.find(s => s.id === id);
+        if (staged) {
+          const parts = staged.flipkart_item_name.split('—').map(p => p.trim());
+          if (parts.length > 1) {
+            const suffix = parts.slice(1).join('—');
+            const prod = products.find(p => p.name === suffix || p.code === suffix);
+            if (prod) {
+              setMatchedMap(prev => ({ ...prev, [id]: { ...(prev[id] || { matches: [] }), selectedId: prod.id } }));
+            }
+          }
+        }
+      }
+    });
+
+    // ensure every selected row has a mapped product before proceeding
+    const unmapped = selectedStagedIds.filter(id => !matchedMap[id]?.selectedId);
+    if (unmapped.length > 0) {
+      setUnmappedIds(unmapped);
+      // scroll to first unmapped row
+      setTimeout(() => {
+        const el = document.getElementById(`row-${unmapped[0]}`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+      const numbers = unmapped.map(id => stagedOrders.find(s => s.id === id)?.platform_order_number || id);
+      showError(`${unmapped.length} order(s) not mapped: ${numbers.join(', ')}. Please map them before creating gatepasses.`);
+      setIsProcessingBulk(false);
+      return;
+    }
     try {
       const { data: dealerData, error: dealerError } = await supabase
         .from('dealers')
@@ -314,20 +517,8 @@ const ProcessOnlineOrders: React.FC = () => {
         const staged = stagedOrders.find(s => s.id === stagedId);
         if (!staged) continue;
 
-        let nextDispatchNumber = 1;
-        try {
-          const { data: lastRow } = await supabase
-            .from('orders')
-            .select('dispatch_number')
-            .not('dispatch_number', 'is', null)
-            .order('dispatch_number', { ascending: false })
-            .limit(1)
-            .single();
-          if (lastRow && lastRow.dispatch_number) nextDispatchNumber = (Number(lastRow.dispatch_number) || 0) + 1;
-        } catch (e) {
-          // ignore and fallback to 1
-        }
-
+        // Let the DB assign the dispatch_number via sequence default.
+        // This is safer and atomic; make sure the corresponding migration has been applied.
         const { data: newOrder, error: orderError } = await supabase
           .from('orders')
           .insert({
@@ -339,30 +530,50 @@ const ProcessOnlineOrders: React.FC = () => {
             order_date: new Date().toISOString(),
             dispatched: true,
             dispatch_date: new Date().toISOString(),
-            dispatch_number: nextDispatchNumber,
             bill_no: staged.bill_no || null
           })
           .select('id')
           .single();
 
-        if (orderError) {
+        if (orderError || !newOrder) {
           console.error('Order create error', orderError);
+          showError(`Failed to create order for staged ${staged.platform_order_number || staged.id}`);
           continue;
         }
 
         const selectedProductId = (matchedMap[staged.id] && matchedMap[staged.id].selectedId) ? matchedMap[staged.id].selectedId : null;
+
+        let rawName = staged.flipkart_item_name || '';
+        if (selectedProductId) {
+          const selProd = products.find(p => p.id === selectedProductId);
+          if (selProd) {
+            const suffix = ` — ${selProd.name}`;
+            if (!rawName.includes(suffix)) rawName = rawName + suffix;
+          }
+        }
+
         const { error: detailsError } = await supabase.from('online_order_details').insert({
           order_id: newOrder.id,
           client_name: staged.customer_name,
           platform_id: selectedPlatformId,
           platform_order_number: staged.platform_order_number,
           address: staged.shipping_address,
-          raw_item_name: staged.flipkart_item_name,
+          raw_item_name: rawName,
           mapped_product_id: selectedProductId,
         });
 
         if (detailsError) {
           console.error('Details insert error', detailsError);
+          showError(`Failed to save mapped product for order ${staged.platform_order_number}`);
+        }
+
+        // keep the staging row update in sync with the string actually stored
+        // above (rawName)
+        if (rawName !== staged.flipkart_item_name) {
+          await supabase
+            .from('online_order_staging')
+            .update({ flipkart_item_name: rawName })
+            .eq('id', staged.id);
         }
 
         const product = products.find(p => p.id === selectedProductId);
@@ -388,7 +599,8 @@ const ProcessOnlineOrders: React.FC = () => {
         successCount++;
       }
 
-      showSuccess(`Created gatepasses for ${successCount} staged order(s).`);
+      showSuccess(`Created gatepasses for ${successCount} staged order(s).` +
+        (successCount > 0 ? ' Selected products were also mapped.' : ''));
       setSelectedStagedIds([]);
       fetchInitialData();
     } catch (error: any) {
@@ -396,6 +608,115 @@ const ProcessOnlineOrders: React.FC = () => {
       showError(error.message || 'Failed to create gatepasses.');
     } finally {
       setIsProcessingBulk(false);
+    }
+  };
+
+  const handleBulkDeleteSelected = async () => {
+    if (selectedStagedIds.length === 0) {
+      showError('No staged orders selected.');
+      return;
+    }
+
+    const ok = window.confirm(`Delete ${selectedStagedIds.length} selected staged order(s)? This cannot be undone.`);
+    if (!ok) return;
+
+    setIsProcessingBulk(true);
+    try {
+      const { error } = await supabase.from('online_order_staging').delete().in('id', selectedStagedIds);
+      if (error) throw error;
+      setStagedOrders(prev => prev.filter(s => !selectedStagedIds.includes(s.id)));
+      setSelectedStagedIds([]);
+      showSuccess(`Deleted ${selectedStagedIds.length} staged order(s).`);
+    } catch (error: any) {
+      console.error('Bulk delete error', error);
+      showError(error?.message || 'Failed to delete staged orders.');
+    } finally {
+      setIsProcessingBulk(false);
+      fetchInitialData();
+    }
+  };
+
+  const autoMapInferredForRow = async (orderId: string) => {
+    const staged = stagedOrders.find(s => s.id === orderId);
+    if (!staged) return;
+    const inferred = extractNameSku(staged.flipkart_item_name);
+    if (!inferred || (!inferred.sku && !inferred.name)) {
+      showError('No SKU or product name could be extracted from this row.');
+      return;
+    }
+
+    // try to find product by code (sku) first, then by name
+    let prod = undefined as Product | undefined;
+    if (inferred.sku) {
+      const normSku = (inferred.sku || '').replace(/\s+/g, '').toLowerCase();
+      prod = products.find(p => (p.code || '').toString().replace(/\s+/g, '').toLowerCase() === normSku);
+      if (!prod) {
+        prod = products.find(p => (p.code || '').toString().replace(/\s+/g, '').toLowerCase().includes(normSku));
+      }
+    }
+    if (!prod && inferred.name) {
+      const normName = inferred.name.toLowerCase();
+      prod = products.find(p => (p.name || '').toLowerCase().includes(normName) || normName.includes((p.name || '').toLowerCase()));
+    }
+
+    if (!prod) {
+      showError('No matching product found for inferred SKU/name.');
+      return;
+    }
+
+    // apply mapping locally
+    setMatchedMap(prev => ({ ...prev, [orderId]: { ...(prev[orderId] || { matches: [] }), selectedId: prod!.id } }));
+    setStagedOrders(prev => prev.map(s => s.id === orderId ? { ...s, flipkart_item_name: s.flipkart_item_name.includes(` — ${prod!.name}`) ? s.flipkart_item_name : `${s.flipkart_item_name} — ${prod!.name}` } : s));
+
+    try {
+      await supabase.from('online_order_staging').update({ flipkart_item_name: (staged.flipkart_item_name || '') + ` — ${prod.name}` }).eq('id', orderId);
+      showSuccess(`Mapped row to product ${prod.name}`);
+    } catch (e) {
+      console.error('Failed to persist inferred mapping', e);
+      showError('Failed to persist inferred mapping to database.');
+    }
+  };
+
+  const handleBulkAutoMapInferred = async () => {
+    if (selectedStagedIds.length === 0) {
+      showError('No staged orders selected.');
+      return;
+    }
+    setIsProcessingBulk(true);
+    let mapped = 0;
+    try {
+      for (const id of selectedStagedIds) {
+        const staged = stagedOrders.find(s => s.id === id);
+        if (!staged) continue;
+        const inferred = extractNameSku(staged.flipkart_item_name);
+        if (!inferred) continue;
+        let prod = undefined as Product | undefined;
+        if (inferred.sku) {
+          const normSku = (inferred.sku || '').replace(/\s+/g, '').toLowerCase();
+          prod = products.find(p => (p.code || '').toString().replace(/\s+/g, '').toLowerCase() === normSku) || products.find(p => (p.code || '').toString().replace(/\s+/g, '').toLowerCase().includes(normSku));
+        }
+        if (!prod && inferred.name) {
+          const normName = inferred.name.toLowerCase();
+          prod = products.find(p => (p.name || '').toLowerCase().includes(normName) || normName.includes((p.name || '').toLowerCase()));
+        }
+        if (!prod) continue;
+        mapped++;
+        setMatchedMap(prev => ({ ...prev, [id]: { ...(prev[id] || { matches: [] }), selectedId: prod!.id } }));
+        setStagedOrders(prev => prev.map(s => s.id === id ? { ...s, flipkart_item_name: s.flipkart_item_name.includes(` — ${prod!.name}`) ? s.flipkart_item_name : `${s.flipkart_item_name} — ${prod!.name}` } : s));
+        try {
+          await supabase.from('online_order_staging').update({ flipkart_item_name: (staged.flipkart_item_name || '') + ` — ${prod.name}` }).eq('id', id);
+        } catch (e) {
+          console.error('Failed to persist inferred mapping for', id, e);
+        }
+      }
+      if (mapped > 0) showSuccess(`Auto-mapped ${mapped} row(s) from inferred SKU/name.`);
+      else showError('No inferred SKUs matched any product.');
+    } catch (e) {
+      console.error('Bulk auto-map error', e);
+      showError('Auto-mapping failed.');
+    } finally {
+      setIsProcessingBulk(false);
+      fetchInitialData();
     }
   };
 
@@ -468,6 +789,56 @@ const ProcessOnlineOrders: React.FC = () => {
                     Bulk Create {stagedOrders.length} Orders
                   </Button>
                   <Button
+                    onClick={handleBulkDeleteSelected}
+                    disabled={isProcessingBulk || selectedStagedIds.length === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    Delete Selected
+                  </Button>
+                  <Button
+                    onClick={handleBulkAutoMapInferred}
+                    disabled={isProcessingBulk || selectedStagedIds.length === 0}
+                    className="bg-indigo-500 hover:bg-indigo-600 text-white"
+                  >
+                    Auto-map Inferred
+                  </Button>
+                  <Popover open={bulkMapPopoverOpen} onOpenChange={setBulkMapPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        disabled={selectedStagedIds.length === 0}
+                        className="bg-yellow-500 hover:bg-yellow-600 text-white"
+                      >
+                        Map Product to Selected
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[600px] max-w-[90vw] p-0">
+                      <div className="p-2 border-b">
+                        <Input
+                          placeholder="Search..."
+                          className="h-7 text-xs"
+                          value={bulkMapSearch}
+                          onChange={(e) => setBulkMapSearch(e.target.value)}
+                        />
+                      </div>
+                      <ScrollArea className="h-[300px]">
+                        {products
+                          .filter(p => {
+                            const q = bulkMapSearch.toLowerCase();
+                            if (!q) return true;
+                            return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
+                          })
+                          .map(p => (
+                          <Button key={`bulk-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={(e) => { e.stopPropagation(); handleBulkMap(p); }}>
+                            <div className="text-left w-full">
+                              <div className="font-medium text-sm whitespace-normal break-words">{p.code || p.name}</div>
+                              {p.size && <div className="text-[11px] text-muted-foreground">Size: {p.size}</div>}
+                            </div>
+                          </Button>
+                        ))}
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
+                  <Button
                     onClick={handleCreateGatepassesForSelected}
                     disabled={isProcessingBulk || selectedStagedIds.length === 0 || !selectedStagedIds.every(id => (stagedOrders.find(s => s.id === id)?.bill_no || '').trim() !== '')}
                     className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -479,21 +850,26 @@ const ProcessOnlineOrders: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent className="p-0">
+            {stagedOrders.length > 0 && (
+              <div className="text-xs text-muted-foreground px-4 pt-4">
+                ⬅️ Scroll horizontally to see the <strong>Product</strong> column and map items.
+              </div>
+            )}
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
-                    <TableHead className="w-12">
+                    <TableHead className="w-12 sticky left-0 bg-background z-20">
                       <Checkbox
                         checked={selectedStagedIds.length === stagedOrders.length && stagedOrders.length > 0}
                         onCheckedChange={(checked) => setSelectedStagedIds(!!checked ? stagedOrders.map(s => s.id) : [])}
                       />
                     </TableHead>
-                    <TableHead className="w-[150px]">Order No.</TableHead>
-                    <TableHead>Bill No.</TableHead>
-                    <TableHead>Product</TableHead>
+                    <TableHead className="w-[150px] sticky left-12 bg-background z-20">Order No.</TableHead>
+                    <TableHead className="sticky left-[162px] bg-background z-20">Bill No.</TableHead>
+                    <TableHead className="sticky left-[262px] bg-background z-20 min-w-[550px]">Extracted Item Name (Product)</TableHead>
+                    <TableHead>Product (Mapped)</TableHead>
                     <TableHead>Customer Details</TableHead>
-                    <TableHead>Extracted Item Name (Dummy)</TableHead>
                     <TableHead>Match Debug</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead className="text-center">Action</TableHead>
@@ -508,12 +884,52 @@ const ProcessOnlineOrders: React.FC = () => {
                     </TableRow>
                   ) : (
                     stagedOrders.map((order) => (
-                      <TableRow key={order.id} className={"hover:bg-muted/30 " + (selectedStagedIds.includes(order.id) ? 'bg-muted/10' : '')}>
-                        <TableCell>
+                      <TableRow id={`row-${order.id}`} key={order.id} className={
+                        "hover:bg-muted/30 " +
+                        (selectedStagedIds.includes(order.id) ? 'bg-muted/10 ' : '') +
+                        (unmappedIds.includes(order.id) ? 'bg-red-100' : '')
+                      }>
+                        <TableCell className="sticky left-0 bg-background z-10">
                           <Checkbox checked={selectedStagedIds.includes(order.id)} onCheckedChange={(checked) => setSelectedStagedIds(prev => !!checked ? [...prev, order.id] : prev.filter(id => id !== order.id))} />
                         </TableCell>
-                        <TableCell className="font-mono text-xs font-semibold text-blue-600">{order.platform_order_number}</TableCell>
-                        <TableCell className="text-xs">{order.bill_no || '—'}</TableCell>
+                        <TableCell className="font-mono text-xs font-semibold text-blue-600 sticky left-12 bg-background z-10">{order.platform_order_number}</TableCell>
+                        <TableCell className="text-xs sticky left-[162px] bg-background z-10">{order.bill_no || '—'}</TableCell>
+                        <TableCell className="text-xs sticky left-[262px] bg-background z-10 min-w-[550px]">
+                          <div className="flex flex-col gap-2 text-sm">
+                            <div className="flex items-start gap-2">
+                              <Package className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                              <div className="flex flex-col gap-2 flex-1">
+                              {(() => {
+                                const txt = order.flipkart_item_name || '';
+                                const parts = txt.split('—');
+                                const base = parts[0] ? parts[0].trim() : txt;
+                                const appended = parts.length > 1 ? parts.slice(1).join('—').trim() : null;
+                                const selProd = products.find(p => p.id === matchedMap[order.id]?.selectedId);
+                                const inferred = extractNameSku(txt);
+                                return (
+                                  <>
+                                    <span className="whitespace-pre-wrap break-words text-sm font-medium" title={txt}>{base}</span>
+                                    {appended && (
+                                      <span className="px-2 py-0.5 rounded bg-green-100 text-green-900 text-[12px] font-semibold w-fit">✓ {appended}</span>
+                                    )}
+                                    {selProd ? (
+                                      <div className="mt-1 text-[12px] text-muted-foreground">
+                                        <div><span className="font-semibold">Product:</span> {selProd.name}</div>
+                                        <div><span className="font-semibold">SKU:</span> {selProd.code || '—'}</div>
+                                      </div>
+                                    ) : inferred ? (
+                                      <div className="mt-1 text-[12px] text-muted-foreground">
+                                        <div><span className="font-semibold">Product:</span> {inferred.name || '—'}</div>
+                                        <div><span className="font-semibold">SKU:</span> {inferred.sku || '—'} <span className="text-[11px] text-muted-foreground">(extracted)</span></div>
+                                      </div>
+                                    ) : null}
+                                  </>
+                                );
+                              })()}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-xs">
                           {matchedMap[order.id]?.selectedId ? (
                             <div className="flex items-center justify-between gap-2">
@@ -522,29 +938,34 @@ const ProcessOnlineOrders: React.FC = () => {
                                 if (!sel) return <span>Selected</span>;
                                 return (
                                   <div className="text-left">
-                                    <div className="font-medium">{sel.name}</div>
+                                    <div className="font-medium text-sm">{sel.code || sel.name}</div>
                                     <div className="text-[11px] text-muted-foreground">{sel.code} {sel.size ? `| Size: ${sel.size}` : ''} {typeof sel.dp !== 'undefined' ? `| DP: ₹${sel.dp}` : ''}</div>
-                                    <div className="text-[11px] truncate max-w-[220px]">{sel.name}</div>
                                   </div>
                                 );
                               })()}
-                              <Button variant="ghost" size="icon" className="text-destructive" onClick={() => {
-                                const selId = matchedMap[order.id]?.selectedId;
-                                const selProd = products.find(p => p.id === selId);
-                                setMatchedMap(prev => ({ ...prev, [order.id]: { ...prev[order.id], selectedId: undefined } }));
-                                if (selProd) {
-                                  setStagedOrders(prev => prev.map(s => s.id === order.id ? { ...s, flipkart_item_name: s.flipkart_item_name.replace(new RegExp(`\\s*—\\s*${escapeRegExp(selProd.name)}$`), '') } : s));
-                                }
-                              }} title="Remove product"><Trash2 className="h-4 w-4" /></Button>
+                              <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="icon" className="text-destructive" onClick={() => {
+                                  const selId = matchedMap[order.id]?.selectedId;
+                                  const selProd = products.find(p => p.id === selId);
+                                  setMatchedMap(prev => ({ ...prev, [order.id]: { ...prev[order.id], selectedId: undefined } }));
+                                  if (selProd) {
+                                    setStagedOrders(prev => prev.map(s => s.id === order.id ? { ...s, flipkart_item_name: s.flipkart_item_name.replace(new RegExp(`\\s*—\\s*${escapeRegExp(selProd.name)}$`), '') } : s));
+                                  }
+                                }} title="Remove product"><Trash2 className="h-4 w-4" /></Button>
+                                <Button variant="ghost" size="icon" className="text-primary" onClick={() => handleApplyProductToMatching(order.id)} title="Apply to matching"><Copy className="h-4 w-4" /></Button>
+                              </div>
                             </div>
                           ) : (
                             <Popover>
                               <PopoverTrigger asChild>
                                 <Button variant="outline" size="sm" className="w-full text-left h-auto py-1">
-                                  {matchedMap[order.id]?.matches.length ? `Select (${matchedMap[order.id].matches.length})` : 'No matches'}
+                                  {(() => {
+                                    const cnt = matchedMap[order.id]?.matches.length || 0;
+                                    return `Select product${cnt > 0 ? ` (${cnt})` : ''}`;
+                                  })()}
                                 </Button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-[340px] p-0">
+                              <PopoverContent className="w-[600px] max-w-[90vw] p-0">
                                 <div className="p-2 border-b">
                                   <Input
                                     placeholder="Search..."
@@ -562,12 +983,20 @@ const ProcessOnlineOrders: React.FC = () => {
                                         return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
                                       })
                                       .map(p => (
-                                      <Button key={`cand-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => {
+                                      <Button key={`cand-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={async () => {
                                         setMatchedMap(prev => ({ ...prev, [order.id]: { ...prev[order.id], selectedId: p.id } }));
-                                        setStagedOrders(prev => prev.map(s => s.id === order.id ? { ...s, flipkart_item_name: `${s.flipkart_item_name} — ${p.name}` } : s));
+                                        setStagedOrders(prev => prev.map(s => s.id === order.id ? { ...s, flipkart_item_name: `${s.flipkart_item_name} — ${p.code || p.name}` } : s));
+                                        try {
+                                          await supabase
+                                            .from('online_order_staging')
+                                            .update({ flipkart_item_name: `${order.flipkart_item_name} — ${p.code || p.name}` })
+                                            .eq('id', order.id);
+                                        } catch (e) {
+                                          console.error('failed to persist manual mapping', e);
+                                        }
                                       }}>
                                         <div className="text-left w-full">
-                                          <div className="font-medium text-sm">{highlightMatch(p.name, matchedMap[order.id]?.search)}</div>
+                                          <div className="font-medium text-sm whitespace-normal break-words">{highlightMatch(p.code || p.name, matchedMap[order.id]?.search)}</div>
                                           <div className="text-[11px] text-muted-foreground">{highlightMatch(p.code || '', matchedMap[order.id]?.search)} {p.size ? `| Size: ${p.size}` : ''} {typeof (p as any).dp !== 'undefined' ? `| DP: ₹${(p as any).dp}` : ''}</div>
                                         </div>
                                       </Button>
@@ -581,12 +1010,20 @@ const ProcessOnlineOrders: React.FC = () => {
                                       return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
                                     })
                                     .map(p => (
-                                    <Button key={`all-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => {
+                                    <Button key={`all-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={async () => {
                                       setMatchedMap(prev => ({ ...prev, [order.id]: { ...prev[order.id], selectedId: p.id } }));
                                       setStagedOrders(prev => prev.map(s => s.id === order.id ? { ...s, flipkart_item_name: `${s.flipkart_item_name} — ${p.name}` } : s));
+                                      try {
+                                        await supabase
+                                          .from('online_order_staging')
+                                          .update({ flipkart_item_name: `${order.flipkart_item_name} — ${p.name}` })
+                                          .eq('id', order.id);
+                                      } catch (e) {
+                                        console.error('failed to persist manual mapping', e);
+                                      }
                                     }}>
                                       <div className="text-left w-full">
-                                        <div className="font-medium text-sm">{highlightMatch(p.name, matchedMap[order.id]?.search)}</div>
+                                        <div className="font-medium text-sm whitespace-normal break-words">{highlightMatch(p.name, matchedMap[order.id]?.search)}</div>
                                         <div className="text-[11px] text-muted-foreground">{highlightMatch(p.code || '', matchedMap[order.id]?.search)} {p.size ? `| Size: ${p.size}` : ''} {typeof (p as any).dp !== 'undefined' ? `| DP: ₹${(p as any).dp}` : ''}</div>
                                       </div>
                                     </Button>
@@ -600,45 +1037,6 @@ const ProcessOnlineOrders: React.FC = () => {
                           <div className="flex flex-col">
                             <span className="font-medium flex items-center gap-1"><User className="h-3 w-3" /> {order.customer_name}</span>
                             <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{order.shipping_address}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 text-sm">
-                            <Package className="h-4 w-4 text-muted-foreground" />
-                            <div className="flex items-center gap-2">
-                              {(() => {
-                                const txt = order.flipkart_item_name || '';
-                                const parts = txt.split('—');
-                                const base = parts[0] ? parts[0].trim() : txt;
-                                const appended = parts.length > 1 ? parts.slice(1).join('—').trim() : null;
-                                return (
-                                  <>
-                                    <span className="truncate max-w-[380px]">{base}</span>
-                                    {appended && (
-                                      <span className="ml-2 px-2 py-0.5 rounded bg-muted/20 text-[12px] text-muted-foreground">{appended}</span>
-                                    )}
-                                    {(() => {
-                                      const matchedSelectionId = matchedMap[order.id]?.selectedId;
-                                      const foundProd = appended ? products.find(p => (p.name || '') === appended || (p.name || '').includes(appended)) : undefined;
-                                      const shouldShowDelete = !!matchedSelectionId || !!appended;
-                                      if (!shouldShowDelete) return null;
-                                      return (
-                                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => {
-                                          const selId = matchedSelectionId || foundProd?.id;
-                                          const selProd = products.find(p => p.id === selId) || foundProd;
-                                          setMatchedMap(prev => ({ ...prev, [order.id]: { ...prev[order.id], selectedId: undefined } }));
-                                          if (selProd) {
-                                            setStagedOrders(prev => prev.map(s => s.id === order.id ? { ...s, flipkart_item_name: s.flipkart_item_name.replace(new RegExp(`\\s*—\\s*${escapeRegExp(selProd.name)}$`), '') } : s));
-                                          } else if (appended) {
-                                            setStagedOrders(prev => prev.map(s => s.id === order.id ? { ...s, flipkart_item_name: s.flipkart_item_name.replace(new RegExp(`\\s*—\\s*${escapeRegExp(appended)}$`), '') } : s));
-                                          }
-                                        }} title="Remove appended product"><Trash2 className="h-4 w-4" /></Button>
-                                      );
-                                    })()}
-                                  </>
-                                );
-                              })()}
-                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="text-xs">

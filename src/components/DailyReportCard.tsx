@@ -59,12 +59,13 @@ const DailyReportCard: React.FC = () => {
         .single();
       setCompanyName(companyInfo?.company_name || null);
 
-      // 1. Fetch Orders Received Today (based on order_date)
+      // 1. Fetch Orders Dispatched Today (based on dispatch_date) - from Sales Team
       const { data: ordersToday, error: ordersError } = await supabase
         .from('orders')
         .select('total_amount, dealers (name)')
-        .gte('order_date', startOfToday)
-        .lte('order_date', endOfToday);
+        .gte('dispatch_date', startOfToday)
+        .lte('dispatch_date', endOfToday)
+        .neq('dispatched', false);
       if (ordersError) throw ordersError;
 
       let fromSalesmen = 0;
@@ -158,9 +159,9 @@ const DailyReportCard: React.FC = () => {
         startY: 45,
         head: [['Metric', 'Amount (INR)']],
         body: [
-          ['Orders from Sales Team', formatCurrency(data.ordersFromSalesmen)],
-          ['Orders from Online Platforms', formatCurrency(data.ordersFromOnline)],
-          ['Total Orders Received Today', formatCurrency(data.totalOrdersReceived)],
+          ['Sales Team - Dispatched', formatCurrency(data.ordersFromSalesmen)],
+          ['Online Orders - Dispatched', formatCurrency(data.ordersFromOnline)],
+          ['Total Dispatched Today', formatCurrency(data.totalOrdersReceived)],
           ['', ''], // Spacer
           ['Total Dispatched Material Value', formatCurrency(data.totalDispatchedValue)],
         ],
@@ -238,9 +239,9 @@ const DailyReportCard: React.FC = () => {
         y += 50;
       };
 
-      drawRow('Orders from Sales Team:', formatCurrency(data.ordersFromSalesmen));
-      drawRow('Orders from Online Platforms:', formatCurrency(data.ordersFromOnline));
-      drawRow('Total Orders Received Today:', formatCurrency(data.totalOrdersReceived), true);
+      drawRow('Sales Team - Dispatched:', formatCurrency(data.ordersFromSalesmen));
+      drawRow('Online Orders - Dispatched:', formatCurrency(data.ordersFromOnline));
+      drawRow('Total Dispatched Today:', formatCurrency(data.totalOrdersReceived), true);
       
       // Separator line
       ctx.strokeStyle = '#dddddd';
@@ -331,23 +332,23 @@ const DailyReportCard: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Orders Received Section */}
+            {/* Dispatched Orders Section */}
             <div>
               <h3 className="text-base md:text-lg font-semibold flex items-center gap-2 mb-2">
-                <ArrowDown className="h-5 w-5 text-green-500" /> Today's Orders Received
+                <ArrowUp className="h-5 w-5 text-green-500" /> Today's Dispatched Orders
               </h3>
               <div className="space-y-2 pl-7">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground flex items-center gap-2"><Users className="h-4 w-4" /> From Sales Team:</span>
+                  <span className="text-sm text-muted-foreground flex items-center gap-2"><Users className="h-4 w-4" /> Sales Team:</span>
                   <span className="font-bold">{formatCurrency(data?.ordersFromSalesmen || 0)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground flex items-center gap-2"><ShoppingCart className="h-4 w-4" /> From Online:</span>
+                  <span className="text-sm text-muted-foreground flex items-center gap-2"><ShoppingCart className="h-4 w-4" /> Online Orders:</span>
                   <span className="font-bold">{formatCurrency(data?.ordersFromOnline || 0)}</span>
                 </div>
                 <Separator className="my-2" />
                 <div className="flex items-center justify-between font-bold text-base">
-                  <span className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> Total Received:</span>
+                  <span className="flex items-center gap-2"><DollarSign className="h-4 w-4" /> Total Dispatched:</span>
                   <span>{formatCurrency(data?.totalOrdersReceived || 0)}</span>
                 </div>
               </div>
@@ -355,10 +356,10 @@ const DailyReportCard: React.FC = () => {
 
             <Separator />
 
-            {/* Dispatched Material Section */}
+            {/* Dispatch Details Section */}
             <div>
               <h3 className="text-base md:text-lg font-semibold flex items-center gap-2 mb-2">
-                <ArrowUp className="h-5 w-5 text-blue-500" /> Today's Dispatched Material
+                <ArrowUp className="h-5 w-5 text-blue-500" /> Dispatched Material Details
               </h3>
               <div className="space-y-2 pl-7">
                 <div className="flex items-center justify-between font-bold text-base">

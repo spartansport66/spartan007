@@ -41,6 +41,7 @@ import OnlineOrderDashboard from "./pages/OnlineOrderDashboard";
 import DatabaseBackup from "./pages/DatabaseBackup";
 import OnlineOrderDispatchDashboard from "./pages/OnlineOrderDispatchDashboard";
 import ManualOrderEntry from "./pages/ManualOrderEntry"; // New Import
+import SalesHODDashboard from "./pages/SalesHODDashboard";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -88,6 +89,7 @@ const AppContent = () => {
       <Route path="/database-backup" element={<DatabaseBackup />} />
       <Route path="/online-order-dispatch-dashboard" element={<OnlineOrderDispatchDashboard />} />
       <Route path="/manual-order-entry" element={<ManualOrderEntry />} /> {/* New Route */}
+      <Route path="/sales-hod-dashboard" element={<SalesHODDashboard />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>
