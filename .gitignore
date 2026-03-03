@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 approve-proposal.js
+
+.vercel
+.env*.local
