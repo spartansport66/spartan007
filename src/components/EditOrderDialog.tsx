@@ -185,7 +185,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const { data: orderRaw, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, order_date, dealer_id, user_id, total_amount, discount_amount, round_off, bill_no, dispatch_date,
+          id, order_number, order_date, dealer_id, user_id, total_amount, discount_amount, round_off, bill_no, dispatch_date, urgent,
           dealers (name),
           online_order_details (client_name, platform_order_number, raw_item_name, mapped_product_id),
           sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst))
@@ -495,6 +495,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                 <FormField control={form.control} name="salesPersonId" render={({ field }) => (<FormItem><FormLabel>{orderData?.is_online ? 'Operator' : 'Sales Person'}</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder={orderData?.is_online ? 'Select Operator' : 'Select Sales Person'} /></SelectTrigger></FormControl><SelectContent>{userListToRender.map(op => <SelectItem key={op.id} value={op.id}>{op.first_name} {op.last_name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="billNo" render={({ field }) => (<FormItem><FormLabel>Bill Number</FormLabel><FormControl><Input placeholder="e.g., INV-001" {...field} value={field.value || ''} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="dispatchDate" render={({ field }) => (<FormItem><FormLabel>Bill Date (Dispatch Date)</FormLabel><FormControl><Input type="date" {...field} value={field.value || ''} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
+                {/* Urgent flag is managed by HOD only; removed from normal edit dialog */}
               </div>
 
               {orderData?.is_online && (

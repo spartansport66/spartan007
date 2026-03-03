@@ -92,6 +92,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
           online_order_details (client_name, platform_order_number, raw_item_name, products(name, code))
         `)
         .eq('dispatched', false)
+        .neq('hod_status', 'disapproved') // hide orders rejected by HOD
         .order('order_date', { ascending: false });
 
       if (filterOrderNumber) query = query.eq('order_number', parseInt(filterOrderNumber));

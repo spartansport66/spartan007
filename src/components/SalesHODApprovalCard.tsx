@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Eye, CheckCircle, XCircle } from 'lucide-react';
+import { Eye, CheckCircle, XCircle, Flag } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
@@ -19,6 +19,7 @@ interface OrderRow {
   order_date: string;
   total_amount: number;
   dealer_name: string;
+  urgent?: boolean;
 }
 
 const SalesHODApprovalCard: React.FC = () => {
@@ -39,7 +40,7 @@ const SalesHODApprovalCard: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('orders')
-        .select(`id, order_number, order_date, total_amount, dealers (name)`)
+        .select(`*, dealers (name)`)
         .eq('dispatched', false)
         .or("hod_status.eq.pending,hod_status.is.null")
         .order('order_date', { ascending: true });
@@ -55,6 +56,7 @@ const SalesHODApprovalCard: React.FC = () => {
           order_date: o.order_date,
           total_amount: o.total_amount,
           dealer_name: o.dealers?.name || 'N/A',
+          urgent: !!o.urgent,
         })));
       }
     } catch (err: any) {
@@ -167,7 +169,7 @@ const SalesHODApprovalCard: React.FC = () => {
               <TableBody>
                 {filteredOrders.map(o => (
                   <TableRow key={o.id} className="hover:bg-accent/50">
-                    <TableCell className="font-medium">#{o.order_number}</TableCell>
+                    <TableCell className="font-medium">#{o.order_number}{o.urgent ? <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-600 text-white">URGENT</span> : null}</TableCell>
                     <TableCell className="text-muted-foreground">{o.dealer_name}</TableCell>
                     <TableCell className="text-muted-foreground">{formatDate(o.order_date)}</TableCell>
                     <TableCell className="text-muted-foreground text-right">{o.total_amount?.toFixed?.(2) ?? o.total_amount}</TableCell>

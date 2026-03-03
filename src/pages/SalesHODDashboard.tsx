@@ -7,8 +7,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import SalesHODApprovalCard from '@/components/SalesHODApprovalCard';
 import ApprovedHODOrdersCard from '@/components/ApprovedHODOrdersCard';
-import DisapprovedHODOrdersCard from '@/components/DisapprovedHODOrdersCard';
 import SalesHODDispatchedCard from '@/components/SalesHODDispatchedCard';
+import DisapprovedHODOrdersCard from '@/components/DisapprovedHODOrdersCard';
 
 const SalesHODDashboard: React.FC = () => {
   const navigate = useNavigate();

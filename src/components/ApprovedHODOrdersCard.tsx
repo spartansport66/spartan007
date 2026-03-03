@@ -30,7 +30,7 @@ const ApprovedHODOrdersCard: React.FC = () => {
     try {
       let query = supabase
         .from('orders')
-        .select(`id, order_number, order_date, total_amount, hod_approved_at, dealers (name)`)
+        .select(`*, dealers (name)`)
         .eq('hod_status', 'approved')
         .order('hod_approved_at', { ascending: false })
         .limit(200);
@@ -45,7 +45,17 @@ const ApprovedHODOrdersCard: React.FC = () => {
       if (error) {
         showError('Failed to load approved orders.');
         setOrders([]);
-      } else setOrders(data || []);
+      } else {
+        const items = data || [];
+        // put urgent orders on top while preserving relative order otherwise
+        const sorted = [...items].sort((a:any,b:any) => {
+          const au = !!a.urgent;
+          const bu = !!b.urgent;
+          if (au === bu) return 0;
+          return au ? -1 : 1;
+        });
+        setOrders(sorted);
+      }
     } catch (err: any) { showError('Unexpected error.'); } finally { setLoading(false); }
   }, [qDate]);
 
@@ -115,7 +125,7 @@ const ApprovedHODOrdersCard: React.FC = () => {
                     .filter((r:any) => qDealerName ? ((r.dealers?.name || '').toLowerCase().includes(qDealerName.toLowerCase())) : true)
                     .map((o:any) => (
                     <TableRow key={o.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium">#{o.order_number}</TableCell>
+                      <TableCell className="font-medium">#{o.order_number}{o.urgent ? <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-600 text-white">URGENT</span> : null}</TableCell>
                       <TableCell className="text-muted-foreground">{o.dealers?.name || 'N/A'}</TableCell>
                       <TableCell className="text-muted-foreground">{o.order_date ? new Date(o.order_date).toLocaleDateString() : '—'}</TableCell>
                       <TableCell className="text-muted-foreground text-right">{o.total_amount?.toFixed?.(2) ?? o.total_amount}</TableCell>

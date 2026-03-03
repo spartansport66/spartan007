@@ -495,6 +495,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             </Popover>
           </div>
 
+          <div className="flex items-center gap-2">
+          </div>
+
           {isOnlineOrder && (
             <Card className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
               <CardHeader><CardTitle>Online Order Details</CardTitle></CardHeader>
