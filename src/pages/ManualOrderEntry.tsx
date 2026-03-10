@@ -16,6 +16,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
+import { buildStagingFromRows } from '@/utils/onlineOrderHelpers';
 import { Label } from '@/components/ui/label';
 
 const formSchema = z.object({
@@ -73,6 +74,15 @@ const ManualOrderEntry = () => {
     fetchPlatforms();
   }, [fetchPlatforms]);
 
+  const splitItems = (item: string): string[] => {
+    if (!item) return [''];
+    const parts = item
+      .split(/\s*[\r\n,|;]+\s*/)
+      .map(p => p.trim())
+      .filter(Boolean);
+    return parts.length ? parts : [item];
+  };
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!user) {
       showError("You must be logged in.");
@@ -85,19 +95,19 @@ const ManualOrderEntry = () => {
 
     setIsSubmitting(true);
     try {
-      const stagingData = {
+      const rawRows = [{
         platform_order_number: values.platform_order_number,
         customer_name: values.customer_name,
         shipping_address: values.shipping_address,
-        flipkart_item_name: values.item_name, // Using the existing column
+        item: values.item_name,
         amount: values.amount,
-        created_by: user.id,
-        status: 'pending'
-      };
+        bill_no: ''
+      }];
+      const stagingEntries = buildStagingFromRows(rawRows, user.id);
 
       const { error } = await supabase
         .from('online_order_staging')
-        .upsert(stagingData, { onConflict: 'platform_order_number' });
+        .upsert(stagingEntries, { onConflict: 'platform_order_number,flipkart_item_name' });
 
       if (error) throw error;
 

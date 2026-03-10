@@ -13,6 +13,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
+import { buildStagingFromRows, upsertStaging, parseItemWithQty, extractSkuToken } from '@/utils/onlineOrderHelpers';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Import the worker directly from the package to avoid CDN issues
@@ -28,6 +29,8 @@ interface ExtractedOrder {
   item: string;
   amount: string;
   invoiceNo?: string;
+  qty?: number;
+  items?: Array<{product: string; qty: number; total: number; mapped_product_id?: string; sku?: string}>;
 }
 
 const MeeshoOrderExtractor = () => {
@@ -103,6 +106,173 @@ const MeeshoOrderExtractor = () => {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  // Try to find a SKU for a given item by searching nearby text in the page/document
+  function findSkuForItem(docText: string, itemText: string): string | undefined {
+    if (!docText || !itemText) return undefined;
+    try {
+      const it = itemText.trim();
+      // Look for the item occurrence and search a window around it
+      const lower = docText.toLowerCase();
+      const idx = lower.indexOf(it.toLowerCase());
+      const windowSize = 400;
+      const start = idx >= 0 ? Math.max(0, idx - windowSize) : 0;
+      const area = docText.substring(start, Math.min(docText.length, (idx >= 0 ? idx + it.length + windowSize : windowSize)));
+
+      // Prioritize explicit "Product Details" table if present
+      const prodDetailsMatch = docText.match(/Product\s*Details[\s\S]{0,600}/i);
+      if (prodDetailsMatch) {
+        const pd = prodDetailsMatch[0];
+        // look for 'SKU' header followed by a value on the next line or same line
+        const skuLine = pd.match(/SKU(?:\s*[:\-]?\s*)([A-Z0-9\-\/.]{3,})/i);
+        if (skuLine && skuLine[1]) return skuLine[1].trim();
+        // try header/value table style: find header tokens and following row tokens
+        const lines = pd.split(/\r?\n|\|/).map(l => l.trim()).filter(Boolean);
+        for (let i = 0; i < lines.length - 1; i++) {
+          if (/\bsku\b/i.test(lines[i])) {
+            // pick first token from next line that looks like SKU
+            const next = lines[i+1];
+            const toks = next.match(/([A-Z0-9\-\/]{3,})/gi);
+            if (toks && toks.length) return toks[0];
+          }
+          // handle case where header and values are on same line
+          if (/\bsku\b/i.test(lines[i])) {
+            const toks = lines[i].match(/\bsku\b[^A-Za-z0-9]*([A-Z0-9\-\/]{3,})/i);
+            if (toks && toks[1]) return toks[1];
+          }
+        }
+      }
+
+      // Common explicit labels
+      const labelRe = /(?:SKU|Art\s*No|Product\s*Code|Code|Style\s*No|Article)[:\s\-]*([A-Z0-9\-\/.]{3,})/i;
+      const labeled = area.match(labelRe);
+      if (labeled && labeled[1]) return labeled[1].trim();
+
+      // Table row style: try lines near the item and pick alpha+digit tokens
+      const lines = area.split(/\r?\n|\|/).map(l => l.trim()).filter(Boolean);
+      for (const line of lines) {
+        // skip lines that equal the item text
+        if (line.toLowerCase().includes(it.toLowerCase()) && /[A-Z0-9]/i.test(line)) {
+          // look for candidate tokens in the same line
+          const toks = line.match(/([A-Z0-9\-\/]{3,})/gi);
+          if (toks) {
+            const mixed = toks.find(t => /[A-Za-z]/.test(t) && /[0-9]/.test(t));
+            if (mixed) return mixed;
+            // otherwise return first that isn't just a short size like M/L/XL or a pure number
+            const candidate = toks.find(t => !/^\d{1,3}$/.test(t) && !/^[SMLX]{1,4}$/i.test(t));
+            if (candidate) return candidate;
+          }
+        }
+      }
+
+      // fallback: search entire area for alpha+digit tokens
+      const wholeToks = area.match(/([A-Z0-9\-\/]{4,})/gi);
+      if (wholeToks) {
+        const mixed = wholeToks.find(t => /[A-Za-z]/.test(t) && /[0-9]/.test(t));
+        if (mixed) return mixed;
+        return wholeToks[0];
+      }
+
+      return undefined;
+    } catch (e) {
+      return undefined;
+    }
+  }
+
+  const handleProductMapping = async (orderIndex: number, itemIndex: number, selectedProductId: string) => {
+    console.log('🔵 handleProductMapping triggered (Meesho):', { orderIndex, itemIndex, selectedProductId });
+    
+    try {
+      // Get current user
+      let authUser = user;
+      if (!authUser) {
+        const { data: { session } } = await supabase.auth.getSession();
+        authUser = session?.user;
+      }
+      if (!authUser) throw new Error('User not authenticated');
+
+      const order = extractedOrders[orderIndex];
+      const item = order.items?.[itemIndex];
+      if (!item) throw new Error('Item not found');
+
+      const selectedProduct = products.find(p => p.id === selectedProductId);
+      if (!selectedProduct) throw new Error('Product not found');
+
+      const finalQty = item.qty || 1;
+      const itemAmount = item.total || 0;
+
+      console.log('📝 Mapping data:', {
+        orderNo: order.orderNo,
+        rawItemName: item.product,
+        mappedProductName: selectedProduct.name,
+        qty: finalQty,
+        total: itemAmount
+      });
+
+      // Delete old staging row with raw extracted item name
+      console.log('🗑️ Deleting old staging row with raw item name...');
+      const { error: deleteError } = await supabase
+        .from('online_order_staging')
+        .delete()
+        .eq('platform_order_number', order.orderNo)
+        .eq('flipkart_item_name', item.product);
+
+      if (deleteError) {
+        console.warn('⚠️ Delete warning (may not exist):', deleteError.message);
+      } else {
+        console.log('✅ Deleted old row');
+      }
+
+      // Upsert new row with mapped product data
+      console.log('✅ Upserting mapped product to staging...');
+      const { data, error: insertError } = await supabase
+        .from('online_order_staging')
+        .upsert([{
+          platform_order_number: order.orderNo,
+          customer_name: order.customerName || null,
+          shipping_address: order.address || null,
+          flipkart_item_name: selectedProduct.name,
+          amount: parseFloat(itemAmount.toString()) || 0,
+          quantity: finalQty,
+          bill_no: order.invoiceNo || '',
+          created_by: authUser.id,
+          status: 'pending',
+          mapped_product_id: selectedProductId
+        }], {
+          onConflict: 'platform_order_number,flipkart_item_name'
+        })
+        .select();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      console.log('✅ Inserted mapped product row:', data);
+      showSuccess(`✅ Mapped & saved: ${selectedProduct.name} | Qty: ${finalQty} | Amount: ₹${itemAmount.toFixed(2)}`);
+
+      // Update UI state to reflect mapping (so it looks like Flipkart extractor)
+      setMatchedMap(prev => ({ ...prev, [orderIndex]: { ...(prev[orderIndex] || { matches: [] }), selectedId: selectedProductId } }));
+      setExtractedOrders(prev => {
+        const next = [...prev];
+        const o = { ...next[orderIndex] } as ExtractedOrder;
+        if (o.items && o.items[itemIndex]) {
+          const newItems = [...o.items];
+          newItems[itemIndex] = { ...newItems[itemIndex], mapped_product_id: selectedProductId };
+          o.items = newItems;
+          // append product name to visible item text if not already present
+          if (!o.item.includes(` — ${selectedProduct.name}`)) {
+            o.item = `${o.item} — ${selectedProduct.name}`;
+          }
+        }
+        next[orderIndex] = o;
+        return next;
+      });
+
+    } catch (error: any) {
+      console.error('❌ Mapping error:', error);
+      showError(`Failed to map product: ${error.message}`);
+    }
+  };
+
   const extractDataFromPageText = (text: string): ExtractedOrder | null => {
     // 1. Extract Order ID (Meesho uses "Sub Order ID" or "Order ID")
     const orderNoMatch = text.match(/(?:Sub Order ID|Order ID|Order No)[:\s]*([a-zA-Z0-9_]+)/i) || 
@@ -168,6 +338,16 @@ const MeeshoOrderExtractor = () => {
     }
 
     return { orderNo, customerName, address, item, amount };
+  };
+
+  // split multi-item descriptions into separate entries
+  const splitItems = (item: string): string[] => {
+    if (!item) return [''];
+    const parts = item
+      .split(/\s*[\r\n,|;]+\s*/)
+      .map(p => p.trim())
+      .filter(Boolean);
+    return parts.length ? parts : [item];
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -243,8 +423,30 @@ const MeeshoOrderExtractor = () => {
         throw new Error("No valid Meesho order patterns found. Please check the 'Debug View' to see the extracted text.");
       }
 
-      setExtractedOrders(allExtracted);
-      showSuccess(`Successfully extracted ${allExtracted.length} orders!`);
+      // expand multi-item rows and build items array (attach SKU found in document)
+      const expanded: ExtractedOrder[] = [];
+      allExtracted.forEach(o => {
+        const parts = splitItems(o.item);
+        const itemsArray: Array<{product: string; qty: number; total: number; mapped_product_id?: string}> = [];
+        
+        if (parts.length > 1) {
+          // Multiple items - divide amount equally
+          const amountPerItem = parseFloat(o.amount) / parts.length;
+          parts.forEach(p => {
+            const sku = findSkuForItem(fullDebugText, p);
+            itemsArray.push({ product: p, qty: 1, total: amountPerItem, ...(sku ? { sku } : {}) } as any);
+            expanded.push({ ...o, item: p, qty: 1, items: [{ product: p, qty: 1, total: amountPerItem, ...(sku ? { sku } : {}) } as any] });
+          });
+        } else {
+          // Single item
+          const sku = findSkuForItem(fullDebugText, o.item);
+          itemsArray.push({ product: o.item, qty: 1, total: parseFloat(o.amount), ...(sku ? { sku } : {}) } as any);
+          expanded.push({ ...o, qty: 1, items: itemsArray });
+        }
+      });
+
+      setExtractedOrders(expanded);
+      showSuccess(`Successfully extracted ${expanded.length} orders (from ${allExtracted.length} entries)!`);
     } catch (error: any) {
       console.error("PDF Parsing Error:", error);
       showError(error.message || "Failed to parse PDF.");
@@ -257,20 +459,17 @@ const MeeshoOrderExtractor = () => {
     if (!user || extractedOrders.length === 0) return;
     setIsSaving(true);
     try {
-      const stagingData = extractedOrders.map(order => ({
-        platform_order_number: order.orderNo,
-        customer_name: order.customerName,
-        shipping_address: order.address,
-        flipkart_item_name: order.item,
-        amount: parseFloat(order.amount),
-        bill_no: order.invoiceNo || '',
-        created_by: user.id,
-        status: 'pending'
+      const rawRows = extractedOrders.map(o => ({
+        platform_order_number: o.orderNo,
+        customer_name: o.customerName,
+        shipping_address: o.address,
+        item: o.item,
+        amount: parseFloat(o.amount) || 0,
+        bill_no: o.invoiceNo || ''
       }));
+      const stagingData = buildStagingFromRows(rawRows, user.id);
 
-      const { error } = await supabase
-        .from('online_order_staging')
-        .upsert(stagingData, { onConflict: 'platform_order_number' });
+      const { error } = await supabase.from('online_order_staging').upsert(stagingData, { onConflict: 'platform_order_number,flipkart_item_name' });
 
       if (error) throw error;
 
@@ -377,97 +576,194 @@ const MeeshoOrderExtractor = () => {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead className="font-bold">Order No.</TableHead>
-                          <TableHead className="font-bold">Invoice No.</TableHead>
-                          <TableHead className="font-bold">Customer Name</TableHead>
-                          <TableHead className="font-bold">Address</TableHead>
-                          <TableHead className="font-bold">Item Description</TableHead>
-                          <TableHead className="font-bold text-right">Amount (₹)</TableHead>
-                        </TableRow>
+                    <TableRow className="bg-muted/50">
+                        <TableHead className="font-bold">Order No.</TableHead>
+                        <TableHead className="font-bold">Invoice No.</TableHead>
+                        <TableHead className="font-bold">Customer Name</TableHead>
+                        <TableHead className="font-bold">Address</TableHead>
+                        <TableHead className="font-bold text-center">Qty</TableHead>
+                        <TableHead className="font-bold">Item Description</TableHead>
+                        <TableHead className="font-bold text-right">Amount (₹)</TableHead>
+                      </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {extractedOrders.map((order, index) => (
-                      <TableRow key={index} className="hover:bg-muted/30">
-                        <TableCell className="font-mono text-xs font-semibold text-pink-600">{order.orderNo}</TableCell>
-                        <TableCell className="text-xs font-medium">{order.invoiceNo || '—'}</TableCell>
-                        <TableCell className="font-medium">{order.customerName}</TableCell>
-                        <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={order.address}>
-                          {order.address}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {matchedMap[index]?.selectedId ? (
-                            (() => {
-                              const sel = products.find(p => p.id === matchedMap[index].selectedId);
-                              if (!sel) return <span>{order.item}</span>;
-                              return (
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="text-left">
-                                    <div className="font-medium">{sel.name}</div>
-                                    <div className="text-[11px] text-muted-foreground">{sel.code} {sel.size ? `| Size: ${sel.size}` : ''} {typeof sel.dp !== 'undefined' ? `| DP: ₹${sel.dp}` : ''}</div>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => {
-                                      const selProd = products.find(p => p.id === matchedMap[index].selectedId);
-                                      setMatchedMap(prev => ({ ...prev, [index]: { ...prev[index], selectedId: undefined } }));
-                                      if (selProd) setExtractedOrders(prev => prev.map((o,i) => i === index ? { ...o, item: o.item.replace(new RegExp(`\\s*—\\s*${escapeRegExp(selProd.name)}$`), '') } : o));
-                                    }} title="Remove product"><Trash2 className="h-4 w-4" /></Button>
+                    {extractedOrders.map((order, orderIndex) => (
+                      <React.Fragment key={orderIndex}>
+                        {/* Main Order Row */}
+                        <TableRow className="bg-pink-50 hover:bg-pink-100 border-b-2">
+                          <TableCell className="font-mono text-xs font-bold text-pink-700">{order.orderNo}</TableCell>
+                          <TableCell className="text-xs font-semibold text-pink-600">{order.invoiceNo || '—'}</TableCell>
+                          <TableCell className="font-bold text-gray-800">{order.customerName}</TableCell>
+                          <TableCell className="max-w-xs text-xs text-gray-700" title={order.address}>
+                            {order.address}
+                          </TableCell>
+                          <TableCell className="text-center font-bold text-green-700">{order.qty || 0}</TableCell>
+                          <TableCell colSpan={2} className="text-right font-bold text-green-700">
+                            TOTAL: ₹{order.amount}
+                          </TableCell>
+                        </TableRow>
+                        
+                        {/* Items Sub-Table */}
+                        {order.items && order.items.length > 0 && (
+                          <TableRow className="bg-gray-50">
+                            <TableCell colSpan={7} className="p-0">
+                              <div className="p-4 space-y-4">
+                                <div>
+                                  <h4 className="font-semibold text-base mb-3">📦 Items in this Order:</h4>
+                                  <p className="text-xs text-muted-foreground mb-3">Order ID: <span className="font-mono font-bold">{order.orderNo}</span> | Invoice: <span className="font-mono font-bold">{order.invoiceNo || '—'}</span> | Customer: <span className="font-bold">{order.customerName}</span></p>
+                                  
+                                  {/* Warning/Info Banner */}
+                                  <div className="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+                                    <p className="text-sm font-semibold text-yellow-800">
+                                      ⚠️ IMPORTANT: Map each extracted item to an actual product from the database. Only mapped products will be saved to staging.
+                                    </p>
+                                    <p className="text-xs text-yellow-700 mt-1">
+                                      Unmapped items will be skipped and NOT saved.
+                                    </p>
                                   </div>
                                 </div>
-                              );
-                            })()
-                          ) : (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button variant="outline" size="sm" className="w-full text-left h-auto py-1">
-                                  {matchedMap[index]?.matches.length ? `Select (${matchedMap[index].matches.length})` : 'Select product'}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[600px] max-w-[90vw] p-0">
-                                <div className="p-2 border-b">
-                                  <Input placeholder="Search..." className="h-7 text-xs" value={matchedMap[index]?.search || ''} onChange={(e) => setMatchedMap(prev => ({ ...prev, [index]: { ...prev[index], search: e.target.value } }))} />
+                                <div className="border rounded-lg overflow-hidden">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="bg-pink-100 border-b">
+                                        <th className="px-4 py-3 text-left font-bold text-gray-800">Extracted Item</th>
+                                        <th className="px-4 py-3 text-left font-bold text-gray-800">➜ Map to Actual Product (This will be saved)</th>
+                                        <th className="px-4 py-3 text-center font-bold text-gray-800 w-20">Qty</th>
+                                        <th className="px-4 py-3 text-right font-bold text-gray-800 w-32">Total (₹)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {order.items.map((item, itemIndex) => {
+                                        const selectedProductId = item.mapped_product_id || matchedMap[orderIndex]?.selectedId;
+                                        const selectedProduct = products.find(p => p.id === selectedProductId);
+                                        
+                                        return (
+                                          <tr key={itemIndex} className="border-b hover:bg-pink-50 transition">
+                                            <td className="px-4 py-3 text-sm break-words font-medium text-gray-900">
+                                              {(() => {
+                                                // Prefer SKU from mapped product, else use detected item.sku or try extract
+                                                const skuFromProduct = selectedProduct?.code || (item as any).sku;
+                                                const raw = item.product || '';
+                                                let extractedSku: string | null = null;
+                                                if (skuFromProduct) extractedSku = skuFromProduct;
+                                                else {
+                                                  // use shared helper which prefers alpha+digit tokens
+                                                  const candidate = extractSkuToken((raw || '').toUpperCase() || raw);
+                                                  if (candidate) {
+                                                    const tokenClean = candidate.replace(/[^A-Z0-9\-]/gi, '');
+                                                    const sizeTokens = ['S','M','L','XL','XS','XXL','XXXL','XXXXL'];
+                                                    // ignore pure short numeric sizes and common size codes
+                                                    if (!/^[0-9]{1,3}$/.test(tokenClean) && !sizeTokens.includes(tokenClean.toUpperCase())) {
+                                                      extractedSku = candidate;
+                                                    }
+                                                  }
+                                                }
+
+                                                return (
+                                                  <>
+                                                    <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-semibold">
+                                                      ❌ From PDF: {raw}
+                                                    </span>
+                                                    {extractedSku && (
+                                                      <div className="text-xs text-muted-foreground mt-1">SKU: {extractedSku}</div>
+                                                    )}
+                                                    <p className="text-xs text-gray-500 mt-1">(Not being saved)</p>
+                                                  </>
+                                                );
+                                              })()}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              {selectedProduct ? (
+                                                <div className="text-sm">
+                                                  <div className="font-bold text-green-700 flex items-center gap-2">
+                                                    ✅ {selectedProduct.name}
+                                                  </div>
+                                                  <div className="text-xs text-muted-foreground mt-1">
+                                                    {selectedProduct.code && <span className="bg-green-100 px-2 py-1 rounded mr-1">Code: {selectedProduct.code}</span>}
+                                                    {selectedProduct.size && <span className="bg-green-100 px-2 py-1 rounded">Size: {selectedProduct.size}</span>}
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <Popover>
+                                                  <PopoverTrigger asChild>
+                                                    <Button variant="outline" size="sm" className="w-full text-left">
+                                                      {matchedMap[orderIndex]?.matches.length ? `→ Map Product (${matchedMap[orderIndex].matches.length})` : '→ Map Product'}
+                                                    </Button>
+                                                  </PopoverTrigger>
+                                                  <PopoverContent className="w-[600px] max-w-[90vw] p-0">
+                                                    <div className="p-2 border-b">
+                                                      <Input 
+                                                        placeholder="Search product..." 
+                                                        className="h-7 text-xs" 
+                                                        value={matchedMap[orderIndex]?.search || ''} 
+                                                        onChange={(e) => setMatchedMap(prev => ({ ...prev, [orderIndex]: { ...prev[orderIndex], search: e.target.value } }))} 
+                                                      />
+                                                    </div>
+                                                    <ScrollArea className="h-[300px]">
+                                                      {matchedMap[orderIndex]?.matches.length ? (
+                                                        matchedMap[orderIndex].matches.filter(p => {
+                                                          const q = (matchedMap[orderIndex]?.search || '').toLowerCase();
+                                                          if (!q) return true;
+                                                          return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
+                                                        }).map(p => (
+                                                          <Button key={`cand-meesho-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => {
+                                                            handleProductMapping(orderIndex, itemIndex, p.id);
+                                                          }}>
+                                                            <div className="text-left w-full">
+                                                              <div className="font-medium text-sm">{p.name}</div>
+                                                              <div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''}</div>
+                                                            </div>
+                                                          </Button>
+                                                        ))
+                                                      ) : null}
+                                                      <div className="h-px bg-muted/30 my-2" />
+                                                      {products.filter(p => {
+                                                        const q = (matchedMap[orderIndex]?.search || '').toLowerCase();
+                                                        if (!q) return true;
+                                                        return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
+                                                      }).map(p => (
+                                                        <Button key={`all-meesho-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => {
+                                                          handleProductMapping(orderIndex, itemIndex, p.id);
+                                                        }}>
+                                                          <div className="text-left w-full">
+                                                            <div className="font-medium text-sm">{p.name}</div>
+                                                            <div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''}</div>
+                                                          </div>
+                                                        </Button>
+                                                      ))}
+                                                    </ScrollArea>
+                                                  </PopoverContent>
+                                                </Popover>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center font-bold text-gray-700">
+                                              {item.qty}
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-bold text-green-600 text-base">₹{item.total.toFixed(2)}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                      {/* Summary Row */}
+                                      <tr className="bg-pink-50 border-t-2 border-pink-300">
+                                        <td colSpan={1} className="px-4 py-3 font-bold text-right text-gray-800">
+                                          Order Total:
+                                        </td>
+                                        <td className="px-4 py-3 text-center font-bold text-pink-600 text-base">
+                                          {order.items.reduce((sum, i) => sum + i.qty, 0)}
+                                        </td>
+                                        <td className="px-4 py-3"></td>
+                                        <td className="px-4 py-3 text-right font-bold text-green-700 text-lg">
+                                          ₹{order.items.reduce((sum, i) => sum + i.total, 0).toFixed(2)}
+                                        </td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
                                 </div>
-                                <ScrollArea className="h-[300px]">
-                                  {matchedMap[index]?.matches.length ? (
-                                    matchedMap[index].matches.filter(p => {
-                                      const q = (matchedMap[index]?.search || '').toLowerCase();
-                                      if (!q) return true;
-                                      return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
-                                    }).map(p => (
-                                      <Button key={`cand-meesho-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => {
-                                        setMatchedMap(prev => ({ ...prev, [index]: { ...prev[index], selectedId: p.id } }));
-                                        setExtractedOrders(prev => prev.map((o,i) => i === index ? { ...o, item: `${o.item} — ${p.name}` } : o));
-                                      }}>
-                                        <div className="text-left w-full">
-                                          <div className="font-medium text-sm">{p.name}</div>
-                                          <div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''} {typeof (p as any).dp !== 'undefined' ? `| DP: ₹${(p as any).dp}` : ''}</div>
-                                        </div>
-                                      </Button>
-                                    ))
-                                  ) : null}
-                                  <div className="h-px bg-muted/30 my-2" />
-                                  {products.filter(p => {
-                                    const q = (matchedMap[index]?.search || '').toLowerCase();
-                                    if (!q) return true;
-                                    return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
-                                  }).map(p => (
-                                    <Button key={`all-meesho-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => {
-                                      setMatchedMap(prev => ({ ...prev, [index]: { ...prev[index], selectedId: p.id } }));
-                                      setExtractedOrders(prev => prev.map((o,i) => i === index ? { ...o, item: `${o.item} — ${p.name}` } : o));
-                                    }}>
-                                      <div className="text-left w-full">
-                                        <div className="font-medium text-sm">{p.name}</div>
-                                        <div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''} {typeof (p as any).dp !== 'undefined' ? `| DP: ₹${(p as any).dp}` : ''}</div>
-                                      </div>
-                                    </Button>
-                                  ))}
-                                </ScrollArea>
-                              </PopoverContent>
-                            </Popover>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-green-600">₹{order.amount}</TableCell>
-                      </TableRow>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
                     ))}
                   </TableBody>
                 </Table>

@@ -87,6 +87,43 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         label="Dashboard"
         onClick={() => navigate('/admin-dashboard')}
       />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={cn(
+              "w-full justify-start gap-2",
+              "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+            )}
+          >
+            <FileSearch className="h-4 w-4" />
+            Extractors
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-56">
+          <DropdownMenuLabel>Open an extractor</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/flipkart-extractor')}>
+              <FileSearch className="h-4 w-4 mr-2" /> Flipkart Extractor
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/amazon-extractor')}>
+              <FileSearch className="h-4 w-4 mr-2" /> Amazon Extractor
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/meesho-extractor')}>
+              <FileSearch className="h-4 w-4 mr-2" /> Meesho Extractor
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/spartan-extractor')}>
+              <FileSearch className="h-4 w-4 mr-2" /> Spartan Website Extractor
+            </DropdownMenuItem>
+          </SheetClose>
+        </DropdownMenuContent>
+      </DropdownMenu>
       
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

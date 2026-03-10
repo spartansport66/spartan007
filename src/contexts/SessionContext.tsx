@@ -9,7 +9,7 @@ interface SessionContextType {
   user: User | null;
   loading: boolean;
   isAdmin: boolean;
-  userType: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | 'online_orders' | 'sales_hod' | null;
+  userType: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | 'online_orders' | 'online_dashboard' | 'sales_hod' | null;
   mustResetPassword: boolean; // Added mustResetPassword
 }
 
@@ -20,7 +20,7 @@ export const SessionContextProvider: React.FC<{ children: React.ReactNode }> = (
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [userType, setUserType] = useState<'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | 'online_orders' | 'sales_hod' | null>(null);
+  const [userType, setUserType] = useState<'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'super_admin' | 'warehouse_keeper' | 'online_orders' | 'online_dashboard' | 'sales_hod' | null>(null);
   const [mustResetPassword, setMustResetPassword] = useState(false); // Initialize mustResetPassword
 
   useEffect(() => {

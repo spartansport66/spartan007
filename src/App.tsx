@@ -38,6 +38,7 @@ import AmazonOrderExtractor from "./pages/AmazonOrderExtractor";
 import SpartanOrderExtractor from "./pages/SpartanOrderExtractor";
 import ProcessOnlineOrders from "./pages/ProcessOnlineOrders";
 import OnlineOrderDashboard from "./pages/OnlineOrderDashboard";
+import OnlineOrdersAdminDashboard from "./pages/OnlineOrdersAdminDashboard";
 import DatabaseBackup from "./pages/DatabaseBackup";
 import OnlineOrderDispatchDashboard from "./pages/OnlineOrderDispatchDashboard";
 import ManualOrderEntry from "./pages/ManualOrderEntry"; // New Import
@@ -86,6 +87,7 @@ const AppContent = () => {
       <Route path="/spartan-extractor" element={<SpartanOrderExtractor />} />
       <Route path="/process-online-orders" element={<ProcessOnlineOrders />} />
       <Route path="/online-order-dashboard" element={<OnlineOrderDashboard />} />
+      <Route path="/online-orders-admin" element={<OnlineOrdersAdminDashboard />} />
       <Route path="/database-backup" element={<DatabaseBackup />} />
       <Route path="/online-order-dispatch-dashboard" element={<OnlineOrderDispatchDashboard />} />
       <Route path="/manual-order-entry" element={<ManualOrderEntry />} /> {/* New Route */}

@@ -5,6 +5,7 @@ import * as z from 'zod';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { showError, showSuccess } from '@/utils/toast';
+import { buildStagingFromRows } from '@/utils/onlineOrderHelpers';
 
 interface OnlineOrderExcelUploadProps {
   onUploadComplete: () => void;
@@ -49,25 +50,34 @@ const sampleData = [
 const OnlineOrderExcelUpload: React.FC<OnlineOrderExcelUploadProps> = ({ onUploadComplete }) => {
   const { user } = useSession();
 
+  const splitItems = (item: string): string[] => {
+    if (!item) return [''];
+    const parts = item
+      .split(/\s*[\r\n,|;]+\s*/)
+      .map(p => p.trim())
+      .filter(Boolean);
+    return parts.length ? parts : [item];
+  };
+
   const handleUpload = async (orders: z.infer<typeof onlineOrderSchema>[]) => {
     if (!user) {
       showError("You must be logged in.");
       return;
     }
 
-    const stagingData = orders.map(order => ({
-      platform_order_number: order.platform_order_number,
-      customer_name: order.customer_name,
-      shipping_address: order.shipping_address,
-      flipkart_item_name: order.item_name, // Map to the existing column name
-      amount: order.amount,
-      created_by: user.id,
-      status: 'pending'
+    const rawRows = orders.map(o => ({
+      platform_order_number: o.platform_order_number,
+      customer_name: o.customer_name,
+      shipping_address: o.shipping_address,
+      item: o.item_name,
+      amount: o.amount,
+      bill_no: ''
     }));
+    const stagingData = buildStagingFromRows(rawRows, user.id);
 
     const { error } = await supabase
       .from('online_order_staging')
-      .upsert(stagingData, { onConflict: 'platform_order_number' });
+      .upsert(stagingData, { onConflict: 'platform_order_number,flipkart_item_name' });
 
     if (error) {
       throw new Error(`Failed to save to staging: ${error.message}`);

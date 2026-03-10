@@ -341,16 +341,20 @@ CREATE TABLE IF NOT EXISTS public.sales_returns (
 -- Online Order Staging
 CREATE TABLE IF NOT EXISTS public.online_order_staging (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  platform_order_number TEXT NOT NULL UNIQUE,
+  platform_order_number TEXT NOT NULL,
   customer_name TEXT,
   shipping_address TEXT,
   flipkart_item_name TEXT,
+  mapped_product_id UUID REFERENCES public.products(id),
   amount NUMERIC,
+  quantity INTEGER DEFAULT 1,
   status TEXT DEFAULT 'pending',
   created_by UUID REFERENCES public.profiles(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- note: a composite unique index on (platform_order_number, flipkart_item_name)
+-- is maintained by migrations to support multi‑item orders.
 -- Online Order Details
 CREATE TABLE IF NOT EXISTS public.online_order_details (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

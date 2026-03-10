@@ -10,6 +10,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
+import { buildStagingFromRows } from '@/utils/onlineOrderHelpers';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -327,20 +328,30 @@ const OnlineOrderDashboard = () => {
   };
 
   // --- Processing Logic ---
+  const splitItems = (item: string): string[] => {
+    if (!item) return [''];
+    const parts = item
+      .split(/\s*[\r\n,|;]+\s*/)
+      .map(p => p.trim())
+      .filter(Boolean);
+    return parts.length ? parts : [item];
+  };
+
   const handleSaveToStaging = async () => {
     if (!user || extractedOrders.length === 0) return;
     setIsProcessing(true);
     try {
-      const stagingData = extractedOrders.map(order => ({
-        platform_order_number: order.orderNo,
-        customer_name: order.customerName,
-        flipkart_item_name: order.item,
-        amount: parseFloat(order.amount),
-        created_by: user.id,
-        status: 'pending'
+      const rawRows = extractedOrders.map(o => ({
+        platform_order_number: o.orderNo,
+        customer_name: o.customerName,
+        shipping_address: o.address,
+        item: o.item,
+        amount: parseFloat(o.amount) || 0,
+        bill_no: o.invoiceNo || ''
       }));
+      const stagingData = buildStagingFromRows(rawRows, user.id);
 
-      const { error } = await supabase.from('online_order_staging').upsert(stagingData, { onConflict: 'platform_order_number' });
+      const { error } = await supabase.from('online_order_staging').upsert(stagingData, { onConflict: 'platform_order_number,flipkart_item_name' });
       if (error) throw error;
 
       showSuccess(`Staged ${extractedOrders.length} orders.`);

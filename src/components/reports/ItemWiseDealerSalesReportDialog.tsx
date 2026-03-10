@@ -14,7 +14,7 @@ import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 
 interface DealerItemSalesData {
-  order_number: number;
+  order_number: number | string;
   sale_id: string;
   dealer_id: string;
   dealer_name: string;
@@ -49,7 +49,7 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
   const [allIndividualSales, setAllIndividualSales] = useState<DealerItemSalesData[]>([]);
   const [loading, setLoading] = useState(false);
   const [allProducts, setAllProducts] = useState<ProductOption[]>([]);
-  
+
   // Filter states
   const [filterProductId, setFilterProductId] = useState<string>('');
   const [filterFromDate, setFilterFromDate] = useState<string>('');
@@ -57,7 +57,7 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
   const [selectedProductName, setSelectedProductName] = useState<string>('');
   const [selectedProductCode, setSelectedProductCode] = useState<string>('');
   const [companyName, setCompanyName] = useState<string>('');
-  
+
   // Search state
   const [productSearchInput, setProductSearchInput] = useState<string>('');
   const [filteredProducts, setFilteredProducts] = useState<ProductOption[]>([]);
@@ -69,9 +69,9 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
         .from('products')
         .select('id, code, name')
         .order('name', { ascending: true });
-      
+
       if (error) throw error;
-      
+
       setAllProducts((data || []).map(p => ({ 
         value: p.id, 
         label: `${p.name} (${p.code})`,
@@ -90,8 +90,8 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
         .select('company_name')
         .limit(1)
         .single();
-      if (error && error.code !== 'PGRST116') throw error;
-      setCompanyName(data?.company_name || 'Company');
+      if (error && (error as any).code !== 'PGRST116') throw error;
+      setCompanyName((data as any)?.company_name || 'Company');
     } catch (error: any) {
       console.error('Error fetching company name:', error.message);
       setCompanyName('Company');
@@ -106,56 +106,64 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
 
     setLoading(true);
     try {
-      let query = supabase
+      // Step 1: fetch sales rows for the product (no joins) with a large range
+      const { data: salesData, error: salesError } = await supabase
         .from('sales')
-        .select(`
-          id,
-          quantity,
-          total_price,
-          sale_date,
-          products (id, name, code),
-          orders!inner (
-            order_number,
-            dealer_id,
-            user_id,
-            dealers (id, name),
-            profiles (first_name, last_name)
-          )
-        `)
-        .eq('product_id', filterProductId);
+        .select('id, quantity, total_price, sale_date, order_id')
+        .eq('product_id', filterProductId)
+        .range(0, 1000000);
 
-      // Apply date filters
+      if (salesError) {
+        console.error('Error fetching sales rows:', (salesError as any).message || salesError);
+        showError(`Failed to load sales data: ${(salesError as any).message || salesError}`);
+        setDealerSalesData([]);
+        setAllIndividualSales([]);
+        return;
+      }
+
+      const salesRows = (salesData || []) as any[];
+
+      // Collect unique order IDs and batch-fetch related orders -> dealers -> profiles
+      const orderIds = Array.from(new Set(salesRows.map(s => s.order_id).filter(Boolean)));
+      let ordersMap = new Map<string, any>();
+      if (orderIds.length > 0) {
+        const { data: ordersData, error: ordersError } = await supabase
+          .from('orders')
+          .select('id, order_number, dealer_id, dealers(id,name), user_id, profiles(first_name,last_name)')
+          .in('id', orderIds)
+          .range(0, 1000000);
+
+        if (ordersError) {
+          console.warn('Failed to fetch orders for sales rows:', (ordersError as any).message || ordersError);
+        } else if (ordersData) {
+          ordersData.forEach((o: any) => ordersMap.set(o.id, o));
+        }
+      }
+
+      // Apply date filters in JS if provided (we already fetched all rows for product)
+      let filteredSales = salesRows;
       if (filterFromDate) {
-        const startOfDay = `${filterFromDate}T00:00:00.000Z`;
-        query = query.gte('sale_date', startOfDay);
+        const start = new Date(`${filterFromDate}T00:00:00.000Z`).getTime();
+        filteredSales = filteredSales.filter(s => new Date(s.sale_date).getTime() >= start);
       }
       if (filterToDate) {
-        const endOfDay = `${filterToDate}T23:59:59.999Z`;
-        query = query.lte('sale_date', endOfDay);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching dealer sales data:', error.message);
-        showError(`Failed to load sales data: ${error.message}`);
-        setDealerSalesData([]);
-        return;
+        const end = new Date(`${filterToDate}T23:59:59.999Z`).getTime();
+        filteredSales = filteredSales.filter(s => new Date(s.sale_date).getTime() <= end);
       }
 
       // Group data by dealer
       const dealerMap = new Map<string, DealerSalesSummary>();
       const individualSalesList: DealerItemSalesData[] = [];
 
-      (data || []).forEach((sale: any) => {
-        const dealerId = sale.orders?.dealer_id || 'unknown';
-        const dealerName = sale.orders?.dealers?.name || 'Unknown Dealer';
-        const orderNumber = sale.orders?.order_number || 'N/A';
-        const salesmanFirstName = sale.orders?.profiles?.first_name || '';
-        const salesmanLastName = sale.orders?.profiles?.last_name || '';
+      filteredSales.forEach((sale: any) => {
+        const order = ordersMap.get(sale.order_id) || {};
+        const dealerId = order.dealer_id || 'unknown';
+        const dealerName = (order.dealers && order.dealers.name) || 'Unknown Dealer';
+        const orderNumber = order.order_number || 'N/A';
+        const salesmanFirstName = (order.profiles && order.profiles.first_name) || '';
+        const salesmanLastName = (order.profiles && order.profiles.last_name) || '';
         const salesmanName = `${salesmanFirstName} ${salesmanLastName}`.trim() || 'N/A';
-        
-        // Create individual sale record
+
         const individualSale: DealerItemSalesData = {
           order_number: orderNumber,
           sale_id: sale.id,
@@ -166,10 +174,9 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
           total_price: sale.total_price || 0,
           sale_date: sale.sale_date,
         };
-        
+
         individualSalesList.push(individualSale);
-        
-        // Create/update dealer summary
+
         if (!dealerMap.has(dealerId)) {
           dealerMap.set(dealerId, {
             dealer_id: dealerId,
@@ -201,6 +208,8 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
     } catch (error: any) {
       console.error('Error in fetchDealerSalesData:', error.message);
       showError('An unexpected error occurred while fetching data.');
+      setDealerSalesData([]);
+      setAllIndividualSales([]);
     } finally {
       setLoading(false);
     }
@@ -223,23 +232,42 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
     }
   }, [isOpen, fetchProducts, fetchCompanyInfo]);
 
-  const handleProductSearchChange = (searchValue: string) => {
+  const handleProductSearchChange = async (searchValue: string) => {
     setProductSearchInput(searchValue);
-    
+
     if (!searchValue.trim()) {
       setFilteredProducts([]);
       setShowProductDropdown(false);
       return;
     }
 
-    const searchLower = searchValue.toLowerCase();
-    const filtered = allProducts.filter(product =>
-      product.label.toLowerCase().includes(searchLower) ||
-      product.code.toLowerCase().includes(searchLower)
-    );
+    // Use server-side search to ensure we return all matching products (no client-side limit)
+    try {
+      setShowProductDropdown(true);
+      const search = searchValue.trim();
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, code, name')
+        .or(`name.ilike.%${search}%,code.ilike.%${search}%`)
+        .order('name', { ascending: true })
+        .range(0, 1000);
 
-    setFilteredProducts(filtered);
-    setShowProductDropdown(filtered.length > 0);
+      if (error) throw error;
+
+      const mapped = (data || []).map((p: any) => ({
+        value: p.id,
+        label: `${p.name} (${p.code})`,
+        code: p.code,
+      }));
+
+      setFilteredProducts(mapped);
+      setShowProductDropdown(mapped.length > 0);
+    } catch (err: any) {
+      console.error('Product search error:', err?.message || err);
+      showError('Failed to search products.');
+      setFilteredProducts([]);
+      setShowProductDropdown(false);
+    }
   };
 
   const handleProductSelect = (product: ProductOption) => {
@@ -399,78 +427,38 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
             
             {/* Dropdown list */}
             {showProductDropdown && filteredProducts.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md shadow-lg z-50 max-h-64 overflow-y-auto">
-                {filteredProducts.map((product, index) => (
-                  <div
-                    key={product.value}
-                    onClick={() => handleProductSelect(product)}
-                    className="px-4 py-2 hover:bg-blue-100 dark:hover:bg-blue-900 cursor-pointer border-b last:border-b-0"
-                  >
-                    <div className="font-medium">{product.label}</div>
-                    <div className="text-xs text-gray-500">Code: {product.code}</div>
+              <div className="absolute z-20 w-full bg-white border rounded shadow mt-1 max-h-60 overflow-y-auto">
+                {filteredProducts.map(p => (
+                  <div key={p.value} className="px-3 py-2 hover:bg-gray-100 cursor-pointer" onClick={() => handleProductSelect(p)}>
+                    {p.label}
                   </div>
                 ))}
               </div>
             )}
-            
-            {productSearchInput && filteredProducts.length === 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded-md shadow-lg z-50 p-3 text-center text-gray-500">
-                No products found
-              </div>
-            )}
-
-            {/* Selected product display */}
-            {filterProductId && (
-              <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-950 rounded-md text-sm">
-                <span className="text-green-700 dark:text-green-400 font-semibold">✓ Selected: {selectedProductName}</span>
-              </div>
-            )}
           </div>
 
-          <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterFromDate" className="text-foreground font-medium">From Date</Label>
-            <Input
-              id="filterFromDate"
-              type="date"
-              value={filterFromDate}
-              onChange={(e) => setFilterFromDate(e.target.value)}
-            />
+          <div className="w-40">
+            <Label className="text-foreground font-medium">From</Label>
+            <Input type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} />
           </div>
 
-          <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterToDate" className="text-foreground font-medium">To Date</Label>
-            <Input
-              id="filterToDate"
-              type="date"
-              value={filterToDate}
-              onChange={(e) => setFilterToDate(e.target.value)}
-            />
+          <div className="w-40">
+            <Label className="text-foreground font-medium">To</Label>
+            <Input type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} />
           </div>
 
-          <Button 
-            onClick={fetchDealerSalesData}
-            disabled={!filterProductId || loading}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-            Search
-          </Button>
-
-          <Button 
-            onClick={handleClearFilters}
-            variant="outline"
-          >
-            Clear
-          </Button>
-
-          <Button 
-            onClick={handlePrint}
-            disabled={allIndividualSales.length === 0 || loading}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={fetchDealerSalesData} className="bg-blue-600 hover:bg-blue-700">Search</Button>
+            <Button variant="outline" onClick={handleClearFilters}>Clear</Button>
+            <Button 
+              onClick={handlePrint}
+              disabled={allIndividualSales.length === 0 || loading}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Print
+            </Button>
+          </div>
         </div>
 
         {/* Loading state */}

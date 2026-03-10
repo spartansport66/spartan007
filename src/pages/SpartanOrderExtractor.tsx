@@ -13,6 +13,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
+import { buildStagingFromRows } from '@/utils/onlineOrderHelpers';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Import the worker directly
@@ -25,8 +26,15 @@ interface ExtractedOrder {
   address: string;
   item: string;
   amount: string;
+  qty: number;
   invoiceNo?: string;
   invoiceDate?: string;
+  productName?: string;
+  productSku?: string;
+  hsn?: string;
+  unitPrice?: string;
+  taxAmount?: string;
+  igst?: string;
 }
 
 interface Product { id: string; name: string; code?: string; size?: string | number | null; dp?: number; gst?: string | number }
@@ -41,7 +49,9 @@ const SpartanOrderExtractor = () => {
   const [showRawText, setShowRawText] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [matchedMap, setMatchedMap] = useState<Record<number, { matches: Product[]; selectedId?: string; search?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }>>({});
+  const [productMapping, setProductMapping] = useState<Record<number, string>>({});
+  const [productSearchText, setProductSearchText] = useState<Record<number, string>>({});
+  const [openDropdown, setOpenDropdown] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -56,49 +66,81 @@ const SpartanOrderExtractor = () => {
     fetchProducts();
   }, []);
 
-  const normalize = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const extractNumericToken = (text: string) => { const match = text.match(/\b(\d{2,})\b/); return match ? match[1] : undefined; };
+  const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  useEffect(() => {
-    if (products.length === 0) return;
-    
-    const enriched = products.map(p => ({
-      ...p,
-      normCode: p.code ? normalize(p.code) : '',
-      normName: p.name ? normalize(p.name) : '',
-      numericParts: (p.code || '').match(/\d{2,}/g) || []
-    }));
+  // Real-time product mapping: Delete raw item, insert mapped product
+  const handleProductMapping = async (orderIndex: number, selectedProductId: string) => {
+    try {
+      let authUser = user;
+      if (!authUser) {
+        const { data: { session } } = await supabase.auth.getSession();
+        authUser = session?.user;
+      }
+      if (!authUser) throw new Error('User not authenticated');
 
-    const map: typeof matchedMap = {} as any;
-    extractedOrders.forEach((ord, idx) => {
-      const text = ord.item || '';
-      const numericToken = extractNumericToken(text);
-      const normText = normalize(text);
+      const order = extractedOrders[orderIndex];
+      if (!order) throw new Error('Order not found');
 
-      let candidates = enriched.filter((p: any) => {
-        if (!p.code && !p.name) return false;
-        if (p.normCode && normText.includes(p.normCode)) return true;
-        if (numericToken) {
-          if (p.numericParts.some((np: string) => np.includes(numericToken) || numericToken.includes(np))) return true;
-          if ((p.normCode || '').includes(numericToken)) return true;
-        }
-        if (p.normName && normText.includes(p.normName.substring(0, Math.min(12, p.normName.length)))) return true;
-        const textTokens = normText.split(/\s+/).filter((t: string) => t.length > 2);
-        const productTokens = (p.normName || '').split(/\s+/).filter((t: string) => t.length > 2);
-        if (textTokens.length > 0 && productTokens.length > 0) {
-          const intersect = textTokens.filter((t: string) => productTokens.includes(t));
-          if (intersect.length >= 2) return true;
-        }
-        return false;
+      const selectedProduct = products.find(p => p.id === selectedProductId);
+      if (!selectedProduct) throw new Error('Product not found');
+
+      const itemAmount = parseFloat(order.amount) || 0;
+
+      console.log('📝 Mapping data:', {
+        orderNo: order.orderNo,
+        rawItemName: order.item,
+        mappedProductName: selectedProduct.name,
+        amount: itemAmount
       });
 
-      const candidateProducts: Product[] = candidates.map((c: any) => ({ id: c.id, name: c.name, code: c.code, size: c.size }));
-      map[idx] = { matches: candidateProducts, selectedId: candidateProducts.length === 1 ? candidateProducts[0].id : undefined, debug: { numericToken, normText, candidateCodes: candidateProducts.map(cp => (cp.code || '').toString()) } };
-    });
-    setMatchedMap(map);
-  }, [products, extractedOrders]);
+      // Step 1: Delete old staging row with raw item name
+      console.log('🗑️ Deleting old staging row with raw item name...');
+      const { error: deleteError } = await supabase
+        .from('online_order_staging')
+        .delete()
+        .eq('platform_order_number', order.orderNo)
+        .eq('flipkart_item_name', order.item);
 
-  const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (deleteError) {
+        console.warn('⚠️ Delete warning (may not exist):', deleteError.message);
+      } else {
+        console.log('✅ Deleted old row');
+      }
+
+      // Step 2: Upsert new row with mapped product data
+      console.log('✅ Upserting mapped product to staging...');
+      const { data, error: insertError } = await supabase
+        .from('online_order_staging')
+        .upsert([{
+          platform_order_number: order.orderNo,
+          customer_name: order.customerName || null,
+          shipping_address: order.address || null,
+          flipkart_item_name: selectedProduct.name,
+          amount: itemAmount,
+          quantity: order.qty || 1,
+          bill_no: order.invoiceNo || '',
+          created_by: authUser.id,
+          status: 'pending'
+        }], {
+          onConflict: 'platform_order_number,flipkart_item_name'
+        })
+        .select();
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      // Update local state to show mapping
+      setProductMapping(prev => ({ ...prev, [orderIndex]: selectedProductId }));
+      
+      console.log('✅ Inserted mapped product row:', data);
+      showSuccess(`✅ Mapped & saved: ${selectedProduct.name} | Amount: ₹${itemAmount.toFixed(2)}`);
+
+    } catch (error: any) {
+      console.error('❌ Mapping error:', error);
+      showError(`Failed to map product: ${error.message}`);
+    }
+  };
 
   // Lightweight extractor to find product name and SKU in the item text.
   const extractNameSku = (text: string | undefined): { name?: string; sku?: string } | null => {
@@ -143,37 +185,80 @@ const SpartanOrderExtractor = () => {
         }
     }
 
-    // 4. Item Description (extract Product Name and SKU from table)
+    // 4. Item Description - Show ALL product details in raw format for extraction
     let item = "N/A";
+    let productName: string | undefined;
+    let productSku: string | undefined;
+    let hsn: string | undefined;
+    let quantity: string | undefined;
+    let unitPrice: string | undefined;
+    let taxAmount: string | undefined;
+    let igst: string | undefined;
+    
     const allLines = text.split('\n');
-    let prodName: string | undefined;
-    let prodSku: string | undefined;
     const headerIdx = allLines.findIndex(l => /Product\s+Name/i.test(l));
     if (headerIdx >= 0) {
-      for (let i = headerIdx + 1; i < Math.min(allLines.length, headerIdx + 30); i++) {
-        const line = (allLines[i] || '').trim();
-        if (!line) continue;
-        // skip known header tokens
-        if (/^(Product\s+Sku|HSN|Quantity|Unit Price|TAX Amount|TAX|CGST|SGST|IGST|TOTAL|\(Including|Charges Applied|Shipping Charges|COD Charges|Total Amount)$/i.test(line)) continue;
-        // consider this a product name if it contains letters and isn't a short token
-        if (/[A-Za-z]/.test(line) && line.length > 2 && line.length < 120) {
-          prodName = line.replace(/\s+/g, ' ').trim();
-          // find next non-empty, non-header line as SKU
-          for (let j = i + 1; j < Math.min(allLines.length, i + 8); j++) {
-            const l2 = (allLines[j] || '').trim();
-            if (!l2) continue;
-            if (/^(HSN|Quantity|Unit Price|TAX Amount|TAX|CGST|SGST|IGST|TOTAL|Charges Applied|Shipping Charges|COD Charges|Total Amount)$/i.test(l2)) continue;
-            prodSku = l2.replace(/\s+/g, ' ').trim();
-            break;
-          }
+      // Skip header line and any empty lines or column headers
+      let startIdx = headerIdx + 1;
+      const headerKeywords = /^(Product\s+Sku|HSN|Quantity|Unit\s+Price|TAX\s+Amount|IGST|TOTAL|Charges\s+Applied|Shipping|COD|Tax\s+Amount)/i;
+      
+      // Skip over column header lines
+      while (startIdx < allLines.length) {
+        const line = (allLines[startIdx] || '').trim();
+        if (!line || headerKeywords.test(line)) {
+          startIdx++;
+        } else {
           break;
         }
       }
+      
+      // Collect the next several non-empty lines that form the product row
+      const productRowLines: string[] = [];
+      for (let i = startIdx; i < Math.min(allLines.length, startIdx + 25); i++) {
+        const line = (allLines[i] || '').trim();
+        if (!line) continue;
+        // Stop when we hit section headers or tax/charge lines
+        if (/^(Charges\s+Applied|Shipping\s+Charges|COD\s+Charges|Total\s+Amount|IGST\s+\(Value)/i.test(line)) break;
+        productRowLines.push(line);
+      }
+      
+      // Extract fields from the product row lines
+      if (productRowLines.length > 0) {
+        productName = productRowLines[0];
+      }
+      if (productRowLines.length > 1) {
+        productSku = productRowLines[1];
+      }
+      if (productRowLines.length > 2) {
+        hsn = productRowLines[2];
+      }
+      if (productRowLines.length > 3) {
+        quantity = productRowLines[3];
+      }
+      if (productRowLines.length > 4) {
+        unitPrice = productRowLines[4];
+      }
+      if (productRowLines.length > 5) {
+        taxAmount = productRowLines[5];
+      }
+      if (productRowLines.length > 6) {
+        igst = productRowLines[6];
+      }
+      
+      // Format as single raw text paragraph
+      const parts = [];
+      if (productName) parts.push(`Product Name: ${productName}`);
+      if (productSku) parts.push(`SKU: ${productSku}`);
+      if (hsn) parts.push(`HSN: ${hsn}`);
+      if (quantity) parts.push(`Qty: ${quantity}`);
+      if (unitPrice) parts.push(`Unit Price: ${unitPrice}`);
+      if (taxAmount) parts.push(`TAX: ${taxAmount}`);
+      if (igst) parts.push(`IGST: ${igst}`);
+      
+      item = parts.length > 0 ? parts.join(' | ') : "N/A";
     }
-    if (prodName) {
-      item = prodSku ? `${prodName} — ${prodSku}` : prodName;
-    }
-    // fallback: attempt loose regex capture
+    
+    // fallback if product extraction failed
     if (item === "N/A") {
       const itemMatch = text.match(/Product\s+Name[\s\S]*?\n\s*([A-Za-z0-9\-\s\(\)]+?)\n\s*([A-Za-z0-9\-\s]+)/i);
       if (itemMatch) {
@@ -188,7 +273,21 @@ const SpartanOrderExtractor = () => {
         console.warn("Spartan Extractor: Could not extract all fields. OrderNo:", orderNo, "Item:", item, "Amount:", amount);
     }
 
-    return { orderNo, customerName, address, item, amount, invoiceDate };
+    return { 
+      orderNo, 
+      customerName, 
+      address, 
+      item, 
+      amount, 
+      qty: 1, 
+      invoiceDate,
+      productName,
+      productSku,
+      hsn,
+      unitPrice,
+      taxAmount,
+      igst
+    };
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -261,6 +360,8 @@ const SpartanOrderExtractor = () => {
         throw new Error("No valid Spartan order patterns found in the PDF. Please check the 'Debug View' to see the extracted text.");
       }
 
+      // For Spartan, each extracted order has ONE item - no need to split
+      // Just use allExtracted directly as final orders
       setExtractedOrders(allExtracted);
       showSuccess(`Successfully extracted ${allExtracted.length} orders!`);
     } catch (error: any) {
@@ -272,33 +373,31 @@ const SpartanOrderExtractor = () => {
   };
 
   const handleSaveToStaging = async () => {
-    if (!user || extractedOrders.length === 0) return;
-    setIsSaving(true);
+    if (extractedOrders.length === 0) return;
+    
     try {
-      const stagingData = extractedOrders.map(order => ({
-        platform_order_number: order.orderNo,
-        customer_name: order.customerName,
-        shipping_address: order.address,
-        flipkart_item_name: order.item,
-        bill_no: order.invoiceNo,
-        amount: parseFloat(order.amount),
-        created_by: user.id,
-        status: 'pending'
-      }));
+      // Check if all items are mapped
+      let unmappedCount = 0;
+      for (let i = 0; i < extractedOrders.length; i++) {
+        if (!productMapping[i]) {
+          unmappedCount++;
+          console.warn(`⚠️ Item not mapped: ${extractedOrders[i].item}`);
+        }
+      }
 
-      const { error } = await supabase
-        .from('online_order_staging')
-        .upsert(stagingData, { onConflict: 'platform_order_number' });
+      if (unmappedCount > 0) {
+        showError(`❌ Please map all ${unmappedCount} unmapped item(s) before proceeding!`);
+        return;
+      }
 
-      if (error) throw error;
-
-      showSuccess(`Saved ${extractedOrders.length} orders to staging area.`);
-      navigate('/process-online-orders');
+      console.log('✅ All items mapped! Proceeding to process orders...');
+      showSuccess('✅ All items have been saved with mapped products!');
+      setTimeout(() => {
+        navigate('/process-online-orders');
+      }, 1500);
     } catch (error: any) {
-      console.error("Staging Error:", error);
-      showError(`Failed to save to staging: ${error.message}`);
-    } finally {
-      setIsSaving(false);
+      console.error("Error:", error);
+      showError(`Error: ${error.message}`);
     }
   };
 
@@ -455,7 +554,7 @@ const SpartanOrderExtractor = () => {
                       <TableHead className="font-bold">Order No.</TableHead>
                       <TableHead className="font-bold">Customer Name</TableHead>
                       <TableHead className="font-bold">Address</TableHead>
-                      <TableHead className="font-bold">Item Description</TableHead>
+                      <TableHead className="font-bold">Item Description (All Product Details)</TableHead>
                       <TableHead className="font-bold">Invoice Date</TableHead>
                       <TableHead className="font-bold">Invoice No.</TableHead>
                       <TableHead className="font-bold text-right">Amount (₹)</TableHead>
@@ -463,11 +562,22 @@ const SpartanOrderExtractor = () => {
                   </TableHeader>
                   <TableBody>
                     {extractedOrders.map((order, index) => {
-                      const candidates = matchedMap[index]?.matches || [];
-                      const selectedId = matchedMap[index]?.selectedId;
-                      const searchTerm = matchedMap[index]?.search || '';
-                      const selected = selectedId ? products.find(p => p.id === selectedId) : null;
-                      const inferred = extractNameSku(order.item);
+                      const selectedProductId = productMapping[index];
+                      const selectedProduct = selectedProductId ? products.find(p => p.id === selectedProductId) : null;
+                      const searchText = productSearchText[index] || '';
+                      
+                      // Find ALL matching products based on the item name
+                      const matchingProducts = products.filter(p => {
+                        const itemLower = (order.item || '').toLowerCase();
+                        const nameLower = (p.name || '').toLowerCase();
+                        const codeLower = (p.code || '').toString().toLowerCase();
+                        return itemLower.includes(codeLower) || itemLower.includes(nameLower.substring(0, 20)) || codeLower.includes(itemLower.substring(0, 10));
+                      });
+                      
+                      // Apply search filter
+                      const filteredProducts = searchText 
+                        ? products.filter(p => (p.name || '').toLowerCase().includes(searchText.toLowerCase()) || (p.code || '').toString().toLowerCase().includes(searchText.toLowerCase()))
+                        : products;
 
                       return (
                         <TableRow key={index} className="hover:bg-muted/30">
@@ -476,78 +586,86 @@ const SpartanOrderExtractor = () => {
                           <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={order.address}>
                             {order.address}
                           </TableCell>
-                          <TableCell className="text-sm min-w-[600px]">
-                            <Popover>
+                          <TableCell className="text-sm min-w-[700px]">
+                            {/* Show extracted item name in red badge */}
+                            <div className="mb-3 inline-block">
+                              <div className="text-xs bg-red-100 text-red-900 px-3 py-2 rounded border border-red-300 break-words">
+                                ❌ From PDF: {order.item}
+                                <div className="text-[11px] text-red-700 mt-1">(Not being saved)</div>
+                              </div>
+                            </div>
+
+                            {/* Product mapping dropdown */}
+                            <Popover open={openDropdown === index} onOpenChange={(open) => setOpenDropdown(open ? index : null)}>
                               <PopoverTrigger asChild>
-                                <Button variant="link" className="p-0 h-auto whitespace-normal text-left text-sm font-medium break-words">
-                                  {`Select product (${candidates.length})`}
+                                <Button variant="outline" className="w-full text-left justify-start mb-2">
+                                  → Map to Actual Product (This will be saved)
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent className="w-[600px] max-w-[90vw] p-3 max-h-96 flex flex-col">
-                                <div className="space-y-2 flex-1 overflow-auto">
-                                  {candidates.length > 0 && (
-                                    <>
-                                      <h4 className="font-semibold text-xs uppercase text-muted-foreground">Best Matches ({candidates.length})</h4>
-                                      {candidates.slice(0, 5).map(p => (
+                                {/* Matching products section */}
+                                {matchingProducts.length > 0 && (
+                                  <div className="mb-3">
+                                    <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-2">Matched Products ({matchingProducts.length})</h4>
+                                    <ScrollArea className="max-h-40">
+                                      {matchingProducts.map(p => (
                                         <button
                                           key={p.id}
                                           onClick={() => {
-                                            const newOrders = [...extractedOrders];
-                                            newOrders[index].item = `${order.item} — ${p.code || p.name}`;
-                                            setExtractedOrders(newOrders);
-                                            setMatchedMap(m => ({ ...m, [index]: { ...m[index], selectedId: p.id } }));
+                                            handleProductMapping(index, p.id);
+                                            setOpenDropdown(null);
                                           }}
-                                          className="w-full text-left p-2 bg-blue-50 hover:bg-blue-100 rounded-md text-xs border border-blue-200 cursor-pointer"
+                                          className="w-full text-left p-2 bg-green-50 hover:bg-green-100 rounded-md text-xs border border-green-300 cursor-pointer mb-2 block"
                                         >
-                                          <div className="font-bold text-blue-900 whitespace-normal break-words">{p.code || p.name}</div>
-                                          {p.code && <div className="text-blue-700">{p.code}</div>}
-                                        </button>
-                                      ))}
-                                    </>
-                                  )}
-                                  <div className="border-t pt-2 mt-2">
-                                    <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-2">All Products</h4>
-                                    <Input
-                                      placeholder="Search products..."
-                                      value={searchTerm}
-                                      onChange={(e) => setMatchedMap(m => ({ ...m, [index]: { ...m[index], search: e.target.value } }))}
-                                      className="mb-2 text-xs"
-                                    />
-                                    <ScrollArea className="max-h-48">
-                                      {(searchTerm ? products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.code?.toLowerCase().includes(searchTerm.toLowerCase())) : products).map(p => (
-                                        <button
-                                          key={p.id}
-                                          onClick={() => {
-                                            const newOrders = [...extractedOrders];
-                                            newOrders[index].item = `${order.item} — ${p.code || p.name}`;
-                                            setExtractedOrders(newOrders);
-                                            setMatchedMap(m => ({ ...m, [index]: { ...m[index], selectedId: p.id } }));
-                                          }}
-                                          className="w-full text-left p-2 hover:bg-gray-100 text-xs border-b last:border-b-0 cursor-pointer"
-                                        >
-                                          <div className="font-medium whitespace-normal break-words">{p.code || p.name}</div>
-                                          {p.code && <div className="text-muted-foreground text-xs">{p.code}</div>}
+                                          <div className="font-bold text-green-900">{p.name}</div>
+                                          <div className="text-green-700 text-[11px]">Code: {p.code || 'N/A'}</div>
                                         </button>
                                       ))}
                                     </ScrollArea>
                                   </div>
+                                )}
+
+                                {/* Search and all products section */}
+                                <div className="border-t pt-2">
+                                  <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-2">Search All Products</h4>
+                                  <Input
+                                    type="text"
+                                    placeholder="Type product name or code..."
+                                    value={searchText}
+                                    onChange={(e) => setProductSearchText(prev => ({ ...prev, [index]: e.target.value }))}
+                                    className="mb-2 text-xs"
+                                    autoFocus
+                                  />
+                                  <ScrollArea className="max-h-48">
+                                    {filteredProducts.map(p => (
+                                      <button
+                                        key={p.id}
+                                        onClick={() => {
+                                          handleProductMapping(index, p.id);
+                                          setOpenDropdown(null);
+                                        }}
+                                        className="w-full text-left p-2 hover:bg-blue-50 text-xs border-b last:border-b-0 cursor-pointer"
+                                      >
+                                        <div className="font-medium">{p.name}</div>
+                                        <div className="text-muted-foreground text-[11px]">Code: {p.code || 'N/A'}</div>
+                                      </button>
+                                    ))}
+                                  </ScrollArea>
                                 </div>
                               </PopoverContent>
                             </Popover>
-                            <div className="mt-1 text-xs text-muted-foreground break-words whitespace-pre-wrap">{order.item}</div>
-                            {selected ? (
-                              <div className="mt-1 text-xs font-bold text-blue-600">✓ {selected.name}</div>
-                            ) : inferred ? (
-                              <div className="mt-1 text-xs text-muted-foreground flex items-start gap-3">
-                                <div>
-                                  <div><span className="font-semibold">Product:</span> {inferred.name || '—'}</div>
-                                  <div><span className="font-semibold">SKU:</span> {inferred.sku || '—'} <span className="text-[11px] text-muted-foreground">(extracted)</span></div>
-                                </div>
-                                <div className="flex items-center">
-                                  <Button size="sm" onClick={() => autoMapAndSaveRow(index)} disabled={isSaving} className="ml-2 bg-indigo-600 hover:bg-indigo-700 text-white">Use extracted</Button>
-                                </div>
+
+                            {/* Show mapping status */}
+                            {selectedProduct ? (
+                              <div className="text-xs bg-green-100 text-green-900 px-3 py-2 rounded border border-green-300 break-words">
+                                ✅ WILL SAVE: {selectedProduct.name}
+                                <div className="text-[11px] text-green-700 mt-1">Code: {selectedProduct.code || 'N/A'}</div>
                               </div>
-                            ) : null}
+                            ) : (
+                              <div className="text-xs bg-yellow-100 text-yellow-900 px-3 py-2 rounded border border-yellow-300">
+                                ⚠️ NOT MAPPED - Select a product above
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">{order.invoiceDate || '-'}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{order.invoiceNo || '-'}</TableCell>

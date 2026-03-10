@@ -80,13 +80,33 @@ const DispatchOrderDialog: React.FC<DispatchOrderDialogProps> = ({ orderId, isOp
     if (!orderId) return;
     setLoading(true);
     try {
+      // Try to fetch the next dispatch number via RPC. If the RPC/function
+      // is not available in the remote DB (schema not migrated), fall back
+      // to updating without the number and let the DB trigger assign it.
+      let nextDispatchNumber: number | null = null;
+      try {
+        const { data: seqData, error: seqError } = await supabase
+          .rpc('get_next_dispatch_number')
+          .single();
+        if (seqError) {
+          console.warn('get_next_dispatch_number RPC error, falling back to trigger:', seqError.message);
+        } else {
+          nextDispatchNumber = seqData as unknown as number;
+        }
+      } catch (rpcErr) {
+        console.warn('RPC call failed, falling back to trigger:', rpcErr);
+      }
+
+      const updatePayload: any = {
+        bill_no: values.billNo,
+        dispatch_date: values.dispatchDate,
+        dispatched: true,
+      };
+      if (nextDispatchNumber !== null) updatePayload.dispatch_number = nextDispatchNumber;
+
       const { error } = await supabase
         .from('orders')
-        .update({
-          bill_no: values.billNo,
-          dispatch_date: values.dispatchDate,
-          dispatched: true,
-        })
+        .update(updatePayload)
         .eq('id', orderId);
 
       if (error) {

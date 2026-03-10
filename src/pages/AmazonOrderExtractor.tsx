@@ -13,6 +13,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
+import { buildStagingFromRows } from '@/utils/onlineOrderHelpers';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Import the worker directly
@@ -26,6 +27,9 @@ interface ExtractedOrder {
   item: string;
   amount: string;
   invoiceNo?: string;
+  qty?: number;
+  items?: Array<{product: string; qty: number; total: number; mapped_product_id?: string; sku?: string}>;
+  sourceText?: string;
 }
 
 interface Product { id: string; name: string; code?: string; size?: string | number | null; dp?: number; gst?: string | number }
@@ -41,6 +45,9 @@ const AmazonOrderExtractor = () => {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [matchedMap, setMatchedMap] = useState<Record<number, { matches: Product[]; selectedId?: string; search?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }>>({});
+  const [productMapping, setProductMapping] = useState<Record<number, Record<number, string>>>({});
+  const [productSearchText, setProductSearchText] = useState<Record<number, Record<number, string>>>({});
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -102,6 +109,46 @@ const AmazonOrderExtractor = () => {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  // Extract a product description from a block of text (SL block)
+  function extractDescriptionFromBlock(block: string) {
+    if (!block) return '';
+    const lines = block.split(/\r?\n|\|/).map(l => l.trim()).filter(Boolean);
+    const rejectRe = /^(invoice|total|amount in words|amount|mode of payment|billing address|shipping address|gst|gstin|place of supply|tax invoice|tax rate|hsn|sl no|sno|description|unit price|net amount|tax amount|order number)\b/i;
+
+    const candidates: Array<{line: string; idx: number; score: number}> = [];
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (!/[A-Za-z]/.test(l)) continue;
+      if (rejectRe.test(l)) continue;
+      // ignore lines that look like totals, amounts, dates or header rows
+      if (/\b(total|amount|invoice|gst|tax|qty|unit price|net amount)\b/i.test(l)) continue;
+      if (/\d{1,2}\.\d{4}/.test(l)) continue; // dates like 03.2026
+      // remove numeric tokens and punctuation to score by letter count
+      const lettersOnly = l.replace(/[^A-Za-z\s]/g, '').trim();
+      const score = lettersOnly.length;
+      if (score > 5) candidates.push({ line: l, idx: i, score });
+    }
+
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.score - a.score);
+      const best = candidates[0];
+      // include following lines that look like continuation (letters, not header/amount)
+      let out = best.line;
+      for (let j = best.idx + 1; j < Math.min(lines.length, best.idx + 4); j++) {
+        const nl = lines[j];
+        if (!/[A-Za-z]/.test(nl)) break;
+        if (rejectRe.test(nl)) break;
+        if (/\b(total|amount|invoice|gst|tax|qty|unit price|net amount)\b/i.test(nl)) break;
+        out += ' ' + nl;
+      }
+      return out.replace(/\s+/g, ' ').trim().slice(0, 400);
+    }
+
+    // fallback: remove amounts and HSN and return remaining descriptive text
+    const cleaned = block.replace(/\d{1,3}(?:,\d{3})*\.\d{2}/g, '').replace(/\bHSN\b\s*[:\s]*\d+/i, '').replace(/\bQty\b[^\n]*/i, '').replace(/\bUnit Price\b[^\n]*/i, '').replace(/\bTotal Amount\b[^\n]*/i, '').replace(/\s+/g, ' ').trim();
+    return cleaned.slice(0, 400).trim();
+  }
+
   const extractDataFromPageText = (text: string): ExtractedOrder | null => {
     if (!text.includes("Tax Invoice/Bill of Supply/Cash Memo")) return null;
 
@@ -131,6 +178,18 @@ const AmazonOrderExtractor = () => {
     return { orderNo, customerName, address, item, amount };
   };
 
+  // helper to split a potentially multi-item description into separate rows
+  const splitItems = (item: string): string[] => {
+    if (!item) return [''];
+    // Avoid splitting on commas because product descriptions often contain commas.
+    // Only split on newlines, pipe characters, or semicolons (or explicit SL No rows elsewhere).
+    const parts = item
+      .split(/\s*[\r\n|;]+\s*/)
+      .map(p => p.trim())
+      .filter(Boolean);
+    return parts.length ? parts : [item];
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -157,6 +216,13 @@ const AmazonOrderExtractor = () => {
         const pageText = textContent.items.map((item: any) => item.str).join('\n');
         fullDebugText += `--- PAGE ${i} ---\n${pageText}\n\n`;
 
+        // Process only even-numbered pages (skip 1st, 3rd, 5th...).
+        // Keep debug text for all pages but continue early for odd pages.
+        if (i % 2 === 1) {
+          console.log(`Skipping odd page ${i} (not processing for order extraction)`);
+          continue;
+        }
+
         // try to extract invoice number on this page
         const pageLabelMatch = pageText.match(labelRegex);
         let pageInvoice: string | undefined;
@@ -175,7 +241,9 @@ const AmazonOrderExtractor = () => {
 
         const order = extractDataFromPageText(pageText);
         if (order) {
-          allExtracted.push(pageInvoice ? { ...order, invoiceNo: pageInvoice } : order);
+          // include the raw page text so we can later detect SL No rows and avoid splitting long descriptions
+          const withSource = { ...(pageInvoice ? { ...order, invoiceNo: pageInvoice } : order), sourceText: pageText };
+          allExtracted.push(withSource as ExtractedOrder);
         }
       }
 
@@ -204,8 +272,110 @@ const AmazonOrderExtractor = () => {
         throw new Error("No valid Amazon order patterns found. Check the Debug View.");
       }
 
-      setExtractedOrders(allExtracted);
-      showSuccess(`Successfully extracted ${allExtracted.length} orders!`);
+      // expand rows when a single order contains multiple items and build items[]
+      const expanded: ExtractedOrder[] = [];
+      allExtracted.forEach(o => {
+        // Decide whether to split the item text into multiple items.
+        // If the original page text contains multiple SL No rows (1,2,...), then split;
+        // If exactly 1 SL No: extract description from that block as a single product;
+        // otherwise use the pre-extracted item as-is.
+        const source = (o as ExtractedOrder).sourceText || '';
+        // detect SL No lines ONLY as single digits at line start, followed by optional . or ), then spaces/tabs (NOT newlines) and a letter.
+        // Using [ \t]+ instead of \s+ ensures we only match SL numbers with text on the SAME LINE (not state codes like "08" that are alone).
+        const slMatches = (source.match(/^\d[\.)]?[ \t]+(?=[A-Za-z])/gm) || []).length;
+        const shouldSplit = slMatches >= 2; // true when multiple SL numbers present (2+)
+        const hasSingleSL = slMatches === 1; // exactly one SL number
+
+        if (shouldSplit) {
+          // Parse SL No blocks from the source text and treat each SL block as one item
+          const slRegex = /^(\d)[\.\)]?[ \t]+(.*)$/gm; // capture the single digit and following text (spaces/tabs only, not newlines)
+          const matches: Array<{idx: number; sl: string; text: string}> = [];
+          let m: RegExpExecArray | null;
+          while ((m = slRegex.exec(source)) !== null) {
+            matches.push({ idx: m.index, sl: m[1], text: m[2] });
+          }
+
+          if (matches.length > 0) {
+            for (let mi = 0; mi < matches.length; mi++) {
+              const start = matches[mi].idx;
+              const end = mi < matches.length - 1 ? matches[mi + 1].idx : source.length;
+              const block = source.substring(start, end).trim();
+              // remove the leading SL number (single digit + optional . or ) + whitespace) from block
+              const blockText = block.replace(/^\d[\.)]?\s*/i, '').trim();
+              // extract description from the SL block (prefer Description column)
+              const desc = extractDescriptionFromBlock(blockText) || blockText.replace(/\s+/g, ' ');
+              // try to find amount in the block, fallback to dividing equally
+              const amtMatch = blockText.match(/\d{1,3}(?:,\d{3})*\.\d{2}/g);
+              const total = amtMatch ? parseFloat(amtMatch[amtMatch.length - 1].replace(/,/g, '')) : (parseFloat(o.amount) || 0);
+              // Extract QTY from table: look for pattern "₹[unit price] [qty] ₹[net amount]"
+              const qtyFromTable = blockText.match(/₹[\d,\.]+\s+(\d+)\s+₹/);
+              const qty = qtyFromTable ? parseInt(qtyFromTable[1]) : 1;
+              expanded.push({ ...o, item: desc, qty, items: [{ product: desc, qty, total }] });
+            }
+          } else {
+            // fallback to splitting by visible separators
+            const parts = splitItems(o.item);
+            const amountPer = parts.length ? parseFloat(o.amount) / parts.length : parseFloat(o.amount) || 0;
+            parts.forEach(p => {
+              expanded.push({ ...o, item: p, qty: 1, items: [{ product: p, qty: 1, total: amountPer }] });
+            });
+          }
+        } else if (hasSingleSL) {
+          // Exactly 1 SL number: extract description from that single block as ONE product
+          const slRegex = /^(\d)[\.\)]?[ \t]+(.*)$/gm; // capture single digit and text (spaces/tabs only)
+          const matches: Array<{idx: number; sl: string; text: string}> = [];
+          let m: RegExpExecArray | null;
+          while ((m = slRegex.exec(source)) !== null) {
+            matches.push({ idx: m.index, sl: m[1], text: m[2] });
+          }
+
+          if (matches.length > 0) {
+            const start = matches[0].idx;
+            const end = matches.length > 1 ? matches[1].idx : source.length;
+            const block = source.substring(start, end).trim();
+            const blockText = block.replace(/^\d[\.)]?\s*/i, '').trim(); // remove single digit + . or ) + whitespace
+            const desc = extractDescriptionFromBlock(blockText) || blockText.replace(/\s+/g, ' ');
+            const amtMatch = blockText.match(/\d{1,3}(?:,\d{3})*\.\d{2}/g);
+            const total = amtMatch ? parseFloat(amtMatch[amtMatch.length - 1].replace(/,/g, '')) : (parseFloat(o.amount) || 0);
+            // Extract QTY from table: look for pattern "₹[unit price] [qty] ₹[net amount]"
+            const qtyFromTable = blockText.match(/₹[\d,\.]+\s+(\d+)\s+₹/);
+            const qty = qtyFromTable ? parseInt(qtyFromTable[1]) : 1;
+            expanded.push({ ...o, item: desc, qty, items: [{ product: desc, qty, total }] });
+          } else {
+            // no SL block found, fallback to original item
+            expanded.push({ ...o, qty: 1, items: [{ product: o.item, qty: 1, total: parseFloat(o.amount) || 0, sku: undefined }] });
+          }
+        } else {
+          // No SL numbers: use original item as single product
+          expanded.push({ ...o, qty: 1, items: [{ product: o.item, qty: 1, total: parseFloat(o.amount) || 0, sku: undefined }] });
+        }
+      });
+
+      // Group expanded entries by order number so multiple pages for same order merge into one
+      const grouped: Record<string, { order: ExtractedOrder; totalAmount: number }> = {};
+      for (const o of expanded) {
+        const key = o.orderNo;
+        if (!grouped[key]) grouped[key] = { order: { ...o }, totalAmount: 0 };
+        const amt = parseFloat(o.amount) || 0;
+        grouped[key].totalAmount += amt;
+        // merge items
+        grouped[key].order.items = (grouped[key].order.items || []).concat(o.items || []);
+      }
+
+      // Preserve parsed item rows (do not merge identical product lines across pages).
+      // Some PDFs duplicate layout across pages; merging identical product names can
+      // incorrectly aggregate quantities. Keep each parsed item row as-is so the
+      // displayed qty matches the fetched value and saved DB rows.
+      const deduplicated = Object.values(grouped).map(g => {
+        const order = g.order;
+        const items = (order.items || []).map(it => ({ ...it }));
+        const totalQty = items.reduce((s, it) => s + (it.qty || 0), 0);
+        const totalAmt = items.reduce((s, it) => s + (it.total || 0), 0).toFixed(2);
+        return { ...order, items, qty: totalQty, amount: totalAmt } as ExtractedOrder;
+      });
+
+      setExtractedOrders(deduplicated);
+      showSuccess(`Successfully extracted ${deduplicated.length} orders (from ${allExtracted.length} entries)!`);
     } catch (error: any) {
       showError(error.message || "Failed to parse PDF.");
     } finally {
@@ -217,20 +387,17 @@ const AmazonOrderExtractor = () => {
     if (!user || extractedOrders.length === 0) return;
     setIsSaving(true);
     try {
-      const stagingData = extractedOrders.map(order => ({
-        platform_order_number: order.orderNo,
-        customer_name: order.customerName,
-        shipping_address: order.address,
-        flipkart_item_name: order.item,
-        bill_no: order.invoiceNo,
-        amount: parseFloat(order.amount),
-        created_by: user.id,
-        status: 'pending'
+      const rawRows = extractedOrders.map(o => ({
+        platform_order_number: o.orderNo,
+        customer_name: o.customerName,
+        shipping_address: o.address,
+        item: o.item,
+        amount: parseFloat(o.amount) || 0,
+        bill_no: o.invoiceNo || ''
       }));
+      const stagingData = buildStagingFromRows(rawRows, user.id);
 
-      const { error } = await supabase
-        .from('online_order_staging')
-        .upsert(stagingData, { onConflict: 'platform_order_number' });
+      const { error } = await supabase.from('online_order_staging').upsert(stagingData, { onConflict: 'platform_order_number,flipkart_item_name' });
 
       if (error) throw error;
 
@@ -240,6 +407,76 @@ const AmazonOrderExtractor = () => {
       showError(`Failed to save to staging: ${error.message}`);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleProductMapping = async (orderIndex: number, itemIndex: number, selectedProductId: string) => {
+    console.log('🔵 handleProductMapping (Amazon):', { orderIndex, itemIndex, selectedProductId });
+    try {
+      // ensure auth
+      let authUser = user;
+      if (!authUser) {
+        const { data: { session } } = await supabase.auth.getSession();
+        authUser = session?.user ?? null;
+      }
+      if (!authUser) throw new Error('User not authenticated');
+
+      const order = extractedOrders[orderIndex];
+      if (!order) throw new Error('Order not found');
+      const item = order.items?.[itemIndex];
+      if (!item) throw new Error('Item not found');
+
+      const selectedProduct = products.find(p => p.id === selectedProductId);
+      if (!selectedProduct) throw new Error('Product not found');
+
+      const finalQty = item.qty || 1;
+      const itemAmount = item.total || 0;
+
+      // Delete old staging row with raw extracted item name
+      const { error: deleteError } = await supabase
+        .from('online_order_staging')
+        .delete()
+        .eq('platform_order_number', order.orderNo)
+        .eq('flipkart_item_name', item.product);
+      if (deleteError) console.warn('Delete warning (may not exist):', deleteError.message);
+
+      // Upsert mapped product row with mapped_product_id
+      const { data, error: insertError } = await supabase
+        .from('online_order_staging')
+        .upsert([{
+          platform_order_number: order.orderNo,
+          customer_name: order.customerName || null,
+          shipping_address: order.address || null,
+          flipkart_item_name: selectedProduct.name,
+          amount: parseFloat(itemAmount.toString()) || 0,
+          quantity: finalQty,
+          bill_no: order.invoiceNo || '',
+          created_by: authUser.id,
+          status: 'pending',
+          mapped_product_id: selectedProductId
+        }], { onConflict: 'platform_order_number,flipkart_item_name' })
+        .select();
+
+      if (insertError) throw insertError;
+      showSuccess(`Mapped & saved: ${selectedProduct.name} | Qty: ${finalQty} | Amount: ₹${itemAmount.toFixed(2)}`);
+
+      // Update local UI state
+      setProductMapping(prev => ({ ...prev, [orderIndex]: { ...(prev[orderIndex] || {}), [itemIndex]: selectedProductId } }));
+      setExtractedOrders(prev => {
+        const next = [...prev];
+        const o = { ...next[orderIndex] } as ExtractedOrder;
+        if (o.items && o.items[itemIndex]) {
+          const newItems = [...o.items];
+          newItems[itemIndex] = { ...newItems[itemIndex], mapped_product_id: selectedProductId };
+          o.items = newItems;
+        }
+        next[orderIndex] = o;
+        return next;
+      });
+
+    } catch (error: any) {
+      console.error('Mapping error (Amazon):', error);
+      showError(`Failed to map product: ${error.message}`);
     }
   };
 
@@ -353,76 +590,116 @@ const AmazonOrderExtractor = () => {
                       const selected = selectedId ? products.find(p => p.id === selectedId) : null;
 
                       return (
-                        <TableRow key={index} className="hover:bg-muted/30">
-                          <TableCell className="font-mono text-xs font-semibold text-yellow-600">{order.orderNo}</TableCell>
-                          <TableCell className="font-medium">{order.customerName}</TableCell>
-                          <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={order.address}>
-                            {order.address}
-                          </TableCell>
-                          <TableCell className="text-sm min-w-[600px]">
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button variant="link" className="p-0 h-auto whitespace-normal text-left text-sm font-medium break-words">
-                                  {`Select product (${candidates.length})`}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[600px] max-w-[90vw] p-3 max-h-96 flex flex-col">
-                                <div className="space-y-2 flex-1 overflow-auto">
-                                  {candidates.length > 0 && (
-                                    <>
-                                      <h4 className="font-semibold text-xs uppercase text-muted-foreground">Best Matches ({candidates.length})</h4>
-                                      {candidates.slice(0, 5).map(p => (
-                                        <button
-                                          key={p.id}
-                                          onClick={() => {
-                                            const newOrders = [...extractedOrders];
-                                            newOrders[index].item = `${order.item} — ${p.code || p.name}`;
-                                            setExtractedOrders(newOrders);
-                                            setMatchedMap(m => ({ ...m, [index]: { ...m[index], selectedId: p.id } }));
-                                          }}
-                                          className="w-full text-left p-2 bg-blue-50 hover:bg-blue-100 rounded-md text-xs border border-blue-200 cursor-pointer"
-                                        >
-                                          <div className="font-bold text-blue-900 whitespace-normal break-words">{p.code || p.name}</div>
-                                          {p.code && <div className="text-blue-700">{p.code}</div>}
-                                        </button>
-                                      ))}
-                                    </>
-                                  )}
-                                  <div className="border-t pt-2 mt-2">
-                                    <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-2">All Products</h4>
-                                    <Input
-                                      placeholder="Search products..."
-                                      value={searchTerm}
-                                      onChange={(e) => setMatchedMap(m => ({ ...m, [index]: { ...m[index], search: e.target.value } }))}
-                                      className="mb-2 text-xs"
-                                    />
-                                    <ScrollArea className="max-h-48">
-                                      {(searchTerm ? products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.code?.toLowerCase().includes(searchTerm.toLowerCase())) : products).map(p => (
-                                        <button
-                                          key={p.id}
-                                          onClick={() => {
-                                            const newOrders = [...extractedOrders];
-                                            newOrders[index].item = `${order.item} — ${p.code || p.name}`;
-                                            setExtractedOrders(newOrders);
-                                            setMatchedMap(m => ({ ...m, [index]: { ...m[index], selectedId: p.id } }));
-                                          }}
-                                          className="w-full text-left p-2 hover:bg-gray-100 text-xs border-b last:border-b-0 cursor-pointer"
-                                        >
-                                          <div className="font-medium whitespace-normal break-words">{p.code || p.name}</div>
-                                          {p.code && <div className="text-muted-foreground text-xs">{p.code}</div>}
-                                        </button>
-                                      ))}
-                                    </ScrollArea>
+                        <React.Fragment key={index}>
+                          <TableRow className="hover:bg-muted/30">
+                            <TableCell className="font-mono text-xs font-semibold text-yellow-600">{order.orderNo}</TableCell>
+                            <TableCell className="font-medium">{order.customerName}</TableCell>
+                            <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={order.address}>
+                              {order.address}
+                            </TableCell>
+                            <TableCell className="text-sm min-w-[600px]">
+                              <div className="mt-1 text-xs text-muted-foreground break-words whitespace-pre-wrap">{order.item}</div>
+                              {selected && <div className="mt-1 text-xs font-bold text-blue-600">✓ {selected.name}</div>}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{order.invoiceNo || '-'}</TableCell>
+                            <TableCell className="text-right font-bold text-green-600">₹{order.amount}</TableCell>
+                          </TableRow>
+
+                          {order.items && order.items.length > 0 && (
+                            <TableRow className="bg-gray-50">
+                              <TableCell colSpan={6} className="p-0">
+                                <div className="p-4 space-y-4">
+                                  <div>
+                                    <h4 className="font-semibold text-base mb-3">📦 Items in this Order:</h4>
+                                    <p className="text-xs text-muted-foreground mb-3">Order ID: <span className="font-mono font-bold">{order.orderNo}</span> | Invoice: <span className="font-mono font-bold">{order.invoiceNo || '—'}</span> | Customer: <span className="font-bold">{order.customerName}</span></p>
+                                    <div className="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+                                      <p className="text-sm font-semibold text-yellow-800">⚠️ IMPORTANT: Map each extracted item to an actual product from the database. Only mapped products will be saved to staging.</p>
+                                    </div>
+                                  </div>
+                                  <div className="border rounded-lg overflow-hidden">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="bg-yellow-100 border-b">
+                                          <th className="px-4 py-3 text-left font-bold text-gray-800">Extracted Item</th>
+                                          <th className="px-4 py-3 text-left font-bold text-gray-800">➜ Map to Actual Product (This will be saved)</th>
+                                          <th className="px-4 py-3 text-center font-bold text-gray-800 w-20">Qty</th>
+                                          <th className="px-4 py-3 text-right font-bold text-gray-800 w-32">Total (₹)</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {order.items.map((it, itemIndex) => {
+                                          const mappingKey = `${index}|${itemIndex}`;
+                                          const selectedProductId = productMapping[index]?.[itemIndex] || it.mapped_product_id;
+                                          const selectedProduct = selectedProductId ? products.find(p => p.id === selectedProductId) : null;
+                                          const searchText = productSearchText[index]?.[itemIndex] || '';
+
+                                          return (
+                                            <tr key={itemIndex} className="border-b hover:bg-yellow-50 transition">
+                                              <td className="px-4 py-3 text-sm break-words font-medium text-gray-900">
+                                                <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-semibold">❌ From PDF: {it.product}</span>
+                                                <p className="text-xs text-gray-500 mt-1">(Not being saved)</p>
+                                              </td>
+                                              <td className="px-4 py-3">
+                                                {selectedProduct ? (
+                                                  <div className="text-sm">
+                                                    <div className="font-bold text-green-700 flex items-center gap-2">✅ {selectedProduct.name}</div>
+                                                    <div className="text-xs text-muted-foreground mt-1">{selectedProduct.code} {selectedProduct.size ? `| Size: ${selectedProduct.size}` : ''}</div>
+                                                  </div>
+                                                ) : (
+                                                  <Popover>
+                                                    <PopoverTrigger asChild>
+                                                      <Button variant="outline" size="sm" className="w-full text-left">{matchedMap[index]?.matches.length ? `→ Map Product (${matchedMap[index].matches.length})` : '→ Map Product'}</Button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-[600px] max-w-[90vw] p-0">
+                                                      <div className="p-2 border-b">
+                                                        <Input placeholder="Search product..." className="h-7 text-xs" value={searchText} onChange={(e) => setProductSearchText(prev => ({ ...prev, [index]: { ...(prev[index] || {}), [itemIndex]: e.target.value } }))} />
+                                                      </div>
+                                                      <ScrollArea className="h-[300px]">
+                                                        {matchedMap[index]?.matches.length ? (
+                                                          matchedMap[index].matches.filter(p => {
+                                                            const q = (productSearchText[index]?.[itemIndex] || '').toLowerCase();
+                                                            if (!q) return true;
+                                                            return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
+                                                          }).map(p => (
+                                                            <Button key={`cand-amazon-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => handleProductMapping(index, itemIndex, p.id)}>
+                                                              <div className="text-left w-full"><div className="font-medium text-sm">{p.name}</div><div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''}</div></div>
+                                                            </Button>
+                                                          ))
+                                                        ) : null}
+                                                        <div className="h-px bg-muted/30 my-2" />
+                                                        {products.filter(p => {
+                                                          const q = (productSearchText[index]?.[itemIndex] || '').toLowerCase();
+                                                          if (!q) return true;
+                                                          return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
+                                                        }).map(p => (
+                                                          <Button key={`all-amazon-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => handleProductMapping(index, itemIndex, p.id)}>
+                                                            <div className="text-left w-full"><div className="font-medium text-sm">{p.name}</div><div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''}</div></div>
+                                                          </Button>
+                                                        ))}
+                                                      </ScrollArea>
+                                                    </PopoverContent>
+                                                  </Popover>
+                                                )}
+                                              </td>
+                                              <td className="px-4 py-3 text-center font-bold text-gray-700">{it.qty}</td>
+                                              <td className="px-4 py-3 text-right font-bold text-green-600 text-base">₹{it.total.toFixed(2)}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                        <tr className="bg-yellow-50 border-t-2 border-yellow-300">
+                                          <td colSpan={1} className="px-4 py-3 font-bold text-right text-gray-800">Order Total:</td>
+                                          <td className="px-4 py-3 text-center font-bold text-yellow-600 text-base">{order.items.reduce((sum, i) => sum + i.qty, 0)}</td>
+                                          <td className="px-4 py-3"></td>
+                                          <td className="px-4 py-3 text-right font-bold text-green-700 text-lg">₹{order.items.reduce((sum, i) => sum + i.total, 0).toFixed(2)}</td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
                                   </div>
                                 </div>
-                              </PopoverContent>
-                            </Popover>
-                            <div className="mt-1 text-xs text-muted-foreground break-words whitespace-pre-wrap">{order.item}</div>
-                            {selected && <div className="mt-1 text-xs font-bold text-blue-600">✓ {selected.name}</div>}
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{order.invoiceNo || '-'}</TableCell>
-                          <TableCell className="text-right font-bold text-green-600">₹{order.amount}</TableCell>
-                        </TableRow>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </TableBody>

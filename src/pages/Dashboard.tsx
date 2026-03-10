@@ -23,6 +23,7 @@ import SalesPersonDealerReport from '@/components/reports/SalesPersonDealerRepor
 import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsReport';
 import DailyVisitProgressCard from '@/components/DailyVisitProgressCard';
 import EditOrderDialog from '@/components/EditOrderDialog';
+import SalesPersonDisapprovedOrdersCard from '@/components/SalesPersonDisapprovedOrdersCard';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Checkbox } from '@/components/ui/checkbox';
 import jsPDF from 'jspdf';
@@ -491,6 +492,10 @@ const Dashboard = () => {
 
       <div className="mb-6">
         <MultiItemOrderForm onOrderPlaced={handleRefreshData} />
+      </div>
+
+      <div className="mb-6">
+        <SalesPersonDisapprovedOrdersCard />
       </div>
 
       {/* PaymentStatusCard hidden per request */}

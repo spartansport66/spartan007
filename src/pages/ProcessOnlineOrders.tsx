@@ -24,8 +24,10 @@ interface StagedOrder {
   shipping_address: string;
   flipkart_item_name: string;
   amount: number;
+  quantity?: number;
   status: string;
   bill_no?: string | null;
+  mapped_product_id?: string | null;
 }
 
 interface Product {
@@ -52,9 +54,8 @@ const ProcessOnlineOrders: React.FC = () => {
 
   const [matchedMap, setMatchedMap] = useState<Record<string, { matches: Product[]; selectedId?: string; search?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }>>({});
   const [selectedStagedIds, setSelectedStagedIds] = useState<string[]>([]);
-  const [bulkMapPopoverOpen, setBulkMapPopoverOpen] = useState(false);
-  const [bulkMapSearch, setBulkMapSearch] = useState('');
   const [unmappedIds, setUnmappedIds] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('grouped');
   
   const handleApplyProductToMatching = async (sourceId: string) => {
     const src = stagedOrders.find(s => s.id === sourceId);
@@ -150,8 +151,10 @@ const ProcessOnlineOrders: React.FC = () => {
         shipping_address: s.shipping_address || '',
         flipkart_item_name: s.item_name || s.raw_item_name || s.flipkart_item_name || '',
         amount: Number(s.amount || s.total_amount || 0),
+        quantity: s.quantity || 1,
         status: s.status || 'pending',
         bill_no: s.bill_no || null,
+        mapped_product_id: s.mapped_product_id || null,
       })));
     } catch (error: any) {
       console.error('Failed to load data', error);
@@ -315,48 +318,6 @@ const ProcessOnlineOrders: React.FC = () => {
     fetchInitialData();
   }, [isAdmin, navigate, fetchInitialData]);
 
-  const handleBulkMap = async (product: Product) => {
-    if (selectedStagedIds.length === 0) return;
-    // close the popover immediately so it doesn't reopen while we're
-    // doing the async work below
-    setBulkMapPopoverOpen(false);
-
-    // update local state
-    setMatchedMap(prev => {
-      const next = { ...prev };
-      selectedStagedIds.forEach(id => {
-        if (!next[id]) next[id] = { matches: [] } as any;
-        next[id].selectedId = product.id;
-      });
-      return next;
-    });
-    setStagedOrders(prev => prev.map(s => {
-      if (selectedStagedIds.includes(s.id)) {
-        const suffix = ` — ${product.name}`;
-        if (!s.flipkart_item_name.includes(suffix)) {
-          return { ...s, flipkart_item_name: s.flipkart_item_name + suffix };
-        }
-      }
-      return s;
-    }));
-    // update db rows one by one (concatenation handled in JS to avoid raw SQL)
-    try {
-      for (const id of selectedStagedIds) {
-        // fetch current value and append suffix if needed
-        const { data: row } = await supabase.from('online_order_staging').select('flipkart_item_name').eq('id', id).single();
-        const suffix = ` — ${product.name}`;
-        if (row && !row.flipkart_item_name?.includes(suffix)) {
-          await supabase.from('online_order_staging').update({ flipkart_item_name: (row.flipkart_item_name || '') + suffix }).eq('id', id);
-        }
-      }
-      showSuccess(`Mapped product "${product.name}" to ${selectedStagedIds.length} order(s).`);
-    } catch (e) {
-      console.error('Bulk map error', e);
-      showError('Failed to save mapping to staging rows.');
-    }
-    setBulkMapPopoverOpen(false);
-  };
-
   const handleBulkProcess = async () => {
     if (stagedOrders.length === 0) return;
     if (!selectedPlatformId) {
@@ -387,72 +348,134 @@ const ProcessOnlineOrders: React.FC = () => {
 
       const paymentStatus = bulkPaymentMethod === 'COD' ? 'pending' : 'paid';
 
-      for (const stagedOrder of stagedOrders) {
+      // group rows by order number so we create a single order per platform_order_number
+      const groups: Record<string, StagedOrder[]> = {};
+      stagedOrders.forEach(s => {
+        const key = s.platform_order_number;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(s);
+      });
+
+      for (const orderNo of Object.keys(groups)) {
+        const rows = groups[orderNo];
+        const totalAmt = rows.reduce((sum, r) => sum + r.amount, 0);
+        const first = rows[0];
+
         const { data: newOrder, error: orderError } = await supabase
           .from('orders')
           .insert({
             dealer_id: dealerData.id,
             user_id: user.id,
-            total_amount: stagedOrder.amount,
+            total_amount: totalAmt,
             status: 'completed',
             payment_status: paymentStatus,
             order_date: new Date().toISOString(),
-            bill_no: stagedOrder.bill_no || null,
+            bill_no: first.bill_no || null,
           })
           .select('id')
           .single();
 
-        if (orderError) {
-          console.error(`Error creating order for ${stagedOrder.platform_order_number}:`, orderError);
+        if (orderError || !newOrder) {
+          console.error(`Error creating order for ${orderNo}:`, orderError);
           continue;
         }
 
-        const selectedProductId = (matchedMap[stagedOrder.id] && matchedMap[stagedOrder.id].selectedId) ? matchedMap[stagedOrder.id].selectedId : null;
+        // prepare a combined raw_item_name string for the group and collect ids
+        const combinedNames: string[] = [];
+        rows.forEach(stagedOrder => {
+          let rawName = stagedOrder.flipkart_item_name || '';
+          // Prefer persisted mapped_product_id from staging (set by extractor), else use local matchedMap
+          const selectedProductId = stagedOrder.mapped_product_id || matchedMap[stagedOrder.id]?.selectedId || null;
+          if (selectedProductId) {
+            const selProd = products.find(p => p.id === selectedProductId);
+            if (selProd) {
+              const suffix = ` — ${selProd.name}`;
+              if (!rawName.includes(suffix)) rawName = rawName + suffix;
+            }
+          }
+          combinedNames.push(rawName);
+        });
+        const combinedRawName = combinedNames.join('\n');
 
-        // derive raw name that includes suffix if a product is picked
-        let rawName = stagedOrder.flipkart_item_name || '';
-        if (selectedProductId) {
-          const selProd = products.find(p => p.id === selectedProductId);
-          if (selProd) {
-            const suffix = ` — ${selProd.name}`;
-            if (!rawName.includes(suffix)) rawName = rawName + suffix;
+        // insert details once for the whole order
+        if (newOrder) {
+          // determine mapped product for the group: prefer any persisted mapping from the rows
+          const groupMappedProductId = rows.find(r => r.mapped_product_id)?.mapped_product_id || matchedMap[rows[0].id]?.selectedId || null;
+          const { error: onlineError } = await supabase
+            .from('online_order_details')
+            .insert({
+              order_id: newOrder.id,
+              client_name: first.customer_name,
+              platform_id: selectedPlatformId,
+              platform_order_number: first.platform_order_number,
+              address: first.shipping_address,
+              raw_item_name: combinedRawName,
+              mapped_product_id: groupMappedProductId,
+            });
+          if (onlineError) {
+            console.error(`Error creating details for ${first.platform_order_number}:`, onlineError);
           }
         }
 
-        const { error: onlineError } = await supabase
-          .from('online_order_details')
-          .insert({
-            order_id: newOrder.id,
-            client_name: stagedOrder.customer_name,
-            platform_id: selectedPlatformId,
-            platform_order_number: stagedOrder.platform_order_number,
-            address: stagedOrder.shipping_address,
-            raw_item_name: rawName,
-            mapped_product_id: selectedProductId,
-          });
+        for (const stagedOrder of rows) {
+          // Prefer persisted mapped_product_id from staging (set by extractor), fall back to matchedMap
+          const selectedProductId = stagedOrder.mapped_product_id || matchedMap[stagedOrder.id]?.selectedId || null;
+          let rawName = stagedOrder.flipkart_item_name || '';
+          if (selectedProductId) {
+            const selProd = products.find(p => p.id === selectedProductId);
+            if (selProd) {
+              const suffix = ` — ${selProd.name}`;
+              if (!rawName.includes(suffix)) rawName = rawName + suffix;
+            }
+          }
 
-        if (onlineError) {
-          console.error(`Error creating details for ${stagedOrder.platform_order_number}:`, onlineError);
-          continue;
-        }
+          if (rawName !== stagedOrder.flipkart_item_name) {
+            await supabase
+              .from('online_order_staging')
+              .update({ flipkart_item_name: rawName })
+              .eq('id', stagedOrder.id);
+          }
 
-        // persist the exact text we saved above back into the staging row
-        if (rawName !== stagedOrder.flipkart_item_name) {
+          // insert a sales line for each staged row
+          const product = products.find(p => p.id === selectedProductId);
+          let gstPercent = 0;
+          if (product) {
+            gstPercent = parseFloat((product as any).gst) || 0;
+            if (gstPercent > 0 && gstPercent <= 1) gstPercent = gstPercent * 100;
+          }
+
+          const qty = (stagedOrder as any).quantity || 1;
+          const unitBase = qty > 0 ? stagedOrder.amount / qty : stagedOrder.amount;
+          const unit_price = gstPercent > 0 ? unitBase / (1 + gstPercent / 100) : unitBase;
+          if (!product || !product.id) {
+            console.warn('Skipping sales insert for grouped order', newOrder?.id, 'staged id', stagedOrder.id, 'no mapped product');
+            showError(`Skipped creating sales line for staged order ${stagedOrder.platform_order_number || stagedOrder.id}: no mapped product_id.`);
+          } else {
+            const { error: salesError } = await supabase.from('sales').insert({
+              order_id: newOrder?.id,
+              product_id: product.id,
+              quantity: qty,
+              unit_price,
+              gst_percent: gstPercent,
+              total_price: stagedOrder.amount,
+            });
+
+            if (salesError) {
+              console.error('Sales insert error for grouped order', salesError);
+              showError(`Sales insert failed: ${salesError.message || JSON.stringify(salesError)}`);
+            }
+          }
+
           await supabase
             .from('online_order_staging')
-            .update({ flipkart_item_name: rawName })
+            .update({ status: 'processed' })
             .eq('id', stagedOrder.id);
         }
-
-        await supabase
-          .from('online_order_staging')
-          .update({ status: 'processed' })
-          .eq('id', stagedOrder.id);
 
         successCount++;
       }
 
-      showSuccess(`Successfully created ${successCount} orders. You can now map products and add bill numbers in the Dispatch section.` +
+      showSuccess(`Successfully created ${successCount} order${successCount !== 1 ? 's' : ''} (items for multi-line orders added automatically). You can now map products and add bill numbers in the Dispatch section.` +
         (successCount > 0 ? ' Selected products have been recorded.' : ''));
       fetchInitialData();
     } catch (error: any) {
@@ -489,20 +512,6 @@ const ProcessOnlineOrders: React.FC = () => {
       }
     });
 
-    // ensure every selected row has a mapped product before proceeding
-    const unmapped = selectedStagedIds.filter(id => !matchedMap[id]?.selectedId);
-    if (unmapped.length > 0) {
-      setUnmappedIds(unmapped);
-      // scroll to first unmapped row
-      setTimeout(() => {
-        const el = document.getElementById(`row-${unmapped[0]}`);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 100);
-      const numbers = unmapped.map(id => stagedOrders.find(s => s.id === id)?.platform_order_number || id);
-      showError(`${unmapped.length} order(s) not mapped: ${numbers.join(', ')}. Please map them before creating gatepasses.`);
-      setIsProcessingBulk(false);
-      return;
-    }
     try {
       const { data: dealerData, error: dealerError } = await supabase
         .from('dealers')
@@ -513,90 +522,119 @@ const ProcessOnlineOrders: React.FC = () => {
 
       const paymentStatus = bulkPaymentMethod === 'COD' ? 'pending' : 'paid';
 
-      for (const stagedId of selectedStagedIds) {
-        const staged = stagedOrders.find(s => s.id === stagedId);
-        if (!staged) continue;
+      // group selected rows by order number to avoid duplicate orders
+      const selectedRows = stagedOrders.filter(s => selectedStagedIds.includes(s.id));
+      const groups: Record<string, StagedOrder[]> = {};
+      selectedRows.forEach(s => {
+        const key = s.platform_order_number;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(s);
+      });
 
-        // Let the DB assign the dispatch_number via sequence default.
-        // This is safer and atomic; make sure the corresponding migration has been applied.
+      for (const orderNo of Object.keys(groups)) {
+        const rows = groups[orderNo];
+        const totalAmt = rows.reduce((sum, r) => sum + r.amount, 0);
+        const first = rows[0];
+
         const { data: newOrder, error: orderError } = await supabase
           .from('orders')
           .insert({
             dealer_id: dealerData.id,
             user_id: user?.id,
-            total_amount: staged.amount,
+            total_amount: totalAmt,
             status: 'completed',
             payment_status: paymentStatus,
             order_date: new Date().toISOString(),
             dispatched: true,
             dispatch_date: new Date().toISOString(),
-            bill_no: staged.bill_no || null
+            bill_no: first.bill_no || null
           })
           .select('id')
           .single();
 
         if (orderError || !newOrder) {
           console.error('Order create error', orderError);
-          showError(`Failed to create order for staged ${staged.platform_order_number || staged.id}`);
-          continue;
+          showError(`Failed to create order for staged ${first.platform_order_number || first.id}`);
+          // still mark rows processed to avoid infinite loop?
         }
 
-        const selectedProductId = (matchedMap[staged.id] && matchedMap[staged.id].selectedId) ? matchedMap[staged.id].selectedId : null;
+        // prepare combined raw names and process each row for sales
+        const combinedNames: string[] = [];
+        rows.forEach(staged => {
+          let rawName = staged.flipkart_item_name || '';
+          const selectedProductId = staged.mapped_product_id || matchedMap[staged.id]?.selectedId || null;
+          if (selectedProductId) {
+            const selProd = products.find(p => p.id === selectedProductId);
+            if (selProd) {
+              const suffix = ` — ${selProd.name}`;
+              if (!rawName.includes(suffix)) rawName = rawName + suffix;
+            }
+          }
+          combinedNames.push(rawName);
+        });
+        const combinedRawName = combinedNames.join('\n');
 
-        let rawName = staged.flipkart_item_name || '';
-        if (selectedProductId) {
-          const selProd = products.find(p => p.id === selectedProductId);
-          if (selProd) {
-            const suffix = ` — ${selProd.name}`;
-            if (!rawName.includes(suffix)) rawName = rawName + suffix;
+        if (newOrder) {
+          // insert single details row for the grouped order
+          const groupMappedProductId = rows.find(r => r.mapped_product_id)?.mapped_product_id || matchedMap[rows[0].id]?.selectedId || null;
+          const { error: detailsError } = await supabase.from('online_order_details').insert({
+            order_id: newOrder.id,
+            client_name: first.customer_name,
+            platform_id: selectedPlatformId,
+            platform_order_number: first.platform_order_number,
+            address: first.shipping_address,
+            raw_item_name: combinedRawName,
+            mapped_product_id: groupMappedProductId,
+          });
+          if (detailsError) {
+            console.error('Details insert error', detailsError);
           }
         }
 
-        const { error: detailsError } = await supabase.from('online_order_details').insert({
-          order_id: newOrder.id,
-          client_name: staged.customer_name,
-          platform_id: selectedPlatformId,
-          platform_order_number: staged.platform_order_number,
-          address: staged.shipping_address,
-          raw_item_name: rawName,
-          mapped_product_id: selectedProductId,
-        });
+        for (const staged of rows) {
+          const selectedProductId = staged.mapped_product_id || matchedMap[staged.id]?.selectedId || null;
 
-        if (detailsError) {
-          console.error('Details insert error', detailsError);
-          showError(`Failed to save mapped product for order ${staged.platform_order_number}`);
+          let rawName = staged.flipkart_item_name || '';
+          if (selectedProductId) {
+            const selProd = products.find(p => p.id === selectedProductId);
+            if (selProd) {
+              const suffix = ` — ${selProd.name}`;
+              if (!rawName.includes(suffix)) rawName = rawName + suffix;
+            }
+          }
+
+          const product = products.find(p => p.id === selectedProductId);
+          let gstPercent = 0;
+          if (product) {
+            gstPercent = parseFloat((product as any).gst) || 0;
+            if (gstPercent > 0 && gstPercent <= 1) gstPercent = gstPercent * 100;
+          }
+
+          const qty = (staged as any).quantity || 1;
+          const unitBase = qty > 0 ? staged.amount / qty : staged.amount;
+          const unit_price = gstPercent > 0 ? unitBase / (1 + gstPercent / 100) : unitBase;
+          const { error: salesError } = await supabase.from('sales').insert({
+            order_id: newOrder?.id,
+            product_id: product?.id || null,
+            quantity: qty,
+            unit_price,
+            gst_percent: gstPercent,
+            total_price: staged.amount,
+          });
+
+          if (salesError) console.error('Sales insert error', salesError);
+
+          if (rawName !== staged.flipkart_item_name) {
+            await supabase
+              .from('online_order_staging')
+              .update({ flipkart_item_name: rawName })
+              .eq('id', staged.id);
+          }
+
+          await supabase.from('online_order_staging').update({ status: 'processed' }).eq('id', staged.id);
+
+          successCount++;
         }
-
-        // keep the staging row update in sync with the string actually stored
-        // above (rawName)
-        if (rawName !== staged.flipkart_item_name) {
-          await supabase
-            .from('online_order_staging')
-            .update({ flipkart_item_name: rawName })
-            .eq('id', staged.id);
-        }
-
-        const product = products.find(p => p.id === selectedProductId);
-        let gstPercent = 0;
-        if (product) {
-          gstPercent = parseFloat((product as any).gst) || 0;
-          if (gstPercent > 0 && gstPercent <= 1) gstPercent = gstPercent * 100;
-        }
-
-        const { error: salesError } = await supabase.from('sales').insert({
-          order_id: newOrder.id,
-          product_id: product?.id || null,
-          quantity: 1,
-          unit_price: gstPercent > 0 ? staged.amount / (1 + gstPercent / 100) : staged.amount,
-          gst_percent: gstPercent,
-          total_price: staged.amount,
-        });
-
-        if (salesError) console.error('Sales insert error', salesError);
-
-        await supabase.from('online_order_staging').update({ status: 'processed' }).eq('id', staged.id);
-
-        successCount++;
       }
 
       showSuccess(`Created gatepasses for ${successCount} staged order(s).` +
@@ -720,6 +758,14 @@ const ProcessOnlineOrders: React.FC = () => {
     }
   };
 
+  const handleSelectAll = () => {
+    setSelectedStagedIds(stagedOrders.map(s => s.id));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedStagedIds([]);
+  };
+
   const handleDeleteStaged = async (id: string) => {
     try {
       const { error } = await supabase.from('online_order_staging').delete().eq('id', id);
@@ -789,6 +835,21 @@ const ProcessOnlineOrders: React.FC = () => {
                     Bulk Create {stagedOrders.length} Orders
                   </Button>
                   <Button
+                    onClick={handleSelectAll}
+                    disabled={stagedOrders.length === 0}
+                    className="bg-slate-500 hover:bg-slate-600 text-white"
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    onClick={handleClearSelection}
+                    disabled={selectedStagedIds.length === 0}
+                    variant="outline"
+                    className="text-slate-600"
+                  >
+                    Clear Selection
+                  </Button>
+                  <Button
                     onClick={handleBulkDeleteSelected}
                     disabled={isProcessingBulk || selectedStagedIds.length === 0}
                     className="bg-red-600 hover:bg-red-700 text-white"
@@ -802,42 +863,6 @@ const ProcessOnlineOrders: React.FC = () => {
                   >
                     Auto-map Inferred
                   </Button>
-                  <Popover open={bulkMapPopoverOpen} onOpenChange={setBulkMapPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        disabled={selectedStagedIds.length === 0}
-                        className="bg-yellow-500 hover:bg-yellow-600 text-white"
-                      >
-                        Map Product to Selected
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[600px] max-w-[90vw] p-0">
-                      <div className="p-2 border-b">
-                        <Input
-                          placeholder="Search..."
-                          className="h-7 text-xs"
-                          value={bulkMapSearch}
-                          onChange={(e) => setBulkMapSearch(e.target.value)}
-                        />
-                      </div>
-                      <ScrollArea className="h-[300px]">
-                        {products
-                          .filter(p => {
-                            const q = bulkMapSearch.toLowerCase();
-                            if (!q) return true;
-                            return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
-                          })
-                          .map(p => (
-                          <Button key={`bulk-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={(e) => { e.stopPropagation(); handleBulkMap(p); }}>
-                            <div className="text-left w-full">
-                              <div className="font-medium text-sm whitespace-normal break-words">{p.code || p.name}</div>
-                              {p.size && <div className="text-[11px] text-muted-foreground">Size: {p.size}</div>}
-                            </div>
-                          </Button>
-                        ))}
-                      </ScrollArea>
-                    </PopoverContent>
-                  </Popover>
                   <Button
                     onClick={handleCreateGatepassesForSelected}
                     disabled={isProcessingBulk || selectedStagedIds.length === 0 || !selectedStagedIds.every(id => (stagedOrders.find(s => s.id === id)?.bill_no || '').trim() !== '')}
@@ -850,12 +875,119 @@ const ProcessOnlineOrders: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {stagedOrders.length > 0 && (
-              <div className="text-xs text-muted-foreground px-4 pt-4">
-                ⬅️ Scroll horizontally to see the <strong>Product</strong> column and map items.
-              </div>
-            )}
+            <div className="px-4 pt-4 pb-2 flex justify-between items-center border-b">
+              {stagedOrders.length > 0 && (
+                <>
+                  <div className="text-xs text-muted-foreground">
+                    {viewMode === 'grouped' ? '📦 Invoice-Style Grouped View' : '📋 Flat Item List View'}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setViewMode(viewMode === 'grouped' ? 'flat' : 'grouped')}
+                    className="ml-auto"
+                  >
+                    Switch to {viewMode === 'grouped' ? 'Flat' : 'Grouped'} View
+                  </Button>
+                </>
+              )}
+            </div>
             <div className="overflow-x-auto">
+              {viewMode === 'grouped' ? (
+                // GROUPED VIEW - Invoice Style
+                <div className="space-y-6 p-4">
+                  {stagedOrders.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">No pending staged orders found.</div>
+                  ) : (() => {
+                    // Group orders by platform_order_number
+                    const grouped = stagedOrders.reduce((acc, order) => {
+                      if (!acc[order.platform_order_number]) {
+                        acc[order.platform_order_number] = {
+                          orderNo: order.platform_order_number,
+                          billNo: order.bill_no || '',
+                          customerName: order.customer_name || '',
+                          shippingAddress: order.shipping_address || '',
+                          items: []
+                        };
+                      }
+                      acc[order.platform_order_number].items.push(order);
+                      return acc;
+                    }, {} as any);
+
+                    return Object.values(grouped).map((grp: any) => {
+                      const totalQty = grp.items.reduce((sum: number, item: StagedOrder) => sum + (item.quantity || 1), 0);
+                      const totalAmount = grp.items.reduce((sum: number, item: StagedOrder) => sum + (item.amount || 0), 0);
+                      
+                      return (
+                        <Card key={grp.orderNo} className="border-2 border-blue-200">
+                          <CardHeader className="bg-blue-50 pb-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <CardTitle className="text-lg text-blue-900">Order #{grp.orderNo}</CardTitle>
+                                <CardDescription className="text-sm mt-1">
+                                  <span className="font-semibold">Invoice:</span> {grp.billNo || '—'}  |  
+                                  <span className="font-semibold ml-2">Customer:</span> {grp.customerName}
+                                </CardDescription>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-sm font-semibold text-gray-600">Total Items: <span className="text-blue-600 text-lg">{totalQty}</span></div>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="p-4">
+                            <div className="border rounded-lg overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="bg-blue-100 border-b">
+                                    <th className="px-4 py-3 text-left font-bold text-gray-800">Item Details</th>
+                                    <th className="px-4 py-3 text-center font-bold text-gray-800 w-20">Qty</th>
+                                    <th className="px-4 py-3 text-right font-bold text-gray-800 w-32">Amount (₹)</th>
+                                    <th className="px-4 py-3 text-center font-bold text-gray-800 w-24">Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {grp.items.map((item: StagedOrder, idx: number) => {
+                                    const product = products.find(p => p.name === item.flipkart_item_name?.split('—')[0]);
+                                    const productCode = product?.code || 'N/A';
+                                    return (
+                                    <tr key={item.id} className="border-b hover:bg-blue-50 transition">
+                                      <td className="px-4 py-3 text-sm break-words">
+                                        <div className="font-medium text-gray-900">{item.flipkart_item_name?.split('—')[0] || 'Unknown'}</div>
+                                        <div className="text-xs text-gray-600 mt-1">Code: <span className="font-semibold text-blue-700">{productCode}</span></div>
+                                        {matchedMap[item.id]?.selectedId && (
+                                          <div className="mt-1 text-xs bg-green-100 text-green-900 px-2 py-1 rounded w-fit">
+                                            ✓ {products.find(p => p.id === matchedMap[item.id].selectedId)?.name || 'Mapped'}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-3 text-center font-semibold text-blue-600">{item.quantity || 1}</td>
+                                      <td className="px-4 py-3 text-right font-bold text-green-600">₹{(item.amount || 0).toFixed(2)}</td>
+                                      <td className="px-4 py-3 text-center">
+                                        <Checkbox 
+                                          checked={selectedStagedIds.includes(item.id)} 
+                                          onCheckedChange={(checked) => setSelectedStagedIds(prev => !!checked ? [...prev, item.id] : prev.filter(id => id !== item.id))} 
+                                        />
+                                      </td>
+                                    </tr>
+                                  );
+                                  })}
+                                  <tr className="bg-blue-50 border-t-2 border-blue-300 font-bold">
+                                    <td className="px-4 py-3 text-right">Order Total:</td>
+                                    <td className="px-4 py-3 text-center text-blue-600 text-base">{totalQty}</td>
+                                    <td className="px-4 py-3 text-right text-green-700 text-lg">₹{totalAmount.toFixed(2)}</td>
+                                    <td></td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    });
+                  })()}
+                </div>
+              ) : (
+                // FLAT VIEW - Original Table
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
@@ -1054,6 +1186,7 @@ const ProcessOnlineOrders: React.FC = () => {
                   )}
                 </TableBody>
               </Table>
+              )}
             </div>
           </CardContent>
         </Card>

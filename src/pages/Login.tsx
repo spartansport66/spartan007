@@ -16,9 +16,10 @@ import * as z from 'zod';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 const RESOLVE_USER_IDENTIFIER_EDGE_FUNCTION_URL = "https://hxftiocfihhdutciaisl.supabase.co/functions/v1/resolve-user-identifier";
+const DEFAULT_EMAIL_DOMAIN = '@ss.com';
 
 const loginFormSchema = z.object({
-  identifier: z.string().min(1, { message: 'Email or Name is required.' }),
+  identifier: z.string().min(1, { message: 'User ID is required.' }),
   password: z.string().min(1, { message: 'Password is required.' }),
 });
 
@@ -45,19 +46,20 @@ const Login = () => {
   const onLoginSubmit = async (values: z.infer<typeof loginFormSchema>) => {
     setIsSubmitting(true);
     try {
-      let emailToLoginWith = values.identifier;
+      console.log('Login form values:', values);
 
-      if (!values.identifier.includes('@')) {
-        const response = await fetch(RESOLVE_USER_IDENTIFIER_EDGE_FUNCTION_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: values.identifier }),
-        });
+      if (!values.identifier) throw new Error('Identifier is required.');
 
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Failed to resolve user identifier.');
-        emailToLoginWith = data.email;
+      // If the identifier contains an '@', treat it as an email; otherwise append default domain.
+      const rawId = values.identifier.trim();
+      let emailToLoginWith = '';
+      if (rawId.includes('@')) {
+        emailToLoginWith = rawId.toLowerCase();
+      } else {
+        emailToLoginWith = `${rawId.toLowerCase()}${DEFAULT_EMAIL_DOMAIN}`;
       }
+
+      console.log('Attempting login with computed email:', { email: emailToLoginWith });
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email: emailToLoginWith,
@@ -65,21 +67,44 @@ const Login = () => {
       });
 
       if (error) {
-        await supabase.from('login_logs').insert({
-          user_id: (data as any)?.user?.id || '00000000-0000-0000-0000-000000000000',
-          success: false,
-        });
-        throw error;
+        console.error('Login error:', error, { authData: data });
+        if (error.message && error.message.toLowerCase().includes('invalid')) {
+          showError('Invalid user id or password.');
+        } else {
+          showError('Login failed. Try again later.');
+        }
+
+        // Only insert into `login_logs` if we have a valid user_id (table requires it).
+        try {
+          const userId = (data as any)?.user?.id;
+          if (userId) {
+            const payload: any = { user_id: userId, success: false };
+            const { data: logData, error: logError } = await supabase.from('login_logs').insert(payload);
+            if (logError) console.error('Failed to insert login_logs (error path):', logError, { payload, logData });
+          } else {
+            console.warn('Skipping login_logs insert: no user_id available for failed login attempt.');
+          }
+        } catch (e) {
+          console.error('Exception while inserting login_logs (error path):', e);
+        }
+
+        return;
       }
-      
+
       if (data.user) {
-        await supabase.from('login_logs').insert({ user_id: data.user.id, success: true });
+        try {
+          const { data: logData, error: logError } = await supabase.from('login_logs').insert({ user_id: data.user.id, success: true });
+          if (logError) console.error('Failed to insert login_logs (success path):', logError, { userId: data.user.id, logData });
+        } catch (e) {
+          console.error('Exception while inserting login_logs (success path):', e);
+        }
       }
 
       showSuccess('Logged in successfully!');
       navigate('/');
-    } catch (error: any) {
-      showError(`Login failed: ${error.message}`);
+    } catch (err: any) {
+      console.error('onLoginSubmit error:', err);
+      showError(err?.message || 'Login error');
     } finally {
       setIsSubmitting(false);
     }
@@ -102,7 +127,15 @@ const Login = () => {
           <CardContent className="pt-6">
             <Form {...loginForm}>
               <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
-                <FormField control={loginForm.control} name="identifier" render={({ field }) => (<FormItem><FormLabel>Email or Name</FormLabel><FormControl><Input placeholder="john.doe@example.com or John Doe" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={loginForm.control} name="identifier" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Username or Email</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter username (e.g., kunal) — '@ss.com' will be appended" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={loginForm.control} name="password" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Password</FormLabel>
