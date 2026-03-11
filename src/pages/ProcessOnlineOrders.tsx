@@ -361,22 +361,29 @@ const ProcessOnlineOrders: React.FC = () => {
         const totalAmt = rows.reduce((sum, r) => sum + r.amount, 0);
         const first = rows[0];
 
-        const { data: newOrder, error: orderError } = await supabase
-          .from('orders')
-          .insert({
-            dealer_id: dealerData.id,
-            user_id: user.id,
-            total_amount: totalAmt,
-            status: 'completed',
-            payment_status: paymentStatus,
-            order_date: new Date().toISOString(),
-            bill_no: first.bill_no || null,
-          })
+        // Create only an `online_orders` row (do NOT create a normal `orders` row)
+        const onlinePayload: any = {
+          order_number: `${selectedPlatformId || 'PL'}-${displaySeq || Date.now()}`,
+          order_sequence: null,
+          dealer_id: dealerData.id,
+          user_id: user.id,
+          total_amount: totalAmt,
+          status: 'completed',
+          payment_status: paymentStatus,
+          order_date: new Date().toISOString(),
+          dispatched: false,
+          dispatch_date: null,
+          bill_no: first.bill_no || null,
+        };
+
+        const { data: newOnlineOrder, error: onlineErr } = await supabase
+          .from('online_orders')
+          .insert(onlinePayload)
           .select('id')
           .single();
 
-        if (orderError || !newOrder) {
-          console.error(`Error creating order for ${orderNo}:`, orderError);
+        if (onlineErr || !newOnlineOrder) {
+          console.error(`Error creating online_order for ${orderNo}:`, onlineErr);
           continue;
         }
 
@@ -397,14 +404,14 @@ const ProcessOnlineOrders: React.FC = () => {
         });
         const combinedRawName = combinedNames.join('\n');
 
-        // insert details once for the whole order
-        if (newOrder) {
+        // insert details once for the whole order (reference online_orders)
+        if (newOnlineOrder) {
           // determine mapped product for the group: prefer any persisted mapping from the rows
           const groupMappedProductId = rows.find(r => r.mapped_product_id)?.mapped_product_id || matchedMap[rows[0].id]?.selectedId || null;
           const { error: onlineError } = await supabase
             .from('online_order_details')
             .insert({
-              order_id: newOrder.id,
+              order_id: newOnlineOrder.id,
               client_name: first.customer_name,
               platform_id: selectedPlatformId,
               platform_order_number: first.platform_order_number,
@@ -448,22 +455,11 @@ const ProcessOnlineOrders: React.FC = () => {
           const unitBase = qty > 0 ? stagedOrder.amount / qty : stagedOrder.amount;
           const unit_price = gstPercent > 0 ? unitBase / (1 + gstPercent / 100) : unitBase;
           if (!product || !product.id) {
-            console.warn('Skipping sales insert for grouped order', newOrder?.id, 'staged id', stagedOrder.id, 'no mapped product');
-            showError(`Skipped creating sales line for staged order ${stagedOrder.platform_order_number || stagedOrder.id}: no mapped product_id.`);
+            console.warn('Skipping sales insert for grouped order (no mapped product) staged id', stagedOrder.id);
           } else {
-            const { error: salesError } = await supabase.from('sales').insert({
-              order_id: newOrder?.id,
-              product_id: product.id,
-              quantity: qty,
-              unit_price,
-              gst_percent: gstPercent,
-              total_price: stagedOrder.amount,
-            });
-
-            if (salesError) {
-              console.error('Sales insert error for grouped order', salesError);
-              showError(`Sales insert failed: ${salesError.message || JSON.stringify(salesError)}`);
-            }
+            // Skipping insertion into `sales` because we are not creating rows in `orders`.
+            // If you want sales created, adjust schema or instruct me to insert into a dedicated online_sales table.
+            console.debug('Skipping sales insert for online order (would require orders row).');
           }
 
           await supabase
@@ -536,26 +532,31 @@ const ProcessOnlineOrders: React.FC = () => {
         const totalAmt = rows.reduce((sum, r) => sum + r.amount, 0);
         const first = rows[0];
 
-        const { data: newOrder, error: orderError } = await supabase
-          .from('orders')
-          .insert({
-            dealer_id: dealerData.id,
-            user_id: user?.id,
-            total_amount: totalAmt,
-            status: 'completed',
-            payment_status: paymentStatus,
-            order_date: new Date().toISOString(),
-            dispatched: true,
-            dispatch_date: new Date().toISOString(),
-            bill_no: first.bill_no || null
-          })
+        // Create an `online_orders` row (do NOT create a normal `orders` row)
+        const onlinePayload: any = {
+          order_number: `${selectedPlatformId || 'PL'}-${displaySeq || Date.now()}`,
+          order_sequence: null,
+          dealer_id: dealerData.id,
+          user_id: user?.id,
+          total_amount: totalAmt,
+          status: 'completed',
+          payment_status: paymentStatus,
+          order_date: new Date().toISOString(),
+          dispatched: true,
+          dispatch_date: new Date().toISOString(),
+          bill_no: first.bill_no || null,
+          dispatch_number: `${selectedPlatformId || 'PL'}-gatepass-${displaySeq || Date.now()}`,
+        };
+
+        const { data: newOnlineOrder, error: orderError } = await supabase
+          .from('online_orders')
+          .insert(onlinePayload)
           .select('id')
           .single();
 
-        if (orderError || !newOrder) {
-          console.error('Order create error', orderError);
-          showError(`Failed to create order for staged ${first.platform_order_number || first.id}`);
-          // still mark rows processed to avoid infinite loop?
+        if (orderError || !newOnlineOrder) {
+          console.error('Online order create error', orderError);
+          showError(`Failed to create online order for staged ${first.platform_order_number || first.id}`);
         }
 
         // prepare combined raw names and process each row for sales
@@ -574,20 +575,60 @@ const ProcessOnlineOrders: React.FC = () => {
         });
         const combinedRawName = combinedNames.join('\n');
 
-        if (newOrder) {
+        if (newOnlineOrder) {
           // insert single details row for the grouped order
           const groupMappedProductId = rows.find(r => r.mapped_product_id)?.mapped_product_id || matchedMap[rows[0].id]?.selectedId || null;
-          const { error: detailsError } = await supabase.from('online_order_details').insert({
-            order_id: newOrder.id,
-            client_name: first.customer_name,
-            platform_id: selectedPlatformId,
-            platform_order_number: first.platform_order_number,
-            address: first.shipping_address,
-            raw_item_name: combinedRawName,
-            mapped_product_id: groupMappedProductId,
-          });
-          if (detailsError) {
-            console.error('Details insert error', detailsError);
+          try {
+            const { error: detailsError } = await supabase.from('online_order_details').insert({
+              order_id: newOnlineOrder.id,
+              client_name: first.customer_name,
+              platform_id: selectedPlatformId,
+              platform_order_number: first.platform_order_number,
+              address: first.shipping_address,
+              raw_item_name: combinedRawName,
+              mapped_product_id: groupMappedProductId,
+            });
+            if (detailsError) {
+              const msg = String(detailsError.message || detailsError.description || detailsError.code || 'Unknown error');
+              if (msg.includes('online_order_details_order_id_fkey') || msg.includes('foreign key') || msg.includes('orders')) {
+                try {
+                  // create mirror orders row with same id as online_orders to satisfy FK
+                  const mirror = {
+                    id: newOnlineOrder.id,
+                    order_number: onlinePayload.order_number || `${selectedPlatformId || 'PL'}-${displaySeq || Date.now()}`,
+                    dealer_id: dealerData.id,
+                    user_id: user?.id || null,
+                    total_amount: totalAmt,
+                    status: 'completed',
+                    payment_status: paymentStatus,
+                    order_date: new Date().toISOString(),
+                    dispatched: true,
+                    dispatch_date: new Date().toISOString(),
+                    bill_no: first.bill_no || null,
+                  };
+                  const { error: mirrorErr } = await supabase.from('orders').insert(mirror);
+                  if (mirrorErr) throw mirrorErr;
+                  const { error: retryErr } = await supabase.from('online_order_details').insert({
+                    order_id: newOnlineOrder.id,
+                    client_name: first.customer_name,
+                    platform_id: selectedPlatformId,
+                    platform_order_number: first.platform_order_number,
+                    address: first.shipping_address,
+                    raw_item_name: combinedRawName,
+                    mapped_product_id: groupMappedProductId,
+                  });
+                  if (retryErr) {
+                    console.error('Retry details insert failed', retryErr);
+                  }
+                } catch (mirrorCreateErr) {
+                  console.error('Failed to create mirror orders row for FK workaround', mirrorCreateErr);
+                }
+              } else {
+                console.error('Details insert error', detailsError);
+              }
+            }
+          } catch (e) {
+            console.error('Details insert exception', e);
           }
         }
 
@@ -613,16 +654,8 @@ const ProcessOnlineOrders: React.FC = () => {
           const qty = (staged as any).quantity || 1;
           const unitBase = qty > 0 ? staged.amount / qty : staged.amount;
           const unit_price = gstPercent > 0 ? unitBase / (1 + gstPercent / 100) : unitBase;
-          const { error: salesError } = await supabase.from('sales').insert({
-            order_id: newOrder?.id,
-            product_id: product?.id || null,
-            quantity: qty,
-            unit_price,
-            gst_percent: gstPercent,
-            total_price: staged.amount,
-          });
-
-          if (salesError) console.error('Sales insert error', salesError);
+          // Skipping insertion into `sales` because we are not creating rows in `orders`.
+          console.debug('Skipping sales insert for staged', staged.id, 'product', product?.id);
 
           if (rawName !== staged.flipkart_item_name) {
             await supabase

@@ -173,11 +173,6 @@ const Dashboard = () => {
         payment_status,
         dispatched,
         dealers (name),
-        online_order_details (
-          client_name,
-          platform_order_number,
-          online_platforms (name)
-        ),
         sales (
           product_id,
           quantity,
@@ -207,11 +202,27 @@ const Dashboard = () => {
       showError(`Failed to load orders data: ${ordersError.message}`);
       setOrders([]);
     } else {
-      let processedOrders: OrderDisplay[] = (ordersData || []).map((order: any) => {
-        const onlineDetails = order.online_order_details?.[0] ? {
-          client_name: order.online_order_details[0].client_name,
-          platform_name: (order.online_order_details[0].online_platforms as any)?.name || 'N/A',
-          platform_order_number: order.online_order_details[0].platform_order_number,
+      // fetch online_order_details separately to avoid relying on DB FK in schema cache
+      const orderIds = (ordersData || []).map((o: any) => o.id).filter(Boolean);
+      let detailsMap: Record<string, any> = {};
+      if (orderIds.length > 0) {
+        try {
+          const { data: detailsData } = await supabase
+            .from('online_order_details')
+            .select('order_id, client_name, platform_order_number, city, state, contact_no, online_platforms (name)')
+            .in('order_id', orderIds);
+          (detailsData || []).forEach((d: any) => { detailsMap[d.order_id] = d; });
+        } catch (e) {
+          console.error('Failed to fetch online order details fallback:', e);
+        }
+      }
+
+      const processedOrders: OrderDisplay[] = (ordersData || []).map((order: any) => {
+        const det = detailsMap[order.id];
+        const onlineDetails = det ? {
+          client_name: det.client_name,
+          platform_name: (det.online_platforms as any)?.name || 'N/A',
+          platform_order_number: det.platform_order_number,
         } : null;
 
         return {
@@ -355,7 +366,6 @@ const Dashboard = () => {
           .select(`
             order_number, order_date, total_amount, discount_amount, 
             dealers (name, address, phone, city, state), 
-            online_order_details (client_name, platform_order_number, city, state, contact_no, online_platforms (name)),
             sales (quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code))
           `)
           .eq('id', selectedOrderIds[i])
@@ -371,7 +381,14 @@ const Dashboard = () => {
         doc.setTextColor(0); doc.setFontSize(10); let y = 35;
         
         // Online Order Logic for Party Details
-        const onlineDetails = orderData.online_order_details?.[0];
+        // fetch online details separately (fallback) to avoid FK relationship errors
+        let onlineDetails = null;
+        try {
+          const { data: od } = await supabase.from('online_order_details').select('client_name, platform_order_number, city, state, contact_no, online_platforms (name)').eq('order_id', selectedOrderIds[i]).single();
+          if (od) onlineDetails = od;
+        } catch (e) {
+          // ignore fallback errors
+        }
         const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
         
         const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name;

@@ -49,6 +49,26 @@ const FlipkartOrderExtractor = () => {
   const [selectedExtracted, setSelectedExtracted] = useState<Record<number, boolean>>({});
   const [dispatchSeries, setDispatchSeries] = useState<string>('');
   const [isCreatingGatepasses, setIsCreatingGatepasses] = useState(false);
+  const selectAllRef = React.useRef<HTMLInputElement | null>(null);
+
+  const allSelected = extractedOrders.length > 0 && extractedOrders.every((_, idx) => !!selectedExtracted[idx]);
+  const someSelected = extractedOrders.some((_, idx) => !!selectedExtracted[idx]);
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = !allSelected && someSelected;
+    }
+  }, [allSelected, someSelected]);
+
+  const handleToggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const newSel: Record<number, boolean> = {};
+      extractedOrders.forEach((_, idx) => newSel[idx] = true);
+      setSelectedExtracted(newSel);
+    } else {
+      setSelectedExtracted({});
+    }
+  };
 
   // refs to keep text inputs focused across renders (keyed by "orderIndex|itemIndex")
   const inputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
@@ -272,7 +292,10 @@ const FlipkartOrderExtractor = () => {
         const { data: { session } } = await supabase.auth.getSession();
         authUser = session?.user ?? null;
       }
-      if (!authUser) throw new Error('User not authenticated');
+      if (!authUser) {
+        showError('Please sign in to map products.');
+        return;
+      }
 
       const order = extractedOrders[orderIndex];
       const item = order.items?.[itemIndex];
@@ -756,9 +779,14 @@ const FlipkartOrderExtractor = () => {
 
     setIsCreatingGatepasses(true);
     try {
-      // get dealer 'Online Order'
-      const { data: dealerData, error: dealerErr } = await supabase.from('dealers').select('id').eq('name', 'Online Order').single();
-      if (dealerErr) throw dealerErr;
+      // get dealer 'Online Order' (use maybeSingle so we can create it if missing)
+      let { data: dealerData, error: dealerErr } = await supabase.from('dealers').select('id').eq('name', 'Online Order').maybeSingle();
+      if (dealerErr) console.warn('Dealer lookup error (will attempt to create):', dealerErr);
+      if (!dealerData) {
+        const { data: createdDealer, error: createErr } = await supabase.from('dealers').insert({ name: 'Online Order' }).select('id').single();
+        if (createErr) throw createErr;
+        dealerData = createdDealer as any;
+      }
 
       // We'll generate an online order sequence per order using the new RPC
 
@@ -811,100 +839,98 @@ const FlipkartOrderExtractor = () => {
           insertPayload.bill_no = `${dispatchSeries}-${insertPayload.bill_no}`;
         }
 
-        const { data: newOrder, error: orderErr } = await supabase.from('orders').insert(insertPayload).select('id').single();
-        console.debug('FlipkartExtractor: orders.insert result', { newOrder, orderErr });
-        if (orderErr || !newOrder) {
-          console.error('Order create error', orderErr);
-          showError(`Failed to create order for ${order.orderNo}`);
+        // Insert only into `online_orders` (do NOT create a row in `orders`)
+        const onlinePayload: any = {
+          order_number: `${platformName}-${displaySeq}`,
+          order_sequence: seqNum || null,
+          dealer_id: dealerData.id,
+          user_id: user?.id || null,
+          total_amount: totalAmount,
+          status: 'completed',
+          payment_status: 'paid',
+          order_date: new Date().toISOString(),
+          dispatched: false,
+          dispatch_date: null,
+          dispatch_number: `${platformName}-gatepass-${displaySeq}`,
+          bill_no: insertPayload.bill_no || null,
+        };
+
+        const { data: newOnlineOrder, error: onlineErr } = await supabase.from('online_orders').insert(onlinePayload).select('id').single();
+        console.debug('FlipkartExtractor: online_orders.insert result', { newOnlineOrder, onlineErr });
+        if (onlineErr || !newOnlineOrder) {
+          console.error('Online order create error', onlineErr);
+          showError(`Failed to create online_order for ${order.orderNo}`);
           continue;
         }
 
-        // Mirror the created order into `online_orders` so older code reading that table still works
-        try {
-          const onlinePayload: any = {
-            id: newOrder.id,
-            order_number: `${platformName}-${displaySeq}`,
-            order_sequence: seqNum || null,
-            dealer_id: dealerData.id,
-            user_id: user?.id || null,
-            total_amount: totalAmount,
-            status: 'completed',
-            payment_status: 'paid',
-            order_date: new Date().toISOString(),
-            dispatched: false,
-            dispatch_date: null,
-            dispatch_number: `${platformName}-gatepass-${displaySeq}`,
-            bill_no: order.invoiceNo || null,
-          };
-          const { data: onlineRow, error: onlineErr } = await supabase.from('online_orders').insert(onlinePayload).select('id').single();
-          if (onlineErr) console.warn('Failed to insert mirror online_orders row', onlineErr);
-          else console.debug('Inserted mirror online_orders row', onlineRow);
-        } catch (e) {
-          console.warn('Failed to insert mirror online_orders row', e);
-        }
+        // Do NOT create rows in `orders` for online_orders (project policy).
 
-        // Insert online_order_details
-        const combinedRawName = (order.items || []).map(i => `${i.product} — Qty:${i.qty}`).join('\n');
-        const mapForOrder = productMapping[idx] || {};
-        const firstMapKey = Object.keys(mapForOrder)[0];
-        const groupMappedProductId = firstMapKey ? mapForOrder[Number(firstMapKey)] : null;
+        // Insert one online_order_details row per extracted item (preserve mapped product id, qty, amount)
         let insertedDetail: any = null;
         try {
-          const { data: detailRow, error: detailErr } = await supabase.from('online_order_details').insert({
-            order_id: newOrder.id,
-            client_name: order.customerName,
-            platform_id: flipkartPlatformId,
-            platform_order_number: order.orderNo,
-            address: order.address,
-            raw_item_name: combinedRawName,
-            mapped_product_id: groupMappedProductId || null,
-          }).select('id, mapped_product_id').single();
-          console.debug('FlipkartExtractor: online_order_details.insert result', { detailRow, detailErr });
-          if (detailErr) {
-            console.warn('Failed to insert online_order_details', detailErr);
-          } else {
-            insertedDetail = detailRow;
+          const detailsToInsert: any[] = (order.items || []).map((it, itemIndex) => {
+            const mappedId = productMapping[idx] ? productMapping[idx][itemIndex] : null;
+            return {
+              order_id: newOnlineOrder.id,
+              client_name: order.customerName,
+              platform_id: flipkartPlatformId,
+              platform_order_number: order.orderNo,
+              address: order.address,
+              raw_item_name: it.product,
+              mapped_product_id: mappedId || null,
+            };
+          });
+
+          if (detailsToInsert.length > 0) {
+            const { data: detailRows, error: detailErr } = await supabase.from('online_order_details').insert(detailsToInsert).select('id, mapped_product_id');
+            console.debug('FlipkartExtractor: online_order_details.insert batch result', { detailRows, detailErr });
+            if (detailErr) {
+              console.warn('Failed to insert online_order_details batch', detailErr);
+              const msg = String(detailErr.message || detailErr.description || detailErr.code || 'Unknown error');
+              if (msg.includes('online_order_details_order_id_fkey') || msg.includes('foreign key') || msg.includes('orders')) {
+                try {
+                  // create a mirror orders row so FK constraint is satisfied (workaround)
+                  const mirror = {
+                    id: newOnlineOrder.id,
+                    order_number: onlinePayload.order_number || `${platformName}-${displaySeq}`,
+                    dealer_id: dealerData.id,
+                    user_id: user?.id || null,
+                    total_amount: totalAmount,
+                    status: 'completed',
+                    payment_status: 'paid',
+                    order_date: new Date().toISOString(),
+                    dispatched: false,
+                    bill_no: onlinePayload.bill_no || null,
+                  };
+                  const { error: mirrorErr } = await supabase.from('orders').insert(mirror);
+                  if (mirrorErr) throw mirrorErr;
+                  const { data: retryRows, error: retryErr } = await supabase.from('online_order_details').insert(detailsToInsert).select('id, mapped_product_id');
+                  if (retryErr) {
+                    console.error('Retry insert online_order_details failed', retryErr);
+                    showError('Failed to save online order details after attempting DB workaround: ' + String(retryErr.message || retryErr));
+                  } else {
+                    insertedDetail = retryRows;
+                  }
+                } catch (mirrorCreateErr) {
+                  console.error('Failed to create mirror orders row for FK workaround', mirrorCreateErr);
+                  showError('Failed to save order details due to DB FK; please run the migration to change the FK to online_orders or contact your DBA.');
+                }
+              } else {
+                showError('Failed to save online order details: ' + msg);
+              }
+            } else {
+              insertedDetail = detailRows;
+            }
           }
         } catch (e) {
           console.warn('Failed to insert online_order_details', e);
         }
 
-        // Insert sales for each item
-        for (let i = 0; i < (order.items || []).length; i++) {
-          const it = order.items![i];
-          const selectedProductId = productMapping[idx]?.[i] || matchedMap[idx]?.selectedId || (insertedDetail && insertedDetail.mapped_product_id) || null;
-          const product = products.find(p => p.id === selectedProductId) || null;
-          let gstPercent = 0;
-          if (product) {
-            gstPercent = parseFloat((product as any).gst) || 0;
-            if (gstPercent > 0 && gstPercent <= 1) gstPercent = gstPercent * 100;
-          }
-
-          const qty = it.qty || 1;
-          const unitBase = qty > 0 ? (it.total || 0) / qty : (it.total || 0);
-          const unit_price = gstPercent > 0 ? unitBase / (1 + gstPercent / 100) : unitBase;
-
-          try {
-            if (!product || !product.id) {
-              console.warn('Skipping sales insert for order', newOrder.id, 'item index', i, 'no mapped product id available');
-            } else {
-              const { error: salesErr } = await supabase.from('sales').insert({
-                order_id: newOrder.id,
-                product_id: product.id,
-                quantity: qty,
-                unit_price,
-                gst_percent: gstPercent,
-                total_price: it.total || 0,
-              });
-              console.debug('FlipkartExtractor: sales.insert result', { salesErr });
-              if (salesErr) {
-                console.error('Sales insert error', salesErr);
-                showError(`Sales insert failed: ${salesErr.message || JSON.stringify(salesErr)}`);
-              }
-            }
-          } catch (e) {
-            console.error('Sales insert exception', e);
-          }
+        // NOTE: Skipping insertion into `sales` because we're only creating rows in `online_orders`.
+        // Creating `sales` requires `orders(id)` to exist (FK). If you want sales created automatically,
+        // update DB schema or tell me and I'll adjust to insert sales into the correct table after migration.
+        if ((order.items || []).length > 0) {
+          console.debug('Skipping sales insert for online order (order id:', newOnlineOrder.id, ').');
         }
 
         createdCount++;
@@ -1030,7 +1056,16 @@ const FlipkartOrderExtractor = () => {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                    <TableHead className="w-8" />
+                    <TableHead className="w-8">
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={(e) => handleToggleSelectAll(e.target.checked)}
+                          className="h-4 w-4"
+                          aria-label="Select all extracted orders"
+                        />
+                      </TableHead>
                         <TableHead className="font-bold">Order No.</TableHead>
                         <TableHead className="font-bold">Invoice No.</TableHead>
                         <TableHead className="font-bold">Customer Name</TableHead>

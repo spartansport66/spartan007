@@ -10,6 +10,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import GatePassOrderSearch from '@/components/GatePassOrderSearch';
 import GatePassDispatchedOrdersCard from '@/components/GatePassDispatchedOrdersCard';
 import GatePassQueueCard from '@/components/GatePassQueueCard'; // NEW IMPORT
+import GatePassOnlineQueueCard from '@/components/GatePassOnlineQueueCard';
 
 const GatePassDashboard = () => {
   const navigate = useNavigate();
@@ -75,8 +76,9 @@ const GatePassDashboard = () => {
           <div className="lg:col-span-1 space-y-6">
             <GatePassOrderSearch key={`search-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} />
           </div>
-          <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-6">
             <GatePassQueueCard key={`queue-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} />
+            <GatePassOnlineQueueCard key={`online-queue-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} />
             <GatePassDispatchedOrdersCard key={`dispatched-${refreshKey}`} />
           </div>
         </div>

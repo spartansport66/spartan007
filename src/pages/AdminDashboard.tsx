@@ -260,6 +260,7 @@ const AdminDashboard = () => {
             <Package className="h-12 w-12 text-purple-500" />
           </CardContent>
         </Card>
+        {/* Exchange Material card temporarily hidden */}
         <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between cursor-pointer hover:bg-accent" onClick={() => navigate('/purchase-dashboard')}>
           <CardHeader className="bg-cyan-500 dark:bg-cyan-700 text-white rounded-t-lg p-4">
             <CardTitle className="text-xl font-semibold">Purchasing</CardTitle>

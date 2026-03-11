@@ -20,6 +20,7 @@ import SheetConverterPage from "./pages/SheetConverterPage";
 import ForcePasswordReset from "./pages/ForcePasswordReset";
 import DailyVisitReport from "./pages/DailyVisitReport";
 import MaterialReturns from "./pages/MaterialReturns";
+import MaterialExchange from "./pages/MaterialExchange";
 import ChangePassword from "./pages/ChangePassword";
 import GatePassDashboard from "./pages/GatePassDashboard";
 import ProductDashboard from "./pages/ProductDashboard";
@@ -73,6 +74,7 @@ const AppContent = () => {
       <Route path="/force-password-reset" element={<ForcePasswordReset />} />
       <Route path="/daily-visit-report" element={<DailyVisitReport />} />
       <Route path="/material-returns" element={<MaterialReturns />} />
+      <Route path="/material-exchange" element={<MaterialExchange />} />
       <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/gate-pass-dashboard" element={<GatePassDashboard />} />
       <Route path="/record-stock-receipt" element={<RecordStockReceipt />} />

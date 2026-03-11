@@ -4,32 +4,32 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Loader2, Truck, AlertTriangle, Eye } from 'lucide-react';
+import { Loader2, Truck, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 
-interface QueueOrder {
+interface OnlineQueueOrder {
   id: string;
-  order_number: number;
-  dealer_name: string;
+  order_number: string | number | null;
+  dispatch_number: string | null;
   bill_no: string | null;
-  dispatch_number: number | null;
-  platform_order_number: string | null;
-  client_name: string | null;
+  dealer_id: string | null;
+  user_id: string | null;
 }
 
-interface GatePassQueueCardProps {
+interface GatePassOnlineQueueCardProps {
   onDispatchSuccess: () => void;
 }
 
-const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess }) => {
-  const [queue, setQueue] = useState<QueueOrder[]>([]);
+const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDispatchSuccess }) => {
+  const [queue, setQueue] = useState<OnlineQueueOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDispatching, setIsDispatching] = useState<string | null>(null);
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
+
   const [selectedQueue, setSelectedQueue] = useState<Record<string, boolean>>({});
   const selectAllRef = useRef<HTMLInputElement | null>(null);
 
@@ -43,75 +43,149 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
   const fetchQueue = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          order_number,
-          bill_no,
-          dispatch_number,
-          dealers (name)
-        `)
-        .eq('dispatched', true)
-        .is('gate_pass_dispatch_time', null)
-        .order('dispatch_number', { ascending: true });
+      // Prefer RPCs which run as SECURITY DEFINER and can bypass RLS for authenticated users
+      const { data: orderIdsRaw, error: rpcErr } = await supabase.rpc('get_online_pending_orders');
+      if (!rpcErr && orderIdsRaw && Array.isArray(orderIdsRaw) && orderIdsRaw.length > 0) {
+        const orderIds = orderIdsRaw;
+        const { data: rpcData, error: rpcErr2 } = await supabase.rpc('get_online_order_full', { order_ids: orderIds });
+        if (rpcErr2) throw rpcErr2;
 
-      if (error) throw error;
+        // If RPC returned meaningful rows, use them. If it returned an empty array,
+        // fall through to the direct-query fallback so we can still surface the orders
+        // (even when `online_order_details` are missing).
+        if (Array.isArray(rpcData) && rpcData.length > 0) {
+          const finalRows = rpcData.map((r: any) => {
+            const items = Array.isArray(r.items) ? r.items : [];
+            const qty = items.length > 0 ? items.reduce((s: number, it: any) => s + (it.qty || 0), 0) : 0;
+            const rawNames = (r.raw_item_name ? [r.raw_item_name] : []).concat(items.map((it: any) => it.product_name).filter(Boolean));
+            return {
+              id: r.order_id,
+              order_number: r.order_number,
+              dispatch_number: r.dispatch_number,
+              bill_no: r.bill_no,
+              client_name: r.client_name || (items[0]?.client_name || null) || null,
+              platform_order_number: r.platform_order_number || null,
+              raw_item_name: rawNames.length > 0 ? rawNames.join(', ') : null,
+              mapped_product_id: r.mapped_product_id || null,
+              items: items.map((it: any) => ({ product_name: it.product_name || it.product || it.product_code || null, qty: it.qty || 0 })),
+              qty,
+            };
+          });
 
-      const onlineOrderIds = (data || []).filter(o => (o.dealers as any)?.name === 'Online Order').map(o => o.id);
-      let onlineDetailsMap = new Map();
-
-      if (onlineOrderIds.length > 0) {
-        const { data: onlineDetails, error: functionError } = await supabase.functions.invoke('get-online-order-details', {
-          body: { orderIds: onlineOrderIds },
-        });
-
-        if (functionError) throw functionError;
-
-        (onlineDetails || []).forEach((d: any) => onlineDetailsMap.set(d.order_id, d));
+          setQueue(finalRows);
+          return;
+        }
+        // else continue to fallback path
       }
 
-      const formattedQueue: QueueOrder[] = (data || []).map((order: any) => {
-        const details = onlineDetailsMap.get(order.id);
-        return {
-          id: order.id,
-          order_number: order.order_number,
-          dealer_name: (order.dealers as any)?.name || 'N/A',
-          bill_no: order.bill_no,
-          dispatch_number: order.dispatch_number,
-          platform_order_number: details?.platform_order_number || null,
-          client_name: details?.client_name || null,
-          // include items and qty from the function (if present)
-          items: details?.items || [],
-        } as any;
+      // Fallback: direct query (may be restricted by RLS)
+      const { data: ordersData, error: ordersErr } = await supabase
+        .from('online_orders')
+        .select('id, order_number, dispatch_number, bill_no, order_sequence, dispatch_date, dispatched')
+        .eq('dispatched', false)
+        .is('dispatch_date', null)
+        .order('order_sequence', { ascending: true })
+        .limit(200);
+
+      if (ordersErr) throw ordersErr;
+      if (!ordersData || ordersData.length === 0) {
+        setQueue([]);
+        return;
+      }
+
+      const orderIds2 = ordersData.map((o: any) => o.id);
+      const { data: detailsData, error: detailsErr } = await supabase
+        .from('online_order_details')
+        .select('order_id, raw_item_name, client_name, mapped_product_id')
+        .in('order_id', orderIds2);
+
+      if (detailsErr) throw detailsErr;
+
+      const { data: salesData, error: salesErr } = await supabase
+        .from('sales')
+        .select('order_id, quantity')
+        .in('order_id', orderIds2);
+
+      if (salesErr) throw salesErr;
+
+      const salesQtyMap: Record<string, number> = {};
+      (salesData || []).forEach((s: any) => {
+        salesQtyMap[s.order_id] = (salesQtyMap[s.order_id] || 0) + (s.quantity || 0);
       });
 
-      setQueue(formattedQueue);
+      const detailsByOrder: Record<string, any[]> = {};
+      (detailsData || []).forEach((d: any) => {
+        if (!detailsByOrder[d.order_id]) detailsByOrder[d.order_id] = [];
+        detailsByOrder[d.order_id].push(d);
+      });
+
+      const finalRows = (ordersData || []).map((o: any) => {
+        const dets = detailsByOrder[o.id] || [];
+        const rawNames = dets.map(d => d.raw_item_name).filter(Boolean);
+        const clientName = dets[0]?.client_name || null;
+        const mappedProductId = dets[0]?.mapped_product_id || null;
+        const salesQty = salesQtyMap[o.id] || 0;
+        const qty = salesQty || (dets.length > 0 ? dets.length : 0);
+
+        return {
+          id: o.id,
+          order_number: o.order_number,
+          dispatch_number: o.dispatch_number,
+          bill_no: o.bill_no,
+          client_name: clientName || null,
+          platform_order_number: null,
+          raw_item_name: rawNames.length > 0 ? rawNames.join(', ') : null,
+          mapped_product_id: mappedProductId || null,
+          items: dets.map((d: any) => ({ product_name: d.raw_item_name || d.mapped_product_name || null, qty: 1 })),
+          qty,
+        };
+      });
+
+      setQueue(finalRows);
     } catch (error: any) {
-      showError(`Failed to load dispatch queue: ${error.message}`);
+      showError(`Failed to load online dispatch queue: ${error.message}`);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchQueue();
-  }, [fetchQueue]);
+  useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
-  const handleDispatchOrder = async (orderId: string, orderNumber: number) => {
+  const handleDispatchOrder = async (orderId: string, orderNumber: string | number | null) => {
     setIsDispatching(orderId);
     try {
       const { error } = await supabase
-        .from('orders')
-        .update({ gate_pass_dispatch_time: new Date().toISOString() })
+        .from('online_orders')
+        .update({ dispatch_date: new Date().toISOString(), dispatched: true })
         .eq('id', orderId);
 
       if (error) throw error;
 
-      showSuccess(`Order #${orderNumber} authorized for OUT!`);
-      onDispatchSuccess(); // This will trigger a re-fetch in the parent
+      showSuccess(`Order ${orderNumber} authorized for OUT!`);
+      onDispatchSuccess();
     } catch (error: any) {
       showError(`Failed to authorize dispatch: ${error.message}`);
+    } finally {
+      setIsDispatching(null);
+    }
+  };
+
+  const handleBulkDispatch = async (orderIds: string[]) => {
+    if (!orderIds || orderIds.length === 0) return;
+    setIsDispatching('bulk-online');
+    try {
+      const { error } = await supabase
+        .from('online_orders')
+        .update({ dispatch_date: new Date().toISOString(), dispatched: true })
+        .in('id', orderIds);
+
+      if (error) throw error;
+
+      showSuccess(`Dispatched ${orderIds.length} online orders successfully.`);
+      setSelectedQueue({});
+      onDispatchSuccess();
+    } catch (error: any) {
+      showError(`Bulk dispatch failed: ${error.message}`);
     } finally {
       setIsDispatching(null);
     }
@@ -122,50 +196,29 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
     setIsOrderDetailsDialogOpen(true);
   };
 
-  const handleBulkDispatch = async (orderIds: string[]) => {
-    if (!orderIds || orderIds.length === 0) return;
-    setIsDispatching('bulk');
-    try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ gate_pass_dispatch_time: new Date().toISOString() })
-        .in('id', orderIds);
-
-      if (error) throw error;
-
-      showSuccess(`Dispatched ${orderIds.length} orders successfully.`);
-      setSelectedQueue({});
-      onDispatchSuccess();
-    } catch (error: any) {
-      showError(`Bulk dispatch failed: ${error.message}`);
-    } finally {
-      setIsDispatching(null);
-    }
-  };
-
   return (
     <>
       <Card className="bg-card text-card-foreground shadow-lg">
-        <CardHeader className="bg-blue-600 dark:bg-blue-800 text-white rounded-t-lg p-4">
+        <CardHeader className="bg-emerald-600 dark:bg-emerald-800 text-white rounded-t-lg p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <CardTitle className="text-xl font-semibold">Dispatch Queue (Awaiting Gate Pass)</CardTitle>
-              <CardDescription className="text-blue-100 dark:text-blue-200">
-                Orders processed by admin and ready for final dispatch.
+              <CardTitle className="text-xl font-semibold">Online Order Dispatch Queue (Awaiting Gate Pass)</CardTitle>
+              <CardDescription className="text-emerald-100 dark:text-emerald-200">
+                Online orders ready for gate pass dispatch.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" disabled={!someSelected || !!isDispatching}>
-                    {isDispatching === 'bulk' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />} Bulk Dispatch
+                    {isDispatching === 'bulk-online' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />} Bulk Dispatch
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Confirm Bulk Dispatch</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Authorize final dispatch for {Object.keys(selectedQueue).filter(k => selectedQueue[k]).length} selected orders? This will record the gate pass time for all selected orders.
+                      Authorize final dispatch for {Object.keys(selectedQueue).filter(k => selectedQueue[k]).length} selected online orders? This will record the gate pass time for all selected orders.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -183,7 +236,7 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>
           ) : queue.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">The dispatch queue is empty.</p>
+            <p className="text-center text-muted-foreground py-8">The online dispatch queue is empty.</p>
           ) : (
             <div className="max-h-96 overflow-y-auto border rounded-md">
               <Table>
@@ -205,12 +258,13 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
                           }
                         }}
                         className="h-4 w-4"
-                        aria-label="Select all dispatch queue items"
+                        aria-label="Select all online dispatch queue items"
                       />
                     </TableHead>
-                    <TableHead>Dispatch #</TableHead>
-                    <TableHead>Order #</TableHead>
-                    <TableHead>Dealer / Customer</TableHead>
+                    <TableHead>Online ID</TableHead>
+                    <TableHead>Dispatch No.</TableHead>
+                    <TableHead>Online Order #</TableHead>
+                    <TableHead>Client / Dealer</TableHead>
                     <TableHead>Item</TableHead>
                     <TableHead>Qty</TableHead>
                     <TableHead>Bill No.</TableHead>
@@ -228,10 +282,15 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
                           className="h-4 w-4"
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{order.dispatch_number}</TableCell>
-                      <TableCell>#{order.order_number}</TableCell>
                       <TableCell>
-                        {order.dealer_name === 'Online Order' && order.client_name ? (
+                        {order.id ? (
+                          <span className="font-mono text-xs text-muted-foreground" title={order.id}>{String(order.id).slice(0,8)}</span>
+                        ) : '—'}
+                      </TableCell>
+                      <TableCell className="font-medium">{order.dispatch_number || '—'}</TableCell>
+                      <TableCell>{order.order_number || '—'}</TableCell>
+                      <TableCell>
+                        {order.client_name ? (
                           <>
                             <span className="font-medium">{order.client_name}</span>
                             {order.platform_order_number && (
@@ -239,19 +298,19 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
                             )}
                           </>
                         ) : (
-                          order.dealer_name
+                          (order.user_id ? <span className="font-medium">{order.user_id}</span> : (order.dealer_id || 'N/A'))
                         )}
                       </TableCell>
                       <TableCell>
-                        {((order as any).items && (order as any).items.length > 0) ? (
-                          <span className="font-medium">{(order as any).items.map((it: any) => it.product_name || it.product_code || it.product_id).join(', ')}</span>
+                        {order.items && order.items.length > 0 ? (
+                          <span className="text-sm font-normal truncate">{order.items.map((it: any) => it.product_name || it.product_code || it.product_id).join(', ')}</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell>
-                        {((order as any).items && (order as any).items.length > 0) ? (
-                          <span>{(order as any).items.map((it: any) => it.qty).join(', ')}</span>
+                        {order.items && order.items.length > 0 ? (
+                          <span className="text-sm font-normal">{order.items.map((it: any) => it.qty).join(', ')}</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -302,4 +361,4 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
   );
 };
 
-export default GatePassQueueCard;
+export default GatePassOnlineQueueCard;

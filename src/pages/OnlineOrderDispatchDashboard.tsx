@@ -138,7 +138,7 @@ const OnlineOrderDispatchDashboard = () => {
     setLoading(true);
     try {
       let query = supabase
-        .from('orders')
+        .from('online_orders')
         .select(`
           id, order_number, order_date, total_amount, bill_no, dispatch_date, dispatch_number, dispatched,
           dealers!inner(name),
@@ -183,15 +183,15 @@ const OnlineOrderDispatchDashboard = () => {
     setLoading(true);
     try {
       let query = supabase
-        .from('orders')
+        .from('online_orders')
         .select(`
-          id, order_number, order_date, total_amount, bill_no, dispatch_date, dispatch_number, dispatched, gate_pass_dispatch_time,
+          id, order_number, order_date, total_amount, bill_no, dispatch_date, dispatch_number, dispatched,
           dealers!inner(name),
           online_order_details!inner(client_name, raw_item_name, platform_order_number, mapped_product_id, products(name, code))
         `)
         .eq('dealers.name', 'Online Order')
         .not('dispatch_number', 'is', null)
-        .is('gate_pass_dispatch_time', null)
+        .is('dispatch_date', null)
         .order('dispatch_date', { ascending: false });
 
       if (filterGatepassDate) {

@@ -182,12 +182,15 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const fetchOrderDetails = useCallback(async (id: string) => {
     setLoading(true);
     try {
+      // Do NOT request the embedded `online_order_details` relation here because
+      // Supabase will error if the DB schema cache has no FK between `orders` and
+      // `online_order_details`. Fetch sales and dealer info only, then fetch
+      // online details separately when needed.
       const { data: orderRaw, error: orderError } = await supabase
         .from('orders')
         .select(`
           id, order_number, order_date, dealer_id, user_id, total_amount, discount_amount, round_off, bill_no, dispatch_date, urgent,
           dealers (name),
-          online_order_details (client_name, platform_order_number, raw_item_name, mapped_product_id),
           sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst))
         `)
         .eq('id', id)
@@ -220,7 +223,38 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       });
 
       const isOnline = (orderRaw.dealers as any)?.name === 'Online Order';
-      const onlineDetails = orderRaw.online_order_details?.[0];
+      let onlineDetails = orderRaw.online_order_details?.[0];
+
+      // If DB schema doesn't expose the embedded relation (missing FK in schema cache),
+      // fall back to fetching online details explicitly (same pattern as OrderDetailsDialog).
+      if (isOnline && !onlineDetails) {
+        try {
+          const { data: onlineData, error: onlineError } = await supabase
+            .from('online_order_details')
+            .select(`
+              client_name,
+              platform_order_number,
+              contact_no,
+              city,
+              state,
+              address,
+              raw_item_name,
+              mapped_product_id,
+              products (name, code),
+              online_platforms (name)
+            `)
+            .eq('order_id', id)
+            .single();
+
+          if (onlineData && !onlineError) {
+            onlineDetails = onlineData as any;
+          } else if (onlineError && onlineError.code !== 'PGRST116') {
+            console.error('Error fetching online order details fallback:', onlineError);
+          }
+        } catch (err) {
+          console.error('Fallback fetch online order details failed:', err);
+        }
+      }
 
       const orderToSet: OrderToEdit = {
         ...orderRaw,

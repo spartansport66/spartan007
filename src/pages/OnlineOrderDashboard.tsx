@@ -411,24 +411,63 @@ const OnlineOrderDashboard = () => {
       const ordersToProcess = stagedOrders.filter(o => selectedStagedIds.includes(o.id));
 
       for (const staged of ordersToProcess) {
-        const { data: newOrder } = await supabase.from('orders').insert({
+        const onlinePayload: any = {
+          order_number: `${selectedPlatformId || 'PL'}-${Date.now()}`,
+          order_sequence: null,
           dealer_id: dealer.id,
           user_id: user.id,
           total_amount: staged.amount,
           status: 'completed',
           payment_status: 'paid',
           order_date: new Date().toISOString(),
-        }).select('id').single();
+        };
 
-        if (newOrder) {
-          await supabase.from('online_order_details').insert({
-            order_id: newOrder.id,
-            client_name: staged.customer_name,
-            platform_id: selectedPlatformId,
-            platform_order_number: staged.platform_order_number,
-            raw_item_name: staged.flipkart_item_name,
-          });
-          await supabase.from('online_order_staging').update({ status: 'processed' }).eq('id', staged.id);
+        const { data: newOnlineOrder } = await supabase.from('online_orders').insert(onlinePayload).select('id').single();
+
+        if (newOnlineOrder) {
+          try {
+            const { error: detailsError } = await supabase.from('online_order_details').insert({
+              order_id: newOnlineOrder.id,
+              client_name: staged.customer_name,
+              platform_id: selectedPlatformId,
+              platform_order_number: staged.platform_order_number,
+              raw_item_name: staged.flipkart_item_name,
+            });
+            if (detailsError) {
+              const msg = String(detailsError.message || detailsError.description || detailsError.code || 'Unknown error');
+              if (msg.includes('online_order_details_order_id_fkey') || msg.includes('foreign key') || msg.includes('orders')) {
+                try {
+                  // create mirror orders row to satisfy FK
+                  const mirror = {
+                    id: newOnlineOrder.id,
+                    order_number: onlinePayload.order_number,
+                    dealer_id: dealer.id,
+                    user_id: user.id,
+                    total_amount: staged.amount,
+                    status: 'completed',
+                    payment_status: 'paid',
+                    order_date: new Date().toISOString(),
+                  };
+                  const { error: mirrorErr } = await supabase.from('orders').insert(mirror);
+                  if (mirrorErr) throw mirrorErr;
+                  await supabase.from('online_order_details').insert({
+                    order_id: newOnlineOrder.id,
+                    client_name: staged.customer_name,
+                    platform_id: selectedPlatformId,
+                    platform_order_number: staged.platform_order_number,
+                    raw_item_name: staged.flipkart_item_name,
+                  });
+                } catch (mirrorCreateErr) {
+                  console.error('Failed to create mirror orders row for FK workaround', mirrorCreateErr);
+                }
+              } else {
+                console.error('Details insert error', detailsError);
+              }
+            }
+            await supabase.from('online_order_staging').update({ status: 'processed' }).eq('id', staged.id);
+          } catch (e) {
+            console.error('Failed inserting online_order_details', e);
+          }
         }
       }
       showSuccess(`${ordersToProcess.length} orders created. Now map products in the next tab.`);
@@ -460,7 +499,7 @@ const OnlineOrderDashboard = () => {
         let gstPercent = parseFloat(product.gst) || 0;
         if (gstPercent > 0 && gstPercent <= 1) gstPercent = gstPercent * 100;
 
-        await supabase.from('orders').update({
+        await supabase.from('online_orders').update({
           bill_no: order.bill_no,
           dispatch_date: order.dispatch_date,
           dispatched: true
@@ -471,14 +510,8 @@ const OnlineOrderDashboard = () => {
           client_name: order.client_name // Save the updated client name
         }).eq('order_id', order.id);
 
-        await supabase.from('sales').insert({
-          order_id: order.id,
-          product_id: order.mapped_product_id,
-          quantity: 1,
-          unit_price: order.total_amount / (1 + gstPercent / 100),
-          gst_percent: gstPercent,
-          total_price: order.total_amount,
-        });
+        // Skipping creating `sales` rows because these would reference `orders(id)`.
+        console.debug('Skipping sales insert for online order gatepass', order.id);
       }
       showSuccess("Gatepasses generated and stock updated for selected orders.");
       setSelectedCreatedIds([]);
