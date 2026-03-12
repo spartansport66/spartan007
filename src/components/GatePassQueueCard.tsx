@@ -244,14 +244,20 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
                       </TableCell>
                       <TableCell>
                         {((order as any).items && (order as any).items.length > 0) ? (
-                          <span className="font-medium">{(order as any).items.map((it: any) => it.product_name || it.product_code || it.product_id).join(', ')}</span>
+                          <span className="font-medium">{(() => {
+                            const names = (order as any).items.map((it: any) => it.product_name || it.product_code || it.product_id);
+                            return names.length === 2 ? names.map((n: any, i: number) => <div key={i}>{n}</div>) : names.join(', ');
+                          })()}</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell>
                         {((order as any).items && (order as any).items.length > 0) ? (
-                          <span>{(order as any).items.map((it: any) => it.qty).join(', ')}</span>
+                          <span>{(() => {
+                            const qtys = (order as any).items.map((it: any) => it.qty);
+                            return qtys.length === 2 ? qtys.map((q: any, i: number) => <div key={i}>{q}</div>) : qtys.join(', ');
+                          })()}</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

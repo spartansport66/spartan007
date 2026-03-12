@@ -586,8 +586,8 @@ const Dashboard = () => {
                         <TableCell className="text-muted-foreground">
                           {order.dealer_name === 'Online Order' && order.online_details ? (
                             <div className="flex flex-col text-xs">
-                              <span className="font-bold text-blue-600 dark:text-blue-400">{order.online_details.client_name}</span>
-                              <span>{order.online_details.platform_name} | Order#: {order.online_details.platform_order_number || 'N/A'}</span>
+                                  <span className="font-bold text-blue-600 dark:text-blue-400">{order.online_details.client_name}</span>
+                                  <span>{order.online_details.platform_name} | Order#: {order.online_details.platform_order_number || 'N/A'}</span>
                             </div>
                           ) : (
                             order.dealer_name

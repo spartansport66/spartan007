@@ -42,6 +42,7 @@ const SalesHODApprovalCard: React.FC = () => {
         .from('orders')
         .select(`*, dealers (name)`)
         .eq('dispatched', false)
+        .is('dispatch_date', null)
         .or("hod_status.eq.pending,hod_status.is.null")
         .order('order_date', { ascending: true });
 
@@ -50,7 +51,12 @@ const SalesHODApprovalCard: React.FC = () => {
         showError('Failed to load pending orders.');
         setOrders([]);
       } else {
-        setOrders((data || []).map((o: any) => ({
+        const filtered = (data || []).filter((o: any) => {
+          const dealerName = o.dealers?.name || '';
+          return dealerName !== 'Online Order';
+        });
+
+        setOrders(filtered.map((o: any) => ({
           id: o.id,
           order_number: o.order_number,
           order_date: o.order_date,

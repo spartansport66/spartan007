@@ -78,6 +78,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
     try {
       const { data: dealersData, error: dealersError } = await supabase.from('dealers').select('id, name');
       if (dealersError) {
+        console.error('Supabase dealers error:', dealersError);
         showError('Failed to load dealers for filter.');
         setAllDealers([]);
       } else {
@@ -92,7 +93,9 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
           online_order_details (client_name, platform_order_number, raw_item_name, products(name, code))
         `)
         .eq('dispatched', false)
-        .neq('hod_status', 'disapproved') // hide orders rejected by HOD
+        .is('dispatch_date', null)
+        .is('bill_no', null)
+        .eq('hod_status', 'approved') // only show orders approved by HOD
         .order('order_date', { ascending: false });
 
       if (filterOrderNumber) query = query.eq('order_number', parseInt(filterOrderNumber));
@@ -101,17 +104,51 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
 
       const { data: ordersData, error: ordersError } = await query;
       if (ordersError) {
+        console.error('Supabase orders error:', ordersError);
         showError('Failed to load orders.');
         setOrders([]);
       } else {
-        setOrders((ordersData || []).map((order: any) => ({
+        const orderIds = (ordersData || []).map((o: any) => o.id).filter(Boolean);
+        let onlineDetails: any[] = [];
+        const onlineOrderIds = new Set<string>();
+        if (orderIds.length > 0) {
+          const [odRes, ooRes] = await Promise.all([
+            supabase
+              .from('online_order_details')
+              .select('order_id, client_name, platform_order_number, raw_item_name, products(name, code), city, state, contact_no, online_platforms(name)')
+              .in('order_id', orderIds),
+            supabase
+              .from('online_orders')
+              .select('order_id')
+              .in('order_id', orderIds),
+          ]);
+          if (odRes.error) console.error('online_order_details error:', odRes.error);
+          if (ooRes.error) console.error('online_orders error:', ooRes.error);
+          onlineDetails = odRes.data || [];
+          (ooRes.data || []).forEach((r: any) => r.order_id && onlineOrderIds.add(r.order_id));
+          (onlineDetails || []).forEach((d: any) => { if (d && d.order_id) onlineOrderIds.add(d.order_id); });
+        }
+
+        const detailsByOrder = new Map<string, any>();
+        onlineDetails.forEach((d: any) => {
+          if (d && d.order_id) detailsByOrder.set(d.order_id, d);
+        });
+
+        const filtered = (ordersData || []).filter((order: any) => {
+          const dealerName = order.dealers?.name || '';
+          const hasOnlineDetails = !!detailsByOrder.get(order.id) || (order.online_order_details && order.online_order_details.length > 0);
+          const isFromOnline = onlineOrderIds.has(order.id);
+          return dealerName !== 'Online Order' && !hasOnlineDetails && !isFromOnline;
+        });
+
+        setOrders(filtered.map((order: any) => ({
           id: order.id,
           order_number: order.order_number,
           order_date: order.order_date,
           total_amount: order.total_amount,
           dealer_name: order.dealers?.name || 'N/A',
           dealer_id: order.dealers?.id || '',
-          online_order_details: order.online_order_details?.[0] || null,
+          online_order_details: detailsByOrder.get(order.id) || order.online_order_details?.[0] || null,
         })));
       }
     } catch (error: any) {

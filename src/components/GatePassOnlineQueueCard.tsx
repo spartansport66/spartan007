@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Loader2, Truck, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
@@ -32,9 +33,16 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
 
   const [selectedQueue, setSelectedQueue] = useState<Record<string, boolean>>({});
   const selectAllRef = useRef<HTMLInputElement | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const allSelected = queue.length > 0 && queue.every(q => !!selectedQueue[q.id]);
-  const someSelected = queue.some(q => !!selectedQueue[q.id]);
+  const filteredQueue = searchQuery.trim() ? queue.filter(q => {
+    const ql = searchQuery.trim().toLowerCase();
+    const fields = [String(q.order_number || ''), String(q.dispatch_number || ''), String(q.client_name || '')];
+    return fields.some(f => f.toLowerCase().includes(ql));
+  }) : queue;
+
+  const allSelected = filteredQueue.length > 0 && filteredQueue.every(q => !!selectedQueue[q.id]);
+  const someSelected = filteredQueue.some(q => !!selectedQueue[q.id]);
 
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = !allSelected && someSelected;
@@ -208,6 +216,10 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              <div className="flex items-center">
+                <Input placeholder="Search dispatch#, order#, client name" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="mr-2" />
+                <Button size="sm" variant="ghost" onClick={() => setSearchQuery('')}>Clear</Button>
+              </div>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" disabled={!someSelected || !!isDispatching}>
@@ -303,14 +315,20 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
                       </TableCell>
                       <TableCell>
                         {order.items && order.items.length > 0 ? (
-                          <span className="text-sm font-normal truncate">{order.items.map((it: any) => it.product_name || it.product_code || it.product_id).join(', ')}</span>
+                          <span className="text-sm font-normal truncate">{(() => {
+                            const names = order.items.map((it: any) => it.product_name || it.product_code || it.product_id);
+                            return names.length === 2 ? names.map((n: any, i: number) => <div key={i}>{n}</div>) : names.join(', ');
+                          })()}</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell>
                         {order.items && order.items.length > 0 ? (
-                          <span className="text-sm font-normal">{order.items.map((it: any) => it.qty).join(', ')}</span>
+                          <span className="text-sm font-normal">{(() => {
+                            const qtys = order.items.map((it: any) => it.qty);
+                            return qtys.length === 2 ? qtys.map((q: any, i: number) => <div key={i}>{q}</div>) : qtys.join(', ');
+                          })()}</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

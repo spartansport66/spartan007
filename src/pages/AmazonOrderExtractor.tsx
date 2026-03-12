@@ -42,6 +42,9 @@ const AmazonOrderExtractor = () => {
   const [extractedOrders, setExtractedOrders] = useState<ExtractedOrder[]>([]);
   const [rawText, setRawText] = useState<string>("");
   const [showRawText, setShowRawText] = useState(false);
+  const [selectedExtracted, setSelectedExtracted] = useState<Record<number, boolean>>({});
+  const selectAllRef = React.useRef<HTMLInputElement | null>(null);
+  const [dispatchSeries, setDispatchSeries] = useState<string>('');
 
   const [products, setProducts] = useState<Product[]>([]);
   const [matchedMap, setMatchedMap] = useState<Record<number, { matches: Product[]; selectedId?: string; search?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }>>({});
@@ -103,6 +106,150 @@ const AmazonOrderExtractor = () => {
     });
     setMatchedMap(map);
   }, [products, extractedOrders]);
+
+  const allSelected = extractedOrders.length > 0 && extractedOrders.every((_, idx) => !!selectedExtracted[idx]);
+  const someSelected = extractedOrders.some((_, idx) => !!selectedExtracted[idx]);
+
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = !allSelected && someSelected;
+  }, [allSelected, someSelected]);
+
+  const handleToggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const newSel: Record<number, boolean> = {};
+      extractedOrders.forEach((_, idx) => newSel[idx] = true);
+      setSelectedExtracted(newSel);
+    } else {
+      setSelectedExtracted({});
+    }
+  };
+
+  const handleCreateGatepassesForSelected = async () => {
+    const selectedIndexes = Object.keys(selectedExtracted).filter(k => selectedExtracted[Number(k)]).map(k => Number(k));
+    if (selectedIndexes.length === 0) {
+      showError('No extracted orders selected.');
+      return;
+    }
+
+    let isCreating = true;
+    try {
+      // ensure dealer 'Online Order' exists
+      let { data: dealerData, error: dealerErr } = await supabase.from('dealers').select('id').eq('name', 'Online Order').maybeSingle();
+      if (dealerErr) console.warn('Dealer lookup error (will attempt to create):', dealerErr);
+      if (!dealerData) {
+        const { data: createdDealer, error: createErr } = await supabase.from('dealers').insert({ name: 'Online Order' }).select('id').single();
+        if (createErr) throw createErr;
+        dealerData = createdDealer as any;
+      }
+
+      // ensure Amazon platform id exists
+      let amazonPlatformId: string | null = null;
+      try {
+        const { data: pf, error: pfErr } = await supabase.from('online_platforms').select('id').eq('name', 'Amazon').single();
+        if (pfErr || !pf) {
+          const { data: createdPf, error: createPfErr } = await supabase.from('online_platforms').insert({ name: 'Amazon' }).select('id').single();
+          if (!createPfErr && createdPf) amazonPlatformId = createdPf.id;
+        } else { amazonPlatformId = pf.id; }
+      } catch (e) { console.warn('Failed to ensure Amazon platform id', e); }
+
+      let createdCount = 0;
+      for (const idx of selectedIndexes) {
+        const order = extractedOrders[idx];
+        if (!order) continue;
+        const totalAmount = parseFloat(order.amount as any) || 0;
+        // request sequence
+        let seqNum: number | null = null;
+        try {
+          const { data: seqData, error: seqErr } = await supabase.rpc('get_next_online_order_seq').single();
+          if (!seqErr && seqData) seqNum = seqData as unknown as number;
+        } catch (rpcErr) { console.warn('get_next_online_order_seq RPC failed', rpcErr); }
+
+        const platformName = 'Amazon';
+        const displaySeq = seqNum ?? Date.now();
+
+        const onlinePayload: any = {
+          order_number: `${platformName}-${displaySeq}`,
+          order_sequence: seqNum || null,
+          dealer_id: dealerData.id,
+          user_id: user?.id || null,
+          total_amount: totalAmount,
+          status: 'completed',
+          payment_status: 'paid',
+          order_date: new Date().toISOString(),
+          dispatched: false,
+          dispatch_date: null,
+          dispatch_number: `${platformName}-gatepass-${displaySeq}`,
+          bill_no: order.invoiceNo || null,
+        };
+
+        const { data: newOnlineOrder, error: onlineErr } = await supabase.from('online_orders').insert(onlinePayload).select('id').single();
+        if (onlineErr || !newOnlineOrder) {
+          console.error('Online order create error', onlineErr);
+          showError(`Failed to create online_order for ${order.orderNo}`);
+          continue;
+        }
+
+        // insert online_order_details rows
+        try {
+          const detailsToInsert: any[] = (order.items || []).map((it, itemIndex) => ({
+            order_id: newOnlineOrder.id,
+            client_name: order.customerName,
+            platform_id: amazonPlatformId,
+            platform_order_number: order.orderNo,
+            address: order.address,
+            raw_item_name: it.product,
+            mapped_product_id: it.mapped_product_id || null,
+          }));
+
+          if (detailsToInsert.length > 0) {
+            const { data: detailRows, error: detailErr } = await supabase.from('online_order_details').insert(detailsToInsert).select('id, mapped_product_id');
+            if (detailErr) {
+              const msg = String(detailErr.message || detailErr.description || detailErr.code || 'Unknown error');
+              if (msg.includes('online_order_details_order_id_fkey') || msg.includes('foreign key') || msg.includes('orders')) {
+                try {
+                  const mirror = {
+                    id: newOnlineOrder.id,
+                    order_number: onlinePayload.order_number,
+                    dealer_id: dealerData.id,
+                    user_id: user?.id || null,
+                    total_amount: totalAmount,
+                    status: 'completed',
+                    payment_status: 'paid',
+                    order_date: new Date().toISOString(),
+                    dispatched: false,
+                    bill_no: onlinePayload.bill_no || null,
+                  };
+                  const { error: mirrorErr } = await supabase.from('orders').insert(mirror);
+                  if (mirrorErr) throw mirrorErr;
+                  const { data: retryRows, error: retryErr } = await supabase.from('online_order_details').insert(detailsToInsert).select('id, mapped_product_id');
+                  if (retryErr) {
+                    console.error('Retry insert online_order_details failed', retryErr);
+                    showError('Failed to save online order details after attempting DB workaround: ' + String(retryErr.message || retryErr));
+                  }
+                } catch (mirrorCreateErr) {
+                  console.error('Failed to create mirror orders row for FK workaround', mirrorCreateErr);
+                  showError('Failed to save order details due to DB FK; please run the migration to change the FK to online_orders or contact your DBA.');
+                }
+              } else {
+                showError('Failed to save online order details: ' + msg);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to insert online_order_details', e);
+        }
+
+        createdCount++;
+      }
+
+      showSuccess(`Created ${createdCount} gatepass(es).` + (dispatchSeries ? ` Series: ${dispatchSeries}` : ''));
+    } catch (error: any) {
+      console.error('Gatepass creation error', error);
+      showError(error.message || 'Failed to create gatepasses.');
+    } finally {
+      isCreating = false;
+    }
+  };
 
   // helper to escape regex
   function escapeRegExp(string: string) {
@@ -395,9 +542,15 @@ const AmazonOrderExtractor = () => {
         amount: parseFloat(o.amount) || 0,
         bill_no: o.invoiceNo || ''
       }));
-      const stagingData = buildStagingFromRows(rawRows, user.id);
 
-      const { error } = await supabase.from('online_order_staging').upsert(stagingData, { onConflict: 'platform_order_number,flipkart_item_name' });
+      // Build staging rows using the shared helper then remap the provider-specific item column
+      const stagingData = buildStagingFromRows(rawRows, user.id).map((r: any) => {
+        const { flipkart_item_name, ...rest } = r;
+        return { ...rest, amazon_item_name: flipkart_item_name };
+      });
+
+      // Upsert using amazon_item_name as the provider-specific column (do not change Flipkart)
+      const { error } = await supabase.from('online_order_staging').upsert(stagingData, { onConflict: 'platform_order_number,amazon_item_name' });
 
       if (error) throw error;
 
@@ -432,12 +585,12 @@ const AmazonOrderExtractor = () => {
       const finalQty = item.qty || 1;
       const itemAmount = item.total || 0;
 
-      // Delete old staging row with raw extracted item name
+      // Delete old staging row with raw extracted item name (provider-specific column)
       const { error: deleteError } = await supabase
         .from('online_order_staging')
         .delete()
         .eq('platform_order_number', order.orderNo)
-        .eq('flipkart_item_name', item.product);
+        .eq('amazon_item_name', item.product);
       if (deleteError) console.warn('Delete warning (may not exist):', deleteError.message);
 
       // Upsert mapped product row with mapped_product_id
@@ -447,17 +600,40 @@ const AmazonOrderExtractor = () => {
           platform_order_number: order.orderNo,
           customer_name: order.customerName || null,
           shipping_address: order.address || null,
-          flipkart_item_name: selectedProduct.name,
+          amazon_item_name: selectedProduct.name,
           amount: parseFloat(itemAmount.toString()) || 0,
           quantity: finalQty,
           bill_no: order.invoiceNo || '',
           created_by: authUser.id,
           status: 'pending',
           mapped_product_id: selectedProductId
-        }], { onConflict: 'platform_order_number,flipkart_item_name' })
+        }], { onConflict: 'platform_order_number,amazon_item_name' })
         .select();
 
-      if (insertError) throw insertError;
+      // Use amazon_item_name onConflict for Amazon extractor
+      if (insertError) {
+        // try fallback: if DB schema still expects flipkart_item_name, retry with that to avoid breaking older schemas
+        if ((insertError.message || '').toLowerCase().includes('column') || (insertError.message || '').toLowerCase().includes('flipkart_item_name')) {
+          const { data: retryData, error: retryErr } = await supabase
+            .from('online_order_staging')
+            .upsert([{
+              platform_order_number: order.orderNo,
+              customer_name: order.customerName || null,
+              shipping_address: order.address || null,
+              flipkart_item_name: selectedProduct.name,
+              amount: parseFloat(itemAmount.toString()) || 0,
+              quantity: finalQty,
+              bill_no: order.invoiceNo || '',
+              created_by: authUser.id,
+              status: 'pending',
+              mapped_product_id: selectedProductId
+            }], { onConflict: 'platform_order_number,flipkart_item_name' })
+            .select();
+          if (retryErr) throw retryErr;
+        } else {
+          throw insertError;
+        }
+      }
       showSuccess(`Mapped & saved: ${selectedProduct.name} | Qty: ${finalQty} | Amount: ₹${itemAmount.toFixed(2)}`);
 
       // Update local UI state
@@ -562,10 +738,20 @@ const AmazonOrderExtractor = () => {
                   <CardDescription>Found {extractedOrders.length} orders in the document.</CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleSaveToStaging} disabled={isSaving} className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 border-none">
-                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    Save to Staging
-                  </Button>
+                        <Button variant="outline" size="sm" onClick={handleSaveToStaging} disabled={isSaving} className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 border-none">
+                          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                          Save to Staging
+                        </Button>
+                        <Input placeholder="Dispatch series (optional)" value={dispatchSeries} onChange={(e) => setDispatchSeries(e.target.value)} className="w-56 text-sm" />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleCreateGatepassesForSelected()}
+                          className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 border-none"
+                        >
+                          <ListChecks className="h-4 w-4" />
+                          Create Gatepasses for Selected
+                        </Button>
                 </div>
               </div>
             </CardHeader>
@@ -574,7 +760,17 @@ const AmazonOrderExtractor = () => {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead className="font-bold">Order No.</TableHead>
+                        <TableHead className="w-8">
+                          <input
+                            ref={selectAllRef}
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={(e) => handleToggleSelectAll(e.target.checked)}
+                            className="h-4 w-4"
+                            aria-label="Select all extracted orders"
+                          />
+                        </TableHead>
+                        <TableHead className="font-bold">Order No.</TableHead>
                       <TableHead className="font-bold">Customer Name</TableHead>
                       <TableHead className="font-bold">Address</TableHead>
                       <TableHead className="font-bold">Item Description</TableHead>
@@ -582,8 +778,8 @@ const AmazonOrderExtractor = () => {
                       <TableHead className="font-bold text-right">Amount (₹)</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
-                    {extractedOrders.map((order, index) => {
+                    <TableBody>
+                      {extractedOrders.map((order, index) => {
                       const candidates = matchedMap[index]?.matches || [];
                       const selectedId = matchedMap[index]?.selectedId;
                       const searchTerm = matchedMap[index]?.search || '';
@@ -591,8 +787,16 @@ const AmazonOrderExtractor = () => {
 
                       return (
                         <React.Fragment key={index}>
-                          <TableRow className="hover:bg-muted/30">
-                            <TableCell className="font-mono text-xs font-semibold text-yellow-600">{order.orderNo}</TableCell>
+                            <TableRow className="hover:bg-muted/30">
+                              <TableCell className="px-3">
+                                <input
+                                  type="checkbox"
+                                  checked={!!selectedExtracted[index]}
+                                  onChange={(e) => setSelectedExtracted(prev => ({ ...prev, [index]: e.target.checked }))}
+                                  className="h-4 w-4"
+                                />
+                              </TableCell>
+                              <TableCell className="font-mono text-xs font-semibold text-yellow-600">{order.orderNo}</TableCell>
                             <TableCell className="font-medium">{order.customerName}</TableCell>
                             <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={order.address}>
                               {order.address}

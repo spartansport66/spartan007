@@ -32,6 +32,9 @@ const ApprovedHODOrdersCard: React.FC = () => {
         .from('orders')
         .select(`*, dealers (name)`)
         .eq('hod_status', 'approved')
+        .eq('dispatched', false)
+        .is('dispatch_date', null)
+        .is('bill_no', null)
         .order('hod_approved_at', { ascending: false })
         .limit(200);
 
@@ -47,8 +50,31 @@ const ApprovedHODOrdersCard: React.FC = () => {
         setOrders([]);
       } else {
         const items = data || [];
+        // exclude online orders by checking online_orders and online_order_details
+        const orderIds = items.map((i:any) => i.id).filter(Boolean);
+        const onlineIds = new Set<string>();
+        if (orderIds.length > 0) {
+          try {
+            const [oOrdersRes, oDetailsRes] = await Promise.all([
+              supabase.from('online_orders').select('order_id').in('order_id', orderIds),
+              supabase.from('online_order_details').select('order_id').in('order_id', orderIds),
+            ]);
+            if (oOrdersRes.error) console.error('online_orders fetch error', oOrdersRes.error);
+            if (oDetailsRes.error) console.error('online_order_details fetch error', oDetailsRes.error);
+            (oOrdersRes.data || []).forEach((r:any) => r.order_id && onlineIds.add(r.order_id));
+            (oDetailsRes.data || []).forEach((r:any) => r.order_id && onlineIds.add(r.order_id));
+          } catch (e:any) { console.error('Error fetching online tables', e); }
+        }
+
+        const filtered = items.filter((it:any) => {
+          const dealerName = it.dealers?.name || '';
+          if (dealerName === 'Online Order') return false;
+          if (it.id && onlineIds.has(it.id)) return false;
+          return true;
+        });
+
         // put urgent orders on top while preserving relative order otherwise
-        const sorted = [...items].sort((a:any,b:any) => {
+        const sorted = [...filtered].sort((a:any,b:any) => {
           const au = !!a.urgent;
           const bu = !!b.urgent;
           if (au === bu) return 0;
