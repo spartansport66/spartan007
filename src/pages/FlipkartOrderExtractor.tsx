@@ -888,33 +888,8 @@ const FlipkartOrderExtractor = () => {
               console.warn('Failed to insert online_order_details batch', detailErr);
               const msg = String(detailErr.message || detailErr.description || detailErr.code || 'Unknown error');
               if (msg.includes('online_order_details_order_id_fkey') || msg.includes('foreign key') || msg.includes('orders')) {
-                try {
-                  // create a mirror orders row so FK constraint is satisfied (workaround)
-                  const mirror = {
-                    id: newOnlineOrder.id,
-                    order_number: onlinePayload.order_number || `${platformName}-${displaySeq}`,
-                    dealer_id: dealerData.id,
-                    user_id: user?.id || null,
-                    total_amount: totalAmount,
-                    status: 'completed',
-                    payment_status: 'paid',
-                    order_date: new Date().toISOString(),
-                    dispatched: false,
-                    bill_no: onlinePayload.bill_no || null,
-                  };
-                  const { error: mirrorErr } = await supabase.from('orders').insert(mirror);
-                  if (mirrorErr) throw mirrorErr;
-                  const { data: retryRows, error: retryErr } = await supabase.from('online_order_details').insert(detailsToInsert).select('id, mapped_product_id');
-                  if (retryErr) {
-                    console.error('Retry insert online_order_details failed', retryErr);
-                    showError('Failed to save online order details after attempting DB workaround: ' + String(retryErr.message || retryErr));
-                  } else {
-                    insertedDetail = retryRows;
-                  }
-                } catch (mirrorCreateErr) {
-                  console.error('Failed to create mirror orders row for FK workaround', mirrorCreateErr);
-                  showError('Failed to save order details due to DB FK; please run the migration to change the FK to online_orders or contact your DBA.');
-                }
+                console.error('DB schema mismatch: online_order_details.order_id still references orders(id)');
+                showError('DB schema mismatch: online_order_details.order_id references orders(id). Run the migration to change the FK to reference online_orders(id) and retry.');
               } else {
                 showError('Failed to save online order details: ' + msg);
               }

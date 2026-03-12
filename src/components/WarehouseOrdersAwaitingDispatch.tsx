@@ -306,30 +306,54 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
         .filter(o => selectedOrderIds.includes(o.id))
         .sort((a, b) => (new Date(a.order_date).getTime() - new Date(b.order_date).getTime()));
 
-      const tableColumn = ['Order No.', 'Dealer Name', 'Order Date', 'Amount'];
-      const tableRows = selected.map(o => [
-        `#${o.order_number}`,
-        o.dealer_name,
-        formatDate(o.order_date),
-        formatCurrency(o.total_amount),
-      ]);
+      let y = 30;
+      let grandTotal = 0;
 
-      const total = selected.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+      for (const o of selected) {
+        doc.setFontSize(12); doc.setFont("helvetica", "bold");
+        doc.text(`#${o.order_number} — ${o.dealer_name || 'N/A'}`, 14, y);
+        y += 6;
+        doc.setFontSize(10); doc.setFont("helvetica", "normal");
+        doc.text(`Order Date: ${formatDate(o.order_date)}    Amount: ${formatCurrency(o.total_amount)}`, 14, y);
+        y += 6;
 
-      autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        foot: [[{ content: 'Total', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, formatCurrency(total)]],
-        startY: 30,
-        styles: { fontSize: 10, cellPadding: 3 },
-        headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255] },
-        columnStyles: {
-          0: { cellWidth: 30 },
-          1: { cellWidth: 70 },
-          2: { cellWidth: 40, halign: 'center' },
-          3: { cellWidth: 30, halign: 'right' },
+        const itemRows = (o.sales || []).map((s: any) => [
+          s.products?.code || 'N/A',
+          s.products?.name || s.product_name || 'N/A',
+          (s.quantity || 0).toString(),
+          formatCurrency(s.total_price || ((s.unit_price || 0) * (s.quantity || 0)))
+        ]);
+
+        if (itemRows.length === 0) {
+          doc.text('No items available for this order', 14, y);
+          y += 10;
+        } else {
+          autoTable(doc, {
+            head: [['Code', 'Product', 'Qty', 'Total']],
+            body: itemRows,
+            startY: y,
+            styles: { fontSize: 9, cellPadding: 2 },
+            headStyles: { fillColor: [30, 58, 138], textColor: [255,255,255] },
+            columnStyles: {
+              0: { cellWidth: 22, halign: 'center' },
+              1: { cellWidth: 90 },
+              2: { cellWidth: 20, halign: 'center' },
+              3: { cellWidth: 30, halign: 'right' }
+            }
+          });
+          y = (doc as any).lastAutoTable.finalY + 8;
         }
-      });
+
+        grandTotal += o.total_amount || 0;
+
+        if (y > doc.internal.pageSize.getHeight() - 80) {
+          doc.addPage();
+          y = 20;
+        }
+      }
+
+      doc.setFontSize(12); doc.setFont("helvetica", "bold");
+      doc.text(`GRAND TOTAL: ${formatCurrency(grandTotal)}`, pageWidth - 16, doc.internal.pageSize.getHeight() - 20, { align: 'right' });
 
       doc.save(`Selected_Orders_${new Date().getTime()}.pdf`);
       showSuccess(`Printed ${selected.length} selected orders.`);

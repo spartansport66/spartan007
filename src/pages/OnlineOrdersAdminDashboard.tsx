@@ -58,23 +58,43 @@ const OnlineOrdersAdminDashboard: React.FC = () => {
       // fetch details for all orders in one go to avoid needing a DB relationship in the schema cache
       const allOrderIds = [ ...(awaitingData || []).map((o: any) => o.id), ...(dispatchedData || []).map((o: any) => o.id) ];
       let details: any[] = [];
+      // try to invoke edge function that uses service role (bypasses RLS) to get detailed rows including items
       if (allOrderIds.length > 0) {
-        // try fetching by the proper column 'order_id'
-        const { data: detData, error: detErr } = await supabase
-          .from('online_order_details')
-          .select('*')
-          .in('order_id', allOrderIds);
-        if (detErr) {
-          console.warn('Fetch online_order_details by order_id failed, falling back to batch fetch', detErr);
-          // fallback: fetch a reasonable batch and filter client-side to avoid PostgREST column errors
-          const { data: batchData, error: batchErr } = await supabase
+        try {
+          const { data: funcData, error: funcErr } = await supabase.functions.invoke('get-online-order-details', { body: { orderIds: allOrderIds } });
+          if (funcErr) {
+            console.warn('get-online-order-details function returned error:', funcErr);
+          } else if (funcData && Array.isArray(funcData)) {
+            // convert function result into the legacy 'online_order_details' array shape per order
+            const byOrder: Record<string, any[]> = {};
+            (funcData || []).forEach((d: any) => {
+              if (!byOrder[d.order_id]) byOrder[d.order_id] = [];
+              byOrder[d.order_id].push(d);
+            });
+            details = Object.keys(byOrder).flatMap(k => byOrder[k]);
+          }
+        } catch (e) {
+          console.warn('Failed to call get-online-order-details function, falling back to direct queries', e);
+        }
+
+        if (details.length === 0) {
+          // fallback: fetch by order_id directly
+          const { data: detData, error: detErr } = await supabase
             .from('online_order_details')
             .select('*')
-            .limit(2000);
-          if (batchErr) throw batchErr;
-          details = (batchData || []).filter((d: any) => allOrderIds.includes(d.order_id));
-        } else {
-          details = detData || [];
+            .in('order_id', allOrderIds);
+          if (detErr) {
+            console.warn('Fetch online_order_details by order_id failed, falling back to batch fetch', detErr);
+            // fallback: fetch a reasonable batch and filter client-side to avoid PostgREST column errors
+            const { data: batchData, error: batchErr } = await supabase
+              .from('online_order_details')
+              .select('*')
+              .limit(2000);
+            if (batchErr) throw batchErr;
+            details = (batchData || []).filter((d: any) => allOrderIds.includes(d.order_id));
+          } else {
+            details = detData || [];
+          }
         }
       }
 
@@ -84,7 +104,7 @@ const OnlineOrdersAdminDashboard: React.FC = () => {
         try {
           const { data: salesData, error: salesErr } = await supabase
             .from('sales')
-            .select('order_id, quantity, unit_price, total_price, products(name)')
+            .select('order_id, quantity, unit_price, total_price, products(name, code)')
             .in('order_id', allOrderIds as any[]);
           if (salesErr) throw salesErr;
           sales = salesData || [];
@@ -101,7 +121,7 @@ const OnlineOrdersAdminDashboard: React.FC = () => {
         details: details.length,
       });
 
-      // attach details array to each order (online_order_details.order_id references orders.id)
+      // attach details array to each order (online_order_details.order_id references online_orders.id)
       const salesByOrder: Record<string, any[]> = {};
       for (const s of sales) {
         const key = s.order_id;
@@ -109,7 +129,14 @@ const OnlineOrdersAdminDashboard: React.FC = () => {
         salesByOrder[key].push(s);
       }
 
-      const attachDetails = (orders: any[]) => orders.map(o => ({ ...o, online_order_details: details.filter(d => d.order_id === o.id), sales: salesByOrder[o.id] || [] }));
+      const attachDetails = (orders: any[]) => orders.map(o => {
+        const dets = details.filter(d => d.order_id === o.id);
+        let salesFallback = salesByOrder[o.id] || [];
+        if ((!salesFallback || salesFallback.length === 0) && dets && dets.length > 0 && dets[0].items && Array.isArray(dets[0].items)) {
+          salesFallback = dets[0].items.map((it: any) => ({ product_id: it.product_id || null, quantity: it.qty || 1, unit_price: 0, total_price: 0, products: { name: it.product_name || null, code: it.product_code || null } }));
+        }
+        return { ...o, online_order_details: dets, sales: salesFallback };
+      });
       let awaitingWithDetails = attachDetails(awaitingData || []);
       let dispatchedWithDetails = attachDetails(dispatchedData || []);
 
@@ -125,7 +152,7 @@ const OnlineOrdersAdminDashboard: React.FC = () => {
         console.debug('Orders missing item details, attempting sales fallback for order ids:', ordersMissingItems);
         const { data: salesData, error: salesErr } = await supabase
           .from('sales')
-          .select('order_id, quantity, products(name)')
+          .select('order_id, quantity, products(name, code)')
           .in('order_id', ordersMissingItems as any[]);
         console.debug('Sales fallback result', { error: salesErr, count: (salesData || []).length });
         if (!salesErr && salesData) {
@@ -157,6 +184,9 @@ const OnlineOrdersAdminDashboard: React.FC = () => {
       setTotalOrders(((awaitingWithDetails || []).length) + ((dispatchedWithDetails || []).length));
       setAwaiting(awaitingWithDetails || []);
       setDispatched(dispatchedWithDetails || []);
+      // debug: show sample orders with attached details for troubleshooting missing fields
+      console.log('OnlineOrdersAdminDashboard: sample awaiting with details', (awaitingWithDetails || []).slice(0,5));
+      console.log('OnlineOrdersAdminDashboard: sample dispatched with details', (dispatchedWithDetails || []).slice(0,5));
     } catch (err: any) {
       console.error('Failed to load online orders', err);
       const msg = (err && (err.message || err.error || err.msg)) ? (err.message || err.error || err.msg) : String(err);
@@ -178,7 +208,59 @@ const OnlineOrdersAdminDashboard: React.FC = () => {
     if (checked) setSelectedIds(awaiting.map(o => o.id)); else setSelectedIds([]);
   };
 
-  const handleView = (order: any) => { setViewOrder(order); setIsViewOpen(true); };
+  const handleView = async (order: any) => {
+    try {
+      console.log('OnlineOrdersAdminDashboard: viewOrder clicked', order);
+      // try invoking edge function to get authoritative details for this order
+      try {
+        const { data: funcData, error: funcErr } = await supabase.functions.invoke('get-online-order-details', { body: { orderIds: [order.id] } });
+        if (funcErr) console.warn('get-online-order-details error', funcErr);
+        if (funcData && Array.isArray(funcData) && funcData.length > 0) {
+          const d = funcData[0];
+          // normalize into expected shapes
+          order.online_order_details = [{
+            order_id: d.order_id,
+            client_name: d.client_name,
+            platform_order_number: d.platform_order_number,
+            raw_item_name: d.raw_item_name,
+            mapped_product_id: d.mapped_product_id,
+            items: d.items,
+          }];
+          if (d.items && Array.isArray(d.items) && d.items.length > 0) {
+            order.sales = d.items.map((it: any) => ({ products: { name: it.product_name, code: it.product_code }, quantity: it.qty, unit_price: 0, total_price: 0 }));
+          }
+          console.log('get-online-order-details result for view', d);
+        }
+      } catch (e) {
+        console.warn('Failed to invoke get-online-order-details for view', e);
+      }
+
+      console.log('online_order_details:', order?.online_order_details);
+      console.log('sales:', order?.sales);
+      let panel = document.getElementById('online-view-debug');
+      const debugObj = { id: order?.id, order_number: order?.order_number, details: order?.online_order_details, sales: order?.sales };
+      if (!panel) {
+        panel = document.createElement('pre');
+        panel.id = 'online-view-debug';
+        panel.style.position = 'fixed';
+        panel.style.left = '10px';
+        panel.style.bottom = '10px';
+        panel.style.maxWidth = '40%';
+        panel.style.maxHeight = '40%';
+        panel.style.overflow = 'auto';
+        panel.style.background = 'rgba(0,0,0,0.85)';
+        panel.style.color = '#fff';
+        panel.style.padding = '8px';
+        panel.style.zIndex = '99999';
+        document.body.appendChild(panel);
+      }
+      panel.textContent = JSON.stringify(debugObj, null, 2);
+    } catch (e) {
+      console.warn('Could not render view debug panel', e);
+    }
+    setViewOrder(order);
+    setIsViewOpen(true);
+  };
 
   const handleOpenEdit = (order: any) => { setEditingOrder(order); setIsEditOpen(true); };
 
@@ -240,14 +322,50 @@ const OnlineOrdersAdminDashboard: React.FC = () => {
     if (selectedIds.length === 0) { showError('No orders selected.'); return; }
     const rows: any[] = [];
     const all = [...awaiting, ...dispatched];
+      console.debug('OnlineOrdersAdminDashboard: bulk print selectedIds', selectedIds);
+      // visible debug: create/update a small debug panel on the page so users without DevTools can see data
+      try {
+        const selectedOrders = selectedIds.map(id => all.find(x => x.id === id)).filter(Boolean);
+        const sample = selectedOrders[0] || null;
+        const debugObj = {
+          selectedCount: selectedIds.length,
+          sampleHasDetails: !!(sample && sample.online_order_details && sample.online_order_details.length > 0),
+          sampleHasSales: !!(sample && sample.sales && sample.sales.length > 0),
+          sampleDetails: sample ? (sample.online_order_details && sample.online_order_details[0]) : null,
+          sampleSales: sample ? (sample.sales || []).slice(0,3) : null,
+        };
+        // show a toast + render a small visible panel
+        showSuccess(`DEBUG: ${debugObj.selectedCount} selected — details:${debugObj.sampleHasDetails} sales:${debugObj.sampleHasSales}`);
+        let panel = document.getElementById('online-bulk-debug');
+        if (!panel) {
+          panel = document.createElement('pre');
+          panel.id = 'online-bulk-debug';
+          panel.style.position = 'fixed';
+          panel.style.right = '10px';
+          panel.style.bottom = '10px';
+          panel.style.maxWidth = '40%';
+          panel.style.maxHeight = '40%';
+          panel.style.overflow = 'auto';
+          panel.style.background = 'rgba(0,0,0,0.8)';
+          panel.style.color = '#fff';
+          panel.style.padding = '8px';
+          panel.style.zIndex = '99999';
+          document.body.appendChild(panel);
+        }
+        panel.textContent = JSON.stringify(debugObj, null, 2);
+      } catch (e) {
+        console.warn('Could not render debug panel', e);
+      }
     for (const id of selectedIds) {
       const o = all.find(x => x.id === id);
+      console.debug('OnlineOrdersAdminDashboard: building row for order', { id, order: o });
       if (!o) continue;
       const details = (o.online_order_details && o.online_order_details[0]) || {};
-      if (o.sales && o.sales.length > 0) {
+        console.debug('OnlineOrdersAdminDashboard: attached details for order', { id, details });
+        if (o.sales && o.sales.length > 0) {
         for (const s of o.sales) {
           const prodName = (s.products && s.products.name) || s.product_name || '-';
-          const prodCode = (s.products && (s.products.code || s.products.product_code)) || s.product_code || '-';
+            const prodCode = (s.products && (s.products.code || s.products.product_code)) || s.product_code || '-';
           const qty = s.quantity != null ? String(s.quantity) : '-';
           rows.push([
             o.order_number || '-',
@@ -260,17 +378,38 @@ const OnlineOrdersAdminDashboard: React.FC = () => {
           ]);
         }
       } else {
-        // fallback: show raw_item_name as product, leave code/qty empty
-        const productText = (details.raw_item_name || '').replace(/\n/g, ' | ').replace(/₹?\s?\d+[.,]?\d*/g, '').trim() || '-';
-        rows.push([
-          o.order_number || '-',
-          o.dispatch_number || '-',
-          o.bill_no || '-',
-          details.client_name || '-',
-          productText,
-          '-',
-          '-',
-        ]);
+          // fallback: parse raw_item_name into one or more product lines with qty when possible
+          const raw = (details.raw_item_name || '').replace(/\r/g, '').trim();
+          if (raw && raw.length > 0) {
+            const parts = raw.split(/\n+/).map(p => p.trim()).filter(Boolean);
+            for (const part of parts) {
+              // try to extract qty (e.g., 'Product Name x2' or 'Qty: 2')
+              let qty = '-';
+              const m = part.match(/(?:\bqty[:\s]*|\bx|×)\s*(\d+)/i);
+              if (m && m[1]) qty = m[1];
+              // remove currency and qty hints from product text
+              const prod = part.replace(/₹?\s?\d+[.,]?\d*/g, '').replace(/(?:\bqty[:\s]*|\bx|×)\s*\d+/i, '').trim() || '-';
+              rows.push([
+                o.order_number || '-',
+                o.dispatch_number || '-',
+                o.bill_no || '-',
+                details.client_name || '-',
+                prod,
+                '-',
+                qty,
+              ]);
+            }
+          } else {
+            rows.push([
+              o.order_number || '-',
+              o.dispatch_number || '-',
+              o.bill_no || '-',
+              details.client_name || '-',
+              '-',
+              '-',
+              '-',
+            ]);
+          }
       }
     }
 

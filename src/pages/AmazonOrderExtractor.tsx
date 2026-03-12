@@ -206,30 +206,8 @@ const AmazonOrderExtractor = () => {
             if (detailErr) {
               const msg = String(detailErr.message || detailErr.description || detailErr.code || 'Unknown error');
               if (msg.includes('online_order_details_order_id_fkey') || msg.includes('foreign key') || msg.includes('orders')) {
-                try {
-                  const mirror = {
-                    id: newOnlineOrder.id,
-                    order_number: onlinePayload.order_number,
-                    dealer_id: dealerData.id,
-                    user_id: user?.id || null,
-                    total_amount: totalAmount,
-                    status: 'completed',
-                    payment_status: 'paid',
-                    order_date: new Date().toISOString(),
-                    dispatched: false,
-                    bill_no: onlinePayload.bill_no || null,
-                  };
-                  const { error: mirrorErr } = await supabase.from('orders').insert(mirror);
-                  if (mirrorErr) throw mirrorErr;
-                  const { data: retryRows, error: retryErr } = await supabase.from('online_order_details').insert(detailsToInsert).select('id, mapped_product_id');
-                  if (retryErr) {
-                    console.error('Retry insert online_order_details failed', retryErr);
-                    showError('Failed to save online order details after attempting DB workaround: ' + String(retryErr.message || retryErr));
-                  }
-                } catch (mirrorCreateErr) {
-                  console.error('Failed to create mirror orders row for FK workaround', mirrorCreateErr);
-                  showError('Failed to save order details due to DB FK; please run the migration to change the FK to online_orders or contact your DBA.');
-                }
+                console.error('DB schema mismatch: online_order_details.order_id still references orders(id)');
+                showError('DB schema mismatch: online_order_details.order_id references orders(id). Run the migration to change the FK to reference online_orders(id) and retry.');
               } else {
                 showError('Failed to save online order details: ' + msg);
               }
@@ -335,6 +313,50 @@ const AmazonOrderExtractor = () => {
       .map(p => p.trim())
       .filter(Boolean);
     return parts.length ? parts : [item];
+  };
+
+  // Parse qty and total from an SL block. Try multiple patterns and fall back to sensible defaults.
+  const parseQtyAndTotal = (blockText: string, orderAmountFallback = 0) => {
+    let qty = 1;
+    let total = NaN;
+    const cleaned = blockText.replace(/\u00A0/g, ' ');
+
+    // Try to find explicit Qty: patterns
+    const qtyMatch1 = cleaned.match(/(?:Qty|Quantity|QTY)[:\s]*([0-9]{1,4})\b/i);
+    if (qtyMatch1) qty = parseInt(qtyMatch1[1], 10);
+
+    // Try patterns like '₹12,345.00  2  ₹24,690.00' (unit price, qty, total)
+    const qtyMatch2 = cleaned.match(/₹[\d,]+(?:\.\d{2})?\s+([0-9]{1,4})\s+₹[\d,]+(?:\.\d{2})?/);
+    if (qtyMatch2) qty = parseInt(qtyMatch2[1], 10);
+
+    // Try patterns like '2 x ₹123.45' or '₹123.45 x2' or '2×₹123.45'
+    const qtyMatch3 = cleaned.match(/([0-9]{1,4})\s*[x×]\s*₹[\d,]+(?:\.\d{2})?/i) || cleaned.match(/₹[\d,]+(?:\.\d{2})?\s*[x×]\s*([0-9]{1,4})/i);
+    if (qtyMatch3) qty = parseInt(qtyMatch3[1], 10);
+
+    // Try to find explicit total in the block (last currency amount)
+    const amtMatches = cleaned.match(/₹?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+\.[0-9]{2})/g);
+    if (amtMatches && amtMatches.length > 0) {
+      const last = amtMatches[amtMatches.length - 1];
+      const num = parseFloat(last.replace(/[^0-9\.]/g, '').replace(/,/g, ''));
+      if (!isNaN(num)) total = num;
+    }
+
+    // If no explicit total but we have unit price and qty, compute total
+    if (isNaN(total)) {
+      // find unit price
+      const unitMatch = cleaned.match(/₹\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+\.[0-9]{2})/);
+      if (unitMatch) {
+        const unit = parseFloat(unitMatch[1].replace(/,/g, ''));
+        if (!isNaN(unit) && qty) total = unit * qty;
+      }
+    }
+
+    // Fallback to evenly splitting the order amount
+    if (isNaN(total) || total <= 0) {
+      total = orderAmountFallback || 0;
+    }
+
+    return { qty: Number.isFinite(qty) ? qty : 1, total };
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -515,12 +537,35 @@ const AmazonOrderExtractor = () => {
       // displayed qty matches the fetched value and saved DB rows.
       const deduplicated = Object.values(grouped).map(g => {
         const order = g.order;
-        const items = (order.items || []).map(it => ({ ...it }));
+        // merge identical product lines (normalize product text) to avoid duplicate rows
+        const mergedMap = new Map<string, { product: string; qty: number; total: number; mapped_product_id?: string; sku?: string }>();
+        (order.items || []).forEach((it: any) => {
+          const key = (it.product || '').replace(/[^a-zA-Z0-9]+/g, ' ').trim().toLowerCase();
+          const existing = mergedMap.get(key);
+          if (existing) {
+            // If the duplicate entry has the same total as existing, it's likely a repeated page
+            // (same product displayed twice). In that case, keep the original values and do not double-count.
+            if (Math.abs((existing.total || 0) - (it.total || 0)) < 0.01) {
+              // prefer existing; but ensure mapped_product_id is preserved
+              if (!existing.mapped_product_id && it.mapped_product_id) existing.mapped_product_id = it.mapped_product_id;
+            } else {
+              // different totals -> treat as distinct quantities (sum)
+              existing.qty = (existing.qty || 0) + (it.qty || 0);
+              existing.total = (existing.total || 0) + (it.total || 0);
+              if (!existing.mapped_product_id && it.mapped_product_id) existing.mapped_product_id = it.mapped_product_id;
+            }
+          } else {
+            mergedMap.set(key, { product: it.product, qty: it.qty || 0, total: it.total || 0, mapped_product_id: it.mapped_product_id, sku: it.sku });
+          }
+        });
+
+        const items = Array.from(mergedMap.values()).map(it => ({ ...it }));
         const totalQty = items.reduce((s, it) => s + (it.qty || 0), 0);
         const totalAmt = items.reduce((s, it) => s + (it.total || 0), 0).toFixed(2);
         return { ...order, items, qty: totalQty, amount: totalAmt } as ExtractedOrder;
       });
 
+      console.log('Amazon extractor - deduplicated orders:', deduplicated);
       setExtractedOrders(deduplicated);
       showSuccess(`Successfully extracted ${deduplicated.length} orders (from ${allExtracted.length} entries)!`);
     } catch (error: any) {
@@ -658,7 +703,7 @@ const AmazonOrderExtractor = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
-      <div className="w-full max-w-6xl">
+      <div className="w-full max-w-7xl">
         <div className="flex justify-between items-center mb-6">
           <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="flex items-center gap-2">
             <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
@@ -806,7 +851,7 @@ const AmazonOrderExtractor = () => {
                               {selected && <div className="mt-1 text-xs font-bold text-blue-600">✓ {selected.name}</div>}
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">{order.invoiceNo || '-'}</TableCell>
-                            <TableCell className="text-right font-bold text-green-600">₹{order.amount}</TableCell>
+                            <TableCell className="text-right font-bold text-green-600">₹{order.amount || '0.00'}</TableCell>
                           </TableRow>
 
                           {order.items && order.items.length > 0 && (

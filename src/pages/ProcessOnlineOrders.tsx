@@ -167,12 +167,13 @@ const ProcessOnlineOrders: React.FC = () => {
   // Matching heuristics: build matchedMap when products or stagedOrders change
   useEffect(() => {
     if (!products || products.length === 0 || stagedOrders.length === 0) return;
+
     // preserve any manually chosen selections when recomputing the map
     const prevSelected: Record<string, string | undefined> = {};
     Object.keys(matchedMap).forEach(k => {
       if (matchedMap[k].selectedId) prevSelected[k] = matchedMap[k].selectedId;
     });
-    const map: Record<string, { matches: Product[]; selectedId?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }> = {};
+
     const sizeRegex = /Size[:\s]*([0-9]+)/i;
 
     const extractNumericToken = (str: string | undefined) => {
@@ -191,6 +192,8 @@ const ProcessOnlineOrders: React.FC = () => {
       numericParts: (p.code || '').toString().match(/\d{2,}/g) || []
     } as any));
 
+    const map: Record<string, { matches: Product[]; selectedId?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }> = {};
+
     for (const s of stagedOrders) {
       const text = s.flipkart_item_name || '';
       const sizeMatch = text.match(sizeRegex);
@@ -199,64 +202,25 @@ const ProcessOnlineOrders: React.FC = () => {
       const numericToken = extractNumericToken(text);
       const normText = normalize(text);
 
-      let candidates = enriched.filter((p: any) => {
+      const candidateProducts = enriched.filter((p: any) => {
         if (!p.code && !p.name) return false;
-
         if (p.normCode && normText.includes(p.normCode)) return true;
-
-        if (numericToken) {
-          if (p.numericParts.some((np: string) => np.includes(numericToken) || numericToken.includes(np))) return true;
-          if ((p.normCode || '').includes(numericToken)) return true;
-        }
-
-        if (p.normName && normText.includes(p.normName.substring(0, Math.min(12, p.normName.length)))) return true;
-
-        const textTokens = normText.split(/\s+/).filter((t: string) => t.length > 2);
-        const productTokens = (p.normName || '').split(/\s+/).filter((t: string) => t.length > 2);
-        if (textTokens.length > 0 && productTokens.length > 0) {
-          const intersect = textTokens.filter((t: string) => productTokens.includes(t));
-          if (intersect.length >= 2) return true;
-          if (intersect.length >= 1 && textTokens.includes('spartan')) return true;
-        }
-
+        if (p.normName && normText.includes(p.normName)) return true;
+        if (size && p.size && String(p.size) === String(size)) return true;
+        if (numericToken && p.numericParts && p.numericParts.includes(numericToken)) return true;
         return false;
       });
 
-      if (size) {
-        const sizeFiltered = candidates.filter((p: any) => (p.size || '').toString() === size.toString() || (p.name || '').toLowerCase().includes(`size: ${size}`));
-        if (sizeFiltered.length > 0) candidates = sizeFiltered;
-      }
-
-      const candidateProducts: Product[] = candidates.map((c: any) => ({ id: c.id, name: c.name, code: c.code, size: c.size }));
-
-      // attempt to infer a selected id from previous choice, unique candidate,
-      // or suffix appended to the extracted name (" — ProductName").
-      let selectedId: string | undefined = undefined;
-      if (prevSelected[s.id]) {
-        selectedId = prevSelected[s.id];
-      } else if (candidateProducts.length === 1) {
-        selectedId = candidateProducts[0].id;
-      } else {
-        // inspect suffix after last '—'
-        const parts = (s.flipkart_item_name || '').split('—').map(p => p.trim());
-        if (parts.length > 1) {
-          const suffix = parts.slice(1).join('—');
-          const prod = products.find(p => {
-            const name = (p.name || '').toString();
-            const code = (p.code || '').toString();
-            return name === suffix || code === suffix || name.includes(suffix) || suffix.includes(name);
-          });
-          if (prod) selectedId = prod.id;
-        }
-      }
+      let selectedId: string | undefined = prevSelected[s.id];
+      if (!selectedId && candidateProducts.length === 1) selectedId = candidateProducts[0].id;
 
       map[s.id] = {
-        matches: candidateProducts,
+        matches: candidateProducts as any,
         selectedId,
         debug: {
           numericToken,
           normText,
-          candidateCodes: candidateProducts.map(cp => (cp.code || '').toString())
+          candidateCodes: candidateProducts.map((cp: any) => (cp.code || '').toString())
         }
       };
     }
@@ -329,6 +293,8 @@ const ProcessOnlineOrders: React.FC = () => {
     setIsProcessingBulk(true);
     let successCount = 0;
 
+    const displaySeq = Date.now();
+
     // warn if some orders have no mapped product; they will still be created but
     // without a mapping. this gives the user a heads-up so they can choose to map
     // before running the action next time.
@@ -347,6 +313,7 @@ const ProcessOnlineOrders: React.FC = () => {
       if (dealerError) throw new Error("Could not find 'Online Order' dealer. Please create one first.");
 
       const paymentStatus = bulkPaymentMethod === 'COD' ? 'pending' : 'paid';
+      const displaySeq = Date.now();
 
       // group rows by order number so we create a single order per platform_order_number
       const groups: Record<string, StagedOrder[]> = {};

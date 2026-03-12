@@ -436,30 +436,8 @@ const OnlineOrderDashboard = () => {
             if (detailsError) {
               const msg = String(detailsError.message || detailsError.description || detailsError.code || 'Unknown error');
               if (msg.includes('online_order_details_order_id_fkey') || msg.includes('foreign key') || msg.includes('orders')) {
-                try {
-                  // create mirror orders row to satisfy FK
-                  const mirror = {
-                    id: newOnlineOrder.id,
-                    order_number: onlinePayload.order_number,
-                    dealer_id: dealer.id,
-                    user_id: user.id,
-                    total_amount: staged.amount,
-                    status: 'completed',
-                    payment_status: 'paid',
-                    order_date: new Date().toISOString(),
-                  };
-                  const { error: mirrorErr } = await supabase.from('orders').insert(mirror);
-                  if (mirrorErr) throw mirrorErr;
-                  await supabase.from('online_order_details').insert({
-                    order_id: newOnlineOrder.id,
-                    client_name: staged.customer_name,
-                    platform_id: selectedPlatformId,
-                    platform_order_number: staged.platform_order_number,
-                    raw_item_name: staged.flipkart_item_name,
-                  });
-                } catch (mirrorCreateErr) {
-                  console.error('Failed to create mirror orders row for FK workaround', mirrorCreateErr);
-                }
+                console.error('DB schema mismatch: online_order_details.order_id still references orders(id)');
+                showError('DB schema mismatch: online_order_details.order_id references orders(id). Run the migration to change the FK to reference online_orders(id) and retry.');
               } else {
                 console.error('Details insert error', detailsError);
               }

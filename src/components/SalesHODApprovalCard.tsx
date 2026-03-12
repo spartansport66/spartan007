@@ -186,7 +186,7 @@ const SalesHODApprovalCard: React.FC = () => {
 
         {loading ? <p>Loading...</p> : filteredOrders.length === 0 ? <p className="text-center text-muted-foreground py-8">No pending orders.</p> : (
           <div className="overflow-x-auto">
-            <div className="max-h-[360px] overflow-y-auto">{/* shows ~8 rows before scrolling */}
+            <div className="max-h-[440px] overflow-y-auto">{/* shows ~10 rows before scrolling */}
               <Table>
               <TableHeader>
                 <TableRow>
