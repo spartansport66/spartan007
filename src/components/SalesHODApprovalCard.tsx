@@ -38,22 +38,47 @@ const SalesHODApprovalCard: React.FC = () => {
   const fetchPending = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('orders')
         .select(`*, dealers (name)`)
         .eq('dispatched', false)
         .is('dispatch_date', null)
-        .or("hod_status.eq.pending,hod_status.is.null")
+        .is('bill_no', null)
+        .is('dispatch_number', null)
+        .eq('hod_status', 'pending')
         .order('order_date', { ascending: true });
 
+      const { data, error } = await query;
       if (error) {
         console.error('fetchPending error', error.message);
         showError('Failed to load pending orders.');
         setOrders([]);
       } else {
-        const filtered = (data || []).filter((o: any) => {
+        const items = data || [];
+        const orderIds = items.map((i: any) => i.id).filter(Boolean);
+        const orderNumbers = items.map((i: any) => i.order_number).filter(Boolean);
+
+        const onlineOrderNumbers = new Set<string>();
+        const onlineOrderIds = new Set<string>();
+        if (orderIds.length > 0 || orderNumbers.length > 0) {
+          try {
+            const [ooRes, odRes] = await Promise.all([
+              supabase.from('online_orders').select('order_number').in('order_number', orderNumbers),
+              supabase.from('online_order_details').select('order_id').in('order_id', orderIds),
+            ]);
+            if (ooRes.error) console.error('online_orders fetch error', ooRes.error);
+            if (odRes.error) console.error('online_order_details fetch error', odRes.error);
+            (ooRes.data || []).forEach((r: any) => { if (r.order_number) onlineOrderNumbers.add(r.order_number); });
+            (odRes.data || []).forEach((r: any) => { if (r.order_id) onlineOrderIds.add(r.order_id); });
+          } catch (e: any) { console.error('Error fetching online tables', e); }
+        }
+
+        const filtered = items.filter((o: any) => {
           const dealerName = o.dealers?.name || '';
-          return dealerName !== 'Online Order';
+          if (dealerName === 'Online Order') return false;
+          if (o.order_number && onlineOrderNumbers.has(o.order_number)) return false;
+          if (o.id && onlineOrderIds.has(o.id)) return false;
+          return true;
         });
 
         setOrders(filtered.map((o: any) => ({
