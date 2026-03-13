@@ -116,6 +116,11 @@ const Dashboard = () => {
   const [isBulkPrinting, setIsBulkPrinting] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
 
+  const deliveryLocation = null; // Define or fetch the actual value
+  const transportName = null; // Define or fetch the actual value
+  const bookingDestination = null; // Define or fetch the actual value
+  const dispatchDate = null; // Define or fetch the actual value
+
   const handleRefreshData = useCallback(() => {
     setRefreshKey(prev => prev + 1);
   }, []);
@@ -391,15 +396,15 @@ const Dashboard = () => {
         }
         const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
         
-        const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name;
-        const partyAddress = isOnline 
+        const partyName = isOnline && onlineDetails ? onlineDetails.client_name : (orderData.dealers as any).name;
+        const partyLocation = isOnline && onlineDetails
           ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
-          : `${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`;
-        const partyPhone = isOnline ? onlineDetails.contact_no : (orderData.dealers as any).phone;
+          : 'N/A';
+        const partyPhone = isOnline && onlineDetails ? onlineDetails.contact_no : (orderData.dealers as any).phone;
 
         doc.setFont("helvetica", "bold"); doc.text("PARTY DETAILS:", margin, y);
         doc.setFont("helvetica", "normal"); y += 5; doc.text(partyName, margin, y);
-        y += 5; const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
+        y += 5; const addressLines = doc.splitTextToSize(partyLocation, pageWidth / 2 - margin);
         doc.text(addressLines, margin, y);
         
         let rightY = 35; const rightColX = pageWidth / 2 + 10;
@@ -408,9 +413,11 @@ const Dashboard = () => {
         rightY += 5; doc.text(`Date: ${formatDate(orderData.order_date)}`, rightColX, rightY);
         rightY += 5; doc.text(`Phone: ${partyPhone || 'N/A'}`, rightColX, rightY);
 
-        if (isOnline) {
-          rightY += 5; doc.text(`Platform: ${(onlineDetails.online_platforms as any)?.name || 'N/A'}`, rightColX, rightY);
-          rightY += 5; doc.text(`Platform Order #: ${onlineDetails.platform_order_number || 'N/A'}`, rightColX, rightY);
+        if (isOnline && onlineDetails) {
+          rightY += 5;
+          doc.text(`Platform: ${(onlineDetails.online_platforms as any)?.name || 'N/A'}`, rightColX, rightY);
+          rightY += 5;
+          doc.text(`Platform Order #: ${onlineDetails.platform_order_number || 'N/A'}`, rightColX, rightY);
         }
 
         y = Math.max(y + (addressLines.length * 5), rightY + 10);
@@ -624,7 +631,16 @@ const Dashboard = () => {
       </Card>
       <MadeWithDyad />
       <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} showGatePassButton={false} />
-      <EditOrderDialog orderId={selectedOrderIdForEdit} isOpen={isEditOrderDialogOpen} onOrderUpdated={handleOrderUpdated} onOpenChange={setIsEditOrderDialogOpen} />
+      <EditOrderDialog
+        orderId={selectedOrderIdForEdit}
+        isOpen={isEditOrderDialogOpen}
+        onOrderUpdated={handleOrderUpdated}
+        onOpenChange={setIsEditOrderDialogOpen}
+        deliveryLocation={deliveryLocation}
+        transportName={transportName}
+        bookingDestination={bookingDestination}
+        dispatchDate={dispatchDate}
+      />
       <SalesPersonSalesReport isOpen={isSalesPersonSalesReportOpen} onOpenChange={setIsSalesPersonSalesReportOpen} />
       <SalesPersonDealerReport isOpen={isSalesPersonDealerReportOpen} onOpenChange={setIsSalesPersonDealerReportOpen} />
       <SalesPersonPaymentsReport isOpen={isSalesPersonPaymentsReportOpen} onOpenChange={setIsSalesPersonPaymentsReportOpen} />

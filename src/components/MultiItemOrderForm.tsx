@@ -77,6 +77,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [chequeDdNo, setChequeDdNo] = useState<string>('');
   const [chequeDdDate, setChequeDdDate] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
+  const [deliveryLocation, setDeliveryLocation] = useState('');
+  const [transportName, setTransportName] = useState('');
+  const [bookingDestination, setBookingDestination] = useState('');
+  const [dateToBeDispatched, setDateToBeDispatched] = useState('');
+
   
   const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState(false);
   const [dealerSearch, setDealerSearch] = useState('');
@@ -349,6 +354,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       return;
     }
 
+    if (!deliveryLocation || !transportName || !bookingDestination || !dateToBeDispatched) {
+      showError("Please fill in all Additional Order Details fields: Delivery Location, Transport Name, Booking Destination, and Date of Dispatch.");
+      return;
+    }
+
     setLoading(true);
     try {
       // 1. Create the Order
@@ -363,6 +373,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           payment_due_date: paymentDueDate,
           status: 'completed',
           payment_status: 'pending_approval',
+          delivery_location: deliveryLocation,
+          transport_name: transportName,
+          booking_destination: bookingDestination,
+          date_of_dispatch: dateToBeDispatched,
         })
         .select('id, order_number')
         .single();
@@ -471,6 +485,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const selectedDealerData = useMemo(() => dealers.find(d => d.id === selectedDealer), [dealers, selectedDealer]);
   const openingBalance = selectedDealerData?.opening_balance || 0;
   const pendingLimit = dealerCreditLimit - (dealerBalance || 0);
+
+  const handleDeliveryLocationChange = (value: string) => {
+    setDeliveryLocation(value);
+  };
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
@@ -640,6 +658,65 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               {['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod) && (<div><Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label><Input id="transactionId" value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="e.g., TXN123456" /></div>)}
             </div>
           </div>
+
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>Additional Order Details</CardTitle>
+              <CardDescription>Provide delivery and transport details.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="deliveryLocation">Delivery Location <span className="text-red-500">*</span></Label>
+                  <Select
+                    value={deliveryLocation}
+                    onValueChange={handleDeliveryLocationChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Delivery Location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Door Delivery">Door Delivery</SelectItem>
+                      <SelectItem value="Godown Delivery">Godown Delivery</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="transportName">Transport Name <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="transportName"
+                    value={transportName}
+                    onChange={(e) => setTransportName(e.target.value)}
+                    placeholder="Enter Transport Name"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="bookingDestination">Booking Destination <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="bookingDestination"
+                    value={bookingDestination}
+                    onChange={(e) => setBookingDestination(e.target.value)}
+                    placeholder="Enter Booking Destination"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="dateToBeDispatched">Date to be Dispatched <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="dateToBeDispatched"
+                    type="date"
+                    value={dateToBeDispatched}
+                    onChange={(e) => setDateToBeDispatched(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSubmitDisabled}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}</Button>
         </form>

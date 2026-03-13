@@ -35,6 +35,10 @@ interface ExtractedOrder {
   unitPrice?: string;
   taxAmount?: string;
   igst?: string;
+  deliveryLocation?: string;
+  transportName?: string;
+  bookingDestination?: string;
+  dateOfDispatch?: string;
 }
 
 interface Product { id: string; name: string; code?: string; size?: string | number | null; dp?: number; gst?: string | number }
@@ -52,6 +56,11 @@ const SpartanOrderExtractor = () => {
   const [productMapping, setProductMapping] = useState<Record<number, string>>({});
   const [productSearchText, setProductSearchText] = useState<Record<number, string>>({});
   const [openDropdown, setOpenDropdown] = useState<number | null>(null);
+
+  const [deliveryLocation, setDeliveryLocation] = useState<string | null>(null);
+  const [transportName, setTransportName] = useState<string | null>(null);
+  const [bookingDestination, setBookingDestination] = useState<string | null>(null);
+  const [dateOfDispatch, setDateOfDispatch] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -286,7 +295,11 @@ const SpartanOrderExtractor = () => {
       hsn,
       unitPrice,
       taxAmount,
-      igst
+      igst,
+      deliveryLocation,
+      transportName,
+      bookingDestination,
+      dateOfDispatch
     };
   };
 
@@ -558,6 +571,10 @@ const SpartanOrderExtractor = () => {
                       <TableHead className="font-bold">Invoice Date</TableHead>
                       <TableHead className="font-bold">Invoice No.</TableHead>
                       <TableHead className="font-bold text-right">Amount (₹)</TableHead>
+                      <TableHead className="font-bold">Delivery Location</TableHead>
+                      <TableHead className="font-bold">Transport Name</TableHead>
+                      <TableHead className="font-bold">Booking Destination</TableHead>
+                      <TableHead className="font-bold">Dispatch Date</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -670,6 +687,10 @@ const SpartanOrderExtractor = () => {
                           <TableCell className="text-xs text-muted-foreground">{order.invoiceDate || '-'}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">{order.invoiceNo || '-'}</TableCell>
                           <TableCell className="text-right font-bold text-green-600">₹{order.amount}</TableCell>
+                          <TableCell>{order.deliveryLocation || 'N/A'}</TableCell>
+                          <TableCell>{order.transportName || 'N/A'}</TableCell>
+                          <TableCell>{order.bookingDestination || 'N/A'}</TableCell>
+                          <TableCell>{formatDate(order.dateOfDispatch)}</TableCell>
                         </TableRow>
                       );
                     })}

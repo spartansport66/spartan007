@@ -24,6 +24,11 @@ const SalesPersonDisapprovedOrdersCard: React.FC = () => {
   const [selectedOrderIdForEdit, setSelectedOrderIdForEdit] = useState<string | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
 
+  const deliveryLocation = null; // Define or fetch the actual value
+  const transportName = null; // Define or fetch the actual value
+  const bookingDestination = null; // Define or fetch the actual value
+  const dispatchDate = null; // Define or fetch the actual value
+
   const fetchDisapproved = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -127,7 +132,16 @@ const SalesPersonDisapprovedOrdersCard: React.FC = () => {
       </CardContent>
 
       <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isDetailsOpen} onOpenChange={setIsDetailsOpen} />
-      <EditOrderDialog orderId={selectedOrderIdForEdit} isOpen={isEditOpen} onOpenChange={setIsEditOpen} onOrderUpdated={fetchDisapproved} />
+      <EditOrderDialog
+        orderId={selectedOrderIdForEdit}
+        isOpen={isEditOpen}
+        onOpenChange={setIsEditOpen}
+        onOrderUpdated={fetchDisapproved}
+        deliveryLocation={deliveryLocation}
+        transportName={transportName}
+        bookingDestination={bookingDestination}
+        dispatchDate={dispatchDate}
+      />
     </Card>
   );
 };

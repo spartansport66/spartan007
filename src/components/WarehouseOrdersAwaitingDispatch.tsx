@@ -23,6 +23,17 @@ interface OrderToDispatch {
   total_amount: number;
   dealer_name: string;
   dealer_id: string;
+  sales?: Array<{
+    quantity: number;
+    total_price: number;
+    unit_price: number;
+    discount_percent: number;
+    gst_percent: number;
+    products: {
+      name: string;
+      code: string;
+    };
+  }>;
   online_order_details?: {
     client_name: string;
     platform_order_number: string | null;
@@ -90,7 +101,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
         .select(`
           id, order_number, order_date, total_amount, 
           dealers (id, name),
-          online_order_details (client_name, platform_order_number, raw_item_name, products(name, code))
+          sales (quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code))
         `)
         .eq('dispatched', false)
         .is('dispatch_date', null)
@@ -141,6 +152,19 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
           return dealerName !== 'Online Order' && !hasOnlineDetails && !isFromOnline;
         });
 
+        const formattedOrders = (ordersData || []).map((order: any) => ({
+          id: order.id,
+          order_number: order.order_number,
+          order_date: order.order_date,
+          total_amount: order.total_amount,
+          dealer_name: order.dealers?.name || 'N/A',
+          dealer_id: order.dealers?.id || '',
+          online_order_details: detailsByOrder.get(order.id) || order.online_order_details?.[0] || null,
+          deliveryLocation: order.delivery_location,
+          transportName: order.transport_name,
+          bookingDestination: order.booking_destination,
+          dateOfDispatch: order.date_of_dispatch,
+        }));
         setOrders(filtered.map((order: any) => ({
           id: order.id,
           order_number: order.order_number,
@@ -149,6 +173,10 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
           dealer_name: order.dealers?.name || 'N/A',
           dealer_id: order.dealers?.id || '',
           online_order_details: detailsByOrder.get(order.id) || order.online_order_details?.[0] || null,
+          deliveryLocation: order.delivery_location,
+          transportName: order.transport_name,
+          bookingDestination: order.booking_destination,
+          dateOfDispatch: order.date_of_dispatch,
         })));
       }
     } catch (error: any) {

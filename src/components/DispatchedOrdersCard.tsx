@@ -28,6 +28,10 @@ interface DispatchedOrder {
   dispatch_number: number;
   bill_no: string;
   dispatch_date: string | null;
+  delivery_location: string;
+  transport_name: string;
+  booking_destination: string;
+  date_of_dispatch: string;
 }
 
 interface DealerOption {
@@ -47,6 +51,10 @@ const DispatchedOrdersCard: React.FC = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isBulkPrinting, setIsBulkPrinting] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [deliveryLocation, setDeliveryLocation] = useState<string | null>(null);
+  const [transportName, setTransportName] = useState<string | null>(null);
+  const [bookingDestination, setBookingDestination] = useState<string | null>(null);
+  const [dateOfDispatch, setDateOfDispatch] = useState<string | null>(null);
 
   // Format date as dd/mm/yyyy
   const formatDate = (dateString: string | null) => {
@@ -102,7 +110,8 @@ const DispatchedOrdersCard: React.FC = () => {
         .from('orders')
         .select(`
           id, order_number, order_date, total_amount, gate_pass_dispatch_time, dispatch_number, bill_no, dispatch_date,
-          dealers (id, name)
+          dealers (id, name),
+          delivery_location, transport_name, booking_destination, date_of_dispatch
         `)
         .not('dispatch_number', 'is', null) 
         .order('dispatch_number', { ascending: false });
@@ -137,11 +146,15 @@ const DispatchedOrdersCard: React.FC = () => {
           order_number: order.order_number,
           order_date: order.order_date,
           total_amount: order.total_amount,
-          dealer_name: order.dealers?.name || 'N/A',
+          dealer_name: order.dealer_name,
           gate_pass_dispatch_time: order.gate_pass_dispatch_time,
           dispatch_number: order.dispatch_number,
           bill_no: order.bill_no,
           dispatch_date: order.dispatch_date,
+          delivery_location: order.deliveryLocation || null,
+          transport_name: order.transportName || null,
+          booking_destination: order.bookingDestination || null,
+          date_of_dispatch: order.dateOfDispatch || null,
         }));
         setOrders(formattedOrders);
         setCurrentPage(1); // Reset to first page on new fetch
@@ -503,6 +516,10 @@ const DispatchedOrdersCard: React.FC = () => {
         isOpen={isEditOrderDialogOpen}
         onOpenChange={setIsEditOrderDialogOpen}
         onOrderUpdated={handleOrderUpdated}
+        deliveryLocation={deliveryLocation}
+        transportName={transportName}
+        bookingDestination={bookingDestination}
+        dispatchDate={dateOfDispatch}
       />
     </Card>
   );

@@ -22,10 +22,14 @@ CREATE POLICY "Gate Keepers can authorize final dispatch"
   FOR UPDATE
   TO authenticated
   USING (
-    is_gate_keeper() AND dispatched = TRUE AND bill_no IS NOT NULL
+    is_gate_keeper() AND dispatched = TRUE AND bill_no IS NOT NULL AND
+    delivery_location IS NOT NULL AND transport_name IS NOT NULL AND
+    booking_destination IS NOT NULL AND date_of_dispatch IS NOT NULL
   )
   WITH CHECK (
-    is_gate_keeper() AND dispatched = TRUE AND bill_no IS NOT NULL
+    is_gate_keeper() AND dispatched = TRUE AND bill_no IS NOT NULL AND
+    delivery_location IS NOT NULL AND transport_name IS NOT NULL AND
+    booking_destination IS NOT NULL AND date_of_dispatch IS NOT NULL
   );
 
 -- 3. RLS Policy for 'dealers' table: Allow Gate Keepers to read all dealer data

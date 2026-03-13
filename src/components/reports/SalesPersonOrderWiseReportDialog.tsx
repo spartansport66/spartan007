@@ -98,16 +98,20 @@ const SalesPersonOrderWiseReportDialog: React.FC<SalesPersonOrderWiseReportDialo
     }
     try {
       const doc = new jsPDF();
-      doc.text(`Sales Person — Order-wise Report`, 14, 18);
-      doc.text(`${selectedSalesPersonLabel} | ${dateRangeString}`, 14, 26);
+      const pageWidth = doc.internal.pageSize.getWidth();
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(16);
+      doc.text(`Sales Person — Order-wise Report`, pageWidth/2, 18, { align: 'center' });
+      doc.setFontSize(12);
+      doc.text(`${selectedSalesPersonLabel} | ${dateRangeString}`, pageWidth/2, 26, { align: 'center' });
+      // single-line summary centered
       doc.setFontSize(11);
-      doc.text(`Billed Orders: ${billedRows.length}   Total: ₹${billedTotal.toFixed(2)}`, 14, 36);
-      doc.text(`Pending Orders: ${pendingRows.length}   Total: ₹${pendingTotal.toFixed(2)}`, 14, 42);
-      doc.text(`All Orders: ${rows.length}   Total: ₹${(billedTotal + pendingTotal).toFixed(2)}`, 14, 48);
+      const summaryY = 36;
+      doc.text(`Billed Orders: ${billedRows.length} ₹${billedTotal.toFixed(2)}   Pending Orders: ${pendingRows.length} ₹${pendingTotal.toFixed(2)}   All Orders: ${rows.length} ₹${(billedTotal + pendingTotal).toFixed(2)}`, pageWidth/2, summaryY, { align: 'center', fontStyle: 'bold' });
       autoTable(doc, {
         head: [['Order #', 'Date', 'Amount', 'Status', 'Bill No']],
         body: dataToPrint.map(r => [r.order_number, new Date(r.order_date).toLocaleString(), `₹${(r.total_amount || 0).toFixed(2)}`, r.bill_no && String(r.bill_no).trim() !== '' ? 'Billed' : 'Pending', r.bill_no || '-']),
-        startY: 56,
+        startY: summaryYStart + 20,
       });
       const safeName = selectedSalesPersonLabel.replace(/[^a-z0-9]+/gi, '_');
       doc.save(`sales_person_order_wise_report_${safeName}_${fromDate}_to_${toDate}.pdf`);
@@ -146,15 +150,13 @@ const SalesPersonOrderWiseReportDialog: React.FC<SalesPersonOrderWiseReportDialo
       ctx.font = 'bold 16px Arial';
       ctx.fillText(`${selectedSalesPersonLabel} | ${dateRangeString}`, width / 2, 70);
 
-      // Summary lines under header
-      ctx.font = '14px Arial';
-      ctx.textAlign = 'left';
+      // single-line summary under header
+      ctx.font = 'bold 16px Arial';
+      ctx.textAlign = 'center';
       ctx.fillStyle = '#111827';
-      ctx.fillText(`Billed Orders: ${billedRows.length}   Total: ₹${billedTotal.toFixed(2)}`, 60, 96);
-      ctx.fillText(`Pending Orders: ${pendingRows.length}   Total: ₹${pendingTotal.toFixed(2)}`, 60, 118);
-      ctx.fillText(`All Orders: ${rows.length}   Total: ₹${(billedTotal + pendingTotal).toFixed(2)}`, 60, 140);
+      ctx.fillText(`Billed Orders: ${billedRows.length} ₹${billedTotal.toFixed(2)}    Pending Orders: ${pendingRows.length} ₹${pendingTotal.toFixed(2)}    All Orders: ${rows.length} ₹${(billedTotal + pendingTotal).toFixed(2)}`, width/2, 96);
 
-      // start table below summaries
+      // start table start below summaries
       ctx.fillStyle = '#333333';
       ctx.font = '16px Arial';
       let y = 160;
@@ -202,19 +204,21 @@ const SalesPersonOrderWiseReportDialog: React.FC<SalesPersonOrderWiseReportDialo
           <DialogDescription>Filter by sales person and date range. Shows billed vs pending orders and totals.</DialogDescription>
         </DialogHeader>
 
-          <div className="mb-6 text-center">
-            <div className="text-xl font-bold">Total Orders: <span className="text-2xl">{rows.length}</span> — <span className="text-2xl">₹{(billedTotal + pendingTotal).toFixed(2)}</span></div>
-            <div className="mt-4 flex justify-center gap-12">
-              <div className="text-center">
-                <div className="text-lg font-semibold">Billed Orders</div>
-                <div className="text-3xl font-bold">{billedRows.length}</div>
-                <div className="text-lg font-semibold">₹{billedTotal.toFixed(2)}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-semibold">Pending Orders</div>
-                <div className="text-3xl font-bold">{pendingRows.length}</div>
-                <div className="text-lg font-semibold">₹{pendingTotal.toFixed(2)}</div>
-              </div>
+          <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-3 bg-card rounded">
+              <div className="text-sm text-muted-foreground">Billed Orders</div>
+              <div className="text-2xl font-bold">{billedRows.length}</div>
+              <div className="text-sm">Total: ₹{billedTotal.toFixed(2)}</div>
+            </div>
+            <div className="p-3 bg-card rounded">
+              <div className="text-sm text-muted-foreground">Pending Orders</div>
+              <div className="text-2xl font-bold">{pendingRows.length}</div>
+              <div className="text-sm">Total: ₹{pendingTotal.toFixed(2)}</div>
+            </div>
+            <div className="p-3 bg-card rounded">
+              <div className="text-sm text-muted-foreground">All Orders</div>
+              <div className="text-2xl font-bold">{rows.length}</div>
+              <div className="text-sm">Total: ₹{(billedTotal + pendingTotal).toFixed(2)}</div>
             </div>
           </div>
 

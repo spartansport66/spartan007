@@ -59,6 +59,10 @@ interface OrderDetail {
   dispatched: boolean;
   payment_status: string;
   online_order_details?: OnlineOrderInfo | null;
+  delivery_location: string | null;
+  transport_name: string | null;
+  booking_destination: string | null;
+  date_of_dispatch: string | null;
 }
 
 interface OrderDetailsDialogProps {
@@ -90,6 +94,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   const [orderDetails, setOrderDetails] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [deliveryLocation, setDeliveryLocation] = useState<string | null>(null);
+  const [transportName, setTransportName] = useState<string | null>(null);
+  const [bookingDestination, setBookingDestination] = useState<string | null>(null);
+  const [dateOfDispatch, setDateOfDispatch] = useState<string | null>(null);
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -108,6 +116,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         .from('orders')
         .select(`
           id, order_number, order_date, total_amount, discount_amount, status, payment_status, user_id, bill_no, dispatch_date, dispatch_number, dispatched,
+          delivery_location, transport_name, booking_destination, date_of_dispatch,
           dealers (id, name, address, phone, city, state, country)
         `)
         .eq('id', id)
@@ -156,39 +165,43 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       
       let onlineOrderDetails: OnlineOrderInfo | null = null;
       if (dealer?.name === 'Online Order') {
-        const { data: onlineData, error: onlineError } = await supabase
-          .from('online_order_details')
-          .select(`
-            client_name,
-            platform_order_number,
-            contact_no,
-            city,
-            state,
-            address,
-            raw_item_name,
-            mapped_product_id,
-            products (name, code),
-            online_platforms (name)
-          `)
-          .eq('order_id', id)
-          .single();
-        
-        if (onlineError && onlineError.code !== 'PGRST116') {
-          console.error("Error fetching online order details:", onlineError);
-        } else if (onlineData) {
-          onlineOrderDetails = {
-            client_name: onlineData.client_name,
-            platform_name: (onlineData.online_platforms as any)?.name || 'N/A',
-            platform_order_number: onlineData.platform_order_number,
-            contact_no: onlineData.contact_no,
-            city: onlineData.city,
-            state: onlineData.state,
-            address: onlineData.address,
-            raw_item_name: onlineData.raw_item_name,
-            mapped_product_id: onlineData.mapped_product_id,
-            mapped_product_name: (onlineData.products as any)?.name || null,
-            mapped_product_code: (onlineData.products as any)?.code || null,
-          };
+        try {
+          const { data: onlineData, error: onlineError } = await supabase
+            .from('online_order_details')
+            .select(`
+              client_name,
+              platform_order_number,
+              contact_no,
+              city,
+              state,
+              address,
+              raw_item_name,
+              mapped_product_id,
+              products (name, code),
+              online_platforms (name)
+            `)
+            .eq('order_id', id)
+            .single();
+          
+          if (onlineError && onlineError.code !== 'PGRST116') {
+            console.warn("Warning fetching online order details:", onlineError.message);
+          } else if (onlineData) {
+            onlineOrderDetails = {
+              client_name: onlineData.client_name,
+              platform_name: (onlineData.online_platforms as any)?.name || 'N/A',
+              platform_order_number: onlineData.platform_order_number,
+              contact_no: onlineData.contact_no,
+              city: onlineData.city,
+              state: onlineData.state,
+              address: onlineData.address,
+              raw_item_name: onlineData.raw_item_name,
+              mapped_product_id: onlineData.mapped_product_id,
+              mapped_product_name: (onlineData.products as any)?.name || null,
+              mapped_product_code: (onlineData.products as any)?.code || null,
+            };
+          }
+        } catch (fallbackError) {
+          console.warn("Failed to fetch online order details (fallback):", fallbackError);
         }
       }
 
@@ -213,7 +226,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         dispatched: orderData.dispatched,
         payment_status: orderData.payment_status,
         online_order_details: onlineOrderDetails,
+        delivery_location: orderData.delivery_location,
+        transport_name: orderData.transport_name,
+        booking_destination: orderData.booking_destination,
+        date_of_dispatch: orderData.date_of_dispatch,
       });
+      setDeliveryLocation(orderData.delivery_location);
+      setTransportName(orderData.transport_name);
+      setBookingDestination(orderData.booking_destination);
+      setDateOfDispatch(orderData.date_of_dispatch);
     } catch (error: any) {
       console.error('Error fetching order details:', error);
       showError(`Failed to load order details: ${error.message}`);
@@ -301,7 +322,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     const hasActualItems = orderDetails.items.some(i => {
       // consider product_name meaningful if it's not the placeholder text
       if (i.product_name && i.product_name !== 'Pending Mapping' && i.product_name !== 'N/A') return true;
-      if (i.product_id) return true;
       return false;
     });
 
@@ -403,7 +423,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
     const hasActualItems2 = orderDetails.items.some(i => {
       if (i.product_name && i.product_name !== 'Pending Mapping' && i.product_name !== 'N/A') return true;
-      if (i.product_id) return true;
       return false;
     });
 
@@ -428,178 +447,175 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
           "0%",
           `Rs.${orderDetails.total_amount.toFixed(2)}`
         ]]
-      : [[ "N/A", orderDetails.online_order_details?.raw_item_name || "Pending Mapping", "1", `Rs.${orderDetails.total_amount.toFixed(2)}`, "0%", "0%", `Rs.${orderDetails.total_amount.toFixed(2)}` ]];
+      : [[ "N/A", orderDetails.online_order_details?.raw_item_name || "Pending Mapping", "1" ]];
 
-    autoTable(doc, { 
-      head: [tableColumn], 
-      body: tableRows, 
-      startY: y, 
-      headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 }, 
-      columnStyles: {
-        0: { cellWidth: 20, halign: 'center' },
-        1: { cellWidth: 'auto' },
-        2: { cellWidth: 15, halign: 'center' },
-        3: { cellWidth: 25, halign: 'right' },
-        4: { cellWidth: 15, halign: 'center' },
-        5: { cellWidth: 15, halign: 'center' },
-        6: { cellWidth: 25, halign: 'right' }
-      },
-      styles: { fontSize: 8, cellPadding: 2 } 
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: y,
+      headStyles: { fillColor: darkBlue, halign: 'center' },
+      columnStyles: { 0: { cellWidth: 40, halign: 'center' }, 1: { cellWidth: 'auto' }, 2: { cellWidth: 30, halign: 'center' } },
+      styles: { fontSize: 9, cellPadding: 3 }
     });
-    
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
-    const subtotal = orderDetails.items.length > 0 
-      ? orderDetails.items.reduce((sum, s) => sum + s.total_price, 0)
-      : orderDetails.total_amount;
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Subtotal: Rs.${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
-    
-    let currentY = finalY;
-    if (orderDetails.discount_amount > 0) {
-      currentY += 5;
-      doc.text(`Global Discount: -Rs.${orderDetails.discount_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
-    }
-    
-    currentY += 7;
+
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text(`FINAL TOTAL: Rs.${orderDetails.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+    doc.text(`TOTAL BILL AMOUNT: Rs. ${orderDetails.total_amount.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
 
-    doc.save(`Order_Details_${orderDetails.order_number}.pdf`);
+    const gatePassNo = orderDetails.dispatch_number || 'NA';
+    const orderNo = orderDetails.order_number || 'NA';
+    const billNo = (orderDetails.bill_no || 'NA').replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `GatePass_${gatePassNo}_Order_${orderNo}_Bill_${billNo}.pdf`;
+    doc.save(fileName);
     if (onPrint) {
       onPrint(orderDetails.id);
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Order Details #{orderDetails?.order_number}</DialogTitle>
-          <DialogDescription>View full order information and items.</DialogDescription>
-        </DialogHeader>
-        {loading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>
-        ) : orderDetails ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p><strong>Dealer:</strong> {orderDetails.dealer_name}</p>
-                <p><strong>Date:</strong> {formatDate(orderDetails.order_date)}</p>
-              </div>
-              <div className="text-right">
-                <p><strong>Status:</strong> {orderDetails.status}</p>
-                <p><strong>Payment:</strong> {orderDetails.payment_status}</p>
-              </div>
-            </div>
-            {orderDetails.online_order_details && (
-              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md space-y-1 text-sm">
-                <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Online Order Details</h4>
-                <p><strong>Client Name:</strong> {orderDetails.online_order_details.client_name}</p>
-                <p><strong>Platform:</strong> {orderDetails.online_order_details.platform_name}</p>
-                <p><strong>Platform Order #:</strong> {orderDetails.online_order_details.platform_order_number || 'N/A'}</p>
-                <p><strong>Contact:</strong> {orderDetails.online_order_details.contact_no || 'N/A'}</p>
-                <p><strong>Address:</strong> {orderDetails.online_order_details.address || `${orderDetails.online_order_details.city || ''}, ${orderDetails.online_order_details.state || ''}`.trim() || 'N/A'}</p>
-                <p><strong>Extracted Item (Dummy):</strong> {orderDetails.online_order_details.raw_item_name || 'N/A'}</p>
-                {orderDetails.online_order_details.mapped_product_name && (
-                  <p className="font-bold text-green-700 dark:text-green-300">
-                    <strong>Mapped Product:</strong> {orderDetails.online_order_details.mapped_product_name} ({orderDetails.online_order_details.mapped_product_code})
-                  </p>
-                )}
-              </div>
-            )}
-            <Separator />
-            <div className="border rounded-md overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    {!isGateKeeper && (
-                      <>
-                        <TableHead className="text-right">DP</TableHead>
-                        <TableHead className="text-right">Disc %</TableHead>
-                        <TableHead className="text-right">GST %</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
-                      </>
+    <div>
+      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Order Details</DialogTitle>
+            <DialogDescription>View and print order information</DialogDescription>
+          </DialogHeader>
+          <div>
+            {orderDetails && (
+              <div className="space-y-6 p-4 bg-white rounded-lg">
+                {/* Header */}
+                <div className="border-b pb-4 text-center">
+                  <h2 className="text-2xl font-bold">ORDER INVOICE</h2>
+                  <p className="text-sm text-muted-foreground">Order #{orderDetails.order_number}</p>
+                </div>
+
+                {/* Order & Party Details */}
+                <div className="grid grid-cols-2 gap-6">
+                  {/* Left: Party Details */}
+                  <div className="border p-4 rounded">
+                    <h3 className="font-bold text-sm mb-3">BILL TO:</h3>
+                    <p className="font-semibold">{orderDetails.dealer_name}</p>
+                    <p className="text-sm text-muted-foreground">{orderDetails.dealer_address}</p>
+                    <p className="text-sm text-muted-foreground">{orderDetails.dealer_city}, {orderDetails.dealer_state}, {orderDetails.dealer_country}</p>
+                    <p className="text-sm mt-2"><strong>Phone:</strong> {orderDetails.dealer_phone}</p>
+                  </div>
+
+                  {/* Right: Order Details */}
+                  <div className="border p-4 rounded">
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between"><span className="font-semibold">Order Date:</span><span>{formatDate(orderDetails.order_date)}</span></div>
+                      <div className="flex justify-between"><span className="font-semibold">Bill No:</span><span>{orderDetails.bill_no || 'N/A'}</span></div>
+                      <div className="flex justify-between"><span className="font-semibold">Dispatch No:</span><span>{orderDetails.dispatch_number || 'N/A'}</span></div>
+                      <div className="flex justify-between"><span className="font-semibold">Dispatch Date:</span><span>{formatDate(orderDetails.dispatch_date)}</span></div>
+                      <div className="flex justify-between"><span className="font-semibold">Sales Person:</span><span>{orderDetails.sales_person_name}</span></div>
+                      <div className="flex justify-between"><span className="font-semibold">Payment Status:</span><span className="text-blue-600 font-semibold">{orderDetails.payment_status}</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Delivery Details */}
+                <div className="border p-3 rounded bg-blue-50">
+                  <h3 className="font-bold text-sm mb-2">DELIVERY & TRANSPORT DETAILS:</h3>
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div>
+                      <p className="font-semibold text-blue-700">1. Delivery Location</p>
+                      <p className="text-muted-foreground">{orderDetails.delivery_location || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-blue-700">2. Transport Name</p>
+                      <p className="text-muted-foreground">{orderDetails.transport_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-blue-700">3. Booking Destination</p>
+                      <p className="text-muted-foreground">{orderDetails.booking_destination || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-blue-700">4. Date of Dispatch</p>
+                      <p className="text-muted-foreground">{formatDate(orderDetails.date_of_dispatch)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                <div>
+                  <h3 className="font-bold text-sm mb-3">ORDER ITEMS:</h3>
+                  <div className="border rounded overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-muted">
+                        <TableRow>
+                          <TableHead className="text-xs font-bold">Code</TableHead>
+                          <TableHead className="text-xs font-bold">Product</TableHead>
+                          <TableHead className="text-xs font-bold text-right">Qty</TableHead>
+                          <TableHead className="text-xs font-bold text-right">Unit Price</TableHead>
+                          <TableHead className="text-xs font-bold text-right">Discount %</TableHead>
+                          <TableHead className="text-xs font-bold text-right">Taxable Value</TableHead>
+                          <TableHead className="text-xs font-bold text-right">GST %</TableHead>
+                          <TableHead className="text-xs font-bold text-right">GST Amt</TableHead>
+                          <TableHead className="text-xs font-bold text-right">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {orderDetails.items.map((item, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="text-xs">{item.product_code}</TableCell>
+                            <TableCell className="text-xs">{item.product_name}</TableCell>
+                            <TableCell className="text-xs text-right">{item.quantity}</TableCell>
+                            <TableCell className="text-xs text-right">₹{item.unit_price.toFixed(2)}</TableCell>
+                            <TableCell className="text-xs text-right">{item.discount_percent}%</TableCell>
+                            <TableCell className="text-xs text-right">₹{((item.unit_price * (1 - item.discount_percent / 100)) * item.quantity).toFixed(2)}</TableCell>
+                            <TableCell className="text-xs text-right">{item.product_gst}%</TableCell>
+                            <TableCell className="text-xs text-right">₹{(((item.unit_price * (1 - item.discount_percent / 100)) * item.quantity * parseFloat(item.product_gst)) / 100).toFixed(2)}</TableCell>
+                            <TableCell className="text-xs text-right font-semibold">₹{item.total_price.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                {/* Totals Section */}
+                <div className="flex justify-end">
+                  <div className="w-80 border rounded p-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Subtotal:</span>
+                      <span>₹{orderDetails.items.reduce((sum, item) => sum + item.total_price, 0).toFixed(2)}</span>
+                    </div>
+                    {orderDetails.discount_amount > 0 && (
+                      <div className="flex justify-between text-sm text-red-600">
+                        <span>Discount:</span>
+                        <span>-₹{orderDetails.discount_amount.toFixed(2)}</span>
+                      </div>
                     )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {hasActualItems ? (
-                    orderDetails.items.map((item, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell>{item.product_name} ({item.product_code})</TableCell>
-                        <TableCell className="text-right">{item.quantity}</TableCell>
-                        {!isGateKeeper && (
-                          <>
-                            <TableCell className="text-right">{formatCurrency(item.unit_price)}</TableCell>
-                            <TableCell className="text-right">{item.discount_percent}%</TableCell>
-                            <TableCell className="text-right">{item.product_gst}%</TableCell>
-                            <TableCell className="text-right font-medium">{formatCurrency(item.total_price)}</TableCell>
-                          </>
-                        )}
-                      </TableRow>
-                    ))
-                  ) : orderDetails.online_order_details?.mapped_product_name ? (
-                    <TableRow>
-                      <TableCell className="font-medium text-green-700">
-                        {orderDetails.online_order_details.mapped_product_name} ({orderDetails.online_order_details.mapped_product_code})
-                      </TableCell>
-                      <TableCell className="text-right">1</TableCell>
-                      {!isGateKeeper && (
-                        <>
-                          <TableCell className="text-right">{formatCurrency(orderDetails.total_amount)}</TableCell>
-                          <TableCell className="text-right">0%</TableCell>
-                          <TableCell className="text-right">0%</TableCell>
-                          <TableCell className="text-right font-medium">{formatCurrency(orderDetails.total_amount)}</TableCell>
-                        </>
-                      )}
-                    </TableRow>
-                  ) : (
-                    <TableRow>
-                      <TableCell className="italic text-muted-foreground">
-                        {orderDetails.online_order_details?.raw_item_name || "Pending Mapping"}
-                      </TableCell>
-                      <TableCell className="text-right">1</TableCell>
-                      {!isGateKeeper && (
-                        <>
-                          <TableCell className="text-right">{formatCurrency(orderDetails.total_amount)}</TableCell>
-                          <TableCell className="text-right">0%</TableCell>
-                          <TableCell className="text-right">0%</TableCell>
-                          <TableCell className="text-right font-medium">{formatCurrency(orderDetails.total_amount)}</TableCell>
-                        </>
-                      )}
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            {!isGateKeeper && (
-              <div className="text-right space-y-1">
-                {orderDetails.discount_amount > 0 && (
-                  <p className="text-sm text-muted-foreground">Global Discount: -{formatCurrency(orderDetails.discount_amount)}</p>
-                )}
-                <p className="text-lg font-bold">Final Total: {formatCurrency(orderDetails.total_amount)}</p>
+                    <div className="flex justify-between text-sm border-t pt-2">
+                      <span>Total GST:</span>
+                      <span>₹{orderDetails.items.reduce((sum, item) => {
+                        const taxableValue = (item.unit_price * (1 - item.discount_percent / 100)) * item.quantity;
+                        const gstAmount = (taxableValue * parseFloat(item.product_gst)) / 100;
+                        return sum + gstAmount;
+                      }, 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-lg border-t border-b py-2">
+                      <span>GRAND TOTAL:</span>
+                      <span>₹{orderDetails.total_amount.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
+            {!orderDetails && <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>}
           </div>
-        ) : null}
-        <DialogFooter className="flex flex-wrap gap-2">
-          {showGatePassButton && (
-            <Button variant="outline" onClick={handlePrintGatePass} disabled={!orderDetails}>
-              <Printer className="mr-2 h-4 w-4" /> Print Gate Pass
+          <DialogFooter>
+            <Button onClick={handlePrintGatePass} disabled={!orderDetails}>
+              Print Gate Pass
             </Button>
-          )}
-          <Button variant="outline" onClick={handlePrintOrderDetails} disabled={!orderDetails}>
-            <FileText className="mr-2 h-4 w-4" /> Print Order Details
-          </Button>
-          <Button onClick={() => onOpenChange(false)}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <Button onClick={handlePrintOrderDetails} disabled={!orderDetails}>
+              Print Order Details
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 

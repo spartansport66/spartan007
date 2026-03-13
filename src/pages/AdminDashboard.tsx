@@ -8,6 +8,7 @@ import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail, ShoppingCart } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
+import EditOrderDialog from '@/components/EditOrderDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
 import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';

@@ -67,11 +67,11 @@ interface OrderToEdit {
   round_off: number;
   bill_no: string | null;
   dispatch_date: string | null;
-  delivery_location: string | null;
-  transport_name: string | null;
-  booking_destination: string | null;
-  date_of_dispatch: string | null;
   items: OrderItem[];
+  raw_item_name?: string | null;
+  mapped_product_id?: string | null;
+  client_name?: string | null;
+  platform_order_number?: string | null;
 }
 
 interface EditOrderDialogProps {
@@ -87,13 +87,10 @@ const formSchema = z.object({
   dealerId: z.string().uuid({ message: 'Please select a dealer.' }),
   salesPersonId: z.string().uuid({ message: 'Please select a sales person.' }),
   discountAmount: z.preprocess((val) => Number(val), z.number().min(0)),
-  billNo: z.string().default(''),
-  dispatchDate: z.string().default(''),
+  billNo: z.string().nullable().optional(),
+  dispatchDate: z.string().nullable().optional(),
   roundOff: z.preprocess((val) => Number(val), z.number().default(0)),
-  deliveryLocation: z.string().default(''),
-  transportName: z.string().default(''),
-  bookingDestination: z.string().default(''),
-  dateOfDispatch: z.string().default(''),
+  clientName: z.string().optional(),
 });
 
 // Helper function to fetch all products with pagination
@@ -130,6 +127,7 @@ const fetchAllProducts = async (): Promise<Product[]> => {
 
 const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated }) => {
   const { user, session } = useSession();
+  const [editingOrder, setEditingOrder] = useState<OrderToEdit | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
@@ -157,10 +155,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       billNo: '',
       dispatchDate: '',
       roundOff: 0,
-      deliveryLocation: '',
-      transportName: '',
-      bookingDestination: '',
-      dateOfDispatch: '',
+      clientName: '',
     },
   });
 
@@ -190,7 +185,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const { data: orderRaw, error: orderError } = await supabase
         .from('orders')
         .select(`
-          id, order_number, order_date, dealer_id, user_id, total_amount, discount_amount, round_off, bill_no, dispatch_date, delivery_location, transport_name, booking_destination, date_of_dispatch,
+          id, order_number, order_date, dealer_id, user_id, total_amount, discount_amount, round_off, bill_no, dispatch_date, urgent,
           dealers (name),
           sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst))
         `)
@@ -199,60 +194,30 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
       if (orderError) throw orderError;
 
-      const fetchedItems: OrderItem[] = (orderRaw.sales || []).map((sale: any, index: number) => {
-        const unitPrice = sale.unit_price || sale.products?.dp || 0;
-        const discPercent = sale.discount_percent || 0;
-        const gstPercent = sale.gst_percent || parseFloat(sale.products?.gst || "0") || 0;
-        
-        const taxableUnitPrice = unitPrice * (1 - discPercent / 100);
-        const taxableValue = taxableUnitPrice * sale.quantity;
-        const gstAmount = (taxableValue * gstPercent) / 100;
-
-        return {
-          id: `${sale.product_id}-${index}`,
+      console.log('Fetched order details:', orderRaw);
+      setEditingOrder({
+        ...orderRaw,
+        items: orderRaw.sales?.map((sale: any) => ({
+          id: sale.product_id, // Assuming product_id as unique identifier
           product_id: sale.product_id,
           quantity: sale.quantity,
-          product_name: sale.products?.name || 'N/A',
-          product_code: sale.products?.code || 'N/A',
-          unit_dp: unitPrice,
-          discount_percent: discPercent,
-          gst_percent: gstPercent,
-          taxable_value: taxableValue,
-          gst_amount: gstAmount,
-          total_price: sale.total_price,
-        };
+          product_name: sale.products?.name || '',
+          product_code: sale.products?.code || '',
+          unit_dp: sale.products?.dp || 0,
+          discount_percent: sale.discount_percent || 0,
+          gst_percent: sale.gst_percent || 0,
+          taxable_value: sale.total_price || 0, // Assuming total_price as taxable_value
+          gst_amount: (sale.total_price || 0) * (sale.gst_percent || 0) / 100, // Calculating GST amount
+          total_price: sale.total_price || 0,
+        })) || [],
       });
-
-      const orderToSet: OrderToEdit = {
-        ...orderRaw,
-        items: fetchedItems,
-      };
-      setOrderData(orderToSet);
-      
-      setOrderItems(fetchedItems);
-
-      form.reset({
-        orderNumber: orderRaw.order_number,
-        orderDate: orderRaw.order_date ? orderRaw.order_date.split('T')[0] : '',
-        dealerId: orderRaw.dealer_id,
-        salesPersonId: orderRaw.user_id,
-        discountAmount: orderRaw.discount_amount || 0,
-        billNo: orderRaw.bill_no || '',
-        dispatchDate: orderRaw.dispatch_date ? orderRaw.dispatch_date.split('T')[0] : '',
-        roundOff: orderRaw.round_off || 0,
-        deliveryLocation: orderRaw.delivery_location || '',
-        transportName: orderRaw.transport_name || '',
-        bookingDestination: orderRaw.booking_destination || '',
-        dateOfDispatch: orderRaw.date_of_dispatch ? orderRaw.date_of_dispatch.split('T')[0] : '',
-      });
-
     } catch (error: any) {
-      console.error('Error fetching order details:', error.message);
-      showError(`Failed to load order details: ${error.message}`);
+      console.error('Failed to load order details:', error.message);
+      showError('Failed to load order details.');
     } finally {
       setLoading(false);
     }
-  }, [form, user]);
+  }, []);
 
   useEffect(() => {
     if (isOpen && orderId) {
@@ -383,18 +348,16 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           total_amount: finalOrderAmount,
           discount_amount: finalDiscountAmount,
           round_off: values.roundOff,
-          bill_no: values.billNo && values.billNo.trim() ? values.billNo : null,
-          dispatch_date: values.dispatchDate && values.dispatchDate.trim() ? values.dispatchDate : null,
-          delivery_location: values.deliveryLocation && values.deliveryLocation.trim() ? values.deliveryLocation : null,
-          transport_name: values.transportName && values.transportName.trim() ? values.transportName : null,
-          booking_destination: values.bookingDestination && values.bookingDestination.trim() ? values.bookingDestination : null,
-          date_of_dispatch: values.dateOfDispatch && values.dateOfDispatch.trim() ? values.dateOfDispatch : null,
+          bill_no: values.billNo || null,
+          dispatch_date: values.dispatchDate || null,
         })
         .eq('id', orderData.id);
 
       if (orderUpdateError) throw orderUpdateError;
 
-      // 2. Update Sales Items
+      // 2. Update Online Details if applicable
+      // For online orders, we only insert into sales at Gate Pass time if not already there.
+      // But if the user is editing an existing order with sales, we update them.
       if (orderItems.length > 0) {
         await supabase.from('sales').delete().eq('order_id', orderData.id);
         const salesToInsert = orderItems.map(item => ({
@@ -409,7 +372,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         await supabase.from('sales').insert(salesToInsert);
       }
 
-      // 3. Update Payment
+      // 4. Update Payment
       const { data: payment } = await supabase
         .from('payments')
         .select('id')
@@ -439,8 +402,21 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const currentSalesPersonId = form.watch('salesPersonId');
   
   const userListToRender = useMemo(() => {
-    return assignableUsers.filter(u => u.user_type === 'sales_person');
-  }, [assignableUsers]);
+    if (!orderData) return [];
+    
+    let filteredList: SalesPerson[];
+    filteredList = assignableUsers.filter(u => u.user_type === 'online_orders' || u.user_type === 'admin');
+
+    const isCurrentUserInList = filteredList.some(u => u.id === currentSalesPersonId);
+    if (!isCurrentUserInList && currentSalesPersonId) {
+      const currentUser = assignableUsers.find(u => u.id === currentSalesPersonId);
+      if (currentUser) {
+        return [...filteredList, currentUser];
+      }
+    }
+    
+    return filteredList;
+  }, [orderData, assignableUsers, currentSalesPersonId]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -464,27 +440,15 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                 <FormField control={form.control} name="orderDate" render={({ field }) => (<FormItem><FormLabel>Order Date</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="dealerId" render={({ field }) => (<FormItem><FormLabel>Dealer</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select Dealer" /></SelectTrigger></FormControl><SelectContent>{dealers.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="salesPersonId" render={({ field }) => (<FormItem><FormLabel>Sales Person</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select Sales Person" /></SelectTrigger></FormControl><SelectContent>{userListToRender.map(op => <SelectItem key={op.id} value={op.id}>{op.first_name} {op.last_name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
-                <FormField control={form.control} name="billNo" render={({ field }) => (<FormItem><FormLabel>Bill Number</FormLabel><FormControl><Input placeholder="e.g., INV-001" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={form.control} name="dispatchDate" render={({ field }) => (<FormItem><FormLabel>Bill Date (Dispatch Date)</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-              </div>
-
-              <Separator />
-
-              <div className="border rounded-md p-4 space-y-4 bg-blue-50">
-                <h3 className="font-semibold text-lg text-blue-900">Delivery & Transport Details</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField control={form.control} name="deliveryLocation" render={({ field }) => (<FormItem><FormLabel>Delivery Location</FormLabel><FormControl><Input placeholder="e.g., Warehouse A" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="transportName" render={({ field }) => (<FormItem><FormLabel>Transport Name</FormLabel><FormControl><Input placeholder="e.g., XYZ Logistics" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="bookingDestination" render={({ field }) => (<FormItem><FormLabel>Booking Destination</FormLabel><FormControl><Input placeholder="e.g., Delhi" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="dateOfDispatch" render={({ field }) => (<FormItem><FormLabel>Date of Dispatch</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                </div>
+                <FormField control={form.control} name="billNo" render={({ field }) => (<FormItem><FormLabel>Bill Number</FormLabel><FormControl><Input placeholder="e.g., INV-001" {...field} value={field.value || ''} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="dispatchDate" render={({ field }) => (<FormItem><FormLabel>Bill Date (Dispatch Date)</FormLabel><FormControl><Input type="date" {...field} value={field.value || ''} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
               </div>
 
               <Separator />
 
               <div className="space-y-4">
                 <Label className="text-lg font-semibold">Add/Modify Items</Label>
-                <div className="flex flex-col gap-3 p-3 border rounded-md bg-muted/50 max-h-[300px] overflow-y-auto">
+                <div className="flex flex-col gap-4 p-4 border rounded-md bg-muted/50">
                   <div className="w-full">
                     <Label>Product</Label>
                     <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
@@ -541,7 +505,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                 {orderItems.length > 0 && (
                   <div className="max-h-[350px] overflow-y-auto border rounded-md">
                     <Table>
-                      <TableHeader><TableRow><TableHead>Product</TableHead><TableHead className="w-24">Qty</TableHead><TableHead className="w-32">DP (₹)</TableHead><TableHead className="w-24">Disc %</TableHead><TableHead className="w-24">GST %</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
+                      <TableHeader><TableRow><TableHead>Product</TableHead><TableHead className="w-24">Qty</TableHead><TableHead className="w-32">DP (Rs.)</TableHead><TableHead className="w-24">Disc %</TableHead><TableHead className="w-24">GST %</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
                       <TableBody>
                         {orderItems.map(item => (
                           <TableRow key={item.id}>
@@ -565,7 +529,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                 <div className="flex justify-between text-sm"><span>Total GST:</span><span>₹{totalGstAmount.toFixed(2)}</span></div>
                 <Separator className="my-1" />
                 <div className="flex justify-between text-base font-medium"><span>Subtotal (Incl. GST):</span><span>₹{preGlobalDiscountTotal.toFixed(2)}</span></div>
-                <FormField control={form.control} name="discountAmount" render={({ field }) => (<FormItem className="flex justify-between items-center"><FormLabel className="text-base font-medium">Additional Global Discount (₹)</FormLabel><FormControl><Input type="number" step="0.01" {...field} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} disabled={isSubmitting} /></FormControl></FormItem>)} />
+                <FormField control={form.control} name="discountAmount" render={({ field }) => (<FormItem className="flex justify-between items-center"><FormLabel className="text-base font-medium">Additional Global Discount (Rs.)</FormLabel><FormControl><Input type="number" step="0.01" {...field} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} disabled={isSubmitting} /></FormControl></FormItem>)} />
                 <FormField control={form.control} name="roundOff" render={({ field }) => (<FormItem className="flex justify-between items-center"><FormLabel className="text-base font-medium">Round Off (+/-)</FormLabel><FormControl><Input type="number" step="0.01" {...field} className="w-32 text-right" disabled={isSubmitting} /></FormControl></FormItem>)} />
                 <Separator className="my-2" />
                 <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
