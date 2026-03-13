@@ -373,6 +373,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           payment_due_date: paymentDueDate,
           status: 'completed',
           payment_status: 'pending_approval',
+          dispatched: false,
+          dispatch_number: null,
           delivery_location: deliveryLocation,
           transport_name: transportName,
           booking_destination: bookingDestination,
