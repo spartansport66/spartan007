@@ -47,6 +47,18 @@ const GatePassDashboard = () => {
     setRefreshKey(prev => prev + 1);
   };
 
+  // Helper function to get platform prefix
+  const getPlatformPrefix = (platform: string): string => {
+    const prefixes: Record<string, string> = {
+      'Flipkart': 'F',
+      'Meesho': 'M',
+      'Amazon': 'A',
+      'Spartan': 'S',
+      'Website': 'W',
+    };
+    return prefixes[platform] || 'W';
+  };
+
   if (sessionLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">

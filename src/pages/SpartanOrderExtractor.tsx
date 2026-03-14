@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, FileText, Upload, AlertCircle, Eye, EyeOff, Save, ListChecks, Trash2 } from 'lucide-react';
+import { Loader2, ArrowLeft, FileText, Upload, AlertCircle, Eye, EyeOff, Save, ListChecks, Trash2, Download, Search } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -13,11 +13,13 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import { buildStagingFromRows } from '@/utils/onlineOrderHelpers';
+import { buildStagingFromRows, upsertStaging, parseItemWithQty } from '@/utils/onlineOrderHelpers';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Import the worker directly
+// Import the worker directly from the package to avoid CDN issues
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+
+// Set up PDF.js worker using the imported URL
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 interface ExtractedOrder {
@@ -26,8 +28,9 @@ interface ExtractedOrder {
   address: string;
   item: string;
   amount: string;
-  qty: number;
   invoiceNo?: string;
+  qty?: number;
+  items?: Array<{product: string; qty: number; total: number; mapped_product_id?: string}>;
   invoiceDate?: string;
   productName?: string;
   productSku?: string;
@@ -51,16 +54,38 @@ const SpartanOrderExtractor = () => {
   const [extractedOrders, setExtractedOrders] = useState<ExtractedOrder[]>([]);
   const [rawText, setRawText] = useState<string>("");
   const [showRawText, setShowRawText] = useState(false);
+  const [productMapping, setProductMapping] = useState<Record<number, Record<number, string>>>({});
+  const [productSearchText, setProductSearchText] = useState<Record<number, Record<number, string>>>({});
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [selectedExtracted, setSelectedExtracted] = useState<Record<number, boolean>>({});
+  const [dispatchSeries, setDispatchSeries] = useState<string>('');
+  const [isCreatingGatepasses, setIsCreatingGatepasses] = useState(false);
+  const selectAllRef = React.useRef<HTMLInputElement | null>(null);
+
+  const allSelected = extractedOrders.length > 0 && extractedOrders.every((_, idx) => !!selectedExtracted[idx]);
+  const someSelected = extractedOrders.some((_, idx) => !!selectedExtracted[idx]);
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = !allSelected && someSelected;
+    }
+  }, [allSelected, someSelected]);
+
+  const handleToggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const newSel: Record<number, boolean> = {};
+      extractedOrders.forEach((_, idx) => newSel[idx] = true);
+      setSelectedExtracted(newSel);
+    } else {
+      setSelectedExtracted({});
+    }
+  };
+
+  // refs to keep text inputs focused across renders (keyed by "orderIndex|itemIndex")
+  const inputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [productMapping, setProductMapping] = useState<Record<number, string>>({});
-  const [productSearchText, setProductSearchText] = useState<Record<number, string>>({});
-  const [openDropdown, setOpenDropdown] = useState<number | null>(null);
-
-  const [deliveryLocation, setDeliveryLocation] = useState<string | null>(null);
-  const [transportName, setTransportName] = useState<string | null>(null);
-  const [bookingDestination, setBookingDestination] = useState<string | null>(null);
-  const [dateOfDispatch, setDateOfDispatch] = useState<string | null>(null);
+  const [matchedMap, setMatchedMap] = useState<Record<number, { matches: Product[]; selectedId?: string; search?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }>>({});
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -75,75 +100,255 @@ const SpartanOrderExtractor = () => {
     fetchProducts();
   }, []);
 
+  const normalize = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const extractNumericToken = (text: string) => { const match = text.match(/\b(\d{2,})\b/); return match ? match[1] : undefined; };
+
+  useEffect(() => {
+    if (products.length === 0) return;
+    
+    const enriched = products.map(p => ({
+      ...p,
+      normCode: p.code ? normalize(p.code) : '',
+      normName: p.name ? normalize(p.name) : '',
+      numericParts: (p.code || '').match(/\d{2,}/g) || []
+    }));
+
+    const map: typeof matchedMap = {} as any;
+    extractedOrders.forEach((ord, idx) => {
+      const text = ord.item || '';
+      const parts = text.split(/\r?\n/).map(p => p.trim()).filter(Boolean);
+
+      const union = new Map<string, Product>();
+      const debugCodes: string[] = [];
+
+      parts.forEach(part => {
+        const numericToken = extractNumericToken(part);
+        const normText = normalize(part);
+
+        const candidates = enriched.filter((p: any) => {
+          if (!p.code && !p.name) return false;
+          if (p.normCode && normText.includes(p.normCode)) return true;
+          if (numericToken) {
+            if (p.numericParts.some((np: string) => np.includes(numericToken) || numericToken.includes(np))) return true;
+            if ((p.normCode || '').includes(numericToken)) return true;
+          }
+          if (p.normName && normText.includes(p.normName.substring(0, Math.min(12, p.normName.length)))) return true;
+          const textTokens = normText.split(/\s+/).filter((t: string) => t.length > 2);
+          const productTokens = (p.normName || '').split(/\s+/).filter((t: string) => t.length > 2);
+          if (textTokens.length > 0 && productTokens.length > 0) {
+            const intersect = textTokens.filter((t: string) => productTokens.includes(t));
+            if (intersect.length >= 2) return true;
+          }
+          return false;
+        });
+
+        candidates.forEach((c: any) => {
+          if (!union.has(c.id)) {
+            union.set(c.id, { id: c.id, name: c.name, code: c.code, size: c.size });
+            debugCodes.push((c.code || '').toString());
+          }
+        });
+      });
+
+      const candidateProducts: Product[] = Array.from(union.values());
+      map[idx] = { matches: candidateProducts, selectedId: candidateProducts.length === 1 ? candidateProducts[0].id : undefined, debug: { numericToken: extractNumericToken(text), normText: normalize(text), candidateCodes: debugCodes } };
+    });
+    setMatchedMap(map);
+  }, [products, extractedOrders]);
+
   const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  // Real-time product mapping: Delete raw item, insert mapped product
-  const handleProductMapping = async (orderIndex: number, selectedProductId: string) => {
+  // Allow deleting a persisted mapping and clear UI mapping state
+  const handleDeleteMapping = async (orderIndex: number, itemIndex: number) => {
     try {
+      const mappedId = productMapping[orderIndex]?.[itemIndex];
+      if (!mappedId) return;
+      const prod = products.find(p => p.id === mappedId);
+      if (!prod) return;
+
+      const order = extractedOrders[orderIndex];
+      if (!order) return;
+      const item = order.items?.[itemIndex];
+      // Clear the mapped_product_id and restore the original extracted name (if available)
+      const updates: any = { mapped_product_id: null };
+      if (item && item.product) updates.flipkart_item_name = item.product;
+
+      const { error } = await supabase
+        .from('online_order_staging')
+        .update(updates)
+        .eq('platform_order_number', order.orderNo)
+        .eq('mapped_product_id', prod.id);
+
+      if (error) {
+        console.warn('Failed to clear mapped staging row:', error.message);
+        showError('Failed to clear mapped staging item');
+      } else {
+        showSuccess('Cleared mapped staging item');
+      }
+
+      const updated = { ...productMapping };
+      if (updated[orderIndex]) {
+        delete updated[orderIndex][itemIndex];
+        if (Object.keys(updated[orderIndex]).length === 0) delete updated[orderIndex];
+      }
+      setProductMapping(updated);
+    } catch (err: any) {
+      console.error('Error deleting mapping:', err);
+      showError(err.message || 'Failed to delete mapping');
+    }
+  };
+
+  // Auto-map items when they contain specific patterns
+  useEffect(() => {
+    if (products.length === 0 || extractedOrders.length === 0) return;
+
+    const codeRegex = /vb\s*(\d+[a-zA-Z]*)/i;
+
+    const updated = { ...productMapping };
+    let changed = false;
+
+    extractedOrders.forEach((order, orderIndex) => {
+      order.items?.forEach((item, itemIndex) => {
+        // skip if already mapped via UI or database
+        const alreadyMapped = (updated[orderIndex] && updated[orderIndex][itemIndex]) || item.mapped_product_id;
+        if (alreadyMapped) return;
+
+        const text = item.product || '';
+        const m = text.match(codeRegex);
+        if (m) {
+          const num = m[1];
+          const wantNorm = `vb${num}`.toLowerCase().replace(/\s+/g, '');
+
+          const regexToken = new RegExp(`\\bvb\\s*${escapeRegExp(num)}\\b`, 'i');
+          const found = products.find(p => {
+            const code = (p.code || '').toString();
+            const name = (p.name || '').toString();
+            if (regexToken.test(code)) return true;
+            if (regexToken.test(name)) return true;
+            const codeNorm = code.toLowerCase().replace(/\s+/g, '');
+            if (codeNorm === wantNorm) return true;
+            return false;
+          });
+
+          if (found) {
+            if (!updated[orderIndex]) updated[orderIndex] = {} as Record<number, string>;
+            updated[orderIndex][itemIndex] = found.id;
+            changed = true;
+            handleProductMapping(orderIndex, itemIndex, found.id).catch((err) => console.error('Auto-map failed', err));
+          }
+        }
+      });
+    });
+
+    if (changed) setProductMapping(updated);
+  }, [products, extractedOrders]);
+
+  const handleProductMapping = async (orderIndex: number, itemIndex: number, selectedProductId: string) => {
+    console.log('🔵 handleProductMapping triggered:', { orderIndex, itemIndex, selectedProductId });
+    
+    try {
+      // Get current user
       let authUser = user;
       if (!authUser) {
         const { data: { session } } = await supabase.auth.getSession();
-        authUser = session?.user;
+        authUser = session?.user ?? null;
       }
-      if (!authUser) throw new Error('User not authenticated');
+      if (!authUser) {
+        showError('Please sign in to map products.');
+        return;
+      }
 
       const order = extractedOrders[orderIndex];
-      if (!order) throw new Error('Order not found');
+      const item = order.items?.[itemIndex];
+      if (!item) throw new Error('Item not found');
 
       const selectedProduct = products.find(p => p.id === selectedProductId);
       if (!selectedProduct) throw new Error('Product not found');
 
-      const itemAmount = parseFloat(order.amount) || 0;
+      // Use item.qty directly
+      const finalQty = item.qty || 1;
+      const itemAmount = item.total || 0;
 
       console.log('📝 Mapping data:', {
         orderNo: order.orderNo,
-        rawItemName: order.item,
+        rawItemName: item.product,
         mappedProductName: selectedProduct.name,
-        amount: itemAmount
+        qty: finalQty,
+        total: itemAmount
       });
 
-      // Step 1: Delete old staging row with raw item name
-      console.log('🗑️ Deleting old staging row with raw item name...');
-      const { error: deleteError } = await supabase
-        .from('online_order_staging')
-        .delete()
-        .eq('platform_order_number', order.orderNo)
-        .eq('flipkart_item_name', order.item);
+      // Try to update any existing staging rows for this order that match the raw item name
+      console.log('🔁 Updating staging row(s) with mapped product id...');
+      let updateCount = 0;
 
-      if (deleteError) {
-        console.warn('⚠️ Delete warning (may not exist):', deleteError.message);
-      } else {
-        console.log('✅ Deleted old row');
-      }
-
-      // Step 2: Upsert new row with mapped product data
-      console.log('✅ Upserting mapped product to staging...');
-      const { data, error: insertError } = await supabase
+      // Exact match update
+      const { data: upd1, error: updErr1 } = await supabase
         .from('online_order_staging')
-        .upsert([{
-          platform_order_number: order.orderNo,
-          customer_name: order.customerName || null,
-          shipping_address: order.address || null,
+        .update({
           flipkart_item_name: selectedProduct.name,
-          amount: itemAmount,
-          quantity: order.qty || 1,
+          mapped_product_id: selectedProduct.id,
+          amount: parseFloat(itemAmount.toString()) || 0,
+          quantity: finalQty,
           bill_no: order.invoiceNo || '',
           created_by: authUser.id,
           status: 'pending'
-        }], {
-          onConflict: 'platform_order_number,flipkart_item_name'
         })
+        .eq('platform_order_number', order.orderNo)
+        .eq('flipkart_item_name', item.product)
         .select();
 
-      if (insertError) {
-        throw insertError;
+      if (updErr1) console.warn('Exact update error', updErr1.message);
+      if (upd1 && upd1.length) updateCount += upd1.length;
+
+      // Looser substring match (case-insensitive)
+      if (updateCount === 0) {
+        const { data: upd2, error: updErr2 } = await supabase
+          .from('online_order_staging')
+          .update({
+            flipkart_item_name: selectedProduct.name,
+            mapped_product_id: selectedProduct.id,
+            amount: parseFloat(itemAmount.toString()) || 0,
+            quantity: finalQty,
+            bill_no: order.invoiceNo || '',
+            created_by: authUser.id,
+            status: 'pending'
+          })
+          .eq('platform_order_number', order.orderNo)
+          .ilike('flipkart_item_name', `%${item.product}%`)
+          .select();
+
+        if (updErr2) console.warn('Substring update error', updErr2.message);
+        if (upd2 && upd2.length) updateCount += upd2.length;
       }
 
-      // Update local state to show mapping
-      setProductMapping(prev => ({ ...prev, [orderIndex]: selectedProductId }));
-      
-      console.log('✅ Inserted mapped product row:', data);
-      showSuccess(`✅ Mapped & saved: ${selectedProduct.name} | Amount: ₹${itemAmount.toFixed(2)}`);
+      if (updateCount === 0) {
+        // fallback: insert/upsert a new mapped row
+        console.log('✅ No existing row updated — upserting mapped product to staging...');
+        const { data, error: insertError } = await supabase
+          .from('online_order_staging')
+          .upsert([{
+            platform_order_number: order.orderNo,
+            customer_name: order.customerName || null,
+            shipping_address: order.address || null,
+            flipkart_item_name: selectedProduct.name,
+            mapped_product_id: selectedProduct.id,
+            amount: parseFloat(itemAmount.toString()) || 0,
+            quantity: finalQty,
+            bill_no: order.invoiceNo || '',
+            created_by: authUser.id,
+            status: 'pending'
+          }], {
+            onConflict: 'platform_order_number,flipkart_item_name'
+          })
+          .select();
+
+        if (insertError) throw insertError;
+        console.log('✅ Inserted mapped product row:', data);
+      } else {
+        console.log(`✅ Updated ${updateCount} staging row(s) with mapped product id`);
+      }
+
+      showSuccess(`✅ Mapped & saved: ${selectedProduct.name} | Qty: ${finalQty} | Amount: ₹${itemAmount.toFixed(2)}`);
 
     } catch (error: any) {
       console.error('❌ Mapping error:', error);
@@ -151,38 +356,219 @@ const SpartanOrderExtractor = () => {
     }
   };
 
-  // Lightweight extractor to find product name and SKU in the item text.
-  const extractNameSku = (text: string | undefined): { name?: string; sku?: string } | null => {
-    if (!text) return null;
-    const t = text.replace(/\s+/g, ' ').trim();
-    // Look for SKU patterns like 'VB 502A-1' or '950699' or '502A-1'
-    const skuRegex = /\b([A-Z]{1,}[A-Z0-9\s]*\d[0-9A-Z\-]*)\b/; // permissive
-    const m = t.match(skuRegex);
-    if (m && m.index !== undefined) {
-      const sku = m[1].trim();
-      let name = t.slice(0, m.index).trim();
-      name = name.replace(/[-–—\|,:\s]+$/g, '').trim();
-      name = name.replace(/(HSN|Quantity|Unit Price|TAX|CGST|SGST|TOTAL).*$/i, '').trim();
-      return { name: name || undefined, sku: sku || undefined };
+  const handleCreateGatepassesForSelected = async () => {
+    const selectedIndexes = Object.keys(selectedExtracted).filter(k => selectedExtracted[+k]).map(Number);
+    if (selectedIndexes.length === 0) {
+      showError('Please select orders to create gatepasses.');
+      return;
     }
-    return null;
+
+    try {
+      setIsCreatingGatepasses(true);
+
+      // Verify all selected orders have mapped items
+      for (const idx of selectedIndexes) {
+        const order = extractedOrders[idx];
+        const items = order.items || [];
+        for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
+          if (!productMapping[idx]?.[itemIdx]) {
+            showError(`Order ${order.orderNo}: Item not mapped. Please map all items before creating gatepasses.`);
+            return;
+          }
+        }
+      }
+
+      // Ensure dealer data is available - handle both single dealer users and admins with multiple dealers
+      let dealerData = null;
+      try {
+        const { data, error: dealerErr } = await supabase
+          .from('dealers')
+          .select('id')
+          .eq('user_id', user?.id)
+          .limit(1);
+
+        if (dealerErr) {
+          console.error('Dealer lookup error:', dealerErr);
+          showError('Could not find dealer information. Please contact your administrator.');
+          return;
+        }
+
+        if (data && data.length > 0) {
+          dealerData = data[0];
+          if (data.length > 1) {
+            console.warn(`Admin user associated with ${data.length} dealers. Using first dealer: ${dealerData.id}`);
+          }
+        }
+      } catch (dErr) {
+        console.error('Dealer lookup exception:', dErr);
+        showError('Error retrieving dealer information.');
+        return;
+      }
+
+      if (!dealerData) {
+        showError('No dealer found for this user. Please contact your administrator.');
+        return;
+      }
+
+      // Ensure Spartan platform exists
+      let spartanPlatformId: string | undefined;
+      try {
+        const { data: pf, error: pfErr } = await supabase
+          .from('online_platforms')
+          .select('id')
+          .eq('name', 'Spartan')
+          .single();
+
+        if (pfErr) {
+          console.warn('Spartan platform lookup failed:', pfErr);
+          // Try to create it
+          const { data: newPf, error: createErr } = await supabase
+            .from('online_platforms')
+            .insert([{ name: 'Spartan' }])
+            .select('id')
+            .single();
+
+          if (createErr) {
+            console.error('Failed to create Spartan platform:', createErr);
+            showError('Could not ensure Spartan platform exists. Please contact administrator.');
+            return;
+          }
+          spartanPlatformId = newPf?.id;
+        } else {
+          spartanPlatformId = pf?.id;
+        }
+
+        if (!spartanPlatformId) {
+          showError('Could not get Spartan platform ID. Please contact administrator.');
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to ensure Spartan platform', e);
+        showError('Error ensuring platform exists.');
+        return;
+      }
+
+      let createdCount = 0;
+      for (const idx of selectedIndexes) {
+        const order = extractedOrders[idx];
+        if (!order) continue;
+
+        const totalAmount = parseFloat(order.amount as any) || 0;
+        // request a new sequence number for this online order
+        let seqNum: number | null = null;
+        try {
+          const { data: seqData, error: seqErr } = await supabase.rpc('get_next_online_order_seq').single();
+          if (!seqErr && seqData) seqNum = seqData as unknown as number;
+        } catch (rpcErr) {
+          console.warn('get_next_online_order_seq RPC failed', rpcErr);
+        }
+
+        const platformName = 'Spartan';
+        const platformPrefix = 'S';
+        const displaySeq = seqNum ?? Date.now();
+
+        const insertPayload: any = {
+          dealer_id: dealerData.id,
+          user_id: user?.id || null,
+          total_amount: totalAmount,
+          status: 'completed',
+          payment_status: 'paid',
+          order_date: new Date().toISOString(),
+          dispatched: false,
+          dispatch_date: null,
+          bill_no: order.invoiceNo || null,
+        };
+
+        // if user provided a dispatch series, prefix the bill_no
+        if (dispatchSeries && insertPayload.bill_no) {
+          insertPayload.bill_no = `${dispatchSeries}-${insertPayload.bill_no}`;
+        }
+
+        const onlinePayload: any = {
+          order_number: `${platformPrefix}${displaySeq}`,
+          order_sequence: seqNum || null,
+          dealer_id: dealerData.id,
+          user_id: user?.id || null,
+          total_amount: totalAmount,
+          status: 'completed',
+          payment_status: 'paid',
+          order_date: new Date().toISOString(),
+          dispatched: false,
+          dispatch_date: null,
+          dispatch_number: `${platformPrefix}${displaySeq}`,
+          bill_no: insertPayload.bill_no || null,
+        };
+
+        const { data: newOnlineOrder, error: onlineErr } = await supabase.from('online_orders').insert(onlinePayload).select('id').single();
+        console.debug('SpartanExtractor: online_orders.insert result', { newOnlineOrder, onlineErr });
+        if (onlineErr || !newOnlineOrder) {
+          console.error('Online order create error', onlineErr);
+          showError(`Failed to create online_order for ${order.orderNo}`);
+          continue;
+        }
+
+        // Insert online_order_details rows per extracted item
+        let insertedDetail: any = null;
+        try {
+          if (!spartanPlatformId) {
+            console.error('Cannot insert order details: platform_id is missing');
+            showError('Platform ID not available. Cannot create order details.');
+            continue;
+          }
+
+          const detailsToInsert: any[] = (order.items || []).map((it, itemIndex) => {
+            const mappedId = productMapping[idx] ? productMapping[idx][itemIndex] : null;
+            return {
+              order_id: newOnlineOrder.id,
+              client_name: order.customerName,
+              platform_id: spartanPlatformId,
+              platform_order_number: order.orderNo,
+              address: order.address,
+              raw_item_name: it.product,
+              mapped_product_id: mappedId || null,
+            };
+          });
+
+          if (detailsToInsert.length > 0) {
+            const { data: detailRows, error: detailErr } = await supabase.from('online_order_details').insert(detailsToInsert).select('id, mapped_product_id');
+            console.debug('SpartanExtractor: online_order_details.insert batch result', { detailRows, detailErr });
+            if (detailErr) {
+              console.error('Failed to insert online_order_details batch', detailErr);
+              const msg = String(detailErr.message || detailErr.description || detailErr.code || 'Unknown error');
+              showError('Failed to save online order details: ' + msg);
+            } else {
+              insertedDetail = detailRows;
+            }
+          }
+        } catch (e) {
+          console.error('Failed to insert online_order_details', e);
+          showError('Error saving order details.');
+        }
+
+        createdCount++;
+      }
+
+      showSuccess(`Created ${createdCount} gatepass(es).` + (dispatchSeries ? ` Series: ${dispatchSeries}` : ''));
+    } catch (error: any) {
+      console.error('Gatepass creation error', error);
+      showError(error.message || 'Failed to create gatepasses.');
+    } finally {
+      setIsCreatingGatepasses(false);
+    }
   };
 
   const extractSpartan = (text: string): ExtractedOrder | null => {
-    // 1. Invoice Number (updated to capture from "Invoice Number - #1461" format)
+    // ORIGINAL SPARTAN PDF EXTRACTION - UNCHANGED
     const invoiceMatch = text.match(/Invoice\s+Number\s*-?\s*#?(\d+)/i);
     if (!invoiceMatch) return null;
     const orderNo = invoiceMatch[1];
 
-    // 1b. Invoice Date
     const invoiceDateMatch = text.match(/Invoice\s+Date\s*-?\s*([A-Za-z0-9 ,]+)/i);
     const invoiceDate = invoiceDateMatch ? invoiceDateMatch[1].trim() : undefined;
 
-    // 2. Total Amount (updated to handle "Rs. 1002" format with optional decimals)
     const amountMatch = text.match(/Total\s+Amount[\s\S]*?Rs\.?\s*([\d,]+(?:\.\d{2})?)/i);
     const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : "0.00";
 
-    // 3. Customer Name and Address (from Bill To section)
     let customerName = "Unknown";
     let address = "N/A";
     const billToBlockMatch = text.match(/Bill\s+To:\s*\n([\s\S]+?)(?=Ship\s+To:|Sold\s+By:|Payment\s+Method)/i);
@@ -194,7 +580,6 @@ const SpartanOrderExtractor = () => {
         }
     }
 
-    // 4. Item Description - Show ALL product details in raw format for extraction
     let item = "N/A";
     let productName: string | undefined;
     let productSku: string | undefined;
@@ -207,11 +592,9 @@ const SpartanOrderExtractor = () => {
     const allLines = text.split('\n');
     const headerIdx = allLines.findIndex(l => /Product\s+Name/i.test(l));
     if (headerIdx >= 0) {
-      // Skip header line and any empty lines or column headers
       let startIdx = headerIdx + 1;
       const headerKeywords = /^(Product\s+Sku|HSN|Quantity|Unit\s+Price|TAX\s+Amount|IGST|TOTAL|Charges\s+Applied|Shipping|COD|Tax\s+Amount)/i;
       
-      // Skip over column header lines
       while (startIdx < allLines.length) {
         const line = (allLines[startIdx] || '').trim();
         if (!line || headerKeywords.test(line)) {
@@ -221,40 +604,22 @@ const SpartanOrderExtractor = () => {
         }
       }
       
-      // Collect the next several non-empty lines that form the product row
       const productRowLines: string[] = [];
       for (let i = startIdx; i < Math.min(allLines.length, startIdx + 25); i++) {
         const line = (allLines[i] || '').trim();
         if (!line) continue;
-        // Stop when we hit section headers or tax/charge lines
         if (/^(Charges\s+Applied|Shipping\s+Charges|COD\s+Charges|Total\s+Amount|IGST\s+\(Value)/i.test(line)) break;
         productRowLines.push(line);
       }
       
-      // Extract fields from the product row lines
-      if (productRowLines.length > 0) {
-        productName = productRowLines[0];
-      }
-      if (productRowLines.length > 1) {
-        productSku = productRowLines[1];
-      }
-      if (productRowLines.length > 2) {
-        hsn = productRowLines[2];
-      }
-      if (productRowLines.length > 3) {
-        quantity = productRowLines[3];
-      }
-      if (productRowLines.length > 4) {
-        unitPrice = productRowLines[4];
-      }
-      if (productRowLines.length > 5) {
-        taxAmount = productRowLines[5];
-      }
-      if (productRowLines.length > 6) {
-        igst = productRowLines[6];
-      }
+      if (productRowLines.length > 0) productName = productRowLines[0];
+      if (productRowLines.length > 1) productSku = productRowLines[1];
+      if (productRowLines.length > 2) hsn = productRowLines[2];
+      if (productRowLines.length > 3) quantity = productRowLines[3];
+      if (productRowLines.length > 4) unitPrice = productRowLines[4];
+      if (productRowLines.length > 5) taxAmount = productRowLines[5];
+      if (productRowLines.length > 6) igst = productRowLines[6];
       
-      // Format as single raw text paragraph
       const parts = [];
       if (productName) parts.push(`Product Name: ${productName}`);
       if (productSku) parts.push(`SKU: ${productSku}`);
@@ -267,7 +632,6 @@ const SpartanOrderExtractor = () => {
       item = parts.length > 0 ? parts.join(' | ') : "N/A";
     }
     
-    // fallback if product extraction failed
     if (item === "N/A") {
       const itemMatch = text.match(/Product\s+Name[\s\S]*?\n\s*([A-Za-z0-9\-\s\(\)]+?)\n\s*([A-Za-z0-9\-\s]+)/i);
       if (itemMatch) {
@@ -277,10 +641,18 @@ const SpartanOrderExtractor = () => {
       }
     }
 
-    // Final validation
     if ((!item || item === "N/A") || customerName === "Unknown" || (amount === "0.00" && !amountMatch)) {
         console.warn("Spartan Extractor: Could not extract all fields. OrderNo:", orderNo, "Item:", item, "Amount:", amount);
     }
+
+    // Return with items array (single item) for compatibility with Flipkart UI
+    // Extract numeric value from quantity string (handle cases like "2.5", "2 units", etc.)
+    let qty = 1;
+    if (quantity) {
+      const numMatch = quantity.match(/\d+(?:\.\d+)?/);
+      qty = numMatch ? parseInt(numMatch[0]) : 1;
+    }
+    const total = parseFloat(amount) || 0;
 
     return { 
       orderNo, 
@@ -288,7 +660,9 @@ const SpartanOrderExtractor = () => {
       address, 
       item, 
       amount, 
-      qty: 1, 
+      qty,
+      invoiceNo: undefined,
+      items: [{ product: item, qty: qty > 0 ? qty : 1, total, mapped_product_id: undefined }],
       invoiceDate,
       productName,
       productSku,
@@ -296,10 +670,10 @@ const SpartanOrderExtractor = () => {
       unitPrice,
       taxAmount,
       igst,
-      deliveryLocation,
-      transportName,
-      bookingDestination,
-      dateOfDispatch
+      deliveryLocation: undefined,
+      transportName: undefined,
+      bookingDestination: undefined,
+      dateOfDispatch: undefined
     };
   };
 
@@ -373,8 +747,6 @@ const SpartanOrderExtractor = () => {
         throw new Error("No valid Spartan order patterns found in the PDF. Please check the 'Debug View' to see the extracted text.");
       }
 
-      // For Spartan, each extracted order has ONE item - no need to split
-      // Just use allExtracted directly as final orders
       setExtractedOrders(allExtracted);
       showSuccess(`Successfully extracted ${allExtracted.length} orders!`);
     } catch (error: any) {
@@ -389,17 +761,16 @@ const SpartanOrderExtractor = () => {
     if (extractedOrders.length === 0) return;
     
     try {
-      // Check if all items are mapped
       let unmappedCount = 0;
       for (let i = 0; i < extractedOrders.length; i++) {
         if (!productMapping[i]) {
           unmappedCount++;
-          console.warn(`⚠️ Item not mapped: ${extractedOrders[i].item}`);
+          console.warn(`⚠️ Order not mapped: ${extractedOrders[i].orderNo}`);
         }
       }
 
       if (unmappedCount > 0) {
-        showError(`❌ Please map all ${unmappedCount} unmapped item(s) before proceeding!`);
+        showError(`❌ Please map all ${unmappedCount} unmapped order(s) before proceeding!`);
         return;
       }
 
@@ -414,71 +785,18 @@ const SpartanOrderExtractor = () => {
     }
   };
 
-  const autoMapAndSaveRow = async (index: number) => {
-    const order = extractedOrders[index];
-    if (!order || !user) return;
-    const inferred = extractNameSku(order.item);
-    if (!inferred || (!inferred.sku && !inferred.name)) {
-      showError('Could not extract SKU or product name from this row.');
-      return;
-    }
-
-    // Try to find product by SKU then by name
-    let prod = undefined as Product | undefined;
-    if (inferred.sku) {
-      const normSku = inferred.sku.replace(/\s+/g, '').toLowerCase();
-      prod = products.find(p => (p.code || '').toString().replace(/\s+/g, '').toLowerCase() === normSku)
-        || products.find(p => (p.code || '').toString().replace(/\s+/g, '').toLowerCase().includes(normSku));
-    }
-    if (!prod && inferred.name) {
-      const normName = inferred.name.toLowerCase();
-      prod = products.find(p => (p.name || '').toLowerCase().includes(normName) || normName.includes((p.name || '').toLowerCase()));
-    }
-
-    if (!prod) {
-      showError('No matching product found for inferred SKU/name.');
-      return;
-    }
-
-    // Update UI state
-    setMatchedMap(m => ({ ...m, [index]: { ...(m[index] || { matches: [] }), selectedId: prod!.id } }));
-    const newOrders = [...extractedOrders];
-    if (!newOrders[index].item.includes(` — ${prod.name}`)) newOrders[index].item = `${newOrders[index].item} — ${prod.name}`;
-    setExtractedOrders(newOrders);
-
-    // Persist this single row to staging
-    try {
-      setIsSaving(true);
-      const row = {
-        platform_order_number: newOrders[index].orderNo,
-        customer_name: newOrders[index].customerName,
-        shipping_address: newOrders[index].address,
-        flipkart_item_name: newOrders[index].item,
-        bill_no: newOrders[index].invoiceNo,
-        amount: parseFloat(newOrders[index].amount),
-        created_by: user.id,
-        status: 'pending'
-      };
-      const { error } = await supabase.from('online_order_staging').upsert([row], { onConflict: 'platform_order_number' });
-      if (error) throw error;
-      showSuccess(`Mapped and saved order ${row.platform_order_number} to staging.`);
-    } catch (e: any) {
-      console.error('Failed to save mapped row', e);
-      showError(e?.message || 'Failed to save mapped row to staging.');
-    } finally {
-      setIsSaving(false);
-    }
+  const formatDate = (date: string | undefined) => {
+    if (!date) return '-';
+    const d = new Date(date);
+    return d.toLocaleDateString();
   };
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-6xl">
-        <div className="flex justify-between items-center mb-6">
-          <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
-          </Button>
-          <Button variant="secondary" onClick={() => navigate('/process-online-orders')} className="flex items-center gap-2">
-            <ListChecks className="h-4 w-4" /> Process Staged Orders
+        <div className="flex justify-start items-center mb-6">
+          <Button variant="outline" onClick={() => navigate('/online-orders-admin')} className="flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" /> Back to Online Orders
           </Button>
         </div>
 
@@ -489,7 +807,7 @@ const SpartanOrderExtractor = () => {
               <div>
                 <CardTitle className="text-2xl">Spartan Order Data Extractor</CardTitle>
                 <CardDescription className="text-gray-200">
-                  Upload Spartan Website Order PDFs to automatically extract order details.
+                  Upload Spartan Website Order PDFs to automatically extract order details and map to actual products.
                 </CardDescription>
               </div>
             </div>
@@ -549,12 +867,28 @@ const SpartanOrderExtractor = () => {
               <div className="flex justify-between items-center">
                 <div>
                   <CardTitle>Extracted Order Details</CardTitle>
-                  <CardDescription>Found {extractedOrders.length} orders in the document.</CardDescription>
+                  <CardDescription>Found {extractedOrders.length} orders. Map each item to an actual product from the database.</CardDescription>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   <Button variant="outline" size="sm" onClick={handleSaveToStaging} disabled={isSaving} className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 border-none">
                     {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     Save to Staging
+                  </Button>
+                  <Input
+                    placeholder="Dispatch series (optional)"
+                    value={dispatchSeries}
+                    onChange={(e) => setDispatchSeries(e.target.value)}
+                    className="w-56 text-sm"
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleCreateGatepassesForSelected()}
+                    disabled={isCreatingGatepasses}
+                    className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 border-none"
+                  >
+                    {isCreatingGatepasses ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
+                    Create Gatepasses for Selected
                   </Button>
                 </div>
               </div>
@@ -564,136 +898,278 @@ const SpartanOrderExtractor = () => {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
+                      <TableHead className="w-8">
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={(e) => handleToggleSelectAll(e.target.checked)}
+                          className="h-4 w-4"
+                          aria-label="Select all extracted orders"
+                        />
+                      </TableHead>
                       <TableHead className="font-bold">Order No.</TableHead>
+                      <TableHead className="font-bold">Invoice No.</TableHead>
                       <TableHead className="font-bold">Customer Name</TableHead>
                       <TableHead className="font-bold">Address</TableHead>
-                      <TableHead className="font-bold">Item Description (All Product Details)</TableHead>
-                      <TableHead className="font-bold">Invoice Date</TableHead>
-                      <TableHead className="font-bold">Invoice No.</TableHead>
+                      <TableHead className="font-bold text-center">Qty</TableHead>
+                      <TableHead className="font-bold">Item Description</TableHead>
                       <TableHead className="font-bold text-right">Amount (₹)</TableHead>
-                      <TableHead className="font-bold">Delivery Location</TableHead>
-                      <TableHead className="font-bold">Transport Name</TableHead>
-                      <TableHead className="font-bold">Booking Destination</TableHead>
-                      <TableHead className="font-bold">Dispatch Date</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {extractedOrders.map((order, index) => {
-                      const selectedProductId = productMapping[index];
-                      const selectedProduct = selectedProductId ? products.find(p => p.id === selectedProductId) : null;
-                      const searchText = productSearchText[index] || '';
-                      
-                      // Find ALL matching products based on the item name
-                      const matchingProducts = products.filter(p => {
-                        const itemLower = (order.item || '').toLowerCase();
-                        const nameLower = (p.name || '').toLowerCase();
-                        const codeLower = (p.code || '').toString().toLowerCase();
-                        return itemLower.includes(codeLower) || itemLower.includes(nameLower.substring(0, 20)) || codeLower.includes(itemLower.substring(0, 10));
-                      });
-                      
-                      // Apply search filter
-                      const filteredProducts = searchText 
-                        ? products.filter(p => (p.name || '').toLowerCase().includes(searchText.toLowerCase()) || (p.code || '').toString().toLowerCase().includes(searchText.toLowerCase()))
-                        : products;
-
-                      return (
-                        <TableRow key={index} className="hover:bg-muted/30">
-                          <TableCell className="font-mono text-xs font-semibold text-gray-600">{order.orderNo}</TableCell>
-                          <TableCell className="font-medium">{order.customerName}</TableCell>
-                          <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={order.address}>
+                    {extractedOrders.map((order, orderIndex) => (
+                      <React.Fragment key={orderIndex}>
+                        <TableRow className="bg-gray-50 hover:bg-gray-100 border-b-2">
+                          <TableCell className="px-3">
+                            <input
+                              type="checkbox"
+                              checked={!!selectedExtracted[orderIndex]}
+                              onChange={(e) => setSelectedExtracted(prev => ({ ...prev, [orderIndex]: e.target.checked }))}
+                              className="h-4 w-4"
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs font-bold text-gray-700">{order.orderNo}</TableCell>
+                          <TableCell className="text-xs font-semibold text-gray-600">{order.invoiceNo || '—'}</TableCell>
+                          <TableCell className="font-bold text-gray-800">{order.customerName}</TableCell>
+                          <TableCell className="max-w-xs text-xs text-gray-700" title={order.address}>
                             {order.address}
                           </TableCell>
-                          <TableCell className="text-sm min-w-[700px]">
-                            {/* Show extracted item name in red badge */}
-                            <div className="mb-3 inline-block">
-                              <div className="text-xs bg-red-100 text-red-900 px-3 py-2 rounded border border-red-300 break-words">
-                                ❌ From PDF: {order.item}
-                                <div className="text-[11px] text-red-700 mt-1">(Not being saved)</div>
-                              </div>
-                            </div>
-
-                            {/* Product mapping dropdown */}
-                            <Popover open={openDropdown === index} onOpenChange={(open) => setOpenDropdown(open ? index : null)}>
-                              <PopoverTrigger asChild>
-                                <Button variant="outline" className="w-full text-left justify-start mb-2">
-                                  → Map to Actual Product (This will be saved)
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-[600px] max-w-[90vw] p-3 max-h-96 flex flex-col">
-                                {/* Matching products section */}
-                                {matchingProducts.length > 0 && (
-                                  <div className="mb-3">
-                                    <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-2">Matched Products ({matchingProducts.length})</h4>
-                                    <ScrollArea className="max-h-40">
-                                      {matchingProducts.map(p => (
-                                        <button
-                                          key={p.id}
-                                          onClick={() => {
-                                            handleProductMapping(index, p.id);
-                                            setOpenDropdown(null);
-                                          }}
-                                          className="w-full text-left p-2 bg-green-50 hover:bg-green-100 rounded-md text-xs border border-green-300 cursor-pointer mb-2 block"
-                                        >
-                                          <div className="font-bold text-green-900">{p.name}</div>
-                                          <div className="text-green-700 text-[11px]">Code: {p.code || 'N/A'}</div>
-                                        </button>
-                                      ))}
-                                    </ScrollArea>
-                                  </div>
-                                )}
-
-                                {/* Search and all products section */}
-                                <div className="border-t pt-2">
-                                  <h4 className="font-semibold text-xs uppercase text-muted-foreground mb-2">Search All Products</h4>
-                                  <Input
-                                    type="text"
-                                    placeholder="Type product name or code..."
-                                    value={searchText}
-                                    onChange={(e) => setProductSearchText(prev => ({ ...prev, [index]: e.target.value }))}
-                                    className="mb-2 text-xs"
-                                    autoFocus
-                                  />
-                                  <ScrollArea className="max-h-48">
-                                    {filteredProducts.map(p => (
-                                      <button
-                                        key={p.id}
-                                        onClick={() => {
-                                          handleProductMapping(index, p.id);
-                                          setOpenDropdown(null);
-                                        }}
-                                        className="w-full text-left p-2 hover:bg-blue-50 text-xs border-b last:border-b-0 cursor-pointer"
-                                      >
-                                        <div className="font-medium">{p.name}</div>
-                                        <div className="text-muted-foreground text-[11px]">Code: {p.code || 'N/A'}</div>
-                                      </button>
-                                    ))}
-                                  </ScrollArea>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-
-                            {/* Show mapping status */}
-                            {selectedProduct ? (
-                              <div className="text-xs bg-green-100 text-green-900 px-3 py-2 rounded border border-green-300 break-words">
-                                ✅ WILL SAVE: {selectedProduct.name}
-                                <div className="text-[11px] text-green-700 mt-1">Code: {selectedProduct.code || 'N/A'}</div>
-                              </div>
-                            ) : (
-                              <div className="text-xs bg-yellow-100 text-yellow-900 px-3 py-2 rounded border border-yellow-300">
-                                ⚠️ NOT MAPPED - Select a product above
-                              </div>
-                            )}
+                          <TableCell className="text-center font-bold text-green-700">{order.qty || 0}</TableCell>
+                          <TableCell colSpan={2} className="text-right font-bold text-green-700">
+                            TOTAL: ₹{order.amount}
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{order.invoiceDate || '-'}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{order.invoiceNo || '-'}</TableCell>
-                          <TableCell className="text-right font-bold text-green-600">₹{order.amount}</TableCell>
-                          <TableCell>{order.deliveryLocation || 'N/A'}</TableCell>
-                          <TableCell>{order.transportName || 'N/A'}</TableCell>
-                          <TableCell>{order.bookingDestination || 'N/A'}</TableCell>
-                          <TableCell>{formatDate(order.dateOfDispatch)}</TableCell>
                         </TableRow>
-                      );
-                    })}
+                        
+                        {order.items && order.items.length > 0 && (
+                          <TableRow className="bg-white">
+                            <TableCell colSpan={8} className="p-0">
+                              <div className="p-4 space-y-4">
+                                <div>
+                                  <h4 className="font-semibold text-base mb-3">📦 Items in this Order:</h4>
+                                  <p className="text-xs text-muted-foreground mb-3">Order ID: <span className="font-mono font-bold">{order.orderNo}</span> | Invoice: <span className="font-mono font-bold">{order.invoiceNo || '—'}</span> | Customer: <span className="font-bold">{order.customerName}</span></p>
+                                  
+                                  <div className="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+                                    <p className="text-sm font-semibold text-yellow-800">
+                                      ⚠️ IMPORTANT: Map each extracted item to an actual product from the database. Only mapped products will be saved.
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="border rounded-lg overflow-hidden">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="bg-gray-100 border-b">
+                                        <th className="px-4 py-3 text-left font-bold text-gray-800">Extracted Item</th>
+                                        <th className="px-4 py-3 text-left font-bold text-gray-800">➜ Map to Actual Product (This will be saved)</th>
+                                        <th className="px-4 py-3 text-center font-bold text-gray-800 w-20">Qty</th>
+                                        <th className="px-4 py-3 text-right font-bold text-gray-800 w-32">Unit Price (₹)</th>
+                                        <th className="px-4 py-3 text-right font-bold text-gray-800 w-32">Total (₹)</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {order.items.map((item, itemIndex) => {
+                                        const unitPrice = item.qty > 0 ? (item.total / item.qty).toFixed(2) : item.total.toFixed(2);
+                                        const mappingKey = `${orderIndex}|${itemIndex}`;
+                                        const selectedProductId = productMapping[orderIndex]?.[itemIndex];
+                                        const selectedProduct = products.find(p => p.id === selectedProductId);
+                                        
+                                        return (
+                                          <tr key={itemIndex} className="border-b hover:bg-gray-50 transition">
+                                            <td className="px-4 py-3 text-sm break-words font-medium text-gray-900">
+                                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-semibold">
+                                                ❌ From PDF: {item.product}
+                                              </span>
+                                              <p className="text-xs text-gray-500 mt-1">(Not being saved)</p>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              {(() => {
+                                                const searchKey = `${orderIndex}|${itemIndex}`;
+                                                const selectedProductId = productMapping[orderIndex]?.[itemIndex];
+                                                const selectedProduct = products.find(p => p.id === selectedProductId);
+                                                const searchText = productSearchText[orderIndex]?.[itemIndex] || '';
+                                                const isOpen = openDropdown === searchKey;
+                                                
+                                                const candidates = (matchedMap[orderIndex]?.matches || []).map(p => p.id);
+                                                const searchLower = (searchText || '').toLowerCase().trim();
+
+                                                let matchedList = [] as Product[];
+                                                if (searchLower.length === 0) {
+                                                  matchedList = products.filter(p => candidates.includes(p.id));
+                                                } else {
+                                                  const bySearch = products.filter(prod => {
+                                                    return (
+                                                      prod.name.toLowerCase().includes(searchLower) ||
+                                                      (prod.code ? prod.code.toLowerCase().includes(searchLower) : false)
+                                                    );
+                                                  });
+                                                  const candidateSet = new Set(candidates);
+                                                  const candidateMatches = bySearch.filter(p => candidateSet.has(p.id));
+                                                  const others = bySearch.filter(p => !candidateSet.has(p.id));
+                                                  matchedList = [...candidateMatches, ...others];
+                                                }
+
+                                                const filteredProducts = matchedList;
+                                                
+                                                return (
+                                                  <div className="w-full">
+                                                    <Popover open={isOpen} onOpenChange={(open) => setOpenDropdown(open ? searchKey : null)}>
+                                                      <PopoverTrigger asChild>
+                                                        <input
+                                                          type="text"
+                                                          placeholder="Type product name or code..."
+                                                          value={searchText}
+                                                          onChange={(e) => {
+                                                            const newSearch = { ...productSearchText };
+                                                            if (!newSearch[orderIndex]) newSearch[orderIndex] = {};
+                                                            newSearch[orderIndex][itemIndex] = e.target.value;
+                                                            setProductSearchText(newSearch);
+                                                            setOpenDropdown(searchKey);
+                                                            setTimeout(() => inputRefs.current[searchKey]?.focus(), 0);
+                                                          }}
+                                                          ref={(el) => { inputRefs.current[searchKey] = el; }}
+                                                          onFocus={() => setOpenDropdown(searchKey)}
+                                                          className="w-full px-3 py-2 border-2 border-gray-300 rounded bg-white text-sm font-medium text-gray-700 focus:border-blue-500 focus:outline-none"
+                                                        />
+                                                      </PopoverTrigger>
+
+                                                      <PopoverContent className="p-0 min-w-[300px] max-h-80 overflow-y-auto">
+                                                        {filteredProducts.length > 0 ? (
+                                                          filteredProducts.map((prod) => (
+                                                            <div
+                                                              key={prod.id}
+                                                              onClick={() => {
+                                                                const newMapping = { ...productMapping };
+                                                                if (!newMapping[orderIndex]) newMapping[orderIndex] = {};
+                                                                newMapping[orderIndex][itemIndex] = prod.id;
+                                                                setProductMapping(newMapping);
+
+                                                                const newSearch = { ...productSearchText };
+                                                                if (!newSearch[orderIndex]) newSearch[orderIndex] = {};
+                                                                newSearch[orderIndex][itemIndex] = '';
+                                                                setProductSearchText(newSearch);
+
+                                                                setOpenDropdown(null);
+
+                                                                handleProductMapping(orderIndex, itemIndex, prod.id);
+                                                              }}
+                                                              className="px-4 py-3 hover:bg-blue-100 cursor-pointer border-b text-sm transition"
+                                                            >
+                                                              <div className="font-semibold text-gray-900 truncate">
+                                                                {prod.name}
+                                                              </div>
+                                                              <div className="text-xs text-gray-600 mt-1">
+                                                                {prod.code && <span className="bg-gray-100 px-2 py-1 rounded mr-2">Code: {prod.code}</span>}
+                                                                {prod.size && <span className="bg-gray-100 px-2 py-1 rounded">Size: {prod.size}</span>}
+                                                              </div>
+                                                            </div>
+                                                          ))
+                                                        ) : (
+                                                          <div className="px-4 py-3 text-sm text-gray-500">
+                                                            No products found matching "{searchText}"
+                                                          </div>
+                                                        )}
+                                                      </PopoverContent>
+                                                    </Popover>
+
+                                                    {selectedProduct && (
+                                                      <div className="text-xs text-green-700 mt-2 font-medium bg-green-50 px-2 py-1 rounded border border-green-200">
+                                                        <div className="flex items-center gap-2">
+                                                          <span className="font-semibold">✅ WILL SAVE:</span>
+                                                          <span className="font-semibold truncate">{selectedProduct.name}</span>
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteMapping(orderIndex, itemIndex)}
+                                                            className="ml-2 text-red-600 hover:text-red-800 rounded p-1"
+                                                            title="Delete mapped item"
+                                                          >
+                                                            <Trash2 className="h-4 w-4" />
+                                                          </button>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-1 text-[11px] text-green-800">
+                                                          {selectedProduct.code && <span className="bg-white px-2 py-0.5 rounded border">Code: {selectedProduct.code}</span>}
+                                                          {selectedProduct.size !== undefined && selectedProduct.size !== null && <span className="bg-white px-2 py-0.5 rounded border">Size: {selectedProduct.size}</span>}
+                                                          {selectedProduct.dp !== undefined && selectedProduct.dp !== null && <span className="bg-white px-2 py-0.5 rounded border">DP: {selectedProduct.dp}</span>}
+                                                        </div>
+                                                      </div>
+                                                    )}
+                                                    {!selectedProduct && (
+                                                      <div className="text-xs text-red-600 mt-2 font-semibold flex items-center gap-1 bg-red-50 px-2 py-1 rounded border border-red-200">
+                                                        <span>⚠️</span>
+                                                        <span>NOT MAPPED - Won't save</span>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })()}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              <input
+                                                type="number"
+                                                min="1"
+                                                value={item.qty}
+                                                onChange={(e) => {
+                                                  const newOrders = [...extractedOrders];
+                                                  const newQty = parseInt(e.target.value) || 1;
+                                                  const unitPriceVal = parseFloat(unitPrice);
+                                                  // Update qty
+                                                  newOrders[orderIndex].items![itemIndex].qty = newQty;
+                                                  // Recalculate total based on new qty
+                                                  newOrders[orderIndex].items![itemIndex].total = newQty * unitPriceVal;
+                                                  // Update order amount and qty
+                                                  newOrders[orderIndex].qty = newOrders[orderIndex].items!.reduce((sum, i) => sum + i.qty, 0);
+                                                  newOrders[orderIndex].amount = newOrders[orderIndex].items!.reduce((sum, i) => sum + i.total, 0).toFixed(2);
+                                                  setExtractedOrders(newOrders);
+                                                }}
+                                                className="w-16 px-2 py-1 border rounded text-center font-bold text-blue-600"
+                                              />
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                              <div className="flex items-center justify-end gap-1">
+                                                <span className="text-xs text-gray-600">₹</span>
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  step="0.01"
+                                                  value={unitPrice}
+                                                  onChange={(e) => {
+                                                    const newOrders = [...extractedOrders];
+                                                    const newUnitPrice = parseFloat(e.target.value) || 0;
+                                                    const qty = order.items![itemIndex].qty;
+                                                    // Update total based on new unit price
+                                                    newOrders[orderIndex].items![itemIndex].total = qty * newUnitPrice;
+                                                    // Update order amount
+                                                    newOrders[orderIndex].amount = newOrders[orderIndex].items!.reduce((sum, i) => sum + i.total, 0).toFixed(2);
+                                                    setExtractedOrders(newOrders);
+                                                  }}
+                                                  className="w-24 px-2 py-1 border rounded text-right font-semibold text-gray-700"
+                                                />
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-bold text-green-600 text-base">₹{item.total.toFixed(2)}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                      <tr className="bg-gray-50 border-t-2 border-gray-300">
+                                        <td colSpan={2} className="px-4 py-3 font-bold text-right text-gray-800">
+                                          Order Total:
+                                        </td>
+                                        <td className="px-4 py-3 text-center font-bold text-gray-600 text-base">
+                                          {order.items.reduce((sum, i) => sum + i.qty, 0)}
+                                        </td>
+                                        <td className="px-4 py-3"></td>
+                                        <td className="px-4 py-3 text-right font-bold text-green-700 text-lg">
+                                          ₹{order.items.reduce((sum, i) => sum + i.total, 0).toFixed(2)}
+                                        </td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    ))}
                   </TableBody>
                 </Table>
               </div>

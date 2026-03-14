@@ -13,7 +13,7 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import { buildStagingFromRows, upsertStaging, parseItemWithQty, extractSkuToken } from '@/utils/onlineOrderHelpers';
+// Removed: buildStagingFromRows, upsertStaging, parseItemWithQty, extractSkuToken - using gatepass creation instead
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Import the worker directly from the package to avoid CDN issues
@@ -37,10 +37,36 @@ const MeeshoOrderExtractor = () => {
   const navigate = useNavigate();
   const { user } = useSession();
   const [loading, setLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isCreatingGatepasses, setIsCreatingGatepasses] = useState(false);
   const [extractedOrders, setExtractedOrders] = useState<ExtractedOrder[]>([]);
   const [rawText, setRawText] = useState<string>("");
   const [showRawText, setShowRawText] = useState(false);
+  const [productMapping, setProductMapping] = useState<Record<string, Record<number, string>>>({});
+  const [productSearchText, setProductSearchText] = useState<Record<string, Record<number, string>>>({});
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [selectedExtracted, setSelectedExtracted] = useState<Record<number, boolean>>({});
+  const selectAllRef = React.useRef<HTMLInputElement | null>(null);
+
+  const allSelected = extractedOrders.length > 0 && extractedOrders.every((_, idx) => !!selectedExtracted[idx]);
+  const someSelected = extractedOrders.some((_, idx) => !!selectedExtracted[idx]);
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = !allSelected && someSelected;
+    }
+  }, [allSelected, someSelected]);
+
+  const handleToggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const newSel: Record<number, boolean> = {};
+      extractedOrders.forEach((_, idx) => newSel[idx] = true);
+      setSelectedExtracted(newSel);
+    } else {
+      setSelectedExtracted({});
+    }
+  };
+
+  const inputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
 
   interface Product { id: string; name: string; code?: string; size?: string | number | null; dp?: number; gst?: string | number }
   const [products, setProducts] = useState<Product[]>([]);
@@ -186,9 +212,12 @@ const MeeshoOrderExtractor = () => {
       let authUser = user;
       if (!authUser) {
         const { data: { session } } = await supabase.auth.getSession();
-        authUser = session?.user;
+        authUser = session?.user ?? null;
       }
-      if (!authUser) throw new Error('User not authenticated');
+      if (!authUser) {
+        showError('Please sign in to map products.');
+        return;
+      }
 
       const order = extractedOrders[orderIndex];
       const item = order.items?.[itemIndex];
@@ -208,65 +237,91 @@ const MeeshoOrderExtractor = () => {
         total: itemAmount
       });
 
-      // Delete old staging row with raw extracted item name
-      console.log('🗑️ Deleting old staging row with raw item name...');
-      const { error: deleteError } = await supabase
-        .from('online_order_staging')
-        .delete()
-        .eq('platform_order_number', order.orderNo)
-        .eq('flipkart_item_name', item.product);
+      // Try to update any existing staging rows for this order that match the raw item name
+      console.log('🔁 Updating staging row(s) with mapped product id...');
+      let updateCount = 0;
 
-      if (deleteError) {
-        console.warn('⚠️ Delete warning (may not exist):', deleteError.message);
-      } else {
-        console.log('✅ Deleted old row');
-      }
-
-      // Upsert new row with mapped product data
-      console.log('✅ Upserting mapped product to staging...');
-      const { data, error: insertError } = await supabase
+      // Exact match update
+      const { data: upd1, error: updErr1 } = await supabase
         .from('online_order_staging')
-        .upsert([{
-          platform_order_number: order.orderNo,
-          customer_name: order.customerName || null,
-          shipping_address: order.address || null,
+        .update({
           flipkart_item_name: selectedProduct.name,
+          mapped_product_id: selectedProduct.id,
           amount: parseFloat(itemAmount.toString()) || 0,
           quantity: finalQty,
           bill_no: order.invoiceNo || '',
           created_by: authUser.id,
-          status: 'pending',
-          mapped_product_id: selectedProductId
-        }], {
-          onConflict: 'platform_order_number,flipkart_item_name'
+          status: 'pending'
         })
+        .eq('platform_order_number', order.orderNo)
+        .eq('flipkart_item_name', item.product)
         .select();
 
-      if (insertError) {
-        throw insertError;
+      if (updErr1) console.warn('Exact update error', updErr1.message);
+      if (upd1 && upd1.length) updateCount += upd1.length;
+
+      // Looser substring match (case-insensitive)
+      if (updateCount === 0) {
+        const { data: upd2, error: updErr2 } = await supabase
+          .from('online_order_staging')
+          .update({
+            flipkart_item_name: selectedProduct.name,
+            mapped_product_id: selectedProduct.id,
+            amount: parseFloat(itemAmount.toString()) || 0,
+            quantity: finalQty,
+            bill_no: order.invoiceNo || '',
+            created_by: authUser.id,
+            status: 'pending'
+          })
+          .eq('platform_order_number', order.orderNo)
+          .ilike('flipkart_item_name', `%${item.product}%`)
+          .select();
+
+        if (updErr2) console.warn('Substring update error', updErr2.message);
+        if (upd2 && upd2.length) updateCount += upd2.length;
       }
 
-      console.log('✅ Inserted mapped product row:', data);
+      if (updateCount === 0) {
+        // fallback: insert/upsert a new mapped row
+        console.log('✅ No existing row updated — upserting mapped product to staging...');
+        const { data, error: insertError } = await supabase
+          .from('online_order_staging')
+          .upsert([{
+            platform_order_number: order.orderNo,
+            customer_name: order.customerName || null,
+            shipping_address: order.address || null,
+            flipkart_item_name: selectedProduct.name,
+            mapped_product_id: selectedProduct.id,
+            amount: parseFloat(itemAmount.toString()) || 0,
+            quantity: finalQty,
+            bill_no: order.invoiceNo || '',
+            created_by: authUser.id,
+            status: 'pending'
+          }], {
+            onConflict: 'platform_order_number,flipkart_item_name'
+          })
+          .select();
+
+        if (insertError) throw insertError;
+        console.log('✅ Inserted mapped product row:', data);
+      } else {
+        console.log(`✅ Updated ${updateCount} staging row(s) with mapped product id`);
+      }
+
       showSuccess(`✅ Mapped & saved: ${selectedProduct.name} | Qty: ${finalQty} | Amount: ₹${itemAmount.toFixed(2)}`);
 
-      // Update UI state to reflect mapping (so it looks like Flipkart extractor)
-      setMatchedMap(prev => ({ ...prev, [orderIndex]: { ...(prev[orderIndex] || { matches: [] }), selectedId: selectedProductId } }));
-      setExtractedOrders(prev => {
-        const next = [...prev];
-        const o = { ...next[orderIndex] } as ExtractedOrder;
-        if (o.items && o.items[itemIndex]) {
-          const newItems = [...o.items];
-          newItems[itemIndex] = { ...newItems[itemIndex], mapped_product_id: selectedProductId };
-          o.items = newItems;
-          // append product name to visible item text if not already present
-          if (!o.item.includes(` — ${selectedProduct.name}`)) {
-            o.item = `${o.item} — ${selectedProduct.name}`;
-          }
-        }
-        next[orderIndex] = o;
-        return next;
-      });
+      // Update UI state to reflect mapping
+      const newMapping = { ...productMapping };
+      if (!newMapping[orderIndex]) newMapping[orderIndex] = {};
+      newMapping[orderIndex][itemIndex] = selectedProductId;
+      setProductMapping(newMapping);
 
+      const newSearch = { ...productSearchText };
+      if (!newSearch[orderIndex]) newSearch[orderIndex] = {};
+      newSearch[orderIndex][itemIndex] = '';
+      setProductSearchText(newSearch);
+
+      setOpenDropdown(null);
     } catch (error: any) {
       console.error('❌ Mapping error:', error);
       showError(`Failed to map product: ${error.message}`);
@@ -455,43 +510,134 @@ const MeeshoOrderExtractor = () => {
     }
   };
 
-  const handleSaveToStaging = async () => {
-    if (!user || extractedOrders.length === 0) return;
-    setIsSaving(true);
+  const handleCreateGatepassesForSelected = async () => {
+    const selectedIndexes = Object.keys(selectedExtracted).filter(k => selectedExtracted[Number(k)]).map(k => Number(k));
+    if (selectedIndexes.length === 0) {
+      showError('No extracted orders selected.');
+      return;
+    }
+
+    setIsCreatingGatepasses(true);
     try {
-      const rawRows = extractedOrders.map(o => ({
-        platform_order_number: o.orderNo,
-        customer_name: o.customerName,
-        shipping_address: o.address,
-        item: o.item,
-        amount: parseFloat(o.amount) || 0,
-        bill_no: o.invoiceNo || ''
-      }));
-      const stagingData = buildStagingFromRows(rawRows, user.id);
+      // get dealer 'Online Order' (use maybeSingle so we can create it if missing)
+      let { data: dealerData, error: dealerErr } = await supabase.from('dealers').select('id').eq('name', 'Online Order').maybeSingle();
+      if (dealerErr) console.warn('Dealer lookup error (will attempt to create):', dealerErr);
+      if (!dealerData) {
+        const { data: createdDealer, error: createErr } = await supabase.from('dealers').insert({ name: 'Online Order' }).select('id').single();
+        if (createErr) throw createErr;
+        dealerData = createdDealer as any;
+      }
 
-      const { error } = await supabase.from('online_order_staging').upsert(stagingData, { onConflict: 'platform_order_number,flipkart_item_name' });
+      // ensure we have the Meesho platform id (online_platforms.id is UUID)
+      let meeshoPlatformId: string | null = null;
+      try {
+        const { data: pf, error: pfErr } = await supabase.from('online_platforms').select('id').eq('name', 'Meesho').single();
+        if (pfErr || !pf) {
+          const { data: createdPf, error: createPfErr } = await supabase.from('online_platforms').insert({ name: 'Meesho' }).select('id').single();
+          if (!createPfErr && createdPf) meeshoPlatformId = createdPf.id;
+        } else {
+          meeshoPlatformId = pf.id;
+        }
+      } catch (e) {
+        console.warn('Failed to ensure Meesho platform id', e);
+      }
 
-      if (error) throw error;
+      let createdCount = 0;
+      for (const idx of selectedIndexes) {
+        const order = extractedOrders[idx];
+        if (!order) continue;
 
-      showSuccess(`Saved ${extractedOrders.length} orders to staging area.`);
-      navigate('/process-online-orders');
+        const totalAmount = parseFloat(order.amount as any) || 0;
+        // request a new sequence number for this online order
+        let seqNum: number | null = null;
+        try {
+          const { data: seqData, error: seqErr } = await supabase.rpc('get_next_online_order_seq').single();
+          if (!seqErr && seqData) seqNum = seqData as unknown as number;
+        } catch (rpcErr) {
+          console.warn('get_next_online_order_seq RPC failed', rpcErr);
+        }
+
+        const platformName = 'Meesho';
+        const platformPrefix = 'M';
+        const displaySeq = seqNum ?? Date.now();
+
+        const onlinePayload: any = {
+          order_number: `${platformPrefix}${displaySeq}`,
+          order_sequence: seqNum || null,
+          dealer_id: dealerData.id,
+          user_id: user?.id || null,
+          total_amount: totalAmount,
+          status: 'completed',
+          payment_status: 'paid',
+          order_date: new Date().toISOString(),
+          dispatched: false,
+          dispatch_date: null,
+          dispatch_number: `${platformPrefix}${displaySeq}`,
+          bill_no: order.invoiceNo || null,
+        };
+
+        const { data: newOnlineOrder, error: onlineErr } = await supabase.from('online_orders').insert(onlinePayload).select('id').single();
+        console.debug('MeeshoExtractor: online_orders.insert result', { newOnlineOrder, onlineErr });
+        if (onlineErr || !newOnlineOrder) {
+          console.error('Online order create error', onlineErr);
+          showError(`Failed to create online_order for ${order.orderNo}`);
+          continue;
+        }
+
+        // Insert one online_order_details row per extracted item (preserve mapped product id, qty, amount)
+        let insertedDetail: any = null;
+        try {
+          const detailsToInsert: any[] = (order.items || []).map((it, itemIndex) => {
+            const mappedId = productMapping[idx] ? productMapping[idx][itemIndex] : null;
+            return {
+              order_id: newOnlineOrder.id,
+              client_name: order.customerName,
+              platform_id: meeshoPlatformId,
+              platform_order_number: order.orderNo,
+              address: order.address,
+              raw_item_name: it.product,
+              mapped_product_id: mappedId || null,
+            };
+          });
+
+          if (detailsToInsert.length > 0) {
+            const { data: detailRows, error: detailErr } = await supabase.from('online_order_details').insert(detailsToInsert).select('id, mapped_product_id');
+            console.debug('MeeshoExtractor: online_order_details.insert batch result', { detailRows, detailErr });
+            if (detailErr) {
+              console.warn('Failed to insert online_order_details batch', detailErr);
+              const msg = String(detailErr.message || detailErr.description || detailErr.code || 'Unknown error');
+              if (msg.includes('online_order_details_order_id_fkey') || msg.includes('foreign key') || msg.includes('orders')) {
+                console.error('DB schema mismatch: online_order_details.order_id still references orders(id)');
+                showError('DB schema mismatch: online_order_details.order_id references orders(id). Run the migration to change the FK to reference online_orders(id) and retry.');
+              } else {
+                showError('Failed to save online order details: ' + msg);
+              }
+            } else {
+              insertedDetail = detailRows;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to insert online_order_details', e);
+        }
+
+        createdCount++;
+      }
+
+      showSuccess(`Created ${createdCount} gatepass(es).`);
     } catch (error: any) {
-      console.error("Staging Error:", error);
-      showError(`Failed to save to staging: ${error.message}`);
+      console.error('Gatepass creation error', error);
+      showError(error.message || 'Failed to create gatepasses.');
     } finally {
-      setIsSaving(false);
+      setIsCreatingGatepasses(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-6xl">
-        <div className="flex justify-between items-center mb-6">
-          <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
-          </Button>
-          <Button variant="secondary" onClick={() => navigate('/process-online-orders')} className="flex items-center gap-2">
-            <ListChecks className="h-4 w-4" /> Process Staged Orders
+        <div className="flex justify-start items-center mb-6">
+          <Button variant="outline" onClick={() => navigate('/online-orders-admin')} className="flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" /> Back to Online Orders
           </Button>
         </div>
 
@@ -564,10 +710,10 @@ const MeeshoOrderExtractor = () => {
                   <CardTitle>Extracted Order Details</CardTitle>
                   <CardDescription>Found {extractedOrders.length} orders in the document.</CardDescription>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleSaveToStaging} disabled={isSaving} className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 border-none">
-                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    Save to Staging
+                <div className="flex gap-2 items-center">
+                  <Button variant="outline" size="sm" onClick={() => handleCreateGatepassesForSelected()} disabled={isCreatingGatepasses} className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 border-none">
+                    {isCreatingGatepasses ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
+                    Create Gatepasses for Selected
                   </Button>
                 </div>
               </div>
@@ -577,20 +723,38 @@ const MeeshoOrderExtractor = () => {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                        <TableHead className="font-bold">Order No.</TableHead>
-                        <TableHead className="font-bold">Invoice No.</TableHead>
-                        <TableHead className="font-bold">Customer Name</TableHead>
-                        <TableHead className="font-bold">Address</TableHead>
-                        <TableHead className="font-bold text-center">Qty</TableHead>
-                        <TableHead className="font-bold">Item Description</TableHead>
-                        <TableHead className="font-bold text-right">Amount (₹)</TableHead>
-                      </TableRow>
+                      <TableHead className="w-8">
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={(e) => handleToggleSelectAll(e.target.checked)}
+                          className="h-4 w-4"
+                          aria-label="Select all extracted orders"
+                        />
+                      </TableHead>
+                      <TableHead className="font-bold">Order No.</TableHead>
+                      <TableHead className="font-bold">Invoice No.</TableHead>
+                      <TableHead className="font-bold">Customer Name</TableHead>
+                      <TableHead className="font-bold">Address</TableHead>
+                      <TableHead className="font-bold text-center">Qty</TableHead>
+                      <TableHead className="font-bold">Item Description</TableHead>
+                      <TableHead className="font-bold text-right">Amount (₹)</TableHead>
+                    </TableRow>
                   </TableHeader>
                   <TableBody>
                     {extractedOrders.map((order, orderIndex) => (
                       <React.Fragment key={orderIndex}>
                         {/* Main Order Row */}
                         <TableRow className="bg-pink-50 hover:bg-pink-100 border-b-2">
+                          <TableCell className="px-3">
+                            <input
+                              type="checkbox"
+                              checked={!!selectedExtracted[orderIndex]}
+                              onChange={(e) => setSelectedExtracted(prev => ({ ...prev, [orderIndex]: e.target.checked }))}
+                              className="h-4 w-4"
+                            />
+                          </TableCell>
                           <TableCell className="font-mono text-xs font-bold text-pink-700">{order.orderNo}</TableCell>
                           <TableCell className="text-xs font-semibold text-pink-600">{order.invoiceNo || '—'}</TableCell>
                           <TableCell className="font-bold text-gray-800">{order.customerName}</TableCell>
@@ -606,7 +770,7 @@ const MeeshoOrderExtractor = () => {
                         {/* Items Sub-Table */}
                         {order.items && order.items.length > 0 && (
                           <TableRow className="bg-gray-50">
-                            <TableCell colSpan={7} className="p-0">
+                            <TableCell colSpan={8} className="p-0">
                               <div className="p-4 space-y-4">
                                 <div>
                                   <h4 className="font-semibold text-base mb-3">📦 Items in this Order:</h4>
@@ -629,133 +793,126 @@ const MeeshoOrderExtractor = () => {
                                         <th className="px-4 py-3 text-left font-bold text-gray-800">Extracted Item</th>
                                         <th className="px-4 py-3 text-left font-bold text-gray-800">➜ Map to Actual Product (This will be saved)</th>
                                         <th className="px-4 py-3 text-center font-bold text-gray-800 w-20">Qty</th>
+                                        <th className="px-4 py-3 text-right font-bold text-gray-800 w-32">Unit Price (₹)</th>
                                         <th className="px-4 py-3 text-right font-bold text-gray-800 w-32">Total (₹)</th>
                                       </tr>
                                     </thead>
                                     <tbody>
                                       {order.items.map((item, itemIndex) => {
-                                        const selectedProductId = item.mapped_product_id || matchedMap[orderIndex]?.selectedId;
+                                        const unitPrice = item.qty > 0 ? (item.total / item.qty).toFixed(2) : item.total.toFixed(2);
+                                        const mappingKey = `${orderIndex}|${itemIndex}`;
+                                        const selectedProductId = productMapping[orderIndex]?.[itemIndex];
                                         const selectedProduct = products.find(p => p.id === selectedProductId);
                                         
                                         return (
                                           <tr key={itemIndex} className="border-b hover:bg-pink-50 transition">
                                             <td className="px-4 py-3 text-sm break-words font-medium text-gray-900">
+                                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-semibold">
+                                                ❌ From PDF: {item.product}
+                                              </span>
+                                              <p className="text-xs text-gray-500 mt-1">(Not being saved)</p>
+                                            </td>
+                                            <td className="px-4 py-3">
                                               {(() => {
-                                                // Prefer SKU from mapped product, else use detected item.sku or try extract
-                                                const skuFromProduct = selectedProduct?.code || (item as any).sku;
-                                                const raw = item.product || '';
-                                                let extractedSku: string | null = null;
-                                                if (skuFromProduct) extractedSku = skuFromProduct;
-                                                else {
-                                                  // use shared helper which prefers alpha+digit tokens
-                                                  const candidate = extractSkuToken((raw || '').toUpperCase() || raw);
-                                                  if (candidate) {
-                                                    const tokenClean = candidate.replace(/[^A-Z0-9\-]/gi, '');
-                                                    const sizeTokens = ['S','M','L','XL','XS','XXL','XXXL','XXXXL'];
-                                                    // ignore pure short numeric sizes and common size codes
-                                                    if (!/^[0-9]{1,3}$/.test(tokenClean) && !sizeTokens.includes(tokenClean.toUpperCase())) {
-                                                      extractedSku = candidate;
-                                                    }
-                                                  }
+                                                const searchKey = `${orderIndex}|${itemIndex}`;
+                                                const selectedProductId = productMapping[orderIndex]?.[itemIndex];
+                                                const selectedProduct = products.find(p => p.id === selectedProductId);
+                                                const searchText = productSearchText[orderIndex]?.[itemIndex] || '';
+                                                const isOpen = openDropdown === searchKey;
+                                                
+                                                // Build dropdown results based on search text
+                                                const searchLower = (searchText || '').toLowerCase().trim();
+                                                const candidates = (matchedMap[orderIndex]?.matches || []).map(p => p.id);
+
+                                                let matchedList = [] as Product[];
+                                                if (searchLower.length === 0) {
+                                                  // show candidate matches when no search typed
+                                                  matchedList = products.filter(p => candidates.includes(p.id));
+                                                } else {
+                                                  // show products matching the search text
+                                                  const bySearch = products.filter(prod => {
+                                                    return (
+                                                      prod.name.toLowerCase().includes(searchLower) ||
+                                                      (prod.code ? prod.code.toLowerCase().includes(searchLower) : false)
+                                                    );
+                                                  });
+                                                  const candidateSet = new Set(candidates);
+                                                  const candidateMatches = bySearch.filter(p => candidateSet.has(p.id));
+                                                  const others = bySearch.filter(p => !candidateSet.has(p.id));
+                                                  matchedList = [...candidateMatches, ...others];
                                                 }
 
+                                                const filteredProducts = matchedList;
+                                                
                                                 return (
-                                                  <>
-                                                    <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-semibold">
-                                                      ❌ From PDF: {raw}
-                                                    </span>
-                                                    {extractedSku && (
-                                                      <div className="text-xs text-muted-foreground mt-1">SKU: {extractedSku}</div>
+                                                  <div className="w-full">
+                                                    {selectedProduct ? (
+                                                      <div className="text-sm">
+                                                        <div className="font-bold text-green-700 flex items-center gap-2">
+                                                          ✅ {selectedProduct.name}
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground mt-1">
+                                                          {selectedProduct.code && <span className="bg-green-100 px-2 py-1 rounded mr-1">Code: {selectedProduct.code}</span>}
+                                                          {selectedProduct.size && <span className="bg-green-100 px-2 py-1 rounded">Size: {selectedProduct.size}</span>}
+                                                        </div>
+                                                      </div>
+                                                    ) : (
+                                                      <Popover open={isOpen} onOpenChange={(open) => setOpenDropdown(open ? searchKey : null)}>
+                                                        <PopoverTrigger asChild>
+                                                          <input
+                                                            type="text"
+                                                            placeholder="Type product name or code..."
+                                                            value={searchText}
+                                                            onChange={(e) => {
+                                                              const newSearch = { ...productSearchText };
+                                                              if (!newSearch[orderIndex]) newSearch[orderIndex] = {};
+                                                              newSearch[orderIndex][itemIndex] = e.target.value;
+                                                              setProductSearchText(newSearch);
+                                                              setOpenDropdown(searchKey);
+                                                              setTimeout(() => inputRefs.current[searchKey]?.focus(), 0);
+                                                            }}
+                                                            ref={(el) => { inputRefs.current[searchKey] = el; }}
+                                                            onFocus={() => setOpenDropdown(searchKey)}
+                                                            className="w-full px-3 py-2 border-2 border-gray-300 rounded bg-white text-sm font-medium text-gray-700 focus:border-pink-500 focus:outline-none"
+                                                          />
+                                                        </PopoverTrigger>
+
+                                                        <PopoverContent className="p-0 min-w-[300px] max-h-80 overflow-y-auto">
+                                                          {filteredProducts.length > 0 ? (
+                                                            filteredProducts.map((prod) => (
+                                                              <div
+                                                                key={prod.id}
+                                                                onClick={() => {
+                                                                  handleProductMapping(orderIndex, itemIndex, prod.id);
+                                                                }}
+                                                                className="px-4 py-3 border-b hover:bg-pink-50 cursor-pointer transition"
+                                                              >
+                                                                <div className="font-medium text-sm">{prod.name}</div>
+                                                                <div className="text-xs text-muted-foreground">{prod.code} {prod.size ? `| Size: ${prod.size}` : ''}</div>
+                                                              </div>
+                                                            ))
+                                                          ) : (
+                                                            <div className="px-4 py-4 text-xs text-muted-foreground text-center">
+                                                              No products found
+                                                            </div>
+                                                          )}
+                                                        </PopoverContent>
+                                                      </Popover>
                                                     )}
-                                                    <p className="text-xs text-gray-500 mt-1">(Not being saved)</p>
-                                                  </>
+                                                  </div>
                                                 );
                                               })()}
                                             </td>
-                                            <td className="px-4 py-3">
-                                              {selectedProduct ? (
-                                                <div className="text-sm">
-                                                  <div className="font-bold text-green-700 flex items-center gap-2">
-                                                    ✅ {selectedProduct.name}
-                                                  </div>
-                                                  <div className="text-xs text-muted-foreground mt-1">
-                                                    {selectedProduct.code && <span className="bg-green-100 px-2 py-1 rounded mr-1">Code: {selectedProduct.code}</span>}
-                                                    {selectedProduct.size && <span className="bg-green-100 px-2 py-1 rounded">Size: {selectedProduct.size}</span>}
-                                                  </div>
-                                                </div>
-                                              ) : (
-                                                <Popover>
-                                                  <PopoverTrigger asChild>
-                                                    <Button variant="outline" size="sm" className="w-full text-left">
-                                                      {matchedMap[orderIndex]?.matches.length ? `→ Map Product (${matchedMap[orderIndex].matches.length})` : '→ Map Product'}
-                                                    </Button>
-                                                  </PopoverTrigger>
-                                                  <PopoverContent className="w-[600px] max-w-[90vw] p-0">
-                                                    <div className="p-2 border-b">
-                                                      <Input 
-                                                        placeholder="Search product..." 
-                                                        className="h-7 text-xs" 
-                                                        value={matchedMap[orderIndex]?.search || ''} 
-                                                        onChange={(e) => setMatchedMap(prev => ({ ...prev, [orderIndex]: { ...prev[orderIndex], search: e.target.value } }))} 
-                                                      />
-                                                    </div>
-                                                    <ScrollArea className="h-[300px]">
-                                                      {matchedMap[orderIndex]?.matches.length ? (
-                                                        matchedMap[orderIndex].matches.filter(p => {
-                                                          const q = (matchedMap[orderIndex]?.search || '').toLowerCase();
-                                                          if (!q) return true;
-                                                          return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
-                                                        }).map(p => (
-                                                          <Button key={`cand-meesho-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => {
-                                                            handleProductMapping(orderIndex, itemIndex, p.id);
-                                                          }}>
-                                                            <div className="text-left w-full">
-                                                              <div className="font-medium text-sm">{p.name}</div>
-                                                              <div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''}</div>
-                                                            </div>
-                                                          </Button>
-                                                        ))
-                                                      ) : null}
-                                                      <div className="h-px bg-muted/30 my-2" />
-                                                      {products.filter(p => {
-                                                        const q = (matchedMap[orderIndex]?.search || '').toLowerCase();
-                                                        if (!q) return true;
-                                                        return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
-                                                      }).map(p => (
-                                                        <Button key={`all-meesho-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => {
-                                                          handleProductMapping(orderIndex, itemIndex, p.id);
-                                                        }}>
-                                                          <div className="text-left w-full">
-                                                            <div className="font-medium text-sm">{p.name}</div>
-                                                            <div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''}</div>
-                                                          </div>
-                                                        </Button>
-                                                      ))}
-                                                    </ScrollArea>
-                                                  </PopoverContent>
-                                                </Popover>
-                                              )}
-                                            </td>
                                             <td className="px-4 py-3 text-center font-bold text-gray-700">
                                               {item.qty}
+                                            </td>
+                                            <td className="px-4 py-3 text-right text-gray-700">
+                                              ₹{parseFloat(unitPrice).toFixed(2)}
                                             </td>
                                             <td className="px-4 py-3 text-right font-bold text-green-600 text-base">₹{item.total.toFixed(2)}</td>
                                           </tr>
                                         );
                                       })}
-                                      {/* Summary Row */}
-                                      <tr className="bg-pink-50 border-t-2 border-pink-300">
-                                        <td colSpan={1} className="px-4 py-3 font-bold text-right text-gray-800">
-                                          Order Total:
-                                        </td>
-                                        <td className="px-4 py-3 text-center font-bold text-pink-600 text-base">
-                                          {order.items.reduce((sum, i) => sum + i.qty, 0)}
-                                        </td>
-                                        <td className="px-4 py-3"></td>
-                                        <td className="px-4 py-3 text-right font-bold text-green-700 text-lg">
-                                          ₹{order.items.reduce((sum, i) => sum + i.total, 0).toFixed(2)}
-                                        </td>
-                                      </tr>
                                     </tbody>
                                   </table>
                                 </div>

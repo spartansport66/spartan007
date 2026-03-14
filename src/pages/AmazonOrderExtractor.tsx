@@ -165,10 +165,11 @@ const AmazonOrderExtractor = () => {
         } catch (rpcErr) { console.warn('get_next_online_order_seq RPC failed', rpcErr); }
 
         const platformName = 'Amazon';
+        const platformPrefix = 'A';
         const displaySeq = seqNum ?? Date.now();
 
         const onlinePayload: any = {
-          order_number: `${platformName}-${displaySeq}`,
+          order_number: `${platformPrefix}${displaySeq}`,
           order_sequence: seqNum || null,
           dealer_id: dealerData.id,
           user_id: user?.id || null,
@@ -178,7 +179,7 @@ const AmazonOrderExtractor = () => {
           order_date: new Date().toISOString(),
           dispatched: false,
           dispatch_date: null,
-          dispatch_number: `${platformName}-gatepass-${displaySeq}`,
+          dispatch_number: `${platformPrefix}${displaySeq}`,
           bill_no: order.invoiceNo || null,
         };
 
@@ -704,12 +705,9 @@ const AmazonOrderExtractor = () => {
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
       <div className="w-full max-w-7xl">
-        <div className="flex justify-between items-center mb-6">
-          <Button variant="outline" onClick={() => navigate('/admin-dashboard')} className="flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" /> Back to Admin Dashboard
-          </Button>
-          <Button variant="secondary" onClick={() => navigate('/process-online-orders')} className="flex items-center gap-2">
-            <ListChecks className="h-4 w-4" /> Process Staged Orders
+        <div className="flex justify-start items-center mb-6">
+          <Button variant="outline" onClick={() => navigate('/online-orders-admin')} className="flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" /> Back to Online Orders
           </Button>
         </div>
 

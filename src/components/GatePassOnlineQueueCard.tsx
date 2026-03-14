@@ -18,11 +18,27 @@ interface OnlineQueueOrder {
   bill_no: string | null;
   dealer_id: string | null;
   user_id: string | null;
+  client_name?: string | null;
+  platform_order_number?: string | null;
+  raw_item_name?: string | null;
+  items?: any[];
+  qty?: number;
+  platform_name?: string;
 }
 
 interface GatePassOnlineQueueCardProps {
   onDispatchSuccess: () => void;
 }
+
+const getPlatformPrefix = (platform: string): string => {
+  const prefixes: Record<string, string> = {
+    'Flipkart': 'F',
+    'Meesho': 'M',
+    'Amazon': 'A',
+    'Spartan': 'S',
+  };
+  return prefixes[platform] || 'S';
+};
 
 const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDispatchSuccess }) => {
   const [queue, setQueue] = useState<OnlineQueueOrder[]>([]);
@@ -34,12 +50,22 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
   const [selectedQueue, setSelectedQueue] = useState<Record<string, boolean>>({});
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>('Flipkart');
+  const platforms = ['Flipkart', 'Meesho', 'Amazon', 'Spartan'];
 
-  const filteredQueue = searchQuery.trim() ? queue.filter(q => {
-    const ql = searchQuery.trim().toLowerCase();
-    const fields = [String(q.order_number || ''), String(q.dispatch_number || ''), String(q.client_name || '')];
-    return fields.some(f => f.toLowerCase().includes(ql));
-  }) : queue;
+  const filteredQueue = queue.filter(q => {
+    const matchesPlatform = selectedPlatform && q.platform_name === selectedPlatform;
+    const matchesSearch = !searchQuery.trim() || [
+      String(q.order_number || ''),
+      String(q.dispatch_number || ''),
+      String(q.client_name || '')
+    ].some(f => f.toLowerCase().includes(searchQuery.trim().toLowerCase()));
+    return matchesPlatform && matchesSearch;
+  });
+
+  const getCountByPlatform = (platform: string): number => {
+    return queue.filter(q => q.platform_name === platform).length;
+  };
 
   const allSelected = filteredQueue.length > 0 && filteredQueue.every(q => !!selectedQueue[q.id]);
   const someSelected = filteredQueue.some(q => !!selectedQueue[q.id]);
@@ -77,6 +103,7 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
               mapped_product_id: r.mapped_product_id || null,
               items: items.map((it: any) => ({ product_name: it.product_name || it.product || it.product_code || null, qty: it.qty || 0 })),
               qty,
+              platform_name: r.platform_name || 'Website',
             };
           });
 
@@ -104,10 +131,26 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
       const orderIds2 = ordersData.map((o: any) => o.id);
       const { data: detailsData, error: detailsErr } = await supabase
         .from('online_order_details')
-        .select('order_id, raw_item_name, client_name, mapped_product_id')
+        .select('order_id, raw_item_name, client_name, mapped_product_id, platform_id')
         .in('order_id', orderIds2);
 
       if (detailsErr) throw detailsErr;
+
+      // Get platform names for the platform IDs
+      const platformIds = detailsData ? [...new Set(detailsData.map(d => d.platform_id).filter(Boolean))] : [];
+      const platformNames: Record<string, string> = {};
+      if (platformIds.length > 0) {
+        const { data: platformData } = await supabase
+          .from('online_platforms')
+          .select('id, name')
+          .in('id', platformIds);
+        
+        if (platformData) {
+          platformData.forEach(p => {
+            platformNames[p.id] = p.name;
+          });
+        }
+      }
 
       const { data: salesData, error: salesErr } = await supabase
         .from('sales')
@@ -132,6 +175,7 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
         const rawNames = dets.map(d => d.raw_item_name).filter(Boolean);
         const clientName = dets[0]?.client_name || null;
         const mappedProductId = dets[0]?.mapped_product_id || null;
+        const platformName = (dets[0]?.platform_id ? platformNames[dets[0].platform_id] : null) || 'Website';
         const salesQty = salesQtyMap[o.id] || 0;
         const qty = salesQty || (dets.length > 0 ? dets.length : 0);
 
@@ -146,6 +190,7 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
           mapped_product_id: mappedProductId || null,
           items: dets.map((d: any) => ({ product_name: d.raw_item_name || d.mapped_product_name || null, qty: 1 })),
           qty,
+          platform_name: platformName,
         };
       });
 
@@ -244,17 +289,40 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-4">
+          {/* Platform Filter Buttons */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-sm font-semibold">Platform:</span>
+            {platforms.map(platform => (
+              <Button
+                key={platform}
+                size="sm"
+                variant={selectedPlatform === platform ? 'default' : 'outline'}
+                onClick={() => setSelectedPlatform(platform)}
+                className={selectedPlatform === platform ? (
+                  platform === 'Flipkart' ? 'bg-blue-600 hover:bg-blue-700' :
+                  platform === 'Meesho' ? 'bg-pink-600 hover:bg-pink-700' :
+                  platform === 'Amazon' ? 'bg-yellow-600 hover:bg-yellow-700' :
+                  'bg-gray-700 hover:bg-gray-800'
+                ) : ''}
+              >
+                {platform} ({getCountByPlatform(platform)})
+              </Button>
+            ))}
+          </div>
+
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div>
           ) : queue.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">The online dispatch queue is empty.</p>
+          ) : filteredQueue.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No orders found for selected platform.</p>
           ) : (
-            <div className="max-h-96 overflow-y-auto border rounded-md">
-              <Table>
+            <div className="border rounded-md overflow-hidden max-h-96 overflow-y-auto">
+              <Table className="text-xs">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-8">
+                    <TableHead className="w-6 p-2">
                       <input
                         ref={selectAllRef}
                         type="checkbox"
@@ -263,86 +331,65 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
                           const checked = e.target.checked;
                           if (checked) {
                             const newSel: Record<string, boolean> = {};
-                            queue.forEach(q => newSel[q.id] = true);
+                            filteredQueue.forEach(q => newSel[q.id] = true);
                             setSelectedQueue(newSel);
                           } else {
                             setSelectedQueue({});
                           }
                         }}
-                        className="h-4 w-4"
+                        className="h-3 w-3"
                         aria-label="Select all online dispatch queue items"
                       />
                     </TableHead>
-                    <TableHead>Online ID</TableHead>
-                    <TableHead>Dispatch No.</TableHead>
-                    <TableHead>Online Order #</TableHead>
-                    <TableHead>Client / Dealer</TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Qty</TableHead>
-                    <TableHead>Bill No.</TableHead>
-                    <TableHead className="text-center">Action</TableHead>
+                    <TableHead className="p-2 w-24">Dispatch</TableHead>
+                    <TableHead className="p-2 w-28">Client</TableHead>
+                    <TableHead className="p-2 flex-grow max-w-xs">Item</TableHead>
+                    <TableHead className="p-2 w-8">Qty</TableHead>
+                    <TableHead className="p-2 w-20 text-center">Act</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {queue.map((order) => (
+                  {filteredQueue.map((order) => (
                     <TableRow key={order.id}>
-                      <TableCell>
+                      <TableCell className="p-2">
                         <input
                           type="checkbox"
                           checked={!!selectedQueue[order.id]}
                           onChange={(e) => setSelectedQueue(prev => ({ ...prev, [order.id]: e.target.checked }))}
-                          className="h-4 w-4"
+                          className="h-3 w-3"
                         />
                       </TableCell>
-                      <TableCell>
-                        {order.id ? (
-                          <span className="font-mono text-xs text-muted-foreground" title={order.id}>{String(order.id).slice(0,8)}</span>
-                        ) : '—'}
+                      <TableCell className="p-2 text-xs font-medium truncate" title={order.dispatch_number || 'N/A'}>
+                        {order.dispatch_number ? String(order.dispatch_number).slice(0, 12) : '—'}
                       </TableCell>
-                      <TableCell className="font-medium">{order.dispatch_number || '—'}</TableCell>
-                      <TableCell>{order.order_number || '—'}</TableCell>
-                      <TableCell>
-                        {order.client_name ? (
-                          <>
-                            <span className="font-medium">{order.client_name}</span>
-                            {order.platform_order_number && (
-                              <span className="block text-xs text-muted-foreground font-mono">{order.platform_order_number}</span>
-                            )}
-                          </>
-                        ) : (
-                          (order.user_id ? <span className="font-medium">{order.user_id}</span> : (order.dealer_id || 'N/A'))
-                        )}
+                      <TableCell className="p-2 text-xs truncate" title={order.client_name || 'N/A'}>
+                        {order.client_name || '—'}
                       </TableCell>
-                      <TableCell>
-                        {order.items && order.items.length > 0 ? (
-                          <span className="text-sm font-normal truncate">{(() => {
-                            const names = order.items.map((it: any) => it.product_name || it.product_code || it.product_id);
-                            return names.length === 2 ? names.map((n: any, i: number) => <div key={i}>{n}</div>) : names.join(', ');
-                          })()}</span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
+                      <TableCell className="p-2 text-xs max-w-xs truncate" title={order.raw_item_name || 'N/A'}>
+                        {order.raw_item_name || '—'}
                       </TableCell>
-                      <TableCell>
-                        {order.items && order.items.length > 0 ? (
-                          <span className="text-sm font-normal">{(() => {
-                            const qtys = order.items.map((it: any) => it.qty);
-                            return qtys.length === 2 ? qtys.map((q: any, i: number) => <div key={i}>{q}</div>) : qtys.join(', ');
-                          })()}</span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
+                      <TableCell className="p-2 text-xs text-center font-medium">
+                        {order.qty || '—'}
                       </TableCell>
-                      <TableCell>{order.bill_no}</TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Details">
-                            <Eye className="h-4 w-4" />
+                      <TableCell className="p-2 text-center">
+                        <div className="flex justify-center gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleViewOrderDetails(order.id)} 
+                            title={`View Details - Order #${order.order_number}`}
+                            className="h-6 w-6 p-0"
+                          >
+                            <Eye className="h-3 w-3" />
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button size="sm" className="bg-green-600 hover:bg-green-700" disabled={!!isDispatching}>
-                                {isDispatching === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
+                              <Button 
+                                size="sm" 
+                                className="bg-green-600 hover:bg-green-700 h-6 px-2" 
+                                disabled={!!isDispatching}
+                              >
+                                {isDispatching === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Truck className="h-3 w-3" />}
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>

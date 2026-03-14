@@ -101,9 +101,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('company_info').select('company_name').limit(1).single();
-      if (error && error.code !== 'PGRST116') throw error;
-      setCompanyName(data?.company_name || null);
+      const { data, error } = await supabase.from('company_info').select('company_name').limit(1);
+      if (error) throw error;
+      setCompanyName(data && data.length > 0 ? data[0].company_name : null);
     } catch (error: any) {
       console.error('Error fetching company name:', error.message);
     }
@@ -112,7 +112,102 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   const fetchOrderDetails = useCallback(async (id: string) => {
     setLoading(true);
     try {
-      const { data: orderData, error: orderError } = await supabase
+      // Try to fetch from online_orders first (for online orders)
+      const { data: onlineOrderArray, error: onlineOrderError } = await supabase
+        .from('online_orders')
+        .select(`id, order_number, order_date, total_amount, status, payment_status, bill_no`)
+        .eq('id', id)
+        .limit(1);
+
+      // If found in online_orders, use that
+      if (!onlineOrderError && onlineOrderArray && onlineOrderArray.length > 0) {
+        const orderData = onlineOrderArray[0];
+        
+        // Fetch online order details
+        const { data: onlineDataArray, error: onlineError } = await supabase
+          .from('online_order_details')
+          .select(`
+            client_name,
+            platform_order_number,
+            contact_no,
+            city,
+            state,
+            address,
+            raw_item_name,
+            mapped_product_id,
+            platform_id,
+            products (name, code)
+          `)
+          .eq('order_id', id)
+          .limit(1);
+
+        let onlineOrderDetails: OnlineOrderInfo | null = null;
+        if (!onlineError && onlineDataArray && onlineDataArray.length > 0) {
+          const onlineData = onlineDataArray[0];
+          let platformName = 'N/A';
+          
+          if (onlineData.platform_id) {
+            const { data: platformDataArray } = await supabase
+              .from('online_platforms')
+              .select('name')
+              .eq('id', onlineData.platform_id)
+              .limit(1);
+            if (platformDataArray && platformDataArray.length > 0) {
+              platformName = platformDataArray[0].name || 'N/A';
+            }
+          }
+          
+          onlineOrderDetails = {
+            client_name: onlineData.client_name,
+            platform_name: platformName,
+            platform_order_number: onlineData.platform_order_number,
+            contact_no: onlineData.contact_no,
+            city: onlineData.city,
+            state: onlineData.state,
+            address: onlineData.address,
+            raw_item_name: onlineData.raw_item_name,
+            mapped_product_id: onlineData.mapped_product_id,
+            mapped_product_name: (onlineData.products as any)?.name || null,
+            mapped_product_code: (onlineData.products as any)?.code || null,
+          };
+        }
+
+        setOrderDetails({
+          id: orderData.id,
+          order_number: orderData.order_number,
+          order_date: orderData.order_date,
+          total_amount: orderData.total_amount,
+          discount_amount: orderData.discount_amount || 0,
+          status: orderData.status,
+          dealer_name: 'Online Order',
+          dealer_address: onlineOrderDetails?.address || 'N/A',
+          dealer_city: onlineOrderDetails?.city || 'N/A',
+          dealer_state: onlineOrderDetails?.state || 'N/A',
+          dealer_country: 'N/A',
+          dealer_phone: onlineOrderDetails?.contact_no || 'N/A',
+          sales_person_name: 'N/A',
+          items: [],
+          bill_no: orderData.bill_no,
+          dispatch_date: null,
+          dispatch_number: null,
+          dispatched: false,
+          payment_status: orderData.payment_status,
+          online_order_details: onlineOrderDetails,
+          delivery_location: onlineOrderDetails?.address || null,
+          transport_name: null,
+          booking_destination: null,
+          date_of_dispatch: null,
+        });
+        setDeliveryLocation(onlineOrderDetails?.address || null);
+        setTransportName(null);
+        setBookingDestination(null);
+        setDateOfDispatch(null);
+        setLoading(false);
+        return;
+      }
+
+      // Try regular orders table
+      const { data: orderDataArray, error: orderError } = await supabase
         .from('orders')
         .select(`
           id, order_number, order_date, total_amount, discount_amount, status, payment_status, user_id, bill_no, dispatch_date, dispatch_number, dispatched,
@@ -120,14 +215,20 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
           dealers (id, name, address, phone, city, state, country)
         `)
         .eq('id', id)
-        .single();
+        .limit(1);
 
       if (orderError) throw orderError;
+      
+      if (!orderDataArray || orderDataArray.length === 0) {
+        throw new Error('Order not found in both online and regular orders');
+      }
+
+      const orderData = orderDataArray[0];
 
       let salesPersonName = 'N/A';
       if (orderData.user_id) {
-        const { data: profileData } = await supabase.from('profiles').select('first_name, last_name').eq('id', orderData.user_id).single();
-        if (profileData) salesPersonName = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim();
+        const { data: profileDataArray } = await supabase.from('profiles').select('first_name, last_name').eq('id', orderData.user_id).limit(1);
+        if (profileDataArray && profileDataArray.length > 0) salesPersonName = `${profileDataArray[0].first_name || ''} ${profileDataArray[0].last_name || ''}`.trim();
       }
 
       const { data: salesItems, error: salesError } = await supabase
@@ -166,7 +267,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       let onlineOrderDetails: OnlineOrderInfo | null = null;
       if (dealer?.name === 'Online Order') {
         try {
-          const { data: onlineData, error: onlineError } = await supabase
+          const { data: onlineDataArray, error: onlineError } = await supabase
             .from('online_order_details')
             .select(`
               client_name,
@@ -177,18 +278,33 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
               address,
               raw_item_name,
               mapped_product_id,
-              products (name, code),
-              online_platforms (name)
+              platform_id,
+              products (name, code)
             `)
             .eq('order_id', id)
-            .single();
+            .limit(1);
           
-          if (onlineError && onlineError.code !== 'PGRST116') {
+          if (onlineError) {
             console.warn("Warning fetching online order details:", onlineError.message);
-          } else if (onlineData) {
+          } else if (onlineDataArray && onlineDataArray.length > 0) {
+            const onlineData = onlineDataArray[0];
+            let platformName = 'N/A';
+            
+            // Fetch platform name separately if platform_id exists
+            if (onlineData.platform_id) {
+              const { data: platformDataArray } = await supabase
+                .from('online_platforms')
+                .select('name')
+                .eq('id', onlineData.platform_id)
+                .limit(1);
+              if (platformDataArray && platformDataArray.length > 0) {
+                platformName = platformDataArray[0].name || 'N/A';
+              }
+            }
+            
             onlineOrderDetails = {
               client_name: onlineData.client_name,
-              platform_name: (onlineData.online_platforms as any)?.name || 'N/A',
+              platform_name: platformName,
               platform_order_number: onlineData.platform_order_number,
               contact_no: onlineData.contact_no,
               city: onlineData.city,
