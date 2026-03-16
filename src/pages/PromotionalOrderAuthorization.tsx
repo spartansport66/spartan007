@@ -20,10 +20,14 @@ interface PromotionalOrderData {
   total_amount: number;
   dealer_name: string;
   sales_person_name: string;
+  person_name?: string;
+  person_address?: string;
+  person_contact_no?: string;
   status: string;
   authorization_status: string;
   items: Array<{
     id: string;
+    product_id?: string;
     product_name: string;
     quantity: number;
     unit_price: number;
@@ -62,10 +66,14 @@ const PromotionalOrderAuthorization = () => {
             total_amount,
             status,
             authorization_status,
+            person_name,
+            person_address,
+            person_contact_no,
             dealers (name),
             sales_person:profiles!sales_person_id (first_name, last_name),
             promotional_order_items (
               id,
+              product_id,
               quantity,
               unit_price,
               total_price,
@@ -93,10 +101,14 @@ const PromotionalOrderAuthorization = () => {
             total_amount: orderArray.total_amount,
             dealer_name: (orderArray.dealers as any)?.name || 'N/A',
             sales_person_name: `${(orderArray.sales_person as any)?.first_name || ''} ${(orderArray.sales_person as any)?.last_name || ''}`.trim(),
+            person_name: orderArray.person_name || '',
+            person_address: orderArray.person_address || '',
+            person_contact_no: orderArray.person_contact_no || '',
             status: orderArray.status,
             authorization_status: orderArray.authorization_status,
             items: (orderArray.promotional_order_items as any[]).map(item => ({
               id: item.id,
+              product_id: item.product_id,
               product_name: (item.products as any)?.name || 'Unknown',
               quantity: item.quantity,
               unit_price: item.unit_price,
@@ -120,6 +132,7 @@ const PromotionalOrderAuthorization = () => {
 
     setSubmitting(true);
     try {
+      // Update promotional order status
       const { error: updateError } = await supabase
         .from('promotional_orders')
         .update({
@@ -130,6 +143,38 @@ const PromotionalOrderAuthorization = () => {
         .eq('id', orderData.id);
 
       if (updateError) throw updateError;
+
+      // Deduct stock for each item
+      for (const item of orderData.items) {
+        if (item.product_id) {
+          // Get current product stock
+          const { data: productData, error: fetchError } = await supabase
+            .from('products')
+            .select('stock_out, opening_stock, stock_in')
+            .eq('id', item.product_id)
+            .single();
+
+          if (fetchError) {
+            console.warn(`Failed to fetch product ${item.product_id}:`, fetchError);
+            continue;
+          }
+
+          // Update stock_out (increase it) which will automatically update closing_stock
+          const newStockOut = (productData?.stock_out || 0) + item.quantity;
+          
+          const { error: stockError } = await supabase
+            .from('products')
+            .update({
+              stock_out: newStockOut,
+              closing_stock: (productData?.opening_stock || 0) + (productData?.stock_in || 0) - newStockOut,
+            })
+            .eq('id', item.product_id);
+
+          if (stockError) {
+            console.warn(`Failed to update stock for product ${item.product_id}:`, stockError);
+          }
+        }
+      }
 
       // Log the authorization
       const { error: logError } = await supabase
@@ -144,7 +189,7 @@ const PromotionalOrderAuthorization = () => {
       if (logError) console.warn('Failed to log authorization:', logError);
 
       setActionTaken('authorized');
-      showSuccess('Order authorized successfully!');
+      showSuccess('Order authorized successfully and stock updated!');
 
       setTimeout(() => {
         navigate('/');
@@ -290,6 +335,22 @@ const PromotionalOrderAuthorization = () => {
                 <p className="text-xs text-muted-foreground">Party</p>
                 <p className="font-semibold">{orderData.dealer_name}</p>
               </div>
+              {orderData.person_name && (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground">👤 Person Name</p>
+                    <p className="font-semibold">{orderData.person_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">📱 Contact Number</p>
+                    <p className="font-semibold">{orderData.person_contact_no}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-xs text-muted-foreground">📍 Address</p>
+                    <p className="font-semibold">{orderData.person_address}</p>
+                  </div>
+                </>
+              )}
               <div>
                 <p className="text-xs text-muted-foreground">Total Amount</p>
                 <p className="font-bold text-lg text-green-700">₹{orderData.total_amount.toFixed(2)}</p>

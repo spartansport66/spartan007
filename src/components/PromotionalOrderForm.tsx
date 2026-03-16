@@ -68,6 +68,11 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
   const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [selectedSalesPerson, setSelectedSalesPerson] = useState<string>('');
 
+  // Person details (for promotions)
+  const [personName, setPersonName] = useState<string>('');
+  const [personAddress, setPersonAddress] = useState<string>('');
+  const [personContactNo, setPersonContactNo] = useState<string>('');
+
   // Data lists
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [salesPersons, setSalesPersons] = useState<SalesPerson[]>([]);
@@ -77,7 +82,15 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [selectedProductQty, setSelectedProductQty] = useState<number>(1);
-  const [selectedProductDiscount, setSelectedProductDiscount] = useState<number>(0);
+
+  // Search states
+  const [dealerSearchInput, setDealerSearchInput] = useState<string>('');
+  const [filteredDealers, setFilteredDealers] = useState<Dealer[]>([]);
+  const [showDealerDropdown, setShowDealerDropdown] = useState(false);
+
+  const [productSearchInput, setProductSearchInput] = useState<string>('');
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
 
   // Fetch dealers, sales persons, and products
   useEffect(() => {
@@ -138,14 +151,58 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
       product_name: product.name,
       quantity: selectedProductQty,
       unit_price: product.dp,
-      discount_percent: selectedProductDiscount,
-      total_price: product.dp * selectedProductQty * (1 - selectedProductDiscount / 100),
+      discount_percent: 0,
+      total_price: product.dp * selectedProductQty,
     };
 
     setOrderItems([...orderItems, newItem]);
     setSelectedProductId('');
     setSelectedProductQty(1);
-    setSelectedProductDiscount(0);
+    setProductSearchInput('');
+    setShowProductDropdown(false);
+  };
+
+  const handleDealerSearch = (input: string) => {
+    setDealerSearchInput(input);
+    
+    // Show all dealers if input is empty, otherwise filter
+    if (input.length === 0) {
+      setFilteredDealers(dealers);
+    } else {
+      const filtered = dealers.filter(dealer =>
+        dealer.name.toLowerCase().includes(input.toLowerCase())
+      );
+      setFilteredDealers(filtered);
+    }
+    setShowDealerDropdown(true);
+  };
+
+  const handleProductSearch = (input: string) => {
+    setProductSearchInput(input);
+    
+    // Show all products if input is empty, otherwise filter
+    if (input.length === 0) {
+      setFilteredProducts(products);
+    } else {
+      const filtered = products.filter(product =>
+        product.name.toLowerCase().includes(input.toLowerCase()) ||
+        product.code.toLowerCase().includes(input.toLowerCase())
+      );
+      setFilteredProducts(filtered);
+    }
+    setShowProductDropdown(true);
+  };
+
+  const selectDealer = (dealer: Dealer) => {
+    setSelectedDealer(dealer.id);
+    setDealerSearchInput(dealer.name);
+    setShowDealerDropdown(false);
+  };
+
+  const selectProduct = (product: Product) => {
+    setSelectedProductId(product.id);
+    setProductSearchInput(`${product.name} (${product.code})`);
+    setShowProductDropdown(false);
   };
 
   const removeItemFromOrder = (itemId: string) => {
@@ -165,6 +222,18 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
 
     if (!selectedDealer) {
       showError('Please select a party');
+      return;
+    }
+    if (!personName.trim()) {
+      showError('Please enter person name');
+      return;
+    }
+    if (!personContactNo.trim()) {
+      showError('Please enter contact number');
+      return;
+    }
+    if (!personAddress.trim()) {
+      showError('Please enter address');
       return;
     }
     if (!selectedSalesPerson) {
@@ -199,6 +268,9 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
           promotion_type: promotionType,
           dealer_id: selectedDealer,
           sales_person_id: selectedSalesPerson,
+          person_name: personName,
+          person_contact_no: personContactNo,
+          person_address: personAddress,
           created_by: user?.id,
           total_amount: calculateTotalAmount(),
           auth_string: authString,
@@ -228,6 +300,16 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
       if (itemsError) throw itemsError;
 
       showSuccess(`Promotional order #${orderNumber} created successfully!`);
+      
+      // Reset form
+      setSelectedDealer('');
+      setPersonName('');
+      setPersonContactNo('');
+      setPersonAddress('');
+      setSelectedSalesPerson('');
+      setOrderItems([]);
+      setDealerSearchInput('');
+      
       onOrderCreated();
     } catch (error: any) {
       showError(`Failed to create order: ${error.message}`);
@@ -287,17 +369,51 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-semibold mb-2">Select Party</label>
-          <select
-            value={selectedDealer}
-            onChange={(e) => setSelectedDealer(e.target.value)}
-            className="w-full border rounded px-3 py-2 dark:bg-gray-800"
-            required
-          >
-            <option value="">-- Select Party --</option>
-            {dealers.map(dealer => (
-              <option key={dealer.id} value={dealer.id}>{dealer.name}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <Input
+              type="text"
+              value={dealerSearchInput}
+              onChange={(e) => handleDealerSearch(e.target.value)}
+              onFocus={() => setShowDealerDropdown(true)}
+              placeholder="Search or click to see all parties..."
+              className="w-full border-2 border-blue-300"
+            />
+            {showDealerDropdown && (
+              <div className="absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border-2 border-blue-300 border-t-0 rounded-b mt-0 z-50">
+                <div className="p-2 border-b border-gray-300 dark:border-gray-600">
+                  <Input
+                    type="text"
+                    placeholder="Filter parties..."
+                    value={dealerSearchInput}
+                    onChange={(e) => handleDealerSearch(e.target.value)}
+                    className="w-full text-sm"
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  {filteredDealers.length > 0 ? (
+                    filteredDealers.map(dealer => (
+                      <div
+                        key={dealer.id}
+                        onClick={() => selectDealer(dealer)}
+                        className="px-3 py-2 hover:bg-blue-100 dark:hover:bg-blue-900 cursor-pointer text-sm border-b border-gray-200 dark:border-gray-700 flex justify-between items-center"
+                      >
+                        <span className="font-medium">{dealer.name}</span>
+                        <span className="text-xs text-blue-600 dark:text-blue-400">Select</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+                      No parties found
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {selectedDealer && dealers.find(d => d.id === selectedDealer) && (
+              <p className="text-xs text-green-600 mt-1">✓ Selected: {dealers.find(d => d.id === selectedDealer)?.name}</p>
+            )}
+          </div>
         </div>
         <div>
           <label className="block text-sm font-semibold mb-2">Select Sales Person</label>
@@ -315,27 +431,106 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
         </div>
       </div>
 
+      {/* Person Details Section (shown when party is selected) */}
+      {selectedDealer && (
+        <Card className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200">
+          <CardHeader>
+            <CardTitle className="text-lg">👤 Person Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2">Person Name</label>
+                <Input
+                  type="text"
+                  value={personName}
+                  onChange={(e) => setPersonName(e.target.value)}
+                  placeholder="Enter person name..."
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Contact Number</label>
+                <Input
+                  type="tel"
+                  value={personContactNo}
+                  onChange={(e) => setPersonContactNo(e.target.value)}
+                  placeholder="Enter contact number..."
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Address</label>
+                <Input
+                  type="text"
+                  value={personAddress}
+                  onChange={(e) => setPersonAddress(e.target.value)}
+                  placeholder="Enter address..."
+                  required
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Add Items Section */}
       <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200">
         <CardHeader>
           <CardTitle className="text-lg">Add Items to Order</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="text-xs font-semibold">Product</label>
-              <select
-                value={selectedProductId}
-                onChange={(e) => setSelectedProductId(e.target.value)}
-                className="w-full text-sm border rounded px-2 py-1 dark:bg-gray-800"
-              >
-                <option value="">Select...</option>
-                {products.map(product => (
-                  <option key={product.id} value={product.id}>
-                    {product.name} (₹{product.dp})
-                  </option>
-                ))}
-              </select>
+              <label className="text-xs font-semibold">Select Product</label>
+              <div className="relative">
+                <Input
+                  type="text"
+                  value={productSearchInput}
+                  onChange={(e) => handleProductSearch(e.target.value)}
+                  onFocus={() => setShowProductDropdown(true)}
+                  placeholder="Search or click to see all..."
+                  className="text-sm w-full border-2 border-blue-300"
+                />
+                {showProductDropdown && (
+                  <div className="absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border-2 border-blue-300 border-t-0 rounded-b mt-0 z-50">
+                    <div className="p-2 border-b border-gray-300 dark:border-gray-600">
+                      <Input
+                        type="text"
+                        placeholder="Filter products..."
+                        value={productSearchInput}
+                        onChange={(e) => handleProductSearch(e.target.value)}
+                        className="w-full text-sm"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-40 overflow-y-auto">
+                      {filteredProducts.length > 0 ? (
+                        filteredProducts.map(product => (
+                          <div
+                            key={product.id}
+                            onClick={() => selectProduct(product)}
+                            className="px-3 py-2 hover:bg-blue-100 dark:hover:bg-blue-900 cursor-pointer text-xs border-b border-gray-200 dark:border-gray-700 flex justify-between items-center"
+                          >
+                            <div>
+                              <div className="font-medium">{product.name}</div>
+                              <div className="text-gray-600 dark:text-gray-400">Code: {product.code}</div>
+                            </div>
+                            <span className="text-blue-600 dark:text-blue-400 font-semibold">₹{product.dp}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
+                          No products found
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {selectedProductId && products.find(p => p.id === selectedProductId) && (
+                  <p className="text-xs text-green-600 mt-1">✓ {products.find(p => p.id === selectedProductId)?.name}</p>
+                )}
+              </div>
             </div>
             <div>
               <label className="text-xs font-semibold">Qty</label>
@@ -344,18 +539,6 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
                 min="1"
                 value={selectedProductQty}
                 onChange={(e) => setSelectedProductQty(parseInt(e.target.value) || 1)}
-                className="text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold">Discount %</label>
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                value={selectedProductDiscount}
-                onChange={(e) => setSelectedProductDiscount(parseFloat(e.target.value) || 0)}
                 className="text-sm"
               />
             </div>
@@ -387,7 +570,6 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
                     <TableHead>Product</TableHead>
                     <TableHead className="text-right">Qty</TableHead>
                     <TableHead className="text-right">Unit Price</TableHead>
-                    <TableHead className="text-right">Discount %</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="w-10 text-center">Action</TableHead>
                   </TableRow>
@@ -398,7 +580,6 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
                       <TableCell className="font-medium">{item.product_name}</TableCell>
                       <TableCell className="text-right">{item.quantity}</TableCell>
                       <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{item.discount_percent}%</TableCell>
                       <TableCell className="text-right font-semibold">₹{item.total_price.toFixed(2)}</TableCell>
                       <TableCell className="text-center">
                         <Button
@@ -414,7 +595,7 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
                     </TableRow>
                   ))}
                   <TableRow className="bg-muted font-bold">
-                    <TableCell colSpan={4} className="text-right">TOTAL AMOUNT:</TableCell>
+                    <TableCell colSpan={3} className="text-right">TOTAL AMOUNT:</TableCell>
                     <TableCell className="text-right">₹{calculateTotalAmount().toFixed(2)}</TableCell>
                     <TableCell />
                   </TableRow>

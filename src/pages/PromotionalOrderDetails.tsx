@@ -23,6 +23,9 @@ interface OrderDetail {
   auth_token?: string;
   dealer_name: string;
   sales_person_name: string;
+  person_name?: string;
+  person_address?: string;
+  person_contact_no?: string;
   items: Array<{
     product_name: string;
     quantity: number;
@@ -57,6 +60,9 @@ const PromotionalOrderDetails = () => {
           status,
           authorization_status,
           auth_token,
+          person_name,
+          person_address,
+          person_contact_no,
           dealers (name),
           sales_person:profiles!sales_person_id (first_name, last_name),
           promotional_order_items (
@@ -85,6 +91,9 @@ const PromotionalOrderDetails = () => {
         auth_token: orderData.auth_token,
         dealer_name: (orderData.dealers as any)?.name || 'N/A',
         sales_person_name: `${(orderData.sales_person as any)?.first_name || ''} ${(orderData.sales_person as any)?.last_name || ''}`.trim(),
+        person_name: orderData.person_name || '',
+        person_address: orderData.person_address || '',
+        person_contact_no: orderData.person_contact_no || '',
         items: (orderData.promotional_order_items as any[]).map(item => ({
           product_name: (item.products as any)?.name || 'Unknown',
           quantity: item.quantity,
@@ -124,7 +133,7 @@ Amount: ₹${order.total_amount.toFixed(2)}
 ${authLink}`;
 
       // WhatsApp Web URL - directly send message with pre-filled content
-      const phoneNumber = '919815260205';
+      const phoneNumber = '61408949488';
       const encoded = encodeURIComponent(whatsappMessage);
       const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encoded}`;
 
@@ -216,8 +225,8 @@ ${authLink}`;
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-background text-foreground p-2 sm:p-4 lg:p-6">
+      <div className="w-full">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
@@ -292,6 +301,22 @@ ${authLink}`;
                 <p className="text-sm text-muted-foreground">Sales Person</p>
                 <p className="text-lg font-semibold">{order.sales_person_name}</p>
               </div>
+              {order.person_name && (
+                <>
+                  <div>
+                    <p className="text-sm text-muted-foreground">👤 Person Name</p>
+                    <p className="text-lg font-semibold">{order.person_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">📱 Contact Number</p>
+                    <p className="text-lg font-semibold">{order.person_contact_no}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-muted-foreground">📍 Address</p>
+                    <p className="text-lg font-semibold">{order.person_address}</p>
+                  </div>
+                </>
+              )}
               <div>
                 <p className="text-sm text-muted-foreground">Material Type</p>
                 <p className="text-lg font-semibold">

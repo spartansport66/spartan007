@@ -144,7 +144,7 @@ ${authLink}`;
       showSuccess('✅ Message copied to clipboard! Redirecting to WhatsApp...');
 
       // WhatsApp Web URL with phone number for testing (9815260205 with country code +91)
-      const phoneNumber = '919815260205'; // India country code +91
+      const phoneNumber = '61408949488'; // Australia country code +61
       const encoded = encodeURIComponent(whatsappMessage);
       const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encoded}`;
       
@@ -260,7 +260,7 @@ ${authLink}`;
         {/* Promotional Order Form Modal */}
         {isFormOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-900 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-white dark:bg-gray-900 rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
               <div className="sticky top-0 bg-white dark:bg-gray-900 border-b p-4 flex justify-between items-center">
                 <h2 className="text-xl font-bold">Create Promotional Order</h2>
                 <button
