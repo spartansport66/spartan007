@@ -9,7 +9,7 @@ import { Loader2, Truck, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import OrderDetailsDialog from '@/components/OrderDetailsDialog';
+import OnlineOrderPreview from '@/components/OnlineOrderPreview';
 
 interface OnlineQueueOrder {
   id: string;
@@ -38,6 +38,25 @@ const getPlatformPrefix = (platform: string): string => {
     'Spartan': 'S',
   };
   return prefixes[platform] || 'S';
+};
+
+// Helper function to clean header patterns from raw item names
+const cleanItemName = (itemName: string | null): string | null => {
+  if (!itemName) return null;
+  
+  // Remove common header patterns from Spartan PDFs
+  let cleaned = itemName
+    .replace(/^Product\s+Name:\s*\%\)\s*\|\s*SKU:\s*TOTAL\s*\|\s*HSN:\s*\(Including\s*\|\s*Qty:\s*GST\)\s*\|\s*Unit\s+Price:/gi, '')
+    .replace(/Product\s+Name.*?Unit\s+Price:/gi, '')
+    .trim();
+  
+  // Remove other common header patterns
+  cleaned = cleaned
+    .replace(/\(Including\s*GST\)/gi, '')
+    .replace(/\(%\)/gi, '')
+    .trim();
+  
+  return cleaned.length > 0 ? cleaned : null;
 };
 
 const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDispatchSuccess }) => {
@@ -91,7 +110,8 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
           const finalRows = rpcData.map((r: any) => {
             const items = Array.isArray(r.items) ? r.items : [];
             const qty = items.length > 0 ? items.reduce((s: number, it: any) => s + (it.qty || 0), 0) : 0;
-            const rawNames = (r.raw_item_name ? [r.raw_item_name] : []).concat(items.map((it: any) => it.product_name).filter(Boolean));
+            const cleanedRawName = cleanItemName(r.raw_item_name);
+            const rawNames = (cleanedRawName ? [cleanedRawName] : []).concat(items.map((it: any) => it.product_name).filter(Boolean));
             return {
               id: r.order_id,
               order_number: r.order_number,
@@ -172,7 +192,8 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
 
       const finalRows = (ordersData || []).map((o: any) => {
         const dets = detailsByOrder[o.id] || [];
-        const rawNames = dets.map(d => d.raw_item_name).filter(Boolean);
+        const cleanedNames = dets.map(d => cleanItemName(d.raw_item_name)).filter(Boolean);
+        const rawNames = cleanedNames.length > 0 ? cleanedNames : dets.map(d => d.raw_item_name).filter(Boolean);
         const clientName = dets[0]?.client_name || null;
         const mappedProductId = dets[0]?.mapped_product_id || null;
         const platformName = (dets[0]?.platform_id ? platformNames[dets[0].platform_id] : null) || 'Website';
@@ -417,7 +438,7 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
           )}
         </CardContent>
       </Card>
-      <OrderDetailsDialog
+      <OnlineOrderPreview
         orderId={selectedOrderIdForDetails}
         isOpen={isOrderDetailsDialogOpen}
         onOpenChange={setIsOrderDetailsDialogOpen}

@@ -9,6 +9,7 @@ import SalesHODApprovalCard from '@/components/SalesHODApprovalCard';
 import ApprovedHODOrdersCard from '@/components/ApprovedHODOrdersCard';
 import SalesHODDispatchedCard from '@/components/SalesHODDispatchedCard';
 import DisapprovedHODOrdersCard from '@/components/DisapprovedHODOrdersCard';
+import HODApprovedPromotionalOrdersCard from '@/components/HODApprovedPromotionalOrdersCard';
 
 const SalesHODDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -35,7 +36,14 @@ const SalesHODDashboard: React.FC = () => {
           <h1 className="text-3xl sm:text-4xl font-bold text-primary">Sales HOD Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage approvals of orders awaiting dispatch.</p>
         </div>
-        <div>
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => navigate('/promotional-orders')}
+            className="bg-purple-600 hover:bg-purple-700"
+            title="Create and manage promotional material orders"
+          >
+            📦 Promotional Orders
+          </Button>
           <Button variant="outline" size="icon" onClick={handleLogout} title="Logout">
             <LogOut className="h-5 w-5" />
           </Button>
@@ -49,6 +57,7 @@ const SalesHODDashboard: React.FC = () => {
           <DisapprovedHODOrdersCard />
         </div>
         <div className="lg:col-span-2"><SalesHODDispatchedCard /></div>
+        <div className="lg:col-span-2"><HODApprovedPromotionalOrdersCard /></div>
       </div>
     </div>
   );

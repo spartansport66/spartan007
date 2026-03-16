@@ -83,6 +83,15 @@ const ManagerDashboard = () => {
           </h1>
 
           <div className="flex items-center gap-2">
+            <Button 
+              onClick={() => navigate('/promotional-orders')}
+              variant="default"
+              size="sm" 
+              className="hidden sm:flex items-center gap-2 bg-purple-600 hover:bg-purple-700"
+            >
+              📦 Promotional Orders
+            </Button>
+
             <Button onClick={handleViewPaymentsReport} variant="ghost" size="sm" className="hidden sm:flex items-center gap-2">
               Reports
             </Button>

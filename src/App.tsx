@@ -44,6 +44,9 @@ import DatabaseBackup from "./pages/DatabaseBackup";
 import OnlineOrderDispatchDashboard from "./pages/OnlineOrderDispatchDashboard";
 import ManualOrderEntry from "./pages/ManualOrderEntry"; // New Import
 import SalesHODDashboard from "./pages/SalesHODDashboard";
+import PromotionalOrderDashboard from "./pages/PromotionalOrderDashboard";
+import PromotionalOrderDetails from "./pages/PromotionalOrderDetails";
+import PromotionalOrderAuthorization from "./pages/PromotionalOrderAuthorization";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -94,6 +97,9 @@ const AppContent = () => {
       <Route path="/online-order-dispatch-dashboard" element={<OnlineOrderDispatchDashboard />} />
       <Route path="/manual-order-entry" element={<ManualOrderEntry />} /> {/* New Route */}
       <Route path="/sales-hod-dashboard" element={<SalesHODDashboard />} />
+      <Route path="/promotional-orders" element={<PromotionalOrderDashboard />} />
+      <Route path="/promotional-orders/:orderId" element={<PromotionalOrderDetails />} />
+      <Route path="/authorize-promotional/:authToken" element={<PromotionalOrderAuthorization />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>
