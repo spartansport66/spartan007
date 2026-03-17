@@ -104,7 +104,24 @@ const MeeshoOrderExtractor = () => {
       const numericToken = extractNumericToken(text);
       const normText = normalize(text);
 
-      let candidates = enriched.filter((p: any) => {
+      // First priority: Check if any item has a SKU that matches a product code
+      let skuCandidates: any[] = [];
+      if (ord.items && ord.items.length > 0) {
+        const skuValue = ord.items[0].sku; // Get SKU from first item
+        if (skuValue) {
+          // Try to find product by SKU code match
+          skuCandidates = enriched.filter((p: any) => {
+            if (!p.code) return false;
+            const normSkuValue = normalize(skuValue);
+            const normCode = normalize(p.code);
+            // Match if code contains SKU or SKU is in code
+            return normCode.includes(normSkuValue) || normSkuValue.includes(normCode) || p.code.toString().includes(skuValue);
+          });
+        }
+      }
+
+      // If SKU found a match, use those candidates
+      let candidates = skuCandidates.length > 0 ? skuCandidates : enriched.filter((p: any) => {
         if (!p.code && !p.name) return false;
         if (p.normCode && normText.includes(p.normCode)) return true;
         if (numericToken) {
@@ -122,7 +139,9 @@ const MeeshoOrderExtractor = () => {
       });
 
       const candidateProducts: Product[] = candidates.map((c: any) => ({ id: c.id, name: c.name, code: c.code, size: c.size }));
-      map[idx] = { matches: candidateProducts, selectedId: candidateProducts.length === 1 ? candidateProducts[0].id : undefined, debug: { numericToken, normText, candidateCodes: candidateProducts.map(cp => (cp.code || '').toString()) } };
+      // Auto-select if only one match found (especially from SKU matching)
+      const autoSelectId = candidateProducts.length === 1 ? candidateProducts[0].id : (skuCandidates.length === 1 ? candidateProducts[0].id : undefined);
+      map[idx] = { matches: candidateProducts, selectedId: autoSelectId, debug: { numericToken, normText, candidateCodes: candidateProducts.map(cp => (cp.code || '').toString()) } };
     });
     setMatchedMap(map);
   }, [products, extractedOrders]);
@@ -132,74 +151,75 @@ const MeeshoOrderExtractor = () => {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  // Try to find a SKU for a given item by searching nearby text in the page/document
+  // Try to find a SKU for a given item
   function findSkuForItem(docText: string, itemText: string): string | undefined {
-    if (!docText || !itemText) return undefined;
+    if (!docText) return undefined;
     try {
-      const it = itemText.trim();
-      // Look for the item occurrence and search a window around it
-      const lower = docText.toLowerCase();
-      const idx = lower.indexOf(it.toLowerCase());
-      const windowSize = 400;
-      const start = idx >= 0 ? Math.max(0, idx - windowSize) : 0;
-      const area = docText.substring(start, Math.min(docText.length, (idx >= 0 ? idx + it.length + windowSize : windowSize)));
-
-      // Prioritize explicit "Product Details" table if present
-      const prodDetailsMatch = docText.match(/Product\s*Details[\s\S]{0,600}/i);
-      if (prodDetailsMatch) {
-        const pd = prodDetailsMatch[0];
-        // look for 'SKU' header followed by a value on the next line or same line
-        const skuLine = pd.match(/SKU(?:\s*[:\-]?\s*)([A-Z0-9\-\/.]{3,})/i);
-        if (skuLine && skuLine[1]) return skuLine[1].trim();
-        // try header/value table style: find header tokens and following row tokens
-        const lines = pd.split(/\r?\n|\|/).map(l => l.trim()).filter(Boolean);
-        for (let i = 0; i < lines.length - 1; i++) {
-          if (/\bsku\b/i.test(lines[i])) {
-            // pick first token from next line that looks like SKU
-            const next = lines[i+1];
-            const toks = next.match(/([A-Z0-9\-\/]{3,})/gi);
-            if (toks && toks.length) return toks[0];
-          }
-          // handle case where header and values are on same line
-          if (/\bsku\b/i.test(lines[i])) {
-            const toks = lines[i].match(/\bsku\b[^A-Za-z0-9]*([A-Z0-9\-\/]{3,})/i);
-            if (toks && toks[1]) return toks[1];
-          }
-        }
+      // Find Product Details section in this page/text
+      const prodDetailsIdx = docText.indexOf('Product Details');
+      const taxInvoiceIdx = docText.indexOf('TAX INVOICE');
+      
+      // Also try to find Description section boundaries
+      const descIdx = docText.indexOf('Description');
+      
+      if (prodDetailsIdx === -1) {
+        console.log(`SKU DEBUG: "Product Details" not found in this page text`);
+        return undefined;
       }
-
-      // Common explicit labels
-      const labelRe = /(?:SKU|Art\s*No|Product\s*Code|Code|Style\s*No|Article)[:\s\-]*([A-Z0-9\-\/.]{3,})/i;
-      const labeled = area.match(labelRe);
-      if (labeled && labeled[1]) return labeled[1].trim();
-
-      // Table row style: try lines near the item and pick alpha+digit tokens
-      const lines = area.split(/\r?\n|\|/).map(l => l.trim()).filter(Boolean);
-      for (const line of lines) {
-        // skip lines that equal the item text
-        if (line.toLowerCase().includes(it.toLowerCase()) && /[A-Z0-9]/i.test(line)) {
-          // look for candidate tokens in the same line
-          const toks = line.match(/([A-Z0-9\-\/]{3,})/gi);
-          if (toks) {
-            const mixed = toks.find(t => /[A-Za-z]/.test(t) && /[0-9]/.test(t));
-            if (mixed) return mixed;
-            // otherwise return first that isn't just a short size like M/L/XL or a pure number
-            const candidate = toks.find(t => !/^\d{1,3}$/.test(t) && !/^[SMLX]{1,4}$/i.test(t));
-            if (candidate) return candidate;
+      
+      // Use TAX INVOICE as end boundary if found, otherwise use Description, otherwise use end of text
+      let endIdx = taxInvoiceIdx !== -1 ? taxInvoiceIdx : (descIdx !== -1 ? descIdx : docText.length);
+      
+      // Make sure start is before end
+      if (prodDetailsIdx >= endIdx && descIdx !== -1) {
+        endIdx = docText.length;
+      }
+      
+      const prodSection = docText.substring(prodDetailsIdx, endIdx);
+      console.log(`SKU DEBUG - Looking in page Product Details (${prodDetailsIdx}-${endIdx}), length: ${prodSection.length}`);
+      console.log(`SKU DEBUG - First 200 chars: "${prodSection.substring(0, 200)}"`);
+      
+      // Strategy 1: Find "SKU" keyword followed by alphanumeric
+      const skuKeywordIdx = prodSection.toLowerCase().indexOf('sku');
+      if (skuKeywordIdx !== -1) {
+        const afterSku = prodSection.substring(skuKeywordIdx + 3);
+        const skuMatch = afterSku.match(/([A-Z][A-Z0-9\-\/\.]{2,})/);
+        
+        if (skuMatch && skuMatch[1]) {
+          const sku = skuMatch[1].trim();
+          if (!/^(Size|Free|Color|Qty|Order|No|Colour|PCS|RS)/i.test(sku)) {
+            console.log(`SKU DEBUG - Found via SKU keyword: "${sku}"`);
+            return sku;
           }
         }
       }
-
-      // fallback: search entire area for alpha+digit tokens
-      const wholeToks = area.match(/([A-Z0-9\-\/]{4,})/gi);
-      if (wholeToks) {
-        const mixed = wholeToks.find(t => /[A-Za-z]/.test(t) && /[0-9]/.test(t));
-        if (mixed) return mixed;
-        return wholeToks[0];
+      
+      // Strategy 2: Look for uppercase alphanumeric pattern at line boundaries (FB1237, XY5678, etc.)
+      const lines = prodSection.split('\n');
+      console.log(`SKU DEBUG - Scanning ${lines.length} lines in Product Details section`);
+      for (let idx = 0; idx < lines.length; idx++) {
+        const trimmed = lines[idx].trim();
+        if (!trimmed || trimmed.length < 3) continue;
+        
+        // Skip known column headers  
+        if (/^(SKU|Size|Qty|Color|Order|No|Gross|Discount|Taxable|Taxes|Free|PCS|Colour)/i.test(trimmed)) {
+          console.log(`SKU DEBUG - Skipping header line: "${trimmed}"`);
+          continue;
+        }
+        
+        // Look for patterns like "FB1237" or "VL008381054711"
+        const skuPattern = /^([A-Z]{1,3}\d{3,6})(\s|$)/;
+        const match = trimmed.match(skuPattern);
+        if (match) {
+          console.log(`SKU DEBUG - Found via line pattern at line ${idx}: "${match[1]}" from "${trimmed}"`);
+          return match[1];
+        }
       }
-
+      
+      console.log(`SKU DEBUG - No SKU found in this page after trying all strategies`);
       return undefined;
     } catch (e) {
+      console.log(`SKU DEBUG - Error: ${e}`);
       return undefined;
     }
   }
@@ -352,23 +372,49 @@ const MeeshoOrderExtractor = () => {
       amount = amountMatch ? amountMatch[1].trim().replace(/,/g, '') : "0.00";
     }
 
-    // 3. Extract Item/Product Description
-    // Look for the text after the table headers and before the HSN code (6-8 digits)
-    const itemTableMatch = text.match(/(?:Description HSN Qty|Product Details)[\s\S]*?Total\s+([\s\S]*?)\s+\d{6,8}/i);
+    // 3. Extract Item/Product Description - Find the Description table and get first product
     let item = "N/A";
     
-    if (itemTableMatch) {
-      item = itemTableMatch[1].trim().replace(/\s+/g, ' ');
-    } else {
-      // Fallback to general description search
-      const descMatch = text.match(/(?:Product|Description|Item Name|SKU)[:\s]+([\s\S]*?)(?=\s*(?:Qty|Size|Color|Price|HSN|GST|Details|Total)|$)/i);
-      if (descMatch) {
-        item = descMatch[1].trim();
+    // Find "Description" text in the document
+    const descIdx = text.toLowerCase().indexOf('description');
+    if (descIdx !== -1) {
+      // Look for the next HSN code after "Description"
+      const searchArea = text.substring(descIdx, descIdx + 2000); // Search in next 2000 chars
+      
+      // SKIP entire section if it's pure metadata (starts with ❌ or From PDF)
+      const isMetadataOnly = /^[^a-z]*❌|^[^a-z]*From\s+PDF/i.test(searchArea);
+      
+      if (!isMetadataOnly) {
+        const hsnMatch = searchArea.match(/\d{6,8}/);
+        
+        if (hsnMatch) {
+          const hsnIdx = searchArea.indexOf(hsnMatch[0]);
+          let productText = searchArea.substring(0, hsnIdx).trim();
+          
+          // Clean it up
+          productText = productText
+            .replace(/Description/i, '')
+            .replace(/HSN/i, '')
+            .replace(/Qty/i, '')
+            .replace(/Gross\s+Amount/i, '')
+            .replace(/Discount/i, '')
+            .replace(/Taxable\s+Value/i, '')
+            .replace(/Taxes/i, '')
+            .replace(/Total/i, '')
+            .replace(/Color/i, '')
+            .replace(/Size/i, '')
+            .replace(/Order\s+No/i, '')
+            .replace(/\n/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          // Only use if it's a real product name (not metadata)
+          if (productText.length > 4 && !/^[%|()❌]/.test(productText) && !/from\s+pdf|product\s+name|sku:|igst|sgst|cgst|tax:/i.test(productText)) {
+            item = productText;
+          }
+        }
       }
     }
-    
-    // Clean up common noise
-    if (item.toLowerCase().includes("details sku")) item = "N/A";
 
     // 4. Extract Customer Name and Address
     let customerName = "Unknown";
@@ -395,14 +441,68 @@ const MeeshoOrderExtractor = () => {
     return { orderNo, customerName, address, item, amount };
   };
 
-  // split multi-item descriptions into separate entries
-  const splitItems = (item: string): string[] => {
-    if (!item) return [''];
-    const parts = item
-      .split(/\s*[\r\n,|;]+\s*/)
-      .map(p => p.trim())
-      .filter(Boolean);
-    return parts.length ? parts : [item];
+  // Parse Description table and extract items - Simple approach: find HSN codes
+  const parseDescriptionTableItems = (fullText: string): string[] => {
+    if (!fullText || !fullText.trim()) return [''];
+    
+    const items: string[] = [];
+    
+    // Find "Description" in the text
+    const descIdx = fullText.toLowerCase().indexOf('description');
+    if (descIdx === -1) return [''];
+    
+    // Search from Description up to "Total" for HSN codes
+    const totalIdx = fullText.indexOf('Total', descIdx);
+    const searchArea = fullText.substring(descIdx, totalIdx !== -1 ? totalIdx : descIdx + 3000);
+    
+    // Find all HSN codes (6-8 digits) in this area
+    const hsnRegex = /\d{6,8}/g;
+    let match;
+    let lastPos = 0;
+    
+    while ((match = hsnRegex.exec(searchArea)) !== null) {
+      // Get text from last position to this HSN code
+      let productText = searchArea.substring(lastPos, match.index).trim();
+      
+      // If contains metadata block, extract what comes AFTER IGST
+      if (productText.toLowerCase().includes('from pdf') || productText.includes('❌')) {
+        const afterIgst = productText.match(/IGST:\s*\d+\s+(.+?)$/i);
+        if (afterIgst && afterIgst[1]) {
+          productText = afterIgst[1].trim();
+        } else {
+          // Strip entire metadata block if IGST not found
+          productText = productText.replace(/❌[^]*From\s+PDF:[^]*?IGST:\s*\d+\s*/gi, '').trim();
+        }
+      }
+      
+      // Remove column headers
+      productText = productText
+        .replace(/Description/i, '')
+        .replace(/HSN/i, '')
+        .replace(/Qty/i, '')
+        .replace(/Gross\s+Amount/i, '')
+        .replace(/Discount/i, '')
+        .replace(/Taxable\s+Value/i, '')
+        .replace(/Taxes/i, '')
+        .replace(/Total/i, '')
+        .replace(/Color/i, '')
+        .replace(/Size/i, '')
+        .replace(/Order\s+No/i, '')
+        .replace(/\n/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      // Reject if contains any metadata indicators
+      const hasMetadata = /^[%|()❌]|from\s+pdf|product\s+name|sku:|igst|sgst|cgst|tax:|Place\s+of\s+Supply|Sold\s+by|GSTIN|Purchase|Invoice|Bill|Charges|Other|spartanextract/i.test(productText);
+      
+      if (productText.length > 4 && !hasMetadata) {
+        items.push(productText);
+      }
+      
+      lastPos = match.index + match[0].length;
+    }
+    
+    return items.length > 0 ? items : [''];
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -418,7 +518,7 @@ const MeeshoOrderExtractor = () => {
       const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
       const pdf = await loadingTask.promise;
       
-      let allExtracted: ExtractedOrder[] = [];
+      let allExtracted: Array<ExtractedOrder & { pageText?: string }> = [];
       let fullDebugText = "";
 
       // invoice extraction helpers (document-level and per-page)
@@ -449,7 +549,7 @@ const MeeshoOrderExtractor = () => {
 
         const order = extractDataFromPageText(pageText);
         if (order) {
-          allExtracted.push(pageInvoice ? { ...order, invoiceNo: pageInvoice } : order);
+          allExtracted.push(pageInvoice ? { ...order, invoiceNo: pageInvoice, pageText } : { ...order, pageText });
         }
       }
 
@@ -478,26 +578,32 @@ const MeeshoOrderExtractor = () => {
         throw new Error("No valid Meesho order patterns found. Please check the 'Debug View' to see the extracted text.");
       }
 
-      // expand multi-item rows and build items array (attach SKU found in document)
+      // expand multi-item rows and build items array (attach SKU found in that page)
       const expanded: ExtractedOrder[] = [];
       allExtracted.forEach(o => {
-        const parts = splitItems(o.item);
+        // Use the page text where this order was found (not the entire document)
+        const searchText = o.pageText || fullDebugText;
+        
+        // Use improved parsing to exclude charges from items
+        const parts = parseDescriptionTableItems(searchText);
         const itemsArray: Array<{product: string; qty: number; total: number; mapped_product_id?: string}> = [];
         
-        if (parts.length > 1) {
-          // Multiple items - divide amount equally
-          const amountPerItem = parseFloat(o.amount) / parts.length;
-          parts.forEach(p => {
-            const sku = findSkuForItem(fullDebugText, p);
-            itemsArray.push({ product: p, qty: 1, total: amountPerItem, ...(sku ? { sku } : {}) } as any);
-            expanded.push({ ...o, item: p, qty: 1, items: [{ product: p, qty: 1, total: amountPerItem, ...(sku ? { sku } : {}) } as any] });
-          });
-        } else {
-          // Single item
-          const sku = findSkuForItem(fullDebugText, o.item);
-          itemsArray.push({ product: o.item, qty: 1, total: parseFloat(o.amount), ...(sku ? { sku } : {}) } as any);
-          expanded.push({ ...o, qty: 1, items: itemsArray });
+        // Determine the product name to use
+        let productName = o.item; // Default to what we extracted from the table
+        
+        // If parseDescriptionTableItems found a non-empty item, use that instead
+        if (parts.length > 0 && parts[0] && parts[0].trim().length > 0) {
+          productName = parts[0].trim();
         }
+        
+        // Find SKU from the same page text where the item was found
+        const sku = findSkuForItem(searchText, productName);
+        console.log(`Extracted order from page: SKU="${sku}" for product="${productName}"`);
+        itemsArray.push({ product: productName, qty: 1, total: parseFloat(o.amount), ...(sku ? { sku } : {}) } as any);
+        
+        // Remove pageText from final output
+        const { pageText, ...orderWithoutPageText } = o;
+        expanded.push({ ...orderWithoutPageText, item: productName, qty: 1, items: itemsArray });
       });
 
       setExtractedOrders(expanded);
@@ -791,6 +897,7 @@ const MeeshoOrderExtractor = () => {
                                     <thead>
                                       <tr className="bg-pink-100 border-b">
                                         <th className="px-4 py-3 text-left font-bold text-gray-800">Extracted Item</th>
+                                        <th className="px-4 py-3 text-left font-bold text-gray-800">SKU</th>
                                         <th className="px-4 py-3 text-left font-bold text-gray-800">➜ Map to Actual Product (This will be saved)</th>
                                         <th className="px-4 py-3 text-center font-bold text-gray-800 w-20">Qty</th>
                                         <th className="px-4 py-3 text-right font-bold text-gray-800 w-32">Unit Price (₹)</th>
@@ -811,6 +918,15 @@ const MeeshoOrderExtractor = () => {
                                                 ❌ From PDF: {item.product}
                                               </span>
                                               <p className="text-xs text-gray-500 mt-1">(Not being saved)</p>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm font-medium">
+                                              {item.sku ? (
+                                                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded font-semibold text-xs">
+                                                  {item.sku}
+                                                </span>
+                                              ) : (
+                                                <span className="text-gray-400 text-xs italic">No SKU found</span>
+                                              )}
                                             </td>
                                             <td className="px-4 py-3">
                                               {(() => {

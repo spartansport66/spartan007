@@ -115,7 +115,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       // Try to fetch from online_orders first (for online orders)
       const { data: onlineOrderArray, error: onlineOrderError } = await supabase
         .from('online_orders')
-        .select(`id, order_number, order_date, total_amount, status, payment_status, bill_no`)
+        .select(`id, order_number, order_date, total_amount, discount_amount, status, payment_status, bill_no`)
         .eq('id', id)
         .limit(1);
 

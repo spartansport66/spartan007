@@ -593,7 +593,10 @@ const SpartanOrderExtractor = () => {
     const headerIdx = allLines.findIndex(l => /Product\s+Name/i.test(l));
     if (headerIdx >= 0) {
       let startIdx = headerIdx + 1;
-      const headerKeywords = /^(Product\s+Sku|HSN|Quantity|Unit\s+Price|TAX\s+Amount|IGST|TOTAL|Charges\s+Applied|Shipping|COD|Tax\s+Amount)/i;
+      // Skip all header lines and split header fragments
+      // Pattern 1: Lines that start with special chars like ( % ) | -
+      // Pattern 2: Lines that start with header keywords
+      const headerKeywords = /^\s*[\(\)%\|\-]|^(Product|Sku|SKU|HSN|Quantity|Unit|TAX|IGST|TOTAL|Charges|Shipping|COD|SGST|CGST|including|gst|Value|Tax|Sold\s+By|Bill\s+To|Ship\s+To)/i;
       
       while (startIdx < allLines.length) {
         const line = (allLines[startIdx] || '').trim();
@@ -620,24 +623,21 @@ const SpartanOrderExtractor = () => {
       if (productRowLines.length > 5) taxAmount = productRowLines[5];
       if (productRowLines.length > 6) igst = productRowLines[6];
       
-      const parts = [];
-      if (productName) parts.push(`Product Name: ${productName}`);
-      if (productSku) parts.push(`SKU: ${productSku}`);
-      if (hsn) parts.push(`HSN: ${hsn}`);
-      if (quantity) parts.push(`Qty: ${quantity}`);
-      if (unitPrice) parts.push(`Unit Price: ${unitPrice}`);
-      if (taxAmount) parts.push(`TAX: ${taxAmount}`);
-      if (igst) parts.push(`IGST: ${igst}`);
-      
-      item = parts.length > 0 ? parts.join(' | ') : "N/A";
+      // Build item with product name and SKU (clean)
+      if (productName && productName.trim().length > 2) {
+        item = productName.trim();
+        if (productSku && productSku.trim().length > 0 && !/^[%|()❌\-]|From\s+PDF|SKU:|Product/i.test(productSku)) {
+          item += ' - ' + productSku.trim();
+        }
+      }
     }
     
     if (item === "N/A") {
       const itemMatch = text.match(/Product\s+Name[\s\S]*?\n\s*([A-Za-z0-9\-\s\(\)]+?)\n\s*([A-Za-z0-9\-\s]+)/i);
       if (itemMatch) {
         const name = itemMatch[1].trim().replace(/\s+/g, ' ');
-        const sku = itemMatch[2].trim().replace(/\s+/g, ' ');
-        item = `${name} — ${sku}`;
+        // ONLY use the product name, not metadata
+        item = name;
       }
     }
 
