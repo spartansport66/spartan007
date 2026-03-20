@@ -37,6 +37,7 @@ import FlipkartOrderExtractor from "./pages/FlipkartOrderExtractor";
 import MeeshoOrderExtractor from "./pages/MeeshoOrderExtractor";
 import AmazonOrderExtractor from "./pages/AmazonOrderExtractor";
 import SpartanOrderExtractor from "./pages/SpartanOrderExtractor";
+import TestProductDropdown from "./pages/TestProductDropdown";
 import ProcessOnlineOrders from "./pages/ProcessOnlineOrders";
 import OnlineOrderDashboard from "./pages/OnlineOrderDashboard";
 import OnlineOrdersAdminDashboard from "./pages/OnlineOrdersAdminDashboard";
@@ -90,6 +91,7 @@ const AppContent = () => {
       <Route path="/meesho-extractor" element={<MeeshoOrderExtractor />} />
       <Route path="/amazon-extractor" element={<AmazonOrderExtractor />} />
       <Route path="/spartan-extractor" element={<SpartanOrderExtractor />} />
+      <Route path="/test-products" element={<TestProductDropdown />} />
       <Route path="/process-online-orders" element={<ProcessOnlineOrders />} />
       <Route path="/online-order-dashboard" element={<OnlineOrderDashboard />} />
       <Route path="/online-orders-admin" element={<OnlineOrdersAdminDashboard />} />

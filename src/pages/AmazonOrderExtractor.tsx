@@ -55,9 +55,34 @@ const AmazonOrderExtractor = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const { data, error } = await supabase.from('products').select('id, name, code, size, dp, gst').order('name');
-        if (error) throw error;
-        setProducts(data || []);
+        let allProducts: any[] = [];
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('products')
+            .select('id, name, code, size, dp, gst')
+            .order('name')
+            .range(offset, offset + pageSize - 1);
+          
+          if (error) throw error;
+
+          if (!data || data.length === 0) {
+            hasMore = false;
+          } else {
+            allProducts = [...allProducts, ...data];
+            if (data.length < pageSize) {
+              hasMore = false;
+            } else {
+              offset += pageSize;
+            }
+          }
+        }
+
+        console.log('✅ All products loaded:', allProducts.length);
+        setProducts(allProducts);
       } catch (e) {
         console.error('Failed to load products for Amazon extractor', e);
       }
@@ -901,12 +926,14 @@ const AmazonOrderExtractor = () => {
                                                       <div className="p-2 border-b">
                                                         <Input placeholder="Search product..." className="h-7 text-xs" value={searchText} onChange={(e) => setProductSearchText(prev => ({ ...prev, [index]: { ...(prev[index] || {}), [itemIndex]: e.target.value } }))} />
                                                       </div>
-                                                      <ScrollArea className="h-[300px]">
+                                                      <ScrollArea className="h-96">
                                                         {matchedMap[index]?.matches.length ? (
                                                           matchedMap[index].matches.filter(p => {
-                                                            const q = (productSearchText[index]?.[itemIndex] || '').toLowerCase();
+                                                            const q = (productSearchText[index]?.[itemIndex] || '').toLowerCase().trim();
                                                             if (!q) return true;
-                                                            return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
+                                                            const prodName = (p.name || '').toLowerCase().trim();
+                                                            const prodCode = (p.code || '').toString().toLowerCase().trim();
+                                                            return prodName.includes(q) || prodCode.includes(q);
                                                           }).map(p => (
                                                             <Button key={`cand-amazon-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => handleProductMapping(index, itemIndex, p.id)}>
                                                               <div className="text-left w-full"><div className="font-medium text-sm">{p.name}</div><div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''}</div></div>
@@ -915,9 +942,11 @@ const AmazonOrderExtractor = () => {
                                                         ) : null}
                                                         <div className="h-px bg-muted/30 my-2" />
                                                         {products.filter(p => {
-                                                          const q = (productSearchText[index]?.[itemIndex] || '').toLowerCase();
+                                                          const q = (productSearchText[index]?.[itemIndex] || '').toLowerCase().trim();
                                                           if (!q) return true;
-                                                          return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
+                                                          const prodName = (p.name || '').toLowerCase().trim();
+                                                          const prodCode = (p.code || '').toString().toLowerCase().trim();
+                                                          return prodName.includes(q) || prodCode.includes(q);
                                                         }).map(p => (
                                                           <Button key={`all-amazon-${p.id}`} variant="ghost" className="w-full justify-start text-[12px] h-auto py-2 px-3" onClick={() => handleProductMapping(index, itemIndex, p.id)}>
                                                             <div className="text-left w-full"><div className="font-medium text-sm">{p.name}</div><div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''}</div></div>

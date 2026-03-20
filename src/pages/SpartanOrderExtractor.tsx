@@ -90,9 +90,47 @@ const SpartanOrderExtractor = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const { data, error } = await supabase.from('products').select('id, name, code, size, dp, gst').order('name');
-        if (error) throw error;
-        setProducts(data || []);
+        console.log('🚀 STARTING PRODUCT FETCH (with pagination)...');
+        let allProducts: any[] = [];
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        let pageCount = 0;
+
+        while (hasMore) {
+          pageCount++;
+          console.log(`📄 Fetching page ${pageCount} (offset: ${offset})...`);
+          const { data, error } = await supabase
+            .from('products')
+            .select('id, name, code, size, dp, gst')
+            .order('name')
+            .range(offset, offset + pageSize - 1);
+          
+          if (error) {
+            console.error('❌ Query error:', error.message);
+            throw error;
+          }
+
+          if (!data || data.length === 0) {
+            console.log('✅ End of data reached');
+            hasMore = false;
+          } else {
+            console.log(`✅ Fetched ${data.length} products, total so far: ${allProducts.length + data.length}`);
+            allProducts = [...allProducts, ...data];
+            if (data.length < pageSize) {
+              console.log('✅ Got less than page size, stopping');
+              hasMore = false;
+            } else {
+              offset += pageSize;
+            }
+          }
+        }
+
+        console.log('🎉 ALL PRODUCTS LOADED:', allProducts.length);
+        console.log('📋 First 5:', allProducts.slice(0, 5));
+        const ctg = allProducts.filter((p: any) => (p.code || '').toString().toUpperCase().includes('CTG 303'));
+        console.log('🔍 CTG 303 found:', ctg.length, ctg);
+        setProducts(allProducts);
       } catch (err: any) {
         console.error('Failed to fetch products:', err.message);
       }
@@ -994,18 +1032,16 @@ const SpartanOrderExtractor = () => {
 
                                                 let matchedList = [] as Product[];
                                                 if (searchLower.length === 0) {
-                                                  matchedList = products.filter(p => candidates.includes(p.id));
+                                                  // Show ALL products when search is empty
+                                                  matchedList = products;
                                                 } else {
                                                   const bySearch = products.filter(prod => {
-                                                    return (
-                                                      prod.name.toLowerCase().includes(searchLower) ||
-                                                      (prod.code ? prod.code.toLowerCase().includes(searchLower) : false)
-                                                    );
+                                                    const searchQ = searchLower.trim();
+                                                    const prodName = (prod.name || '').toLowerCase().trim();
+                                                    const prodCode = (prod.code || '').toString().toLowerCase().trim();
+                                                    return prodName.includes(searchQ) || prodCode.includes(searchQ);
                                                   });
-                                                  const candidateSet = new Set(candidates);
-                                                  const candidateMatches = bySearch.filter(p => candidateSet.has(p.id));
-                                                  const others = bySearch.filter(p => !candidateSet.has(p.id));
-                                                  matchedList = [...candidateMatches, ...others];
+                                                  matchedList = bySearch;
                                                 }
 
                                                 const filteredProducts = matchedList;
@@ -1032,7 +1068,7 @@ const SpartanOrderExtractor = () => {
                                                         />
                                                       </PopoverTrigger>
 
-                                                      <PopoverContent className="p-0 min-w-[300px] max-h-80 overflow-y-auto">
+                                                      <PopoverContent className="p-0 min-w-[400px] max-h-96 overflow-y-auto">
                                                         {filteredProducts.length > 0 ? (
                                                           filteredProducts.map((prod) => (
                                                             <div

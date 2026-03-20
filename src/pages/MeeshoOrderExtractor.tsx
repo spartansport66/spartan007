@@ -75,9 +75,34 @@ const MeeshoOrderExtractor = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const { data, error } = await supabase.from('products').select('id, name, code, size, dp, gst').order('name');
-        if (error) throw error;
-        setProducts(data || []);
+        let allProducts: any[] = [];
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('products')
+            .select('id, name, code, size, dp, gst')
+            .order('name')
+            .range(offset, offset + pageSize - 1);
+          
+          if (error) throw error;
+
+          if (!data || data.length === 0) {
+            hasMore = false;
+          } else {
+            allProducts = [...allProducts, ...data];
+            if (data.length < pageSize) {
+              hasMore = false;
+            } else {
+              offset += pageSize;
+            }
+          }
+        }
+
+        console.log('✅ All products loaded:', allProducts.length);
+        setProducts(allProducts);
       } catch (e) {
         console.error('Failed to load products for Meesho extractor', e);
       }
@@ -942,20 +967,16 @@ const MeeshoOrderExtractor = () => {
 
                                                 let matchedList = [] as Product[];
                                                 if (searchLower.length === 0) {
-                                                  // show candidate matches when no search typed
-                                                  matchedList = products.filter(p => candidates.includes(p.id));
+                                                  // Show ALL products when search is empty
+                                                  matchedList = products;
                                                 } else {
-                                                  // show products matching the search text
                                                   const bySearch = products.filter(prod => {
-                                                    return (
-                                                      prod.name.toLowerCase().includes(searchLower) ||
-                                                      (prod.code ? prod.code.toLowerCase().includes(searchLower) : false)
-                                                    );
+                                                    const searchQ = searchLower.trim();
+                                                    const prodName = (prod.name || '').toLowerCase().trim();
+                                                    const prodCode = (prod.code || '').toString().toLowerCase().trim();
+                                                    return prodName.includes(searchQ) || prodCode.includes(searchQ);
                                                   });
-                                                  const candidateSet = new Set(candidates);
-                                                  const candidateMatches = bySearch.filter(p => candidateSet.has(p.id));
-                                                  const others = bySearch.filter(p => !candidateSet.has(p.id));
-                                                  matchedList = [...candidateMatches, ...others];
+                                                  matchedList = bySearch;
                                                 }
 
                                                 const filteredProducts = matchedList;
@@ -993,7 +1014,7 @@ const MeeshoOrderExtractor = () => {
                                                           />
                                                         </PopoverTrigger>
 
-                                                        <PopoverContent className="p-0 min-w-[300px] max-h-80 overflow-y-auto">
+                                                        <PopoverContent className="p-0 min-w-[400px] max-h-96 overflow-y-auto">
                                                           {filteredProducts.length > 0 ? (
                                                             filteredProducts.map((prod) => (
                                                               <div
