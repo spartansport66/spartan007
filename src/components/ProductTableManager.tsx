@@ -63,6 +63,7 @@ interface Product {
   has_sales: boolean;
   category_id: string | null;
   categories: { id: string; name: string } | null;
+  is_active: boolean;
 }
 
 interface Category {
@@ -80,6 +81,7 @@ const formSchema = z.object({
   dp: z.preprocess((val) => Number(val), z.number().min(0)),
   opening_stock: z.preprocess((val) => Number(val), z.number().int().min(0)),
   category_id: z.string().uuid().nullable().optional(),
+  is_active: z.boolean(),
 });
 
 type SortKey = 'code' | 'name' | 'dp' | 'gst' | 'opening_stock' | 'stock_in' | 'stock_out' | 'calculated_closing';
@@ -123,7 +125,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: { code: '', name: '', description: '', size: '', hsn: '', gst: '', dp: 0, opening_stock: 0, category_id: null },
+    defaultValues: { code: '', name: '', description: '', size: '', hsn: '', gst: '', dp: 0, opening_stock: 0, category_id: null, is_active: true },
   });
 
   useEffect(() => {
@@ -138,6 +140,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
         dp: selectedProduct.dp,
         opening_stock: selectedProduct.opening_stock,
         category_id: selectedProduct.category_id || null,
+        is_active: selectedProduct.is_active === true,
       });
     }
   }, [selectedProduct, form]);
@@ -165,7 +168,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
     try {
       let query = supabase
         .from('products')
-        .select('id, code, name, description, size, hsn, gst, dp, opening_stock, stock_in, stock_out, closing_stock, category_id, user_id, sales(count), categories(id, name)');
+        .select('id, code, name, description, size, hsn, gst, dp, opening_stock, stock_in, stock_out, closing_stock, category_id, user_id, is_active, sales(count), categories(id, name)');
       
       if (appliedSearchTerm) {
         query = query.or(`name.ilike.%${appliedSearchTerm}%,code.ilike.%${appliedSearchTerm}%`);
@@ -281,6 +284,39 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
     }
   };
 
+  const handleToggleActive = async (productId: string, newStatus: boolean) => {
+    try {
+      console.log(`[DEBUG] Starting product status update: productId=${productId}, newStatus=${newStatus}`);
+      
+      // Update directly via Supabase client
+      const { data: updatedProduct, error: updateError } = await supabase
+        .from('products')
+        .update({ is_active: newStatus })
+        .eq('id', productId)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('[DEBUG] Update error:', updateError);
+        throw new Error(`Failed to update product: ${updateError.message}`);
+      }
+
+      console.log('[DEBUG] Update successful. Returned is_active:', updatedProduct?.is_active, '(expected:', newStatus + ')');
+      
+      showSuccess(`Product ${newStatus ? 'activated' : 'deactivated'} successfully!`);
+      
+      // Refresh the product list
+      console.log('[DEBUG] Refreshing products...');
+      await fetchProducts();
+      onProductAction?.();
+      
+      console.log('[DEBUG] Refresh complete');
+    } catch (error: any) {
+      console.error('[DEBUG] Error updating product status:', error);
+      showError(`Failed to update product status: ${error.message}`);
+    }
+  };
+
   const sortedAndFilteredProducts = useMemo(() => {
     let filtered = products.filter(product => {
       const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
@@ -343,6 +379,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
       if (appliedStockFilter !== null) filterDetails.push(`Stock <= ${appliedStockFilter}`);
       if (appliedStockFilterGreater !== null) filterDetails.push(`Stock >= ${appliedStockFilterGreater}`);
       if (appliedCategoryId) filterDetails.push(`Category: ${categories.find(c => c.id === appliedCategoryId)?.name || appliedCategoryId}`);
+      filterDetails.push(`Status: Active Only`);
 
       if (filterDetails.length > 0) {
         doc.setFontSize(9);
@@ -351,8 +388,11 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
 
       const tableColumn = ["Code", "Product Name", "Opening", "Stock In", "Stock Out", "Closing", "DP (₹)"];
 
+      // Filter to include only active products
+      const activeProducts = sortedAndFilteredProducts.filter(p => p.is_active !== false);
+
       if (groupByCategory) {
-        const groups = sortedAndFilteredProducts.reduce((acc: Record<string, Product[]>, p) => {
+        const groups = activeProducts.reduce((acc: Record<string, Product[]>, p) => {
           const catName = p.categories?.name || 'Uncategorized';
           if (!acc[catName]) acc[catName] = [];
           acc[catName].push(p);
@@ -392,7 +432,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
         doc.save('product_inventory_report_by_category.pdf');
         showSuccess('Category-wise product report generated successfully!');
       } else {
-        const tableRows = sortedAndFilteredProducts.map(product => {
+        const tableRows = activeProducts.map(product => {
           const calculatedClosing = (product.opening_stock || 0) + (product.stock_in || 0) - (product.stock_out || 0);
           return [
             product.code,
@@ -542,7 +582,7 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                   return (
                     <TableRow key={product.id} className="hover:bg-accent/50">
                       <TableCell className="font-medium">{product.code}</TableCell>
-                      <TableCell>{product.name}</TableCell>
+                      <TableCell className={product.is_active === false ? "text-red-600 font-semibold" : ""}>{product.name}</TableCell>
                       <TableCell>{product.categories?.name || 'N/A'}</TableCell>
                       <TableCell className="text-right">₹{product.dp.toFixed(2)}</TableCell>
                       <TableCell className="text-right">{String(Number(gstDisplay))}%</TableCell>
@@ -553,6 +593,66 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                       <TableCell>
                         <div className="flex gap-2">
                           <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}><Edit className="h-4 w-4" /></Button>
+                          {(product.is_active ?? true) && (
+                            <AlertDialog>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon" title="Deactivate Product">
+                                        <svg className="h-4 w-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Deactivate product</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Deactivate Product?</AlertDialogTitle>
+                                  <AlertDialogDescription>Product will be hidden from Place New Order and all lists.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleToggleActive(product.id, false)}>Deactivate</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                          {!(product.is_active ?? true) && (
+                            <AlertDialog>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon" title="Activate Product">
+                                        <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Activate product</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Activate Product?</AlertDialogTitle>
+                                  <AlertDialogDescription>Product will be visible in Place New Order and all lists.</AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleToggleActive(product.id, true)}>Activate</AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
                           {isAuthorized && (
                             <AlertDialog>
                               <TooltipProvider>
@@ -686,6 +786,22 @@ const ProductTableManager: React.FC<ProductTableManagerProps> = ({ onProductActi
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="opening_stock" className="text-right">Opening Stock</Label>
                   <Input id="opening_stock" type="number" {...form.register('opening_stock')} className="col-span-3" disabled={isSubmitting} />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right">Status</Label>
+                  <div className="col-span-3 flex items-center gap-2">
+                    <Checkbox 
+                      id="is_active"
+                      checked={form.watch('is_active') === true}
+                      onCheckedChange={(checked) => {
+                        form.setValue('is_active', checked === true);
+                      }}
+                      disabled={isSubmitting}
+                    />
+                    <Label htmlFor="is_active" className="m-0 font-normal cursor-pointer">
+                      {form.watch('is_active') === true ? '✓ Active' : '✗ Inactive'} - Product is {form.watch('is_active') === true ? 'visible' : 'hidden'} in all lists
+                    </Label>
+                  </div>
                 </div>
                 
                 <Separator />

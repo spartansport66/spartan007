@@ -68,6 +68,7 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
       const { data, error } = await supabase
         .from('products')
         .select('id, code, name')
+        .eq('is_active', true)
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -248,6 +249,7 @@ const ItemWiseDealerSalesReportDialog: React.FC<ItemWiseDealerSalesReportDialogP
       const { data, error } = await supabase
         .from('products')
         .select('id, code, name')
+        .eq('is_active', true)
         .or(`name.ilike.%${search}%,code.ilike.%${search}%`)
         .order('name', { ascending: true })
         .range(0, 1000);

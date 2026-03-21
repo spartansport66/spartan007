@@ -62,7 +62,8 @@ const LowStockProductsCard: React.FC<LowStockProductsCardProps> = ({ onProductAc
       // Fetch all products and filter in memory to ensure the formula is applied correctly
       const { data, error } = await supabase
         .from('products')
-        .select('id, code, name, opening_stock, stock_in, stock_out, closing_stock, dp');
+        .select('id, code, name, opening_stock, stock_in, stock_out, closing_stock, dp')
+        .eq('is_active', true);
 
       if (error) throw error;
 

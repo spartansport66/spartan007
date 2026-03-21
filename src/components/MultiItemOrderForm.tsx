@@ -27,6 +27,27 @@ interface Product {
   gst: string;
 }
 
+interface ComboItem {
+  id: string;
+  product_id: string;
+  product_name: string;
+  product_code: string;
+  quantity: number;
+  unit_dp: number;
+  discount_percent: number;
+  gst_percent: number;
+}
+
+interface Combo {
+  combo_id: string;
+  combo_code?: string;
+  combo_name: string;
+  combo_dp: number;
+  combo_gst: number;
+  item_count: number;
+  items: ComboItem[];
+}
+
 interface Dealer {
   id: string;
   name: string;
@@ -62,6 +83,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const { user, session, loading: sessionLoading } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [combos, setCombos] = useState<Combo[]>([]);
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [selectedDealer, setSelectedDealer] = useState<string>('');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
@@ -154,6 +176,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         const { data: productsData, error: productsError } = await supabase
           .from('products')
           .select('id, code, name, dp, closing_stock, gst')
+          .eq('is_active', true)
           .order('name', { ascending: true })
           .range(page * pageSize, (page + 1) * pageSize - 1);
         
@@ -173,6 +196,32 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     } catch (error: any) {
       console.error('fetchProducts Error:', error);
       showError(`Failed to load products: ${error.message}`);
+    }
+  }, []);
+
+  const fetchCombos = useCallback(async () => {
+    try {
+      console.log('🔄 Fetching combos from MultiItemOrderForm...');
+      const { data: combosData, error: combosError } = await supabase
+        .rpc('get_all_active_combos_with_items');
+
+      if (combosError) throw combosError;
+
+      console.log('✅ Raw combo data:', combosData);
+      
+      if (combosData && Array.isArray(combosData)) {
+        setCombos(combosData);
+        console.log('📊 Combo count:', combosData.length);
+        if (combosData.length > 0) {
+          console.log('📋 First combo:', combosData[0]);
+        }
+      } else {
+        setCombos([]);
+      }
+    } catch (error: any) {
+      console.error('fetchCombos Error:', error);
+      showError(`Failed to load combos: ${error.message}`);
+      setCombos([]);
     }
   }, []);
 
@@ -204,6 +253,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       setPlatforms(platformsData || []);
 
       await fetchProducts();
+      await fetchCombos();
 
     } catch (error: any) {
       console.error('fetchData Error:', error);
@@ -211,7 +261,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     } finally {
       setLoading(false);
     }
-  }, [user, session, fetchProducts]);
+  }, [user, session, fetchProducts, fetchCombos]);
 
   useEffect(() => {
     if (!sessionLoading && user) fetchData();
@@ -295,27 +345,80 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   const addOrderItem = () => {
     if (!newItemProductId || newItemQuantity <= 0) {
-      showError("Please select a product and enter a valid quantity.");
+      showError("Please select a product or combo and enter a valid quantity.");
       return;
     }
-    const product = products.find(p => p.id === newItemProductId);
-    if (!product) return;
 
-    const newOrderItem: OrderItem = {
-      id: Date.now().toString(),
-      product_id: product.id,
-      quantity: newItemQuantity,
-      product_name: product.name,
-      product_code: product.code,
-      unit_dp: newItemUnitPrice,
-      discount_percent: parseFloat(newItemDiscountPercent as any) || 0,
-      gst_percent: parseFloat(newItemGstPercent as any) || 0,
-      taxable_value: newItemCalculations.taxableValue,
-      gst_amount: newItemCalculations.gstAmount,
-      total_price: newItemCalculations.totalPrice,
-    };
-    // Changed from [newOrderItem, ...prevItems] to [...prevItems, newOrderItem]
-    setOrderItems(prevItems => [...prevItems, newOrderItem]);
+    // Check if it's a combo
+    if (newItemProductId.startsWith('combo_')) {
+      const comboId = newItemProductId.replace('combo_', '');
+      const combo = combos.find(c => c.combo_id === comboId);
+      if (!combo || !combo.items || combo.items.length === 0) {
+        showError("Combo not found or has no items.");
+        return;
+      }
+
+      // Create order items for each product in the combo
+      const newItems = combo.items.map(item => {
+        // Get the current product DP from products table
+        const actualProduct = products.find(p => p.id === item.product_id);
+        const currentDP = actualProduct ? (actualProduct.dp || 0) : (item.unit_dp || 0);
+        
+        // Multiply item quantity by selected quantity
+        const totalItemQuantity = item.quantity * newItemQuantity;
+        
+        // Use selected discount if provided, otherwise use combo item's discount
+        const discount_percent = parseFloat(newItemDiscountPercent as any) || item.discount_percent || 0;
+        const gst_percent = parseFloat(newItemGstPercent as any) || item.gst_percent || 0;
+        
+        // Calculate totals using current DP from products table
+        const discount = (currentDP * discount_percent) / 100;
+        const discountedUnitPrice = Math.max(0, currentDP - discount);
+        const taxable_value = discountedUnitPrice * totalItemQuantity;
+        const gst_amount = (taxable_value * gst_percent) / 100;
+        const total_price = taxable_value + gst_amount;
+
+        const newOrderItem: OrderItem = {
+          id: `${Date.now().toString()}_${item.product_id}`,
+          product_id: item.product_id,
+          quantity: Math.max(1, totalItemQuantity || 1),
+          product_name: item.product_name || 'Unknown',
+          product_code: item.product_code || 'N/A',
+          unit_dp: Math.max(0, currentDP),
+          discount_percent: Math.max(0, discount_percent),
+          gst_percent: Math.max(0, gst_percent),
+          taxable_value,
+          gst_amount,
+          total_price,
+        };
+
+        return newOrderItem;
+      });
+
+      setOrderItems(prevItems => [...prevItems, ...newItems]);
+    } else {
+      // It's a regular product
+      const product = products.find(p => p.id === newItemProductId);
+      if (!product) return;
+
+      const newOrderItem: OrderItem = {
+        id: Date.now().toString(),
+        product_id: product.id,
+        quantity: Math.max(1, newItemQuantity || 1),
+        product_name: product.name || 'Unknown',
+        product_code: product.code || 'N/A',
+        unit_dp: Math.max(0, newItemUnitPrice || 0),
+        discount_percent: Math.max(0, parseFloat(newItemDiscountPercent as any) || 0),
+        gst_percent: Math.max(0, parseFloat(newItemGstPercent as any) || 0),
+        taxable_value: newItemCalculations.taxableValue || 0,
+        gst_amount: newItemCalculations.gstAmount || 0,
+        total_price: newItemCalculations.totalPrice || 0,
+      };
+
+      setOrderItems(prevItems => [...prevItems, newOrderItem]);
+    }
+
+    // Reset form
     setNewItemProductId('');
     setNewItemQuantity(1);
     setNewItemUnitPrice(0);
@@ -324,13 +427,16 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   };
 
   const updateOrderItem = (id: string, field: keyof OrderItem, value: number) => {
+    // Ensure value is a valid number, default to appropriate values
+    const safeValue = isNaN(value) ? 0 : Math.max(0, value);
+    
     setOrderItems(prev => prev.map(item => {
       if (item.id === id) {
-        const updatedItem = { ...item, [field]: value };
-        const discount = (updatedItem.unit_dp * updatedItem.discount_percent) / 100;
-        const discountedUnitPrice = Math.max(0, updatedItem.unit_dp - discount);
-        updatedItem.taxable_value = discountedUnitPrice * updatedItem.quantity;
-        updatedItem.gst_amount = (updatedItem.taxable_value * updatedItem.gst_percent) / 100;
+        const updatedItem = { ...item, [field]: safeValue };
+        const discount = ((updatedItem.unit_dp || 0) * (updatedItem.discount_percent || 0)) / 100;
+        const discountedUnitPrice = Math.max(0, (updatedItem.unit_dp || 0) - discount);
+        updatedItem.taxable_value = discountedUnitPrice * (updatedItem.quantity || 1);
+        updatedItem.gst_amount = (updatedItem.taxable_value * (updatedItem.gst_percent || 0)) / 100;
         updatedItem.total_price = updatedItem.taxable_value + updatedItem.gst_amount;
         return updatedItem;
       }
@@ -474,13 +580,30 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     return products.filter(p => p.name.toLowerCase().includes(search) || p.code.toLowerCase().includes(search));
   }, [products, productSearch]);
 
+  const filteredCombos = useMemo(() => {
+    if (!productSearch) return combos;
+    const search = productSearch.toLowerCase();
+    return combos.filter(c => c.combo_name.toLowerCase().includes(search));
+  }, [combos, productSearch]);
+
   const currentDealerName = selectedDealer ? dealers.find(d => d.id === selectedDealer)?.name : "Select dealer...";
   
   const currentProductDisplay = useMemo(() => {
-    if (!newItemProductId) return "Select product...";
+    if (!newItemProductId) return "Select product or combo...";
+    
+    // Check if it's a combo
+    if (newItemProductId.startsWith('combo_')) {
+      const comboId = newItemProductId.replace('combo_', '');
+      const combo = combos.find(c => c.combo_id === comboId);
+      if (combo) {
+        return `🎁 (${combo.combo_code || 'N/A'}) ${combo.combo_name} (${combo.item_count} items)`;
+      }
+    }
+    
+    // Check if it's a product
     const product = products.find(p => p.id === newItemProductId);
-    return product ? `${product.name} (${product.code})` : "Select product...";
-  }, [newItemProductId, products]);
+    return product ? `${product.name} (${product.code})` : "Select product or combo...";
+  }, [newItemProductId, products, combos]);
 
   const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid;
 
@@ -564,12 +687,45 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                 <Label>Product</Label>
                 <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0}>{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
+                    <Button variant="outline" role="combobox" className="w-full justify-between" disabled={products.length === 0 && combos.length === 0}>{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[400px] p-0" align="start">
-                    <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
-                    <ScrollArea className="h-[250px]"><div className="p-1">{filteredProducts.length === 0 ? (<div className="p-2 text-sm text-center text-muted-foreground">No product found.</div>) : (
-                          filteredProducts.map((product) => (
+                    <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product or combo..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
+                    <ScrollArea className="h-[250px]"><div className="p-1">
+                      {filteredCombos.length === 0 && filteredProducts.length === 0 ? (
+                        <div className="p-2 text-sm text-center text-muted-foreground">No product or combo found.</div>
+                      ) : (
+                        <>
+                          {filteredCombos.map((combo) => (
+                            <Button 
+                              key={`combo_${combo.combo_id}`} 
+                              variant="ghost" 
+                              className="w-full justify-start font-normal h-auto py-2" 
+                              onClick={() => {
+                                setNewItemProductId(`combo_${combo.combo_id}`);
+                                setNewItemUnitPrice(combo.combo_dp);
+                                setNewItemGstPercent(String(combo.combo_gst));
+                                setIsProductPopoverOpen(false);
+                                setProductSearch('');
+                              }}
+                            >
+                              <div className="flex flex-col items-start w-full">
+                                <div className="flex items-center justify-between w-full gap-2">
+                                  <div className="flex items-center min-w-0">
+                                    <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === `combo_${combo.combo_id}` ? "opacity-100" : "opacity-0")} />
+                                    <span className="font-mono font-bold text-purple-600">({combo.combo_code || 'N/A'})</span>
+                                    <span className="font-medium truncate text-purple-600 font-semibold">🎁 {combo.combo_name}</span>
+                                  </div>
+                                </div>
+                                <div className="text-[10px] text-muted-foreground ml-6 flex flex-wrap gap-x-3 gap-y-1">
+                                  <span className="bg-purple-100 dark:bg-purple-900 px-1 rounded font-medium">{combo.item_count} items</span>
+                                  <span className="font-bold text-purple-600 bg-purple-50 dark:bg-purple-900/30 px-1 rounded">DP: ₹{combo.combo_dp.toFixed(2)}</span>
+                                  <span className="text-purple-600">GST: {combo.combo_gst}%</span>
+                                </div>
+                              </div>
+                            </Button>
+                          ))}
+                          {filteredProducts.map((product) => (
                             <Button 
                               key={product.id} 
                               variant="ghost" 
@@ -598,17 +754,19 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                                 </div>
                               </div>
                             </Button>
-                          ))
-                        )}</div></ScrollArea>
+                          ))}
+                        </>
+                      )}
+                    </div></ScrollArea>
                   </PopoverContent>
                 </Popover>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 items-end">
-                <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
-                <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
-                <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(e.target.value)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
-                <div><Label>GST (%)</Label><Input type="number" step="0.1" value={newItemGstPercent} onChange={(e) => setNewItemGstPercent(e.target.value)} min="0" /></div>
-                <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemCalculations.totalPrice.toFixed(2)}</div></div>
+                <div><Label>Quantity</Label><Input type="number" value={newItemQuantity || 1} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
+                <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice || 0} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
+                <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent || '0'} onChange={(e) => setNewItemDiscountPercent(e.target.value)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
+                <div><Label>GST (%)</Label><Input type="number" step="0.1" value={newItemGstPercent || '0'} onChange={(e) => setNewItemGstPercent(e.target.value)} min="0" /></div>
+                <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{(newItemCalculations.totalPrice || 0).toFixed(2)}</div></div>
               </div>
               <Button type="button" onClick={addOrderItem} disabled={loading} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
             </div>
@@ -620,12 +778,12 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   <TableBody>
                     {orderItems.map(item => (
                       <TableRow key={item.id}>
-                        <TableCell className="max-w-[150px] truncate">{item.product_name} ({item.product_code})</TableCell>
-                        <TableCell><Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
-                        <TableCell><Input type="number" step="0.01" value={item.unit_dp} onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} className="w-24 h-8" /></TableCell>
-                        <TableCell><Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
-                        <TableCell><Input type="number" step="0.1" value={item.gst_percent} onChange={(e) => updateOrderItem(item.id, 'gst_percent', parseFloat(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
-                        <TableCell className="text-right font-medium">₹{item.total_price.toFixed(2)}</TableCell>
+                        <TableCell className="max-w-[150px] truncate font-mono text-sm">(<span className="font-bold text-primary">{item.product_code}</span>) {item.product_name}</TableCell>
+                        <TableCell><Input type="number" value={item.quantity || 0} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
+                        <TableCell><Input type="number" step="0.01" value={item.unit_dp || 0} onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} className="w-24 h-8" /></TableCell>
+                        <TableCell><Input type="number" step="0.1" value={item.discount_percent || 0} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
+                        <TableCell><Input type="number" step="0.1" value={item.gst_percent || 0} onChange={(e) => updateOrderItem(item.id, 'gst_percent', parseFloat(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
+                        <TableCell className="text-right font-medium">₹{(item.total_price || 0).toFixed(2)}</TableCell>
                         <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
                       </TableRow>
                     ))}
@@ -641,10 +799,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               <div className="flex justify-between text-sm"><span>Total GST:</span><span>₹{totalGstAmount.toFixed(2)}</span></div>
               <Separator className="my-1" />
               <div className="flex justify-between text-base font-medium"><span>Subtotal (Incl. GST):</span><span>₹{preGlobalDiscountTotal.toFixed(2)}</span></div>
-              <div className="flex justify-between items-center"><Label htmlFor="discountAmount" className="text-base font-medium">Additional Global Discount (Rs.)</Label><Input id="discountAmount" type="number" step="0.01" value={discountAmount} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} /></div>
+              <div className="flex justify-between items-center"><Label htmlFor="discountAmount" className="text-base font-medium">Additional Global Discount (Rs.)</Label><Input id="discountAmount" type="number" step="0.01" value={discountAmount || 0} onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} /></div>
               <div className="flex justify-between items-center">
                 <Label htmlFor="roundOff" className="text-base font-medium">Round Off (+/-)</Label>
-                <Input id="roundOff" type="number" step="0.01" value={roundOff} onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)} className="w-32 text-right" />
+                <Input id="roundOff" type="number" step="0.01" value={roundOff || 0} onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)} className="w-32 text-right" />
               </div>
               <Separator className="my-2" />
               <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
@@ -655,7 +813,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             <div className="flex items-center space-x-2"><Check className="h-5 w-5 text-green-600" /><Label className="text-base font-medium text-green-600">Payment Received at Order Time</Label></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div><Label htmlFor="paymentMethod">Payment Method</Label><Select value={paymentMethod} onValueChange={setPaymentMethod}><SelectTrigger id="paymentMethod"><SelectValue placeholder="Select method" /></SelectTrigger><SelectContent>{paymentMethodsOptions.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label htmlFor="paymentAmount">Amount Paid</Label><Input id="paymentAmount" type="number" value={paymentAmount} readOnly className="bg-muted" /></div>
+              <div><Label htmlFor="paymentAmount">Amount Paid</Label><Input id="paymentAmount" type="number" value={paymentAmount || 0} readOnly className="bg-muted" /></div>
               {paymentMethod === 'Cheque/DD' && (<><div><Label htmlFor="chequeDdNo">Cheque/DD No</Label><Input id="chequeDdNo" value={chequeDdNo} onChange={e => setChequeDdNo(e.target.value)} /></div><div><Label htmlFor="chequeDdDate">Cheque/DD Date</Label><Input id="chequeDdDate" type="date" value={chequeDdDate} onChange={e => setChequeDdDate(e.target.value)} /></div></>)}
               {['Card', 'Bank Transfer', 'UPI', 'Cash'].includes(paymentMethod) && (<div><Label htmlFor="transactionId">Transaction ID {paymentMethod === 'Cash' ? '(Optional)' : ''}</Label><Input id="transactionId" value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="e.g., TXN123456" /></div>)}
             </div>

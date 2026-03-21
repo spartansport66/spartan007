@@ -52,6 +52,7 @@ const StockReceiptForm: React.FC<StockReceiptFormProps> = ({ onReceiptRecorded }
           const { data, error } = await supabase
             .from('products')
             .select('id, name, code')
+            .eq('is_active', true)
             .order('name')
             .range(page * pageSize, (page + 1) * pageSize - 1);
 

@@ -107,6 +107,7 @@ const fetchAllProducts = async (): Promise<Product[]> => {
     const { data, error } = await supabase
       .from('products')
       .select('id, code, name, dp, closing_stock, gst')
+      .eq('is_active', true)
       .order('name', { ascending: true })
       .range(page * pageSize, (page + 1) * pageSize - 1);
 

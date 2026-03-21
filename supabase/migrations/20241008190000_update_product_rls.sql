@@ -10,4 +10,5 @@ WITH CHECK (public.has_inventory_access());
 DROP POLICY IF EXISTS "Admins and Inventory Managers can update products" ON public.products;
 CREATE POLICY "Admins and Inventory Managers can update products" ON public.products
 FOR UPDATE TO authenticated
-USING (public.has_inventory_access());
+USING (public.has_inventory_access())
+WITH CHECK (public.has_inventory_access());

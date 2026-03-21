@@ -38,6 +38,10 @@ import MeeshoOrderExtractor from "./pages/MeeshoOrderExtractor";
 import AmazonOrderExtractor from "./pages/AmazonOrderExtractor";
 import SpartanOrderExtractor from "./pages/SpartanOrderExtractor";
 import TestProductDropdown from "./pages/TestProductDropdown";
+import CricketKitManager from "./pages/CricketKitManager";
+import CricketKitOrderDemo from "./pages/CricketKitOrderDemo";
+import ComboOffersAdmin from "./pages/ComboOffersAdmin";
+import MultiOrderForm from "./pages/MultiOrderForm";
 import ProcessOnlineOrders from "./pages/ProcessOnlineOrders";
 import OnlineOrderDashboard from "./pages/OnlineOrderDashboard";
 import OnlineOrdersAdminDashboard from "./pages/OnlineOrdersAdminDashboard";
@@ -92,6 +96,10 @@ const AppContent = () => {
       <Route path="/amazon-extractor" element={<AmazonOrderExtractor />} />
       <Route path="/spartan-extractor" element={<SpartanOrderExtractor />} />
       <Route path="/test-products" element={<TestProductDropdown />} />
+      <Route path="/cricket-kit-manager" element={<CricketKitManager />} />
+      <Route path="/cricket-kit-order-demo" element={<CricketKitOrderDemo />} />
+      <Route path="/combo-offers-admin" element={<ComboOffersAdmin />} />
+      <Route path="/multi-order-form" element={<MultiOrderForm />} />
       <Route path="/process-online-orders" element={<ProcessOnlineOrders />} />
       <Route path="/online-order-dashboard" element={<OnlineOrderDashboard />} />
       <Route path="/online-orders-admin" element={<OnlineOrdersAdminDashboard />} />

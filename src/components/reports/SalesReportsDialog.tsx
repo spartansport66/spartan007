@@ -97,7 +97,8 @@ const SalesReportsDialog: React.FC<SalesReportsDialogProps> = ({ isOpen, onOpenC
       // Fetch products - UPDATED to include new fields
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, code, name, size, hsn, gst, dp');
+        .select('id, code, name, size, hsn, gst, dp')
+        .eq('is_active', true);
       if (productsError) throw productsError;
       setAllProducts((productsData || []).map(p => ({ value: p.id, label: `${p.name} (${p.code})` })));
 

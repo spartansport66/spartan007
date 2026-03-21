@@ -87,7 +87,8 @@ const SalesPersonSalesReport: React.FC<SalesPersonSalesReportProps> = ({ isOpen,
       // Fetch products
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, code, name');
+        .select('id, code, name')
+        .eq('is_active', true);
       if (productsError) throw productsError;
       setAllProducts((productsData || []).map(p => ({ value: p.id, label: `${p.name} (${p.code})` })));
 

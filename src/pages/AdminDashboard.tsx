@@ -229,6 +229,16 @@ const AdminDashboard = () => {
         <div className="text-left">{companyName && (<h2 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400">{companyName}</h2>)}<p className="text-xs text-muted-foreground mt-1">Last Active: {lastActiveTime ? new Date(lastActiveTime).toLocaleString() : 'N/A'}</p></div>
         <h1 className="text-center text-3xl sm:text-4xl font-bold text-primary">Admin Dashboard</h1>
         <div className="flex items-center gap-2">
+          <Button 
+            variant="default" 
+            size="sm"
+            onClick={() => navigate('/multi-order-form')} 
+            title="Create New Order"
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <ShoppingCart className="h-4 w-4 mr-2" />
+            Place Order
+          </Button>
           <Button variant="outline" size="icon" onClick={() => setIsEmailManagerOpen(true)} title="Notification Settings">
             <Mail className="h-5 w-5" />
           </Button>
@@ -238,6 +248,10 @@ const AdminDashboard = () => {
               <FileText className="h-5 w-5" />
             </Button>
           )}
+          {/* Combo Offers Admin */}
+          <Button variant="outline" size="icon" onClick={() => navigate('/combo-offers-admin')} title="Combo Offers">
+            <Gift className="h-5 w-5" />
+          </Button>
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400"><Menu className="h-5 w-5" /></Button>

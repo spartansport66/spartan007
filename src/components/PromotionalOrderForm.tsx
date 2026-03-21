@@ -123,6 +123,7 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
         const { data: productsData, error: productsError } = await supabase
           .from('products')
           .select('id, name, code, dp')
+          .eq('is_active', true)
           .order('name');
         if (productsError) throw productsError;
         setProducts(productsData || []);
