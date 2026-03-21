@@ -9,7 +9,6 @@ import { Loader2, LogOut, Boxes } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import WarehouseOrdersAwaitingDispatch from '@/components/WarehouseOrdersAwaitingDispatch';
 import WarehousePromotionalOrdersCard from '@/components/WarehousePromotionalOrdersCard';
-import HODApprovedPromotionalOrdersCard from '@/components/HODApprovedPromotionalOrdersCard';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 
 const WarehouseDashboard = () => {
@@ -66,13 +65,6 @@ const WarehouseDashboard = () => {
             <Boxes className="h-6 w-6" /> Warehouse Dashboard
           </h1>
           <div className="flex gap-2">
-            <Button 
-              onClick={() => navigate('/promotional-orders')}
-              className="bg-purple-600 hover:bg-purple-700"
-              title="View promotional orders"
-            >
-              📦 Promotional Orders
-            </Button>
             <Button onClick={handleLogout} variant="outline" className="flex items-center gap-2">
               <LogOut className="h-4 w-4" /> Logout
             </Button>
@@ -80,9 +72,8 @@ const WarehouseDashboard = () => {
         </div>
 
         <div className="space-y-6">
-          <HODApprovedPromotionalOrdersCard />
-          <WarehousePromotionalOrdersCard />
           <WarehouseOrdersAwaitingDispatch key={`warehouse-dispatch-${refreshKey}`} />
+          <WarehousePromotionalOrdersCard />
         </div>
       </div>
       <MadeWithDyad />
