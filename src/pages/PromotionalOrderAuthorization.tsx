@@ -313,16 +313,18 @@ const PromotionalOrderAuthorization = () => {
         {/* Order Summary Card */}
         <Card className="mb-6 border-2 border-purple-300 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg sm:text-2xl font-bold">
               🔐 Promotional Order Authorization
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               Please review the details below and authorize or reject this material distribution
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Order Header Info - Line by Line Format */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border p-3 sm:p-4 space-y-2">
+            <div>
+              <h3 className="font-bold text-sm mb-3">Order Details:</h3>
+              <div className="bg-white dark:bg-gray-800 rounded-lg border p-3 sm:p-4 space-y-2">
               <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
                 <span className="font-bold">Order: P{orderData.order_number}</span>
               </p>
@@ -347,11 +349,12 @@ const PromotionalOrderAuthorization = () => {
                   <span>📍 {orderData.person_address}</span>
                 </p>
               )}
+              </div>
             </div>
 
             {/* Items List */}
             <div>
-              <h3 className="font-bold mb-3 text-sm">Order Items:</h3>
+              <h3 className="font-bold text-sm mb-3">Order Items:</h3>
               <div className="space-y-2">
                 {orderData.items.map((item, index) => (
                   <div key={item.id} className="border rounded-md p-3 bg-white hover:bg-muted/50">
@@ -373,7 +376,7 @@ const PromotionalOrderAuthorization = () => {
 
             {/* Remarks Section */}
             <div>
-              <label className="block text-sm font-semibold mb-2">
+              <label className="block text-sm font-bold mb-2">
                 Remarks {orderData.authorization_status === 'rejected' && '(Required for rejection)'}
               </label>
               <Textarea
