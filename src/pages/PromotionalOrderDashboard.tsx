@@ -65,7 +65,7 @@ const PromotionalOrderDashboard = () => {
           status,
           authorization_status,
           auth_token,
-          dealers (name),
+          dealer_name,
           sales_person:profiles!sales_person_id (first_name, last_name)
         `)
         .order('order_date', { ascending: false });
@@ -78,7 +78,7 @@ const PromotionalOrderDashboard = () => {
         order_date: order.order_date,
         material_out_type: order.material_out_type,
         promotion_type: order.promotion_type,
-        dealer_name: (order.dealers as any)?.name || 'N/A',
+        dealer_name: order.dealer_name || 'N/A',
         sales_person_name: `${(order.sales_person as any)?.first_name || ''} ${(order.sales_person as any)?.last_name || ''}`.trim(),
         total_amount: order.total_amount,
         status: order.status,

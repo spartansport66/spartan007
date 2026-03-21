@@ -51,7 +51,7 @@ const HODApprovedPromotionalOrdersCard = () => {
           material_out_type,
           total_amount,
           status,
-          dealers (name),
+          dealer_name,
           sales_person:profiles!sales_person_id (first_name, last_name),
           promotional_order_items (
             quantity,
@@ -72,7 +72,7 @@ const HODApprovedPromotionalOrdersCard = () => {
         promotion_type: order.promotion_type,
         material_out_type: order.material_out_type,
         total_amount: order.total_amount,
-        dealer_name: (order.dealers as any)?.name || 'N/A',
+        dealer_name: order.dealer_name || 'N/A',
         sales_person_name: `${(order.sales_person as any)?.first_name || ''} ${(order.sales_person as any)?.last_name || ''}`.trim(),
         status: order.status,
         items: (order.promotional_order_items as any[]).map(item => ({

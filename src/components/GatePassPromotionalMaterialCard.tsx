@@ -59,7 +59,7 @@ const GatePassPromotionalMaterialCard: React.FC<GatePassPromotionalMaterialCardP
           person_name,
           person_contact_no,
           person_address,
-          dealers (name),
+          dealer_name,
           sales_person:profiles!sales_person_id (first_name, last_name),
           promotional_order_items (
             quantity,
@@ -84,7 +84,7 @@ const GatePassPromotionalMaterialCard: React.FC<GatePassPromotionalMaterialCardP
         person_name: order.person_name || '',
         person_contact_no: order.person_contact_no || '',
         person_address: order.person_address || '',
-        dealer_name: (order.dealers as any)?.name || 'N/A',
+        dealer_name: order.dealer_name || 'N/A',
         sales_person_name: `${(order.sales_person as any)?.first_name || ''} ${(order.sales_person as any)?.last_name || ''}`.trim(),
         items: (order.promotional_order_items as any[]).map(item => ({
           product_name: (item.products as any)?.name || 'Unknown',

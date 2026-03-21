@@ -63,7 +63,7 @@ const PromotionalOrderDetails = () => {
           person_name,
           person_address,
           person_contact_no,
-          dealers (name),
+          dealer_name,
           sales_person:profiles!sales_person_id (first_name, last_name),
           promotional_order_items (
             quantity,
@@ -89,7 +89,7 @@ const PromotionalOrderDetails = () => {
         status: orderData.status,
         authorization_status: orderData.authorization_status,
         auth_token: orderData.auth_token,
-        dealer_name: (orderData.dealers as any)?.name || 'N/A',
+        dealer_name: orderData.dealer_name || 'N/A',
         sales_person_name: `${(orderData.sales_person as any)?.first_name || ''} ${(orderData.sales_person as any)?.last_name || ''}`.trim(),
         person_name: orderData.person_name || '',
         person_address: orderData.person_address || '',

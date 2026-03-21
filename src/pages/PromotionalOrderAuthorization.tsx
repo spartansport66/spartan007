@@ -69,7 +69,8 @@ const PromotionalOrderAuthorization = () => {
             person_name,
             person_address,
             person_contact_no,
-            dealers (name),
+            dealer_name,
+            dealer_id,
             sales_person:profiles!sales_person_id (first_name, last_name),
             promotional_order_items (
               id,
@@ -99,7 +100,7 @@ const PromotionalOrderAuthorization = () => {
             promotion_type: orderArray.promotion_type,
             material_out_type: orderArray.material_out_type,
             total_amount: orderArray.total_amount,
-            dealer_name: (orderArray.dealers as any)?.name || 'N/A',
+            dealer_name: orderArray.dealer_name || 'N/A',
             sales_person_name: `${(orderArray.sales_person as any)?.first_name || ''} ${(orderArray.sales_person as any)?.last_name || ''}`.trim(),
             person_name: orderArray.person_name || '',
             person_address: orderArray.person_address || '',
@@ -325,28 +326,28 @@ const PromotionalOrderAuthorization = () => {
             <div>
               <h3 className="font-bold text-sm mb-3">Order Details:</h3>
               <div className="bg-white dark:bg-gray-800 rounded-lg border p-3 sm:p-4 space-y-2">
-              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
-                <span className="font-bold">Order: P{orderData.order_number}</span>
+              <p className="text-xs sm:text-sm">
+                <span className="font-bold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-100 px-3 py-1 rounded-md inline-block">Order: P{orderData.order_number}</span>
               </p>
-              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
-                <span>Party: {orderData.dealer_name}</span>
+              <p className="text-xs sm:text-sm">
+                <span className="font-bold bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-100 px-3 py-1 rounded-md inline-block">Party: {orderData.dealer_name}</span>
               </p>
-              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
-                <span>Promotion: {orderData.promotion_type}</span>
+              <p className="text-xs sm:text-sm">
+                <span className="font-bold bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-100 px-3 py-1 rounded-md inline-block">Promotion: {orderData.promotion_type}</span>
               </p>
               {orderData.person_name && (
-                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
-                  <span>Person: {orderData.person_name}</span>
+                <p className="text-xs sm:text-sm">
+                  <span className="font-bold bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-100 px-3 py-1 rounded-md inline-block">Person: {orderData.person_name}</span>
                 </p>
               )}
               {orderData.person_contact_no && (
-                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
-                  <span>📱 {orderData.person_contact_no}</span>
+                <p className="text-xs sm:text-sm">
+                  <span className="font-bold bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-100 px-3 py-1 rounded-md inline-block">📱 {orderData.person_contact_no}</span>
                 </p>
               )}
               {orderData.person_address && (
-                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
-                  <span>📍 {orderData.person_address}</span>
+                <p className="text-xs sm:text-sm">
+                  <span className="font-bold bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-100 px-3 py-1 rounded-md inline-block">📍 {orderData.person_address}</span>
                 </p>
               )}
               </div>
