@@ -362,11 +362,11 @@ const GatePassOnlineQueueCard: React.FC<GatePassOnlineQueueCardProps> = ({ onDis
                         aria-label="Select all online dispatch queue items"
                       />
                     </TableHead>
-                    <TableHead className="p-2 w-24">Dispatch</TableHead>
-                    <TableHead className="p-2 w-28">Client</TableHead>
-                    <TableHead className="p-2 flex-grow max-w-xs">Item</TableHead>
-                    <TableHead className="p-2 w-8">Qty</TableHead>
-                    <TableHead className="p-2 w-20 text-center">Act</TableHead>
+                    <TableHead className="p-2 min-w-20 sm:w-24">Dispatch</TableHead>
+                    <TableHead className="p-2 min-w-20 sm:w-28">Client</TableHead>
+                    <TableHead className="p-2 flex-grow min-w-32">Item</TableHead>
+                    <TableHead className="p-2 min-w-10 text-center">Qty</TableHead>
+                    <TableHead className="p-2 min-w-20 text-center">Act</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

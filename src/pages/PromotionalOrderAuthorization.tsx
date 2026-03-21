@@ -357,30 +357,25 @@ const PromotionalOrderAuthorization = () => {
               </div>
             </div>
 
-            {/* Items Table */}
+            {/* Items List */}
             <div>
-              <h3 className="font-bold mb-3">Order Items:</h3>
-              <div className="border rounded-md overflow-x-auto">
-                <Table className="text-sm">
-                  <TableHeader>
-                    <TableRow className="bg-muted">
-                      <TableHead>Product</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orderData.items.map(item => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.product_name}</TableCell>
-                        <TableCell className="text-right">{item.quantity}</TableCell>
-                        <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-semibold">₹{item.total_price.toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <h3 className="font-bold mb-3 text-sm">Order Items:</h3>
+              <div className="space-y-2">
+                {orderData.items.map((item, index) => (
+                  <div key={item.id} className="border rounded-md p-3 bg-white hover:bg-muted/50">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-muted-foreground mb-1">S.No {index + 1}</div>
+                        <p className="text-xs font-medium text-gray-900 break-words mb-2">{item.product_name}</p>
+                        <div className="flex gap-4 text-xs text-gray-700">
+                          <span><strong>Qty:</strong> {item.quantity}</span>
+                          <span><strong>@ ₹</strong>{item.unit_price.toFixed(2)}</span>
+                          <span className="font-semibold text-green-600"><strong>= ₹</strong>{item.total_price.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 

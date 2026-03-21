@@ -208,13 +208,13 @@ const GatePassQueueCard: React.FC<GatePassQueueCardProps> = ({ onDispatchSuccess
                         aria-label="Select all dispatch queue items"
                       />
                     </TableHead>
-                    <TableHead>Dispatch #</TableHead>
-                    <TableHead>Order #</TableHead>
-                    <TableHead>Dealer / Customer</TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Qty</TableHead>
-                    <TableHead>Bill No.</TableHead>
-                    <TableHead className="text-center">Action</TableHead>
+                    <TableHead className="min-w-20">Dispatch #</TableHead>
+                    <TableHead className="min-w-16">Order #</TableHead>
+                    <TableHead className="min-w-28">Dealer / Customer</TableHead>
+                    <TableHead className="min-w-32 flex-grow">Item</TableHead>
+                    <TableHead className="min-w-12 text-center">Qty</TableHead>
+                    <TableHead className="min-w-16">Bill No.</TableHead>
+                    <TableHead className="text-center min-w-24">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

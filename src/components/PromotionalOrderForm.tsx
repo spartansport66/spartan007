@@ -565,43 +565,35 @@ const PromotionalOrderForm: React.FC<PromotionalOrderFormProps> = ({ onOrderCrea
           </CardHeader>
           <CardContent>
             <div className="border rounded-md overflow-x-auto">
-              <Table className="text-sm">
-                <TableHeader>
-                  <TableRow className="bg-muted">
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Qty</TableHead>
-                    <TableHead className="text-right">Unit Price</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="w-10 text-center">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orderItems.map(item => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.product_name}</TableCell>
-                      <TableCell className="text-right">{item.quantity}</TableCell>
-                      <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-semibold">₹{item.total_price.toFixed(2)}</TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeItemFromOrder(item.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className="bg-muted font-bold">
-                    <TableCell colSpan={3} className="text-right">TOTAL AMOUNT:</TableCell>
-                    <TableCell className="text-right">₹{calculateTotalAmount().toFixed(2)}</TableCell>
-                    <TableCell />
-                  </TableRow>
-                </TableBody>
-              </Table>
+              <div className="space-y-2 p-3">
+                {orderItems.map((item, idx) => (
+                  <div key={item.id} className="border rounded-md p-3 bg-white hover:bg-muted/50 flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-muted-foreground mb-1">S.No {idx + 1}</div>
+                      <p className="text-sm font-medium text-gray-900 break-words mb-2">{item.product_name}</p>
+                      <div className="flex gap-4 text-xs text-gray-700">
+                        <span><strong>Qty:</strong> {item.quantity}</span>
+                        <span><strong>@ ₹</strong>{item.unit_price.toFixed(2)}</span>
+                        <span className="font-semibold text-green-600"><strong>= ₹</strong>{item.total_price.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeItemFromOrder(item.id)}
+                      className="text-red-600 hover:text-red-700 mt-1"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <div className="border-t-2 border-muted mt-3 pt-3">
+                  <div className="text-right">
+                    <p className="text-sm font-bold">TOTAL AMOUNT: <span className="text-lg text-green-600">₹{calculateTotalAmount().toFixed(2)}</span></p>
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

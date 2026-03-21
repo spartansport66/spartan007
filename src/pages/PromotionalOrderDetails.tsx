@@ -337,35 +337,27 @@ ${authLink}`;
             <CardTitle>Order Items</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted">
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                    <TableHead className="text-right">Unit Price</TableHead>
-                    <TableHead className="text-right">Total Price</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {order.items.map((item, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-medium">{item.product_name}</TableCell>
-                      <TableCell className="text-right">{item.quantity}</TableCell>
-                      <TableCell className="text-right">₹{item.unit_price.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-semibold">₹{item.total_price.toFixed(2)}</TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className="font-bold bg-muted">
-                    <TableCell colSpan={3} className="text-right">
-                      Grand Total:
-                    </TableCell>
-                    <TableCell className="text-right text-lg text-green-600">
-                      ₹{order.total_amount.toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+            <div className="space-y-2">
+              {order.items.map((item, idx) => (
+                <div key={idx} className="border rounded-md p-3 bg-white hover:bg-muted/50">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-muted-foreground mb-1">S.No {idx + 1}</div>
+                      <p className="text-sm font-medium text-gray-900 break-words mb-2">{item.product_name}</p>
+                      <div className="flex gap-4 text-xs text-gray-700">
+                        <span><strong>Qty:</strong> {item.quantity}</span>
+                        <span><strong>@ ₹</strong>{item.unit_price.toFixed(2)}</span>
+                        <span className="font-semibold text-green-600"><strong>= ₹</strong>{item.total_price.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div className="border-t-2 border-muted mt-3 pt-3">
+                <div className="text-right">
+                  <p className="text-sm font-bold">Grand Total: <span className="text-lg text-green-600">₹{order.total_amount.toFixed(2)}</span></p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

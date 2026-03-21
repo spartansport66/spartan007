@@ -297,14 +297,14 @@ ${authLink}`;
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted">
-                      <TableHead className="font-bold">Order #</TableHead>
-                      <TableHead className="font-bold">Date</TableHead>
-                      <TableHead className="font-bold">Party</TableHead>
-                      <TableHead className="font-bold">Promotion</TableHead>
-                      <TableHead className="font-bold">Material Type</TableHead>
-                      <TableHead className="font-bold">Amount</TableHead>
-                      <TableHead className="font-bold">Status</TableHead>
-                      <TableHead className="text-center font-bold">Actions</TableHead>
+                      <TableHead className="font-bold min-w-16">Order #</TableHead>
+                      <TableHead className="font-bold min-w-20">Date</TableHead>
+                      <TableHead className="font-bold min-w-24">Party</TableHead>
+                      <TableHead className="font-bold min-w-28 flex-grow">Promotion</TableHead>
+                      <TableHead className="font-bold min-w-20">Material Type</TableHead>
+                      <TableHead className="font-bold min-w-20">Amount</TableHead>
+                      <TableHead className="font-bold min-w-16">Status</TableHead>
+                      <TableHead className="text-center font-bold min-w-24">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

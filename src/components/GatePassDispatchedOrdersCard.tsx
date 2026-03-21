@@ -109,11 +109,11 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="bg-muted hover:bg-muted/90">
-                      <TableHead>Dispatch #</TableHead>
-                      <TableHead>Order #</TableHead>
-                      <TableHead>Dealer / Customer</TableHead>
-                      <TableHead>Gate Pass Time</TableHead>
-                      <TableHead className="text-center">Details</TableHead>
+                      <TableHead className="min-w-20">Dispatch #</TableHead>
+                      <TableHead className="min-w-16">Order #</TableHead>
+                      <TableHead className="min-w-28 flex-grow">Dealer / Customer</TableHead>
+                      <TableHead className="min-w-32">Gate Pass Time</TableHead>
+                      <TableHead className="text-center min-w-20">Details</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
