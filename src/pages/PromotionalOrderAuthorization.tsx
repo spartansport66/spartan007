@@ -326,28 +326,28 @@ const PromotionalOrderAuthorization = () => {
             <div>
               <h3 className="font-bold text-sm mb-3">Order Details:</h3>
               <div className="bg-white dark:bg-gray-800 rounded-lg border p-3 sm:p-4 space-y-2">
-              <p className="text-xs sm:text-sm">
-                <span className="font-bold bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-100 px-3 py-1 rounded-md inline-block">Order: P{orderData.order_number}</span>
+              <p className="text-sm sm:text-lg">
+                <span className="font-bold text-blue-600 dark:text-blue-400">Order: P{orderData.order_number}</span>
               </p>
-              <p className="text-xs sm:text-sm">
-                <span className="font-bold bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-100 px-3 py-1 rounded-md inline-block">Party: {orderData.dealer_name}</span>
+              <p className="text-sm sm:text-lg">
+                <span className="font-bold text-green-600 dark:text-green-400">Party: {orderData.dealer_name}</span>
               </p>
-              <p className="text-xs sm:text-sm">
-                <span className="font-bold bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-100 px-3 py-1 rounded-md inline-block">Promotion: {orderData.promotion_type}</span>
+              <p className="text-sm sm:text-lg">
+                <span className="font-bold text-purple-600 dark:text-purple-400">Promotion: {orderData.promotion_type}</span>
               </p>
               {orderData.person_name && (
-                <p className="text-xs sm:text-sm">
-                  <span className="font-bold bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-100 px-3 py-1 rounded-md inline-block">Person: {orderData.person_name}</span>
+                <p className="text-sm sm:text-lg">
+                  <span className="font-bold text-indigo-600 dark:text-indigo-400">Person: {orderData.person_name}</span>
                 </p>
               )}
               {orderData.person_contact_no && (
-                <p className="text-xs sm:text-sm">
-                  <span className="font-bold bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-100 px-3 py-1 rounded-md inline-block">📱 {orderData.person_contact_no}</span>
+                <p className="text-sm sm:text-lg">
+                  <span className="font-bold text-orange-600 dark:text-orange-400">📱 {orderData.person_contact_no}</span>
                 </p>
               )}
               {orderData.person_address && (
-                <p className="text-xs sm:text-sm">
-                  <span className="font-bold bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-100 px-3 py-1 rounded-md inline-block">📍 {orderData.person_address}</span>
+                <p className="text-sm sm:text-lg">
+                  <span className="font-bold text-red-600 dark:text-red-400">📍 {orderData.person_address}</span>
                 </p>
               )}
               </div>
