@@ -292,41 +292,37 @@ ${authLink}`;
             </div>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <p className="text-sm text-muted-foreground">Party (Dealer)</p>
-                <p className="text-lg font-semibold">{order.dealer_name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Sales Person</p>
-                <p className="text-lg font-semibold">{order.sales_person_name}</p>
-              </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg border p-3 sm:p-4 space-y-2">
+              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                <span className="font-bold">Order: P{order.order_number}</span>
+              </p>
+              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                <span>Party: {order.dealer_name}</span>
+              </p>
+              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                <span>Sales Person: {order.sales_person_name}</span>
+              </p>
+              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                <span>Promotion: {order.promotion_type}</span>
+              </p>
               {order.person_name && (
-                <>
-                  <div>
-                    <p className="text-sm text-muted-foreground">👤 Person Name</p>
-                    <p className="text-lg font-semibold">{order.person_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">📱 Contact Number</p>
-                    <p className="text-lg font-semibold">{order.person_contact_no}</p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-muted-foreground">📍 Address</p>
-                    <p className="text-lg font-semibold">{order.person_address}</p>
-                  </div>
-                </>
-              )}
-              <div>
-                <p className="text-sm text-muted-foreground">Material Type</p>
-                <p className="text-lg font-semibold">
-                  {order.material_out_type === 'returnable' ? '↩️ Returnable' : '✓ Non-Returnable'}
+                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                  <span>Person: {order.person_name}</span>
                 </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Amount</p>
-                <p className="text-2xl font-bold text-green-600">₹{order.total_amount.toFixed(2)}</p>
-              </div>
+              )}
+              {order.person_contact_no && (
+                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                  <span>📱 {order.person_contact_no}</span>
+                </p>
+              )}
+              {order.person_address && (
+                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                  <span>📍 {order.person_address}</span>
+                </p>
+              )}
+              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                <span>Type: {order.material_out_type === 'returnable' ? '↩️ Returnable' : '✓ Non-Returnable'}</span>
+              </p>
             </div>
           </CardContent>
         </Card>

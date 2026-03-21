@@ -321,40 +321,32 @@ const PromotionalOrderAuthorization = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Order Header Info */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-white dark:bg-gray-800 rounded-lg border">
-              <div>
-                <p className="text-xs text-muted-foreground">Order Number</p>
-                <p className="font-bold text-lg">P{orderData.order_number}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Promotion Type</p>
-                <p className="font-semibold">{orderData.promotion_type}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Party</p>
-                <p className="font-semibold">{orderData.dealer_name}</p>
-              </div>
+            {/* Order Header Info - Line by Line Format */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg border p-3 sm:p-4 space-y-2">
+              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                <span className="font-bold">Order: P{orderData.order_number}</span>
+              </p>
+              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                <span>Party: {orderData.dealer_name}</span>
+              </p>
+              <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                <span>Promotion: {orderData.promotion_type}</span>
+              </p>
               {orderData.person_name && (
-                <>
-                  <div>
-                    <p className="text-xs text-muted-foreground">👤 Person Name</p>
-                    <p className="font-semibold">{orderData.person_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">📱 Contact Number</p>
-                    <p className="font-semibold">{orderData.person_contact_no}</p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <p className="text-xs text-muted-foreground">📍 Address</p>
-                    <p className="font-semibold">{orderData.person_address}</p>
-                  </div>
-                </>
+                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                  <span>Person: {orderData.person_name}</span>
+                </p>
               )}
-              <div>
-                <p className="text-xs text-muted-foreground">Total Amount</p>
-                <p className="font-bold text-lg text-green-700">₹{orderData.total_amount.toFixed(2)}</p>
-              </div>
+              {orderData.person_contact_no && (
+                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                  <span>📱 {orderData.person_contact_no}</span>
+                </p>
+              )}
+              {orderData.person_address && (
+                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                  <span>📍 {orderData.person_address}</span>
+                </p>
+              )}
             </div>
 
             {/* Items List */}

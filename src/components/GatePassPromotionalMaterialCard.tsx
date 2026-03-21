@@ -240,49 +240,34 @@ const GatePassPromotionalMaterialCard: React.FC<GatePassPromotionalMaterialCardP
           {selectedOrder && (
             <div className="space-y-6">
               {/* Order Summary */}
-              <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
-                <div>
-                  <p className="text-xs text-muted-foreground">Party</p>
-                  <p className="font-semibold">{selectedOrder.dealer_name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Sales Person</p>
-                  <p className="font-semibold">{selectedOrder.sales_person_name}</p>
-                </div>
+              <div className="bg-white dark:bg-gray-800 rounded-lg border p-3 sm:p-4 space-y-2">
+                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                  <span className="font-bold">Order: P{selectedOrder.order_number}</span>
+                </p>
+                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                  <span>Party: {selectedOrder.dealer_name}</span>
+                </p>
+                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                  <span>Sales Person: {selectedOrder.sales_person_name}</span>
+                </p>
+                <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                  <span>Promotion: {selectedOrder.promotion_type}</span>
+                </p>
                 {selectedOrder.person_name && (
-                  <>
-                    <div>
-                      <p className="text-xs text-muted-foreground">👤 Person Name</p>
-                      <p className="font-semibold">{selectedOrder.person_name}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">📱 Contact</p>
-                      <p className="font-semibold">{selectedOrder.person_contact_no}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-xs text-muted-foreground">📍 Address</p>
-                      <p className="font-semibold">{selectedOrder.person_address}</p>
-                    </div>
-                  </>
-                )}
-                <div>
-                  <p className="text-xs text-muted-foreground">Promotion Type</p>
-                  <p className="font-semibold">{selectedOrder.promotion_type}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Material Type</p>
-                  <p className="font-semibold">
-                    {selectedOrder.material_out_type === 'returnable' ? '↩️ Returnable' : '✓ Non-Returnable'}
+                  <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                    <span>Person: {selectedOrder.person_name}</span>
                   </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Order Date</p>
-                  <p className="font-semibold">{new Date(selectedOrder.order_date).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Amount</p>
-                  <p className="font-semibold text-green-600">₹{selectedOrder.total_amount.toFixed(2)}</p>
-                </div>
+                )}
+                {selectedOrder.person_contact_no && (
+                  <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                    <span>📱 {selectedOrder.person_contact_no}</span>
+                  </p>
+                )}
+                {selectedOrder.person_address && (
+                  <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                    <span>📍 {selectedOrder.person_address}</span>
+                  </p>
+                )}
               </div>
 
               {/* Items List */}
