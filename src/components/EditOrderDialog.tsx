@@ -17,6 +17,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSession } from '@/contexts/SessionContext';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
@@ -28,6 +29,29 @@ interface Product {
   dp: number;
   closing_stock: number;
   gst: string;
+}
+
+interface ComboItem {
+  id: string;
+  product_id: string;
+  product_name: string;
+  product_code: string;
+  quantity: number;
+  discount_percent: number;
+  gst_percent: number;
+  unit_price: number;
+}
+
+interface Combo {
+  combo_id: string;
+  combo_code?: string;
+  combo_name: string;
+  combo_description: string;
+  combo_category: string;
+  combo_dp: number;
+  combo_gst: number;
+  item_count: number;
+  items: ComboItem[];
 }
 
 interface Dealer {
@@ -129,11 +153,37 @@ const fetchAllProducts = async (): Promise<Product[]> => {
   return allProducts;
 };
 
+// Helper function to fetch all combos
+const fetchAllCombos = async (): Promise<Combo[]> => {
+  try {
+    const { data, error } = await supabase.rpc('get_all_active_combos_with_items');
+    if (error) {
+      console.error("Error fetching combos:", error);
+      throw error;
+    }
+    return (data || []).map((combo: any) => ({
+      combo_id: combo.combo_id,
+      combo_code: combo.combo_code,
+      combo_name: combo.combo_name,
+      combo_description: combo.combo_description,
+      combo_category: combo.combo_category,
+      combo_dp: combo.combo_dp,
+      combo_gst: combo.combo_gst,
+      item_count: combo.item_count,
+      items: Array.isArray(combo.items) ? combo.items : [],
+    }));
+  } catch (error) {
+    console.error('Error fetching combos:', error);
+    return [];
+  }
+};
+
 const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated }) => {
   const { user, session } = useSession();
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [combos, setCombos] = useState<Combo[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<SalesPerson[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
@@ -141,11 +191,15 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   const [isProductPopoverOpen, setIsProductPopoverOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
+  const [selectionTab, setSelectionTab] = useState<'products' | 'combos'>('products');
   const [newItemProductId, setNewItemProductId] = useState<string>('');
+  const [newItemComboId, setNewItemComboId] = useState<string>('');
   const [newItemQuantity, setNewItemQuantity] = useState<number>(1);
   const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
   const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<string>('0');
   const [newItemGstPercent, setNewItemGstPercent] = useState<string>('0');
+  const [newComboDiscountPercent, setNewComboDiscountPercent] = useState<string>('0');
+  const [newComboGstPercent, setNewComboGstPercent] = useState<string>('0');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -167,8 +221,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   const fetchInitialData = useCallback(async () => {
     try {
-      const [productsData, dealersRes, usersRes] = await Promise.all([
+      const [productsData, combosData, dealersRes, usersRes] = await Promise.all([
         fetchAllProducts(),
+        fetchAllCombos(),
         supabase.from('dealers').select('id, name').order('name'),
         supabase.from('profiles').select('id, first_name, last_name, user_type').in('user_type', ['sales_person', 'admin']).order('first_name'),
       ]);
@@ -177,6 +232,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       if (usersRes.error) throw usersRes.error;
 
       setProducts(productsData || []);
+      setCombos(combosData || []);
       setDealers(dealersRes.data || []);
       setAssignableUsers(usersRes.data || []);
     } catch (error: any) {
@@ -302,32 +358,80 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   }, [newItemUnitPrice, newItemDiscountPercent, newItemQuantity, newItemGstPercent]);
 
   const addOrderItem = () => {
-    if (!newItemProductId || newItemQuantity <= 0) {
-      showError("Please select a product and enter a valid quantity.");
-      return;
-    }
-    const product = products.find(p => p.id === newItemProductId);
-    if (!product) return;
+    if (selectionTab === 'products') {
+      // Add individual product
+      if (!newItemProductId || newItemQuantity <= 0) {
+        showError("Please select a product and enter a valid quantity.");
+        return;
+      }
+      const product = products.find(p => p.id === newItemProductId);
+      if (!product) return;
 
-    const newOrderItem: OrderItem = {
-      id: Date.now().toString(),
-      product_id: product.id,
-      quantity: newItemQuantity,
-      product_name: product.name,
-      product_code: product.code,
-      unit_dp: newItemUnitPrice,
-      discount_percent: parseFloat(newItemDiscountPercent as any) || 0,
-      gst_percent: parseFloat(newItemGstPercent as any) || 0,
-      taxable_value: newItemCalculations.taxableValue,
-      gst_amount: newItemCalculations.gstAmount,
-      total_price: newItemCalculations.totalPrice,
-    };
-    setOrderItems(prevItems => [...prevItems, newOrderItem]);
-    setNewItemProductId('');
-    setNewItemQuantity(1);
-    setNewItemUnitPrice(0);
-    setNewItemDiscountPercent('0');
-    setNewItemGstPercent('0');
+      const newOrderItem: OrderItem = {
+        id: Date.now().toString(),
+        product_id: product.id,
+        quantity: newItemQuantity,
+        product_name: product.name,
+        product_code: product.code,
+        unit_dp: newItemUnitPrice,
+        discount_percent: parseFloat(newItemDiscountPercent as any) || 0,
+        gst_percent: parseFloat(newItemGstPercent as any) || 0,
+        taxable_value: newItemCalculations.taxableValue,
+        gst_amount: newItemCalculations.gstAmount,
+        total_price: newItemCalculations.totalPrice,
+      };
+      setOrderItems(prevItems => [...prevItems, newOrderItem]);
+      setNewItemProductId('');
+      setNewItemQuantity(1);
+      setNewItemUnitPrice(0);
+      setNewItemDiscountPercent('0');
+      setNewItemGstPercent('0');
+    } else {
+      // Add combo items
+      if (!newItemComboId) {
+        showError("Please select a combo.");
+        return;
+      }
+      const selectedCombo = combos.find(c => c.combo_id === newItemComboId);
+      if (!selectedCombo || !selectedCombo.items || selectedCombo.items.length === 0) {
+        showError("Combo has no items.");
+        return;
+      }
+
+      const comboItems = selectedCombo.items.map((item, index) => {
+        const itemQuantity = item.quantity * newItemQuantity;
+        const unitPrice = item.unit_price || 0;
+        // Use combo discount/GST if specified, otherwise use item defaults
+        const discPercent = parseFloat(newComboDiscountPercent as any) || item.discount_percent || 0;
+        const gstPercent = parseFloat(newComboGstPercent as any) || item.gst_percent || 0;
+        
+        const taxableUnitPrice = unitPrice * (1 - discPercent / 100);
+        const taxableValue = taxableUnitPrice * itemQuantity;
+        const gstAmount = (taxableValue * gstPercent) / 100;
+        const totalPrice = taxableValue + gstAmount;
+
+        return {
+          id: `${selectedCombo.combo_id}-${item.product_id}-${Date.now()}-${index}`,
+          product_id: item.product_id,
+          quantity: itemQuantity,
+          product_name: item.product_name,
+          product_code: item.product_code,
+          unit_dp: unitPrice,
+          discount_percent: discPercent,
+          gst_percent: gstPercent,
+          taxable_value: taxableValue,
+          gst_amount: gstAmount,
+          total_price: totalPrice,
+        };
+      });
+
+      setOrderItems(prevItems => [...prevItems, ...comboItems]);
+      setNewItemComboId('');
+      setNewItemQuantity(1);
+      setNewComboDiscountPercent('0');
+      setNewComboGstPercent('0');
+      showSuccess(`Added ${selectedCombo.combo_name} to order`);
+    }
   };
 
   const updateOrderItem = (id: string, field: keyof OrderItem, value: number) => {
@@ -485,59 +589,151 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
               <div className="space-y-4">
                 <Label className="text-lg font-semibold">Add/Modify Items</Label>
-                <div className="flex flex-col gap-3 p-3 border rounded-md bg-muted/50 max-h-[300px] overflow-y-auto">
-                  <div className="w-full">
-                    <Label>Product</Label>
-                    <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[400px] p-0" align="start">
-                        <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
-                        <ScrollArea className="h-[250px]"><div className="p-1">
-                          {filteredProducts.map((product) => (
-                            <Button
-                              key={product.id}
-                              variant="ghost"
-                              className="w-full justify-start font-normal h-auto py-2"
-                              onClick={() => {
-                                const rawGst = parseFloat(product.gst) || 0;
-                                const gstNormalized = rawGst > 0 && rawGst <= 1 ? rawGst * 100 : rawGst;
-                                setNewItemProductId(product.id);
-                                setNewItemUnitPrice(product.dp);
-                                setNewItemGstPercent(String(gstNormalized));
-                                setIsProductPopoverOpen(false);
-                                setProductSearch('');
-                              }}
-                            >
-                              <div className="flex flex-col items-start w-full">
-                                <div className="flex items-center justify-between w-full gap-2">
-                                  <div className="flex items-center min-w-0">
-                                    <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                                    <span className="font-medium truncate">{product.name}</span>
+                <Tabs value={selectionTab} onValueChange={(val) => setSelectionTab(val as 'products' | 'combos')} className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="products">Products</TabsTrigger>
+                    <TabsTrigger value="combos">Combo Kits ({combos.length})</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="products">
+                    <div className="flex flex-col gap-3 p-3 border rounded-md bg-muted/50">
+                      <div className="w-full">
+                        <Label>Product</Label>
+                        <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[400px] p-0" align="start">
+                            <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
+                            <ScrollArea className="h-[250px]"><div className="p-1">
+                              {filteredProducts.map((product) => (
+                                <Button
+                                  key={product.id}
+                                  variant="ghost"
+                                  className="w-full justify-start font-normal h-auto py-2"
+                                  onClick={() => {
+                                    const rawGst = parseFloat(product.gst) || 0;
+                                    const gstNormalized = rawGst > 0 && rawGst <= 1 ? rawGst * 100 : rawGst;
+                                    setNewItemProductId(product.id);
+                                    setNewItemUnitPrice(product.dp);
+                                    setNewItemGstPercent(String(gstNormalized));
+                                    setIsProductPopoverOpen(false);
+                                    setProductSearch('');
+                                  }}
+                                >
+                                  <div className="flex flex-col items-start w-full">
+                                    <div className="flex items-center justify-between w-full gap-2">
+                                      <div className="flex items-center min-w-0">
+                                        <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                        <span className="font-medium truncate">{product.name}</span>
+                                      </div>
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground ml-6 flex flex-wrap gap-x-3 gap-y-1">
+                                      <span className="bg-muted px-1 rounded font-mono">Code: {product.code}</span>
+                                      <span className="font-semibold text-primary">DP: ₹{product.dp.toFixed(2)}</span>
+                                      <span>Stock: {product.closing_stock}</span>
+                                    </div>
                                   </div>
-                                </div>
-                                <div className="text-[10px] text-muted-foreground ml-6 flex flex-wrap gap-x-3 gap-y-1">
-                                  <span className="bg-muted px-1 rounded font-mono">Code: {product.code}</span>
-                                  <span className="font-semibold text-primary">DP: ₹{product.dp.toFixed(2)}</span>
-                                  <span>Stock: {product.closing_stock}</span>
-                                </div>
-                              </div>
-                            </Button>
-                          ))}
-                        </div></ScrollArea>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 items-end">
-                    <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
-                    <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
-                    <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(e.target.value)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
-                    <div><Label>GST (%)</Label><Input type="number" step="0.1" value={newItemGstPercent} onChange={(e) => setNewItemGstPercent(e.target.value)} min="0" /></div>
-                    <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemCalculations.totalPrice.toFixed(2)}</div></div>
-                  </div>
-                  <Button type="button" onClick={addOrderItem} disabled={isSubmitting} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
-                </div>
+                                </Button>
+                              ))}
+                            </div></ScrollArea>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 items-end">
+                        <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
+                        <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
+                        <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(e.target.value)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
+                        <div><Label>GST (%)</Label><Input type="number" step="0.1" value={newItemGstPercent} onChange={(e) => setNewItemGstPercent(e.target.value)} min="0" /></div>
+                        <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemCalculations.totalPrice.toFixed(2)}</div></div>
+                      </div>
+                      <Button type="button" onClick={addOrderItem} disabled={isSubmitting} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="combos">
+                    <div className="flex flex-col gap-3 p-3 border rounded-md bg-muted/50">
+                      <div className="w-full">
+                        <Label>Combo Kit</Label>
+                        <Select value={newItemComboId} onValueChange={setNewItemComboId} disabled={isSubmitting}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select a combo kit..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {combos.length === 0 ? (
+                              <div className="p-2 text-center text-sm text-muted-foreground">No combo kits available</div>
+                            ) : (
+                              combos.map(combo => {
+                                const avgDiscount = combo.items && combo.items.length > 0
+                                  ? combo.items.reduce((sum, item) => sum + (item.discount_percent || 0), 0) / combo.items.length
+                                  : 0;
+                                return (
+                                  <SelectItem key={combo.combo_id} value={combo.combo_id}>
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">{combo.combo_name} {combo.combo_code ? `(${combo.combo_code})` : ''}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {combo.item_count} items • ₹{combo.combo_dp.toFixed(2)} • {avgDiscount > 0 ? `${avgDiscount.toFixed(1)}% off` : 'No discount'}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {newItemComboId && combos.find(c => c.combo_id === newItemComboId) && (() => {
+                        const selectedCombo = combos.find(c => c.combo_id === newItemComboId);
+                        const avgDiscount = selectedCombo?.items && selectedCombo.items.length > 0
+                          ? selectedCombo.items.reduce((sum, item) => sum + (item.discount_percent || 0), 0) / selectedCombo.items.length
+                          : 0;
+                        return (
+                          <div className="p-2 bg-blue-50 rounded border text-sm">
+                            <div className="font-semibold">
+                              {selectedCombo?.combo_name}
+                              {selectedCombo?.combo_code && (
+                                <span className="text-xs font-mono ml-2 bg-white px-2 py-0.5 rounded text-gray-700">
+                                  {selectedCombo.combo_code}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {selectedCombo?.combo_description}
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                              <span className="text-xs font-mono bg-white px-2 py-1 rounded">
+                                {selectedCombo?.item_count} items
+                              </span>
+                              {avgDiscount > 0 && (
+                                <span className="text-xs font-mono bg-green-100 px-2 py-1 rounded text-green-700 font-semibold">
+                                  Discount: {avgDiscount.toFixed(1)}%
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <div>
+                        <Label>Quantity (Combo Multiplier)</Label>
+                        <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" placeholder="How many times to add this combo" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Discount (%)</Label>
+                          <div className="relative">
+                            <Input type="number" step="0.1" value={newComboDiscountPercent} onChange={(e) => setNewComboDiscountPercent(e.target.value)} min="0" max="100" className="pr-8" placeholder="0" />
+                            <Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </div>
+                        <div>
+                          <Label>GST (%)</Label>
+                          <Input type="number" step="0.1" value={newComboGstPercent} onChange={(e) => setNewComboGstPercent(e.target.value)} min="0" placeholder="0" />
+                        </div>
+                      </div>
+                      <Button type="button" onClick={addOrderItem} disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700"><Plus className="h-4 w-4 mr-2" /> Add Combo to Order</Button>
+                    </div>
+                  </TabsContent>
+                </Tabs>
 
                 {orderItems.length > 0 && (
                   <div className="max-h-[350px] overflow-y-auto border rounded-md">
