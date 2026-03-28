@@ -24,3 +24,15 @@ CREATE POLICY "Allow public read access to products"
 ON public.products
 FOR SELECT
 USING (true);
+
+-- Add public SELECT policy for product_combos
+CREATE POLICY "Allow public read access to product_combos"
+ON public.product_combos
+FOR SELECT
+USING (true);
+
+-- Add public SELECT policy for product_combo_items
+CREATE POLICY "Allow public read access to product_combo_items"
+ON public.product_combo_items
+FOR SELECT
+USING (true);

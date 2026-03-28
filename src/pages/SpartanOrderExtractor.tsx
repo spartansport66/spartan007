@@ -5,15 +5,17 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, ArrowLeft, FileText, Upload, AlertCircle, Eye, EyeOff, Save, ListChecks, Trash2, Download, Search } from 'lucide-react';
+import { Loader2, ArrowLeft, FileText, Upload, AlertCircle, Eye, EyeOff, Save, ListChecks, Trash2, Download, Search, Package } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { buildStagingFromRows, upsertStaging, parseItemWithQty } from '@/utils/onlineOrderHelpers';
+import { fetchAllCombos, expandComboToItems, Combo } from '@/utils/comboHelpers';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Import the worker directly from the package to avoid CDN issues
@@ -85,6 +87,7 @@ const SpartanOrderExtractor = () => {
   const inputRefs = React.useRef<Record<string, HTMLInputElement | null>>({});
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [combos, setCombos] = useState<Combo[]>([]);
   const [matchedMap, setMatchedMap] = useState<Record<number, { matches: Product[]; selectedId?: string; search?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }>>({});
 
   useEffect(() => {
@@ -128,12 +131,16 @@ const SpartanOrderExtractor = () => {
         }
 
         console.log('🎉 ALL PRODUCTS LOADED:', allProducts.length);
-        console.log('📋 First 5:', allProducts.slice(0, 5));
-        const ctg = allProducts.filter((p: any) => (p.code || '').toString().toUpperCase().includes('CTG 303'));
-        console.log('🔍 CTG 303 found:', ctg.length, ctg);
         setProducts(allProducts);
+
+        // Also fetch combos
+        console.log('🔄 Fetching combos...');
+        const combosData = await fetchAllCombos();
+        console.log('✅ Combos loaded:', combosData.length);
+        setCombos(combosData);
       } catch (err: any) {
         console.error('Failed to fetch products:', err.message);
+        showError(`Failed to load products: ${err.message}`);
       }
     };
     fetchProducts();
@@ -1069,9 +1076,27 @@ const SpartanOrderExtractor = () => {
                                                         />
                                                       </PopoverTrigger>
 
-                                                      <PopoverContent className="p-0 min-w-[400px] max-h-96 overflow-y-auto">
-                                                        {filteredProducts.length > 0 ? (
-                                                          filteredProducts.map((prod) => (
+                                                      <PopoverContent className="p-0 min-w-[450px] max-h-96 overflow-hidden flex flex-col">
+                                                        {/* Search Box in Dropdown */}
+                                                        <div className="sticky top-0 bg-white border-b p-2 z-10">
+                                                          <input
+                                                            type="text"
+                                                            placeholder="🔍 Search here..."
+                                                            value={searchText}
+                                                            onChange={(e) => {
+                                                              const newSearch = { ...productSearchText };
+                                                              if (!newSearch[orderIndex]) newSearch[orderIndex] = {};
+                                                              newSearch[orderIndex][itemIndex] = e.target.value;
+                                                              setProductSearchText(newSearch);
+                                                            }}
+                                                            autoFocus
+                                                            className="w-full px-3 py-2 border border-blue-300 rounded bg-blue-50 text-sm font-medium text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                                          />
+                                                        </div>
+                                                        
+                                                        {/* Products and Combos List */}
+                                                        <div className="overflow-y-auto flex-1">
+                                                          {filteredProducts.map((prod) => (
                                                             <div
                                                               key={prod.id}
                                                               onClick={() => {
@@ -1099,33 +1124,146 @@ const SpartanOrderExtractor = () => {
                                                                 {prod.size && <span className="bg-gray-100 px-2 py-1 rounded">Size: {prod.size}</span>}
                                                               </div>
                                                             </div>
-                                                          ))
-                                                        ) : (
+                                                          ))}
+                                                        
+                                                        {/* Combo Kit Section - Always Show */}
+                                                        {combos.length > 0 && (
+                                                          <>
+                                                            {filteredProducts.length > 0 && <div className="px-4 py-2 text-xs font-semibold bg-blue-50 text-blue-700 border-t sticky top-[48px]">📦 COMBO KITS</div>}
+                                                            {combos.map((combo) => (
+                                                              <div
+                                                                key={`combo-${combo.combo_id}`}
+                                                                onClick={() => {
+                                                                  // Expand combo and add ALL items to the order
+                                                                  const expandedItems = expandComboToItems(combo, 1);
+                                                                  const newOrders = [...extractedOrders];
+                                                                  const order = newOrders[orderIndex];
+
+                                                                  if (!order.items) order.items = [];
+
+                                                                  // Convert expanded items into order item format
+                                                                  const comboOrderItems = expandedItems.map((item) => {
+                                                                    // Try to auto-map by product code
+                                                                    const matchedProduct = products.find(p => 
+                                                                      p.code && item.product_code && 
+                                                                      p.code.toLowerCase().trim() === item.product_code.toLowerCase().trim()
+                                                                    );
+                                                                    
+                                                                    return {
+                                                                      product: item.product_name,
+                                                                      qty: item.quantity,
+                                                                      total: item.unit_price * item.quantity,
+                                                                      mapped_product_id: matchedProduct?.id || item.product_id,
+                                                                      sku: item.product_code,
+                                                                    };
+                                                                  });
+
+                                                                  // Replace the current unmapped item with first combo item and add the rest
+                                                                  order.items[itemIndex] = comboOrderItems[0];
+                                                                  
+                                                                  // Add remaining combo items to the order
+                                                                  for (let i = 1; i < comboOrderItems.length; i++) {
+                                                                    order.items.push(comboOrderItems[i]);
+                                                                  }
+
+                                                                  // Update order qty ONLY (NOT amount - keep original PDF amount)
+                                                                  order.qty = order.items.reduce((sum, i) => sum + (i.qty || 0), 0);
+
+                                                                  setExtractedOrders(newOrders);
+                                                                  
+                                                                  // Update mapping for all items
+                                                                  const newMapping = { ...productMapping };
+                                                                  if (!newMapping[orderIndex]) newMapping[orderIndex] = {};
+                                                                  
+                                                                  comboOrderItems.forEach((item, idx) => {
+                                                                    newMapping[orderIndex][itemIndex + idx] = item.mapped_product_id;
+                                                                  });
+                                                                  setProductMapping(newMapping);
+
+                                                                  const newSearch = { ...productSearchText };
+                                                                  if (!newSearch[orderIndex]) newSearch[orderIndex] = {};
+                                                                  newSearch[orderIndex][itemIndex] = '';
+                                                                  setProductSearchText(newSearch);
+                                                                  setOpenDropdown(null);
+
+                                                                  // Auto-save all items to database and show mapping
+                                                                  comboOrderItems.forEach((item, idx) => {
+                                                                    handleProductMapping(orderIndex, itemIndex + idx, item.mapped_product_id);
+                                                                  });
+
+                                                                  showSuccess(`✅ Added & mapped combo "${combo.combo_name}" with ${expandedItems.length} items!`);
+                                                                }}
+                                                                className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b text-sm transition"
+                                                              >
+                                                                <div className="font-semibold text-blue-900 truncate">
+                                                                  {combo.combo_name}
+                                                                </div>
+                                                                <div className="text-xs text-blue-700 mt-1">
+                                                                  {combo.combo_code && <span className="bg-blue-100 px-2 py-1 rounded mr-2">Code: {combo.combo_code}</span>}
+                                                                  <span className="bg-blue-100 px-2 py-1 rounded">📦 {combo.item_count} items</span>
+                                                                </div>
+                                                              </div>
+                                                            ))}
+                                                          </>
+                                                        )}
+                                                        {filteredProducts.length === 0 && combos.length === 0 && (
                                                           <div className="px-4 py-3 text-sm text-gray-500">
-                                                            No products found matching "{searchText}"
+                                                            No products or combos found
                                                           </div>
                                                         )}
+                                                        </div>
                                                       </PopoverContent>
                                                     </Popover>
 
                                                     {selectedProduct && (
-                                                      <div className="text-xs text-green-700 mt-2 font-medium bg-green-50 px-2 py-1 rounded border border-green-200">
-                                                        <div className="flex items-center gap-2">
-                                                          <span className="font-semibold">✅ WILL SAVE:</span>
-                                                          <span className="font-semibold truncate">{selectedProduct.name}</span>
-                                                          <button
-                                                            type="button"
-                                                            onClick={() => handleDeleteMapping(orderIndex, itemIndex)}
-                                                            className="ml-2 text-red-600 hover:text-red-800 rounded p-1"
-                                                            title="Delete mapped item"
-                                                          >
-                                                            <Trash2 className="h-4 w-4" />
-                                                          </button>
+                                                      <div className="mt-2 space-y-2">
+                                                        <div className="text-xs text-green-700 font-medium bg-green-50 px-2 py-1 rounded border border-green-200">
+                                                          <div className="flex items-center gap-2">
+                                                            <span className="font-semibold">✅ WILL SAVE:</span>
+                                                            <span className="font-semibold truncate">{selectedProduct.name}</span>
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => handleDeleteMapping(orderIndex, itemIndex)}
+                                                              className="ml-2 text-red-600 hover:text-red-800 rounded p-1"
+                                                              title="Delete mapped item"
+                                                            >
+                                                              <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                          </div>
+                                                          <div className="flex items-center gap-2 mt-1 text-[11px] text-green-800">
+                                                            {selectedProduct.code && <span className="bg-white px-2 py-0.5 rounded border">Code: {selectedProduct.code}</span>}
+                                                            {selectedProduct.size !== undefined && selectedProduct.size !== null && <span className="bg-white px-2 py-0.5 rounded border">Size: {selectedProduct.size}</span>}
+                                                            {selectedProduct.dp !== undefined && selectedProduct.dp !== null && <span className="bg-white px-2 py-0.5 rounded border">DP: ₹{selectedProduct.dp.toFixed(2)}</span>}
+                                                          </div>
                                                         </div>
-                                                        <div className="flex items-center gap-2 mt-1 text-[11px] text-green-800">
-                                                          {selectedProduct.code && <span className="bg-white px-2 py-0.5 rounded border">Code: {selectedProduct.code}</span>}
-                                                          {selectedProduct.size !== undefined && selectedProduct.size !== null && <span className="bg-white px-2 py-0.5 rounded border">Size: {selectedProduct.size}</span>}
-                                                          {selectedProduct.dp !== undefined && selectedProduct.dp !== null && <span className="bg-white px-2 py-0.5 rounded border">DP: {selectedProduct.dp}</span>}
+                                                        
+                                                        {/* Price Comparison */}
+                                                        <div className="text-xs bg-blue-50 border border-blue-200 rounded p-2 space-y-1">
+                                                          <div className="font-semibold text-blue-900 mb-1.5">💰 PRICE COMPARISON:</div>
+                                                          <div className="flex justify-between items-center">
+                                                            <span className="text-gray-600">Catalog Price (DP):</span>
+                                                            <span className="font-bold text-blue-700">₹{selectedProduct.dp?.toFixed(2) || '0.00'}/unit</span>
+                                                          </div>
+                                                          <div className="flex justify-between items-center">
+                                                            <span className="text-gray-600">Order Total:</span>
+                                                            <span className="font-bold text-blue-700">₹{item.total.toFixed(2)}</span>
+                                                          </div>
+                                                          <div className="flex justify-between items-center">
+                                                            <span className="text-gray-600">Extracted Unit Price:</span>
+                                                            <span className="font-bold text-amber-600">₹{unitPrice}</span>
+                                                          </div>
+                                                          <div className="border-t border-blue-200 pt-1 mt-1 flex justify-between items-center">
+                                                            <span className="text-gray-700 font-semibold">Difference:</span>
+                                                            <span className={`font-bold text-lg ${(item.total - (selectedProduct.dp * item.qty)) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                                              {(item.total - (selectedProduct.dp * item.qty)) > 0 ? '+' : ''}
+                                                              ₹{(item.total - (selectedProduct.dp * item.qty)).toFixed(2)}
+                                                            </span>
+                                                          </div>
+                                                          <div className="text-[10px] text-gray-500 mt-1 italic">
+                                                            {Math.abs(item.total - (selectedProduct.dp * item.qty)) > 0 && 
+                                                              `(${(((item.total - (selectedProduct.dp * item.qty)) / (selectedProduct.dp * item.qty)) * 100).toFixed(0)}% ${(item.total - (selectedProduct.dp * item.qty)) > 0 ? 'higher' : 'lower'})`
+                                                            }
+                                                          </div>
                                                         </div>
                                                       </div>
                                                     )}
@@ -1152,9 +1290,8 @@ const SpartanOrderExtractor = () => {
                                                   newOrders[orderIndex].items![itemIndex].qty = newQty;
                                                   // Recalculate total based on new qty
                                                   newOrders[orderIndex].items![itemIndex].total = newQty * unitPriceVal;
-                                                  // Update order amount and qty
+                                                  // Update order qty ONLY (NOT amount - keep original PDF amount)
                                                   newOrders[orderIndex].qty = newOrders[orderIndex].items!.reduce((sum, i) => sum + i.qty, 0);
-                                                  newOrders[orderIndex].amount = newOrders[orderIndex].items!.reduce((sum, i) => sum + i.total, 0).toFixed(2);
                                                   setExtractedOrders(newOrders);
                                                 }}
                                                 className="w-16 px-2 py-1 border rounded text-center font-bold text-blue-600"
@@ -1172,13 +1309,11 @@ const SpartanOrderExtractor = () => {
                                                     const newOrders = [...extractedOrders];
                                                     const newUnitPrice = parseFloat(e.target.value) || 0;
                                                     const qty = order.items![itemIndex].qty;
-                                                    // Update total based on new unit price
+                                                    // Update total based on new unit price (NOT amount - keep original PDF amount)
                                                     newOrders[orderIndex].items![itemIndex].total = qty * newUnitPrice;
-                                                    // Update order amount
-                                                    newOrders[orderIndex].amount = newOrders[orderIndex].items!.reduce((sum, i) => sum + i.total, 0).toFixed(2);
                                                     setExtractedOrders(newOrders);
                                                   }}
-                                                  className="w-24 px-2 py-1 border rounded text-right font-semibold text-gray-700"
+                                                  className="w-40 px-2 py-1 border rounded text-right font-semibold text-gray-700"
                                                 />
                                               </div>
                                             </td>
@@ -1196,6 +1331,29 @@ const SpartanOrderExtractor = () => {
                                         <td className="px-4 py-3"></td>
                                         <td className="px-4 py-3 text-right font-bold text-green-700 text-lg">
                                           ₹{order.items.reduce((sum, i) => sum + i.total, 0).toFixed(2)}
+                                        </td>
+                                      </tr>
+                                      {/* Price Variance Summary Row */}
+                                      <tr className="bg-blue-50 border-t border-blue-200">
+                                        <td colSpan={5} className="px-4 py-3">
+                                          <div className="grid grid-cols-4 gap-4 text-sm">
+                                            <div>
+                                              <div className="text-gray-600 text-xs">Original Order Total (PDF):</div>
+                                              <div className="font-bold text-blue-700">₹{parseFloat(order.amount).toFixed(2)}</div>
+                                            </div>
+                                            <div>
+                                              <div className="text-gray-600 text-xs">Current Order Total (Mapped):</div>
+                                              <div className="font-bold text-blue-700">₹{order.items.reduce((sum, i) => sum + i.total, 0).toFixed(2)}</div>
+                                            </div>
+                                            <div className="col-span-2">
+                                              <div className="text-gray-700 text-xs font-semibold">Variance:</div>
+                                              <div className={`font-bold text-lg ${(order.items.reduce((sum, i) => sum + i.total, 0) - parseFloat(order.amount)) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                                {(order.items.reduce((sum, i) => sum + i.total, 0) - parseFloat(order.amount)) > 0 ? '+' : ''}
+                                                ₹{(order.items.reduce((sum, i) => sum + i.total, 0) - parseFloat(order.amount)).toFixed(2)} 
+                                                ({(((order.items.reduce((sum, i) => sum + i.total, 0) - parseFloat(order.amount)) / parseFloat(order.amount)) * 100).toFixed(0)}%)
+                                              </div>
+                                            </div>
+                                          </div>
                                         </td>
                                       </tr>
                                     </tbody>

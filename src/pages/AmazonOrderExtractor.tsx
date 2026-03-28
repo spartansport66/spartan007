@@ -9,11 +9,13 @@ import { Loader2, ArrowLeft, FileText, Upload, AlertCircle, Eye, EyeOff, Save, L
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import { showError, showSuccess } from '@/utils/toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { buildStagingFromRows } from '@/utils/onlineOrderHelpers';
+import { fetchAllCombos, expandComboToItems, Combo } from '@/utils/comboHelpers';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Import the worker directly
@@ -47,6 +49,7 @@ const AmazonOrderExtractor = () => {
   const [dispatchSeries, setDispatchSeries] = useState<string>('');
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [combos, setCombos] = useState<Combo[]>([]);
   const [matchedMap, setMatchedMap] = useState<Record<number, { matches: Product[]; selectedId?: string; search?: string; debug?: { numericToken?: string; normText?: string; candidateCodes?: string[] } }>>({});
   const [productMapping, setProductMapping] = useState<Record<number, Record<number, string>>>({});
   const [productSearchText, setProductSearchText] = useState<Record<number, Record<number, string>>>({});
@@ -84,6 +87,11 @@ const AmazonOrderExtractor = () => {
 
         console.log('✅ All products loaded:', allProducts.length);
         setProducts(allProducts);
+
+        // Fetch combos
+        const combosData = await fetchAllCombos();
+        setCombos(combosData);
+        console.log('✅ Combos loaded:', combosData.length);
       } catch (e) {
         console.error('Failed to load products for Amazon extractor', e);
       }
@@ -914,9 +922,38 @@ const AmazonOrderExtractor = () => {
                                               </td>
                                               <td className="px-4 py-3">
                                                 {selectedProduct ? (
-                                                  <div className="text-sm">
+                                                  <div className="text-sm space-y-2">
                                                     <div className="font-bold text-green-700 flex items-center gap-2">✅ {selectedProduct.name}</div>
                                                     <div className="text-xs text-muted-foreground mt-1">{selectedProduct.code} {selectedProduct.size ? `| Size: ${selectedProduct.size}` : ''}</div>
+                                                    
+                                                    {/* Price Comparison for Amazon */}
+                                                    <div className="text-xs bg-blue-50 border border-blue-200 rounded p-2 space-y-1 mt-2">
+                                                      <div className="font-semibold text-blue-900">💰 PRICE VARIANCE:</div>
+                                                      <div className="flex justify-between">
+                                                        <span className="text-gray-600">Catalog DP:</span>
+                                                        <span className="font-bold text-blue-700">₹{selectedProduct.dp?.toFixed(2) || '0.00'}/unit</span>
+                                                      </div>
+                                                      <div className="flex justify-between">
+                                                        <span className="text-gray-600">Order Total:</span>
+                                                        <span className="font-bold text-blue-700">₹{it.total.toFixed(2)}</span>
+                                                      </div>
+                                                      <div className="flex justify-between">
+                                                        <span className="text-gray-600">Extracted Unit:</span>
+                                                        <span className="font-bold text-amber-600">₹{((it.total / it.qty) || 0).toFixed(2)}</span>
+                                                      </div>
+                                                      <div className="border-t border-blue-200 pt-1 flex justify-between">
+                                                        <span className="font-semibold text-gray-700">Diff:</span>
+                                                        <span className={`font-bold ${(it.total - (selectedProduct.dp * it.qty)) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                                          {(it.total - (selectedProduct.dp * it.qty)) > 0 ? '+' : ''}
+                                                          ₹{(it.total - (selectedProduct.dp * it.qty)).toFixed(2)}
+                                                        </span>
+                                                      </div>
+                                                      <div className="text-[10px] text-gray-500 italic">
+                                                        {Math.abs(it.total - (selectedProduct.dp * it.qty)) > 0 && 
+                                                          `(${(((it.total - (selectedProduct.dp * it.qty)) / (selectedProduct.dp * it.qty)) * 100).toFixed(0)}% ${(it.total - (selectedProduct.dp * it.qty)) > 0 ? 'higher' : 'lower'})`
+                                                        }
+                                                      </div>
+                                                    </div>
                                                   </div>
                                                 ) : (
                                                   <Popover>
@@ -953,6 +990,91 @@ const AmazonOrderExtractor = () => {
                                                             <div className="text-left w-full"><div className="font-medium text-sm">{p.name}</div><div className="text-[11px] text-muted-foreground">{p.code} {p.size ? `| Size: ${p.size}` : ''}</div></div>
                                                           </Button>
                                                         ))}
+                                                        {/* Combo Kit Section */}
+                                                        {combos.length > 0 && (
+                                                          <>
+                                                            <div className="h-px bg-blue-300 my-2" />
+                                                            <div className="px-3 py-2 text-xs font-semibold bg-blue-50 text-blue-700 sticky top-0">
+                                                              📦 COMBO KITS
+                                                            </div>
+                                                            {combos.filter((combo) => {
+                                                              const q = (productSearchText[index]?.[itemIndex] || '').toLowerCase().trim();
+                                                              if (!q) return true;
+                                                              const comboName = (combo.combo_name || '').toLowerCase().trim();
+                                                              const comboCode = (combo.combo_code || '').toString().toLowerCase().trim();
+                                                              return comboName.includes(q) || comboCode.includes(q);
+                                                            }).map((combo) => (
+                                                              <Button 
+                                                                key={`combo-amazon-${combo.combo_id}`} 
+                                                                variant="ghost" 
+                                                                className="w-full justify-start text-[12px] h-auto py-2 px-3" 
+                                                                onClick={() => {
+                                                                  // Expand combo and add ALL items to the order
+                                                                  const expandedItems = expandComboToItems(combo, 1);
+                                                                  const newOrders = [...extractedOrders];
+                                                                  const order = newOrders[index];
+
+                                                                  if (!order.items) order.items = [];
+
+                                                                  // Convert expanded items into order item format with auto-mapping
+                                                                  const comboOrderItems = expandedItems.map((item) => {
+                                                                    // Try to auto-map by product code
+                                                                    const matchedProduct = products.find(p => 
+                                                                      p.code && item.product_code && 
+                                                                      p.code.toLowerCase().trim() === item.product_code.toLowerCase().trim()
+                                                                    );
+                                                                    
+                                                                    return {
+                                                                      product: item.product_name,
+                                                                      qty: item.quantity,
+                                                                      total: item.unit_price * item.quantity,
+                                                                      mapped_product_id: matchedProduct?.id || item.product_id,
+                                                                      sku: item.product_code,
+                                                                    };
+                                                                  });
+
+                                                                  // Replace the current unmapped item with first combo item and add the rest
+                                                                  order.items[itemIndex] = comboOrderItems[0];
+                                                                  
+                                                                  // Add remaining combo items to the order
+                                                                  for (let i = 1; i < comboOrderItems.length; i++) {
+                                                                    order.items.push(comboOrderItems[i]);
+                                                                  }
+
+                                                                  // Update order totals
+                                                                  order.qty = order.items.reduce((sum, i) => sum + (i.qty || 0), 0);
+                                                                  order.amount = order.items.reduce((sum, i) => sum + (i.total || 0), 0).toFixed(2);
+
+                                                                  setExtractedOrders(newOrders);
+                                                                  
+                                                                  // Update mapping for all items
+                                                                  setProductMapping(prev => {
+                                                                    const newMap = { ...prev, [index]: { ...(prev[index] || {}) } };
+                                                                    comboOrderItems.forEach((item, idx) => {
+                                                                      newMap[index][itemIndex + idx] = item.mapped_product_id;
+                                                                    });
+                                                                    return newMap;
+                                                                  });
+
+                                                                  // Auto-save all items to database
+                                                                  comboOrderItems.forEach((item, idx) => {
+                                                                    handleProductMapping(index, itemIndex + idx, item.mapped_product_id);
+                                                                  });
+
+                                                                  showSuccess(`✅ Added & mapped combo "${combo.combo_name}" with ${expandedItems.length} items!`);
+                                                                }}
+                                                              >
+                                                                <div className="text-left w-full">
+                                                                  <div className="font-medium text-sm text-blue-900">{combo.combo_name}</div>
+                                                                  <div className="text-[11px] text-blue-700">
+                                                                    {combo.combo_code && <span>{combo.combo_code} • </span>}
+                                                                    📦 {combo.item_count} items
+                                                                  </div>
+                                                                </div>
+                                                              </Button>
+                                                            ))}
+                                                          </>
+                                                        )}
                                                       </ScrollArea>
                                                     </PopoverContent>
                                                   </Popover>
@@ -968,6 +1090,29 @@ const AmazonOrderExtractor = () => {
                                           <td className="px-4 py-3 text-center font-bold text-yellow-600 text-base">{order.items.reduce((sum, i) => sum + i.qty, 0)}</td>
                                           <td className="px-4 py-3"></td>
                                           <td className="px-4 py-3 text-right font-bold text-green-700 text-lg">₹{order.items.reduce((sum, i) => sum + i.total, 0).toFixed(2)}</td>
+                                        </tr>
+                                        {/* Price Variance Summary Row */}
+                                        <tr className="bg-yellow-50 border-t border-yellow-200">
+                                          <td colSpan={4} className="px-4 py-3">
+                                            <div className="grid grid-cols-4 gap-4 text-sm">
+                                              <div>
+                                                <div className="text-gray-600 text-xs">Original Order Total (PDF):</div>
+                                                <div className="font-bold text-yellow-700">₹{parseFloat(order.amount).toFixed(2)}</div>
+                                              </div>
+                                              <div>
+                                                <div className="text-gray-600 text-xs">Current Order Total (Mapped):</div>
+                                                <div className="font-bold text-yellow-700">₹{order.items.reduce((sum, i) => sum + i.total, 0).toFixed(2)}</div>
+                                              </div>
+                                              <div className="col-span-2">
+                                                <div className="text-gray-700 text-xs font-semibold">Variance:</div>
+                                                <div className={`font-bold text-lg ${(order.items.reduce((sum, i) => sum + i.total, 0) - parseFloat(order.amount)) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                                  {(order.items.reduce((sum, i) => sum + i.total, 0) - parseFloat(order.amount)) > 0 ? '+' : ''}
+                                                  ₹{(order.items.reduce((sum, i) => sum + i.total, 0) - parseFloat(order.amount)).toFixed(2)} 
+                                                  ({(((order.items.reduce((sum, i) => sum + i.total, 0) - parseFloat(order.amount)) / parseFloat(order.amount)) * 100).toFixed(0)}%)
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </td>
                                         </tr>
                                       </tbody>
                                     </table>
