@@ -1,0 +1,75 @@
+-- ============================================================================
+-- EXPORT: USERS AND AUTHENTICATION DATA
+-- ============================================================================
+-- ✅ EXECUTABLE SQL FILE - This will be populated from your current database
+-- Created user profiles from auth.users table
+-- Run this SECOND on your NEW Supabase instance (after export_schema_policies.sql)
+-- ============================================================================
+
+-- ============================================================================
+-- 1. DISABLE FOREIGN KEY CONSTRAINTS TEMPORARILY
+-- ============================================================================
+
+SET session_replication_role = 'replica';
+
+-- ============================================================================
+-- 2. INSERT PROFILES (USER DATA)
+-- ============================================================================
+-- NOTE: This will be auto-populated from your current database
+-- These INSERT statements preserve the original user IDs for foreign key relationships
+
+-- Copy the INSERT statements from your current Supabase database
+-- Example format (replace with real data from your export):
+/*
+
+INSERT INTO public.profiles (id, first_name, last_name, is_admin, user_type, created_at, updated_at) VALUES 
+  ('550e8400-e29b-41d4-a716-446655440000', 'Admin', 'User', TRUE, 'admin', NOW(), NOW()),
+  ('550e8400-e29b-41d4-a716-446655440001', 'Sales', 'Person', FALSE, 'sales_person', NOW(), NOW()),
+  ('550e8400-e29b-41d4-a716-446655440002', 'Dealer', 'Customer', FALSE, 'dealer', NOW(), NOW());
+
+*/
+
+-- ============================================================================
+-- 3. INSERT USER ROLES
+-- ============================================================================
+-- Maps users to their roles
+
+-- Copy the role mapping INSERT statements from your current database
+-- Example format:
+/*
+
+INSERT INTO public.user_roles (user_id, role) VALUES
+  ('550e8400-e29b-41d4-a716-446655440000', 'admin'),
+  ('550e8400-e29b-41d4-a716-446655440001', 'sales_person');
+
+*/
+
+-- ============================================================================
+-- 4. RE-ENABLE FOREIGN KEY CONSTRAINTS
+-- ============================================================================
+
+SET session_replication_role = 'origin';
+
+-- ============================================================================
+-- ⚠️ IMPORTANT INSTRUCTIONS
+-- ============================================================================
+-- 
+-- This file is a TEMPLATE. To complete the user export:
+--
+-- 1. Go to your CURRENT Supabase database
+-- 2. Run this query to export your users:
+--
+--    SELECT 'INSERT INTO public.profiles (id, first_name, last_name, is_admin, user_type, created_at, updated_at) VALUES (' ||
+--      quote_literal(id) || ', ' ||
+--      quote_literal(first_name) || ', ' ||
+--      quote_literal(last_name) || ', ' ||
+--      is_admin || ', ' ||
+--      quote_literal(user_type) || ', ' ||
+--      quote_literal(created_at) || ', ' ||
+--      quote_literal(updated_at) || ');'
+--    FROM public.profiles;
+--
+-- 3. Copy the output and uncomment the INSERT statements above (remove the /* */)
+-- 4. Then run this file on your NEW Supabase instance
+--
+-- ============================================================================

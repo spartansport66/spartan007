@@ -48,10 +48,17 @@ import OnlineOrdersAdminDashboard from "./pages/OnlineOrdersAdminDashboard";
 import DatabaseBackup from "./pages/DatabaseBackup";
 import OnlineOrderDispatchDashboard from "./pages/OnlineOrderDispatchDashboard";
 import ManualOrderEntry from "./pages/ManualOrderEntry"; // New Import
+import SalesPersonDispatchedOrderReport from "./pages/SalesPersonDispatchedOrderReport";
 import SalesHODDashboard from "./pages/SalesHODDashboard";
 import PromotionalOrderDashboard from "./pages/PromotionalOrderDashboard";
 import PromotionalOrderDetails from "./pages/PromotionalOrderDetails";
 import PromotionalOrderAuthorization from "./pages/PromotionalOrderAuthorization";
+import DatabaseMigration from "./pages/DatabaseMigration";
+import ProjectSetupWizard from "./pages/ProjectSetupWizard";
+import AdminUtils from "./pages/AdminUtils";
+import UploadToNewSupabase from "./pages/UploadToNewSupabase";
+import AutoMigration from "./pages/AutoMigration";
+import MigrationPage from "./pages/migration";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -106,10 +113,17 @@ const AppContent = () => {
       <Route path="/database-backup" element={<DatabaseBackup />} />
       <Route path="/online-order-dispatch-dashboard" element={<OnlineOrderDispatchDashboard />} />
       <Route path="/manual-order-entry" element={<ManualOrderEntry />} /> {/* New Route */}
+      <Route path="/sales-dispatched-order-report" element={<SalesPersonDispatchedOrderReport />} />
       <Route path="/sales-hod-dashboard" element={<SalesHODDashboard />} />
       <Route path="/promotional-orders" element={<PromotionalOrderDashboard />} />
       <Route path="/promotional-orders/:orderId" element={<PromotionalOrderDetails />} />
       <Route path="/authorize-promotional/:authToken" element={<PromotionalOrderAuthorization />} />
+      <Route path="/admin-utils" element={<AdminUtils />} />
+      <Route path="/database-migration" element={<DatabaseMigration />} />
+      <Route path="/migration" element={<MigrationPage />} />
+      <Route path="/auto-migration" element={<AutoMigration />} />
+      <Route path="/project-setup-wizard" element={<ProjectSetupWizard />} />
+      <Route path="/upload-to-new-supabase" element={<UploadToNewSupabase />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>

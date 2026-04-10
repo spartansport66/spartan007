@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail, ShoppingCart } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail, ShoppingCart, Wrench } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
@@ -46,6 +46,7 @@ import SalesPersonDailySalesReportDialog from '@/components/reports/SalesPersonD
 import SalesPersonOrderWiseReportDialog from '@/components/reports/SalesPersonOrderWiseReportDialog';
 import ItemWiseDealerSalesReportDialog from '@/components/reports/ItemWiseDealerSalesReportDialog';
 
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin, userType, session } = useSession();
@@ -74,6 +75,7 @@ const AdminDashboard = () => {
   const [isSalesPersonDailySalesReportOpen, setIsSalesPersonDailySalesReportOpen] = useState(false); // New State
   const [isSalesPersonOrderWiseReportOpen, setIsSalesPersonOrderWiseReportOpen] = useState(false);
   const [isItemWiseDealerSalesReportOpen, setIsItemWiseDealerSalesReportOpen] = useState(false);
+
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastActiveTime, setLastActiveTime] = useState<string | null>(null);
@@ -252,6 +254,7 @@ const AdminDashboard = () => {
           <Button variant="outline" size="icon" onClick={() => navigate('/combo-offers-admin')} title="Combo Offers">
             <Gift className="h-5 w-5" />
           </Button>
+
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400"><Menu className="h-5 w-5" /></Button>
@@ -281,6 +284,7 @@ const AdminDashboard = () => {
                 setIsSalesPersonDailySalesReportOpen={setIsSalesPersonDailySalesReportOpen}
                 setIsItemWiseDealerSalesReportOpen={setIsItemWiseDealerSalesReportOpen}
                 setIsSalesPersonOrderWiseReportOpen={setIsSalesPersonOrderWiseReportOpen}
+
               />
             </SheetContent>
           </Sheet>
@@ -359,6 +363,8 @@ const AdminDashboard = () => {
           <NotificationEmailManager />
         </DialogContent>
       </Dialog>
+
+
     </div>
   );
 };

@@ -118,6 +118,8 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
     setFilterToOrderDate('');
   };
 
+  const totalAmount = orders.reduce((sum, order) => sum + order.total_amount, 0);
+
   const handlePrint = () => {
     const doc = new jsPDF();
     doc.setFontSize(18);
@@ -146,6 +148,13 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
       },
       margin: { top: 25 },
     });
+
+    // Add total at the bottom
+    const finalY = (doc as any).lastAutoTable.finalY || 30;
+    doc.setFontSize(10);
+    doc.setTextColor(0);
+    doc.setFont(undefined, 'bold');
+    doc.text(`Total Order Value: ₹${totalAmount.toFixed(2)}`, 14, finalY + 10);
 
     doc.save('orders_awaiting_dispatch_report.pdf');
   };
@@ -223,27 +232,35 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
           ) : orders.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No orders awaiting dispatch found matching your criteria.</p>
           ) : (
-            <div className="max-h-[400px] overflow-y-auto border rounded-md">
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
-                  <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground">Order No.</TableHead>
-                    <TableHead className="text-muted-foreground">Dealer Name</TableHead>
-                    <TableHead className="text-muted-foreground">Order Date</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((order) => (
-                    <TableRow key={order.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
+            <div>
+              <div className="max-h-[400px] overflow-y-auto border rounded-md">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background z-10">
+                    <TableRow className="bg-muted hover:bg-muted/90">
+                      <TableHead className="text-muted-foreground">Order No.</TableHead>
+                      <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                      <TableHead className="text-muted-foreground">Order Date</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order) => (
+                      <TableRow key={order.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="mt-4 p-4 bg-muted rounded-md border">
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-semibold">Total Order Value:</span>
+                  <span className="text-lg font-bold text-primary">₹{totalAmount.toFixed(2)}</span>
+                </div>
+              </div>
             </div>
           )}
         </div>

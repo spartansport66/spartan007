@@ -162,6 +162,8 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
     }
   };
 
+  const totalAmount = orders.reduce((sum, order) => sum + order.total_amount, 0);
+
   const handlePrint = () => {
     const doc = new jsPDF();
     doc.setFontSize(18);
@@ -192,6 +194,13 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
       },
       margin: { top: 25 },
     });
+
+    // Add total at the bottom
+    const finalY = (doc as any).lastAutoTable.finalY || 30;
+    doc.setFontSize(10);
+    doc.setTextColor(0);
+    doc.setFont(undefined, 'bold');
+    doc.text(`Total Order Value: ₹${totalAmount.toFixed(2)}`, 14, finalY + 10);
 
     doc.save('dispatched_orders_report.pdf');
   };
@@ -269,57 +278,65 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
           ) : orders.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">No dispatched orders found matching your criteria.</p>
           ) : (
-            <div className="max-h-[400px] overflow-y-auto border rounded-md">
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
-                  <TableRow className="bg-muted hover:bg-muted/90">
-                    <TableHead className="text-muted-foreground">Order No.</TableHead>
-                    <TableHead className="text-muted-foreground">Dispatch No.</TableHead>
-                    <TableHead className="text-muted-foreground">Bill No.</TableHead>
-                    <TableHead className="text-muted-foreground">Dealer Name</TableHead>
-                    <TableHead className="text-muted-foreground">Dispatch Date</TableHead>
-                    <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
-                    {isAdmin && <TableHead className="text-muted-foreground text-center">Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((order) => (
-                    <TableRow key={order.id} className="hover:bg-accent/50">
-                      <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(order.dispatch_date).toLocaleDateString()}</TableCell>
-                      <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
-                      {isAdmin && (
-                        <TableCell className="text-center">
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" title="Delete Order" disabled={isDeleting}>
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will permanently delete Order #{order.order_number}, its associated payments, and restore stock. This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteOrder(order.id, order.order_number)} disabled={isDeleting}>
-                                  {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </TableCell>
-                      )}
+            <div>
+              <div className="max-h-[400px] overflow-y-auto border rounded-md">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background z-10">
+                    <TableRow className="bg-muted hover:bg-muted/90">
+                      <TableHead className="text-muted-foreground">Order No.</TableHead>
+                      <TableHead className="text-muted-foreground">Dispatch No.</TableHead>
+                      <TableHead className="text-muted-foreground">Bill No.</TableHead>
+                      <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                      <TableHead className="text-muted-foreground">Dispatch Date</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
+                      {isAdmin && <TableHead className="text-muted-foreground text-center">Actions</TableHead>}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order) => (
+                      <TableRow key={order.id} className="hover:bg-accent/50">
+                        <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{new Date(order.dispatch_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
+                        {isAdmin && (
+                          <TableCell className="text-center">
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" title="Delete Order" disabled={isDeleting}>
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete Order #{order.order_number}, its associated payments, and restore stock. This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteOrder(order.id, order.order_number)} disabled={isDeleting}>
+                                    {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="mt-4 p-4 bg-muted rounded-md border">
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-semibold">Total Order Value:</span>
+                  <span className="text-lg font-bold text-primary">₹{totalAmount.toFixed(2)}</span>
+                </div>
+              </div>
             </div>
           )}
         </div>

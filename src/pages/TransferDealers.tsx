@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowLeft, ArrowRight, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { useSession } from '@/contexts/SessionContext';
@@ -24,21 +24,26 @@ interface Dealer {
   name: string;
   city: string | null;
   state: string | null;
+  currentSalesPersonId?: string;
+  currentSalesPersonName?: string;
 }
 
 const TransferDealers = () => {
   const navigate = useNavigate();
   const { isAdmin, loading: sessionLoading } = useSession();
   const [salesPersons, setSalesPersons] = useState<SalesPerson[]>([]);
+  const [selectedState, setSelectedState] = useState<string>('');
   const [fromSalesPersonId, setFromSalesPersonId] = useState<string>('');
   const [toSalesPersonId, setToSalesPersonId] = useState<string>('');
+  const [dealersByState, setDealersByState] = useState<Dealer[]>([]);
   const [dealersOfFromSalesPerson, setDealersOfFromSalesPerson] = useState<Dealer[]>([]);
   const [selectedDealerIds, setSelectedDealerIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isTransferring, setIsTransferring] = useState(false);
+  const [states, setStates] = useState<string[]>([]);
+  const [searchMethod, setSearchMethod] = useState<'state' | 'sales_person'>('state');
 
   const fetchSalesPersons = useCallback(async () => {
-    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -49,19 +54,71 @@ const TransferDealers = () => {
       setSalesPersons((data || []).map(p => ({ id: p.id, name: `${p.first_name} ${p.last_name || ''}`.trim() })));
     } catch (error: any) {
       showError(`Failed to load sales persons: ${error.message}`);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (!sessionLoading && !isAdmin) {
-      showError('Access Denied.');
-      navigate('/dashboard');
-    } else if (!sessionLoading) {
-      fetchSalesPersons();
+  const fetchStates = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('dealers')
+        .select('state')
+        .not('state', 'is', null);
+      if (error) throw error;
+      const uniqueStates = [...new Set((data || []).map(d => d.state).filter(Boolean))].sort() as string[];
+      setStates(uniqueStates);
+    } catch (error: any) {
+      showError(`Failed to load states: ${error.message}`);
     }
-  }, [sessionLoading, isAdmin, navigate, fetchSalesPersons]);
+  }, []);
+
+  const fetchDealersByState = useCallback(async (state: string) => {
+    if (!state) {
+      setDealersByState([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data: dealersData, error: dealersError } = await supabase
+        .from('dealers')
+        .select('id, name, city, state')
+        .eq('state', state)
+        .order('name');
+      if (dealersError) throw dealersError;
+
+      // Fetch current sales person assignment for each dealer
+      const dealersWithSalesPerson = await Promise.all(
+        (dealersData || []).map(async (dealer) => {
+          const { data: spData } = await supabase
+            .from('dealer_sales_persons')
+            .select('sales_person_id')
+            .eq('dealer_id', dealer.id)
+            .maybeSingle();
+          
+          let currentSalesPersonId = '';
+          let currentSalesPersonName = '';
+          if (spData?.sales_person_id) {
+            currentSalesPersonId = spData.sales_person_id;
+            const person = salesPersons.find(sp => sp.id === spData.sales_person_id);
+            if (person) {
+              currentSalesPersonName = person.name;
+            }
+          }
+          
+          return {
+            ...dealer,
+            currentSalesPersonId,
+            currentSalesPersonName,
+          };
+        })
+      );
+
+      setDealersByState(dealersWithSalesPerson);
+    } catch (error: any) {
+      showError(`Failed to load dealers: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [salesPersons]);
 
   const fetchDealersForSalesPerson = useCallback(async (salesPersonId: string) => {
     if (!salesPersonId) {
@@ -72,10 +129,11 @@ const TransferDealers = () => {
     try {
       const { data, error } = await supabase
         .from('dealer_sales_persons')
-        .select('dealers(id, name, city, state)')
+        .select('dealer_id, dealers(id, name, city, state)')
         .eq('sales_person_id', salesPersonId);
       if (error) throw error;
-      setDealersOfFromSalesPerson((data || []).map((item: any) => item.dealers).filter(Boolean));
+      const dealers = (data || []).map((item: any) => item.dealers).filter(Boolean);
+      setDealersOfFromSalesPerson(dealers);
     } catch (error: any) {
       showError(`Failed to load dealers: ${error.message}`);
     } finally {
@@ -84,12 +142,27 @@ const TransferDealers = () => {
   }, []);
 
   useEffect(() => {
-    fetchDealersForSalesPerson(fromSalesPersonId);
-    setSelectedDealerIds([]); // Reset selection when 'from' person changes
-  }, [fromSalesPersonId, fetchDealersForSalesPerson]);
+    if (!sessionLoading && !isAdmin) {
+      showError('Access Denied.');
+      navigate('/dashboard');
+    } else if (!sessionLoading) {
+      setLoading(true);
+      Promise.all([fetchSalesPersons(), fetchStates()]).finally(() => setLoading(false));
+    }
+  }, [sessionLoading, isAdmin, navigate, fetchSalesPersons, fetchStates]);
+
+  useEffect(() => {
+    if (searchMethod === 'state') {
+      fetchDealersByState(selectedState);
+    } else {
+      fetchDealersForSalesPerson(fromSalesPersonId);
+    }
+    setSelectedDealerIds([]); // Reset selection when search changes
+  }, [selectedState, fromSalesPersonId, searchMethod, fetchDealersByState, fetchDealersForSalesPerson]);
 
   const handleSelectAll = (checked: boolean) => {
-    setSelectedDealerIds(checked ? dealersOfFromSalesPerson.map(d => d.id) : []);
+    const dealers = searchMethod === 'state' ? dealersByState : dealersOfFromSalesPerson;
+    setSelectedDealerIds(checked ? dealers.map(d => d.id) : []);
   };
 
   const handleSelectDealer = (dealerId: string, checked: boolean) => {
@@ -97,23 +170,37 @@ const TransferDealers = () => {
   };
 
   const handleTransfer = async () => {
-    if (!fromSalesPersonId || !toSalesPersonId || selectedDealerIds.length === 0 || fromSalesPersonId === toSalesPersonId) {
-      showError('Please make sure you have selected a different "From" and "To" salesperson and at least one dealer.');
+    if (!toSalesPersonId || selectedDealerIds.length === 0) {
+      showError('Please select a target sales person and at least one dealer.');
       return;
     }
     setIsTransferring(true);
     try {
-      const { error } = await supabase
+      // Delete existing dealer-sales person assignments
+      const { error: deleteError } = await supabase
         .from('dealer_sales_persons')
-        .update({ sales_person_id: toSalesPersonId })
-        .eq('sales_person_id', fromSalesPersonId)
+        .delete()
         .in('dealer_id', selectedDealerIds);
-      if (error) throw error;
-      showSuccess(`${selectedDealerIds.length} dealer(s) transferred successfully!`);
+      if (deleteError) throw deleteError;
+
+      // Create new dealer-sales person assignments
+      const newAssignments = selectedDealerIds.map(dealerId => ({
+        dealer_id: dealerId,
+        sales_person_id: toSalesPersonId,
+      }));
+
+      const { error: insertError } = await supabase
+        .from('dealer_sales_persons')
+        .insert(newAssignments);
+      if (insertError) throw insertError;
+
+      showSuccess(`${selectedDealerIds.length} dealer(s) transferred to the selected sales person successfully!`);
       // Reset state
+      setSelectedState('');
       setFromSalesPersonId('');
       setToSalesPersonId('');
       setSelectedDealerIds([]);
+      setDealersByState([]);
       setDealersOfFromSalesPerson([]);
     } catch (error: any) {
       showError(`Transfer failed: ${error.message}`);
@@ -122,7 +209,8 @@ const TransferDealers = () => {
     }
   };
 
-  const isAllSelected = dealersOfFromSalesPerson.length > 0 && selectedDealerIds.length === dealersOfFromSalesPerson.length;
+  const currentDealers = searchMethod === 'state' ? dealersByState : dealersOfFromSalesPerson;
+  const isAllSelected = currentDealers.length > 0 && selectedDealerIds.length === currentDealers.length;
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
@@ -132,33 +220,86 @@ const TransferDealers = () => {
         </Button>
         <Card>
           <CardHeader>
-            <CardTitle>Transfer Dealers</CardTitle>
-            <CardDescription>Reassign dealers from one sales person to another.</CardDescription>
+            <CardTitle>Transfer Dealers by State</CardTitle>
+            <CardDescription>Search dealers by state and reassign them to a sales person.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-              <div className="space-y-2">
-                <Label>From Sales Person</Label>
-                <Select value={fromSalesPersonId} onValueChange={setFromSalesPersonId} disabled={loading}>
-                  <SelectTrigger><SelectValue placeholder="Select a sales person" /></SelectTrigger>
-                  <SelectContent>{salesPersons.map(sp => <SelectItem key={sp.id} value={sp.id}>{sp.name}</SelectItem>)}</SelectContent>
-                </Select>
+            <div className="space-y-3 pb-4 border-b">
+              <Label>Search Method</Label>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    setSearchMethod('state');
+                    setFromSalesPersonId('');
+                  }}
+                  className={`px-4 py-2 rounded-md transition ${
+                    searchMethod === 'state'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-muted/80'
+                  }`}
+                >
+                  Search by State
+                </button>
+                <button
+                  onClick={() => {
+                    setSearchMethod('sales_person');
+                    setSelectedState('');
+                  }}
+                  className={`px-4 py-2 rounded-md transition ${
+                    searchMethod === 'sales_person'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted hover:bg-muted/80'
+                  }`}
+                >
+                  Search by Sales Person
+                </button>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+              {searchMethod === 'state' ? (
+                <div className="space-y-2">
+                  <Label>Select State</Label>
+                  <Select value={selectedState} onValueChange={setSelectedState} disabled={loading}>
+                    <SelectTrigger>
+                      <Search className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Search by state..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {states.map(state => (
+                        <SelectItem key={state} value={state}>{state}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>From Sales Person</Label>
+                  <Select value={fromSalesPersonId} onValueChange={setFromSalesPersonId} disabled={loading}>
+                    <SelectTrigger><SelectValue placeholder="Select a sales person" /></SelectTrigger>
+                    <SelectContent>{salesPersons.map(sp => <SelectItem key={sp.id} value={sp.id}>{sp.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="flex justify-center items-center pt-6">
                 <ArrowRight className="h-6 w-6 text-muted-foreground" />
               </div>
               <div className="space-y-2">
-                <Label>To Sales Person</Label>
+                <Label>Transfer To Sales Person</Label>
                 <Select value={toSalesPersonId} onValueChange={setToSalesPersonId} disabled={loading}>
                   <SelectTrigger><SelectValue placeholder="Select a sales person" /></SelectTrigger>
-                  <SelectContent>{salesPersons.filter(sp => sp.id !== fromSalesPersonId).map(sp => <SelectItem key={sp.id} value={sp.id}>{sp.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>{salesPersons.map(sp => <SelectItem key={sp.id} value={sp.id}>{sp.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
 
-            {fromSalesPersonId && (
+            {(selectedState || fromSalesPersonId) && (
               <div className="space-y-4">
-                <h3 className="font-semibold">Dealers Assigned to {salesPersons.find(sp => sp.id === fromSalesPersonId)?.name}</h3>
+                <h3 className="font-semibold">
+                  {searchMethod === 'state' 
+                    ? `Dealers in ${selectedState}` 
+                    : `Dealers of ${salesPersons.find(sp => sp.id === fromSalesPersonId)?.name}`}
+                </h3>
                 {loading ? <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div> : (
                   <div className="max-h-96 overflow-y-auto border rounded-md">
                     <Table>
@@ -167,19 +308,19 @@ const TransferDealers = () => {
                           <TableHead className="w-12"><Checkbox checked={isAllSelected} onCheckedChange={handleSelectAll} /></TableHead>
                           <TableHead>Dealer Name</TableHead>
                           <TableHead>City</TableHead>
-                          <TableHead>State</TableHead>
+                          <TableHead>{searchMethod === 'state' ? 'Current Sales Person' : 'State'}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {dealersOfFromSalesPerson.length === 0 ? (
-                          <TableRow><TableCell colSpan={4} className="text-center">No dealers assigned.</TableCell></TableRow>
+                        {currentDealers.length === 0 ? (
+                          <TableRow><TableCell colSpan={4} className="text-center">No dealers found.</TableCell></TableRow>
                         ) : (
-                          dealersOfFromSalesPerson.map(dealer => (
+                          currentDealers.map(dealer => (
                             <TableRow key={dealer.id}>
                               <TableCell><Checkbox checked={selectedDealerIds.includes(dealer.id)} onCheckedChange={checked => handleSelectDealer(dealer.id, !!checked)} /></TableCell>
                               <TableCell>{dealer.name}</TableCell>
                               <TableCell>{dealer.city || 'N/A'}</TableCell>
-                              <TableCell>{dealer.state || 'N/A'}</TableCell>
+                              <TableCell>{searchMethod === 'state' ? (dealer.currentSalesPersonName || 'Unassigned') : (dealer.state || 'N/A')}</TableCell>
                             </TableRow>
                           ))
                         )}
@@ -192,7 +333,7 @@ const TransferDealers = () => {
 
             <Button
               onClick={handleTransfer}
-              disabled={isTransferring || !fromSalesPersonId || !toSalesPersonId || selectedDealerIds.length === 0}
+              disabled={isTransferring || !toSalesPersonId || selectedDealerIds.length === 0 || (!selectedState && !fromSalesPersonId)}
               className="w-full"
             >
               {isTransferring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

@@ -215,6 +215,14 @@ const OrdersAwaitingDispatchReport: React.FC<OrdersAwaitingDispatchReportProps> 
             </Table>
           )}
         </div>
+        {orders.length > 0 && (
+          <div className="mt-4 p-4 bg-muted rounded-md border">
+            <div className="flex justify-between items-center">
+              <span className="text-lg font-semibold">Total Order Value:</span>
+              <span className="text-lg font-bold text-primary">₹{orders.reduce((sum, o) => sum + o.total_amount, 0).toFixed(2)}</span>
+            </div>
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>

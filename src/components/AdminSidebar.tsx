@@ -31,6 +31,7 @@ interface AdminSidebarProps {
   setIsSalesPersonDailySalesReportOpen: (isOpen: boolean) => void; // New Prop
   setIsSalesPersonOrderWiseReportOpen: (isOpen: boolean) => void;
   setIsItemWiseDealerSalesReportOpen: (isOpen: boolean) => void;
+
 }
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -56,6 +57,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsSalesPersonDailySalesReportOpen, // New Prop
   setIsSalesPersonOrderWiseReportOpen,
   setIsItemWiseDealerSalesReportOpen,
+
 }) => {
   const navigate = useNavigate();
 
@@ -310,6 +312,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
               Sales Person Ledger Report
             </DropdownMenuItem>
           </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/sales-dispatched-order-report')}>
+              Sales Person Dispatched Orders
+            </DropdownMenuItem>
+          </SheetClose>
           <DropdownMenuSeparator />
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDealerReportOpen(true)}>
@@ -357,11 +364,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <NavButton
-        icon={<Database className="h-4 w-4" />}
-        label="Database Backup"
-        onClick={() => navigate('/database-backup')}
-      />
+
       <NavButton
         icon={<Info className="h-4 w-4" />}
         label="Company Information"

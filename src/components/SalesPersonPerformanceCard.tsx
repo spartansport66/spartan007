@@ -16,25 +16,38 @@ const SalesPersonPerformanceCard = () => {
   const { user } = useSession();
 
   const fetchPerformanceData = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      console.warn('⚠️ No user session found');
+      return;
+    }
     setLoading(true);
 
     try {
       const today = new Date();
+      
+      // Format date in local timezone to avoid UTC conversion issues
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = '01';
+      const targetMonthDate = `${year}-${month}-${day}`;
+      
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
       const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
-
-      // 1. Fetch sales target for the current user.
-      // Removed .single() to prevent 406 error if multiple targets exist.
+      
+      console.log('🔍 Fetching target for:', { userId: user.id, targetMonthDate });
+      
       const { data: targetData, error: targetError } = await supabase
         .from('sales_targets')
         .select('target_amount')
-        .eq('sales_person_id', user.id);
+        .eq('sales_person_id', user.id)
+        .eq('target_month', targetMonthDate);
 
       if (targetError) {
-        // We no longer need to check for 'PGRST116' because we aren't using .single()
+        console.error('❌ Target fetch error:', targetError);
         throw new Error(`Failed to fetch sales target: ${targetError.message}`);
       }
+      
+      console.log('✅ Target fetched:', targetData?.[0]?.target_amount);
       
       // Safely get the target from the first result, or default to 0.
       const firstTarget = targetData?.[0]?.target_amount || 0;
