@@ -119,7 +119,7 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
                   <TableBody>
                     {orders.map((order) => (
                       <TableRow key={order.id} className="hover:bg-accent/50">
-                        <TableCell className="font-medium">{order.dispatch_number}</TableCell>
+                        <TableCell className="font-medium">{order.dispatch_number || '-'}</TableCell>
                         <TableCell>#{order.order_number}</TableCell>
                         <TableCell>
                           {order.dealer_name === 'Online Order' && order.client_name ? (
@@ -133,7 +133,7 @@ const GatePassDispatchedOrdersCard: React.FC = () => {
                             order.dealer_name
                           )}
                         </TableCell>
-                        <TableCell>{new Date(order.gate_pass_dispatch_time).toLocaleString()}</TableCell>
+                        <TableCell>{order.gate_pass_dispatch_time ? new Date(order.gate_pass_dispatch_time).toLocaleString() : '-'}</TableCell>
                         <TableCell className="text-center">
                           <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Details">
                             <Eye className="h-4 w-4" />

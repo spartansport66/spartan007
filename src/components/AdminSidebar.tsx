@@ -246,7 +246,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
             Reports
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-56">
+        <DropdownMenuContent className="w-56 max-h-[60vh] overflow-y-auto">
           <DropdownMenuLabel>Select a Report</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <SheetClose asChild>
@@ -256,7 +256,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </SheetClose>
           <DropdownMenuSeparator />
           <SheetClose asChild>
-            <DropdownMenuItem onClick={() => setIsOrdersAwaitingDispatchReportOpen(true)}>
+            <DropdownMenuItem onClick={() => navigate('/orders-awaiting-dispatch')}>
               Orders Awaiting Dispatch
             </DropdownMenuItem>
           </SheetClose>

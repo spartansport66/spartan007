@@ -174,10 +174,10 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
     const tableColumn = ["Order No.", "Dispatch No.", "Bill No.", "Dealer Name", "Dispatch Date", "Total Amount"];
     const tableRows = orders.map(order => [
       order.order_number,
-      order.dispatch_number,
-      order.bill_no,
+      order.dispatch_number || '-',
+      order.bill_no || '-',
       order.dealer_name,
-      new Date(order.dispatch_date).toLocaleDateString(),
+      order.dispatch_date ? new Date(order.dispatch_date).toLocaleDateString() : '-',
       `₹${order.total_amount.toFixed(2)}`,
     ]);
 
@@ -296,10 +296,10 @@ const DispatchedOrdersReportDialog: React.FC<DispatchedOrdersReportDialogProps> 
                     {orders.map((order) => (
                       <TableRow key={order.id} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
-                        <TableCell className="text-muted-foreground">{order.dispatch_number}</TableCell>
-                        <TableCell className="text-muted-foreground">{order.bill_no}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.dispatch_number || '-'}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.bill_no || '-'}</TableCell>
                         <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
-                        <TableCell className="text-muted-foreground">{new Date(order.dispatch_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.dispatch_date ? new Date(order.dispatch_date).toLocaleDateString() : '-'}</TableCell>
                         <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                         {isAdmin && (
                           <TableCell className="text-center">
