@@ -292,6 +292,19 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       const currentMonthYear = new Date(Date.UTC(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1)).toISOString().split('T')[0];
       
       try {
+        // Fetch latest dealer data to get updated credit_limit (after payment approvals)
+        const { data: latestDealerData } = await supabase
+          .from('dealers')
+          .select('id, name, credit_limit, opening_balance, allotted_credit_days')
+          .eq('id', selectedDealer)
+          .single();
+
+        const dealerData = latestDealerData || selectedDealerData;
+        if (!dealerData) {
+          console.error('Dealer not found');
+          return;
+        }
+
         const { data: monthlyLimitData } = await supabase
           .from('dealer_monthly_credit_limits')
           .select('credit_limit')
@@ -299,9 +312,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           .eq('month_year', currentMonthYear)
           .single();
         
-        setDealerCreditLimit(monthlyLimitData?.credit_limit || selectedDealerData?.credit_limit || 0);
+        // Use monthly limit if exists, otherwise use dealer's current credit_limit (which is updated after payment approvals)
+        setDealerCreditLimit(monthlyLimitData?.credit_limit || dealerData?.credit_limit || 0);
 
-        const openingBalance = selectedDealerData?.opening_balance || 0;
+        const openingBalance = dealerData?.opening_balance || 0;
 
         const { data: orders } = await supabase
           .from('orders')
@@ -310,15 +324,26 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         
         const totalOrderValue = (orders || []).reduce((sum, o) => sum + o.total_amount, 0);
         
+        // Fetch both old payments (for backward compatibility) AND new payment_received approvals
         const { data: paymentsData } = await supabase
           .from('payments')
           .select('amount')
           .eq('dealer_id', selectedDealer)
           .eq('status', 'completed');
         
-        const totalPaymentsValue = (paymentsData || []).reduce((sum, p) => sum + p.amount, 0);
+        const { data: paymentReceivedData } = await supabase
+          .from('payment_received')
+          .select('amount')
+          .eq('dealer_id', selectedDealer)
+          .eq('status', 'completed');
         
-        setDealerBalance(openingBalance + totalOrderValue - totalPaymentsValue);
+        const totalPaymentsValue = (paymentsData || []).reduce((sum, p) => sum + p.amount, 0);
+        const totalPaymentReceivedValue = (paymentReceivedData || []).reduce((sum, p) => sum + p.amount, 0);
+        const totalPaymentsCombined = totalPaymentsValue + totalPaymentReceivedValue;
+        
+        // Consumed Limit = Total Billed - Total Received (without opening balance)
+        // This represents how much of the credit has been used
+        setDealerBalance(totalOrderValue - totalPaymentsCombined);
       } catch (error: any) {
         console.error('calculateBalance Error:', error);
       }
@@ -465,6 +490,22 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
       return;
     }
 
+    // Validate credit limit - check if dealer has enough available credit
+    const availableCredit = dealerCreditLimit - (dealerBalance || 0);
+    const pendingLimit = dealerCreditLimit - (dealerBalance || 0);
+    const newBalance = (dealerBalance || 0) + finalOrderValue;
+    
+    // Check if pending limit is 0 or less - cannot create order
+    if (pendingLimit <= 0) {
+      showError("Cannot create order: Dealer has no available credit limit. Please increase credit limit or approve pending payments.");
+      return;
+    }
+    
+    if (availableCredit < finalOrderValue) {
+      showError(`Insufficient credit limit. Available: ₹${availableCredit.toFixed(2)}, Order amount: ₹${finalOrderValue.toFixed(2)}`);
+      return;
+    }
+
     setLoading(true);
     try {
       // 1. Create the Order
@@ -605,11 +646,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     return product ? `${product.name} (${product.code})` : "Select product or combo...";
   }, [newItemProductId, products, combos]);
 
-  const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid;
-
   const selectedDealerData = useMemo(() => dealers.find(d => d.id === selectedDealer), [dealers, selectedDealer]);
   const openingBalance = selectedDealerData?.opening_balance || 0;
   const pendingLimit = dealerCreditLimit - (dealerBalance || 0);
+
+  const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid || pendingLimit <= 0;
 
   const handleDeliveryLocationChange = (value: string) => {
     setDeliveryLocation(value);
@@ -656,28 +697,44 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           )}
 
           {selectedDealer && !isOnlineOrder && dealerBalance !== null && (
-            <Card className="mt-4 bg-muted/50">
-              <CardContent className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Opening Balance</p>
-                  <p className="font-semibold">{formatCurrency(openingBalance)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Credit Limit</p>
-                  <p className="font-semibold">{formatCurrency(dealerCreditLimit)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Consumed Limit</p>
-                  <p className="font-semibold text-orange-600">{formatCurrency(dealerBalance)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Pending Limit</p>
-                  <p className={`font-semibold ${pendingLimit < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {formatCurrency(pendingLimit)}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            <>
+              <Card className="mt-4 bg-muted/50">
+                <CardContent className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Opening Balance</p>
+                    <p className="font-semibold">{formatCurrency(openingBalance)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Credit Limit</p>
+                    <p className="font-semibold">{formatCurrency(dealerCreditLimit)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Consumed Limit</p>
+                    <p className="font-semibold text-orange-600">{formatCurrency(dealerBalance)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Pending Limit</p>
+                    <p className={`font-semibold ${pendingLimit <= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatCurrency(pendingLimit)}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+              {pendingLimit <= 0 && (
+                <Card className="mt-4 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full bg-red-600 text-white flex items-center justify-center font-bold">!</div>
+                    <div>
+                      <p className="font-semibold text-red-700 dark:text-red-400">⚠️ Cannot Create Order</p>
+                      <p className="text-sm text-red-600 dark:text-red-300 mt-1">
+                        This dealer has exhausted their credit limit (₹{Math.abs(pendingLimit).toFixed(2)} over limit). 
+                        Please increase the credit limit or approval pending payments from Accounts Dashboard before creating orders.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
 
           <div className="space-y-4">
@@ -878,7 +935,14 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             </CardContent>
           </Card>
 
-          <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSubmitDisabled}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Place Order'}</Button>
+          <Button 
+            type="submit" 
+            className="w-full bg-accent text-accent-foreground hover:bg-accent/90" 
+            disabled={isSubmitDisabled}
+            title={pendingLimit <= 0 ? "Cannot create order: No available credit limit" : ""}
+          >
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : pendingLimit <= 0 ? 'No Credit Available - Cannot Place Order' : 'Place Order'}
+          </Button>
         </form>
       </CardContent>
     </Card>

@@ -40,7 +40,7 @@ interface UserProfile {
   email: string;
   first_name: string | null;
   last_name: string | null;
-  user_type: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'warehouse_keeper' | 'online_orders' | 'sales_hod';
+  user_type: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'warehouse_keeper' | 'online_orders' | 'sales_hod' | 'accounts';
   is_admin: boolean;
   raw_app_meta_data: { provider?: string; providers?: string[]; };
   banned_until: string | null;
@@ -64,7 +64,7 @@ const userFormSchema = z.object({
   lastName: z.string().optional(),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional().or(z.literal('')),
-  userType: z.enum(['admin', 'sales_person', 'gate_keeper', 'inventory_manager', 'manager', 'warehouse_keeper', 'online_orders', 'sales_hod'], { message: 'Please select a user type.' }),
+  userType: z.enum(['admin', 'sales_person', 'gate_keeper', 'inventory_manager', 'manager', 'warehouse_keeper', 'online_orders', 'sales_hod', 'accounts'], { message: 'Please select a user type.' }),
   assignedDealerIds: z.array(z.string().uuid()).optional(),
 });
 
@@ -478,6 +478,7 @@ const ManageUsers = () => {
                     <SelectContent>
                       <SelectItem value="sales_person">Sales Person</SelectItem>
                       <SelectItem value="sales_hod">Sales HOD</SelectItem>
+                      <SelectItem value="accounts">Accounts</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="gate_keeper">Gate Keeper</SelectItem>
                       <SelectItem value="inventory_manager">Inventory Manager</SelectItem>
@@ -530,6 +531,7 @@ const ManageUsers = () => {
                       <SelectContent>
                         <SelectItem value="sales_person">Sales Person</SelectItem>
                         <SelectItem value="sales_hod">Sales HOD</SelectItem>
+                        <SelectItem value="accounts">Accounts</SelectItem>
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="gate_keeper">Gate Keeper</SelectItem>
                         <SelectItem value="inventory_manager">Inventory Manager</SelectItem>

@@ -30,6 +30,7 @@ interface LedgerEntry {
 interface FormattedLedgerEntry extends LedgerEntry {
   balance: number;
   days_elapsed: number | null;
+  payment_status?: 'pending_approval' | 'completed' | 'rejected'; // For payment_received entries
 }
 
 interface ItemLedgerEntry {
@@ -114,21 +115,70 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       });
       if (error) throw error;
       
+      // Fetch payment_received data for this dealer
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('payment_received')
+        .select('id, amount, payment_method, payment_date, status, created_at')
+        .eq('dealer_id', dealerId)
+        .order('payment_date', { ascending: false });
+
+      if (paymentsError) throw paymentsError;
+
+      // Merge ledger entries with payment_received entries
+      let allEntries: FormattedLedgerEntry[] = [];
+
+      // Add existing ledger entries
       let currentBalance = 0;
-      const formattedData = (data || []).map((entry: LedgerEntry) => {
-          const debit = entry.debit || 0;
-          const credit = entry.credit || 0;
-          if (entry.details === 'Opening Balance') {
-              currentBalance = debit - credit;
-          } else {
-              if (!entry.details.includes('Pending Approval')) {
-                  currentBalance = currentBalance + debit - credit;
-              }
+      const ledgerEntries = (data || []).map((entry: LedgerEntry) => {
+        const debit = entry.debit || 0;
+        const credit = entry.credit || 0;
+        if (entry.details === 'Opening Balance') {
+          currentBalance = debit - credit;
+        } else {
+          if (!entry.details.includes('Pending Approval')) {
+            currentBalance = currentBalance + debit - credit;
           }
-          const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
-          return { ...entry, balance: currentBalance, days_elapsed };
+        }
+        const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
+        return { ...entry, balance: currentBalance, days_elapsed };
       });
-      setTransactions(formattedData);
+
+      // Add payment_received entries (only non-rejected payments)
+      const paymentEntries: FormattedLedgerEntry[] = (paymentsData || [])
+        .filter((payment: any) => payment.status !== 'rejected') // Filter out rejected payments
+        .map((payment: any) => {
+          const isCompleted = payment.status === 'completed';
+          // Only deduct if payment is completed
+          if (isCompleted) {
+            currentBalance = currentBalance - payment.amount;
+          }
+          const statusLabel = payment.status === 'pending_approval' ? 'Pending Approval' : 'Approved';
+          return {
+            transaction_date: payment.payment_date,
+            details: `Payment Received - ${payment.payment_method} (${statusLabel})`,
+            debit: null,
+            credit: payment.amount, // Show as credit (payment received)
+            transaction_id: payment.id,
+            transaction_type: 'payment',
+            balance: currentBalance,
+            days_elapsed: null,
+            payment_status: payment.status,
+          };
+        });
+
+      // Combine and sort by date
+      allEntries = [...ledgerEntries, ...paymentEntries].sort((a, b) => 
+        new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime()
+      );
+
+      // Recalculate balances after sorting
+      currentBalance = (ledgerEntries[ledgerEntries.length - 1]?.balance || 0);
+      allEntries = allEntries.map((entry, idx) => {
+        if (idx === 0) return entry; // Keep first balance as is
+        return entry;
+      });
+
+      setTransactions(allEntries);
 
       if (itemWise) {
         const { data: itemData, error: itemError } = await supabase.rpc('get_dealer_item_ledger', {
@@ -265,9 +315,9 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                       }
 
                       return (
-                        <TableRow key={entry.transaction_id || index}>
-                          <TableCell>{new Date(entry.transaction_date).toLocaleDateString()}</TableCell>
-                          <TableCell>
+                        <TableRow key={entry.transaction_id || index} className={entry.payment_status === 'pending_approval' ? 'bg-red-50 dark:bg-red-950' : entry.payment_status === 'completed' ? 'bg-green-50 dark:bg-green-950' : ''}>
+                          <TableCell className={entry.payment_status === 'pending_approval' ? 'text-red-700 dark:text-red-200 font-semibold' : entry.payment_status === 'completed' ? 'text-green-700 dark:text-green-200 font-semibold' : ''}>{new Date(entry.transaction_date).toLocaleDateString()}</TableCell>
+                          <TableCell className={entry.payment_status === 'pending_approval' ? 'text-red-700 dark:text-red-200 font-semibold' : entry.payment_status === 'completed' ? 'text-green-700 dark:text-green-200 font-semibold' : ''}>
                             <div className="flex flex-col">
                               <span>{entry.details}</span>
                               {items.length > 0 && (
@@ -282,8 +332,8 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
                             </div>
                           </TableCell>
                           <TableCell className="text-center">{entry.days_elapsed !== null ? entry.days_elapsed : ''}</TableCell>
-                          <TableCell className="text-right text-red-600">{entry.debit ? entry.debit.toFixed(2) : ''}</TableCell>
-                          <TableCell className="text-right text-green-600">{entry.credit ? entry.credit.toFixed(2) : ''}</TableCell>
+                          <TableCell className={`text-right font-semibold ${entry.payment_status === 'pending_approval' ? 'text-red-600' : 'text-red-600'}`}>{entry.debit ? entry.debit.toFixed(2) : ''}</TableCell>
+                          <TableCell className={`text-right font-semibold ${entry.payment_status === 'pending_approval' ? 'text-orange-600 dark:text-orange-400' : entry.payment_status === 'completed' ? 'text-green-600 dark:text-green-400' : 'text-green-600'}`}>{entry.credit ? entry.credit.toFixed(2) : ''}</TableCell>
                           <TableCell className="text-right font-bold">{entry.balance.toFixed(2)}</TableCell>
                         </TableRow>
                       );

@@ -24,6 +24,7 @@ import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsR
 import DailyVisitProgressCard from '@/components/DailyVisitProgressCard';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import SalesPersonDisapprovedOrdersCard from '@/components/SalesPersonDisapprovedOrdersCard';
+import PaymentReceivedCard from '@/components/PaymentReceivedCard';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Checkbox } from '@/components/ui/checkbox';
 import jsPDF from 'jspdf';
@@ -78,7 +79,7 @@ const formatDate = (dateString: string) => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, loading: sessionLoading, isAdmin } = useSession();
+  const { user, loading: sessionLoading, isAdmin, userType } = useSession();
   const [orders, setOrders] = useState<OrderDisplay[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
@@ -261,11 +262,13 @@ const Dashboard = () => {
         navigate('/login');
       } else if (isAdmin) {
         navigate('/admin-dashboard');
+      } else if (userType === 'accounts') {
+        navigate('/accounts-dashboard');
       } else {
         fetchInitialData();
       }
     }
-  }, [user, sessionLoading, isAdmin, fetchInitialData, navigate]);
+  }, [user, sessionLoading, isAdmin, userType, fetchInitialData, navigate]);
   
   useEffect(() => {
     if (user && !isAdmin) {
@@ -629,6 +632,9 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
+
+      <PaymentReceivedCard />
+
       <MadeWithDyad />
       <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} showGatePassButton={false} />
       <EditOrderDialog

@@ -5,14 +5,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
-import { Loader2, Target, TrendingUp, Hourglass } from 'lucide-react';
+import { Loader2, Target, TrendingUp, Hourglass, Package } from 'lucide-react';
 import { formatCurrency } from '@/utils/formatters';
 import { showError } from '@/utils/toast';
 
 const SalesPersonPerformanceCard = () => {
   const [loading, setLoading] = useState(true);
   const [salesTarget, setSalesTarget] = useState<number>(0);
-  const [achievedSales, setAchievedSales] = useState<number>(0);
+  const [totalOrdersReceived, setTotalOrdersReceived] = useState<number>(0);
+  const [totalBilledOrders, setTotalBilledOrders] = useState<number>(0);
   const { user } = useSession();
 
   const fetchPerformanceData = useCallback(async () => {
@@ -53,26 +54,44 @@ const SalesPersonPerformanceCard = () => {
       const firstTarget = targetData?.[0]?.target_amount || 0;
       setSalesTarget(firstTarget);
 
-      // 2. Fetch total achieved sales (post-discount) for the current month
-      const { data: ordersData, error: ordersError } = await supabase
+      // 2. Fetch total amount of orders received for the current month
+      const { data: allOrdersData, error: allOrdersError } = await supabase
         .from('orders')
         .select('total_amount')
         .eq('user_id', user.id)
         .gte('order_date', firstDayOfMonth)
         .lte('order_date', lastDayOfMonth);
 
-      if (ordersError) {
-        throw new Error(`Failed to fetch achieved sales: ${ordersError.message}`);
+      if (allOrdersError) {
+        throw new Error(`Failed to fetch orders received: ${allOrdersError.message}`);
       }
 
-      const totalAchievedSales = (ordersData || []).reduce((sum, order) => sum + order.total_amount, 0);
-      setAchievedSales(totalAchievedSales);
+      const totalOrdersAmount = (allOrdersData || []).reduce((sum, order) => sum + order.total_amount, 0);
+      setTotalOrdersReceived(totalOrdersAmount);
+
+      // 3. Fetch total amount of billed orders (where bill_no is not empty/null) for the current month
+      const { data: billedOrdersData, error: billedOrdersError } = await supabase
+        .from('orders')
+        .select('total_amount')
+        .eq('user_id', user.id)
+        .not('bill_no', 'is', null)
+        .gt('bill_no', '')
+        .gte('order_date', firstDayOfMonth)
+        .lte('order_date', lastDayOfMonth);
+
+      if (billedOrdersError) {
+        throw new Error(`Failed to fetch billed orders: ${billedOrdersError.message}`);
+      }
+
+      const totalBilledAmount = (billedOrdersData || []).reduce((sum, order) => sum + order.total_amount, 0);
+      setTotalBilledOrders(totalBilledAmount);
 
     } catch (error: any) {
       console.error('Error fetching performance data:', error);
       showError(error.message || 'An unexpected error occurred while fetching performance data.');
       setSalesTarget(0);
-      setAchievedSales(0);
+      setTotalOrdersReceived(0);
+      setTotalBilledOrders(0);
     } finally {
       setLoading(false);
     }
@@ -82,8 +101,8 @@ const SalesPersonPerformanceCard = () => {
     fetchPerformanceData();
   }, [fetchPerformanceData]);
 
-  const progressPercentage = salesTarget > 0 ? (achievedSales / salesTarget) * 100 : 0;
-  const pendingTarget = Math.max(0, salesTarget - achievedSales);
+  const progressPercentage = salesTarget > 0 ? (totalBilledOrders / salesTarget) * 100 : 0;
+  const pendingTarget = Math.max(0, salesTarget - totalBilledOrders);
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
@@ -105,21 +124,28 @@ const SalesPersonPerformanceCard = () => {
                 <Target className="h-5 w-5" />
                 <span>Monthly Target:</span>
               </div>
-              <span className="font-bold text-foreground">{formatCurrency(salesTarget)}</span>
+              <span className="font-bold text-lg text-blue-600 dark:text-blue-400">{formatCurrency(salesTarget)}</span>
             </div>
             <div className="flex justify-between items-center text-lg">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <TrendingUp className="h-5 w-5" />
-                <span>Achieved Sales:</span>
+                <span>Order Received:</span>
               </div>
-              <span className="font-bold text-green-600 dark:text-green-400">{formatCurrency(achievedSales)}</span>
+              <span className="font-bold text-lg text-cyan-600 dark:text-cyan-400">{formatCurrency(totalOrdersReceived)}</span>
+            </div>
+            <div className="flex justify-between items-center text-lg">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Package className="h-5 w-5" />
+                <span>Billed Orders:</span>
+              </div>
+              <span className="font-bold text-lg text-green-600 dark:text-green-400">{formatCurrency(totalBilledOrders)}</span>
             </div>
             <div className="flex justify-between items-center text-lg">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Hourglass className="h-5 w-5" />
                 <span>Pending Target:</span>
               </div>
-              <span className="font-bold text-orange-500 dark:text-orange-400">{formatCurrency(pendingTarget)}</span>
+              <span className="font-bold text-lg text-orange-600 dark:text-orange-400">{formatCurrency(pendingTarget)}</span>
             </div>
             <div>
               <Progress value={progressPercentage} className="w-full h-3" />

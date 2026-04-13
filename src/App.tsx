@@ -60,6 +60,7 @@ import AdminUtils from "./pages/AdminUtils";
 import UploadToNewSupabase from "./pages/UploadToNewSupabase";
 import AutoMigration from "./pages/AutoMigration";
 import MigrationPage from "./pages/migration";
+import AccountsDashboard from "./pages/AccountsDashboard";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -74,6 +75,7 @@ const AppContent = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/admin-dashboard" element={<AdminDashboard />} />
+      <Route path="/accounts-dashboard" element={<AccountsDashboard />} />
       <Route path="/product-dashboard" element={<ProductDashboard />} />
       <Route path="/super-admin-dashboard" element={<SuperAdminDashboard />} />
       <Route path="/manager-dashboard" element={<ManagerDashboard />} />
