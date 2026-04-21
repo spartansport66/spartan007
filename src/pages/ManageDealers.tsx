@@ -67,11 +67,13 @@ interface Dealer {
   credit_limit: number;
   allotted_credit_days: number;
   user_id: string;
-  last_billing_date: string | null; // New: Directly from dealers table
+  last_billing_date: string | null;
+  gst_number: string | null;
+  gst_registration_type: string | null;
   assigned_sales_persons: { id: string; first_name: string; last_name: string }[];
   current_month_credit_limit: number;
   opening_balance: number;
-  current_balance: number; // New field for calculated current balance
+  current_balance: number;
 }
 
 interface SalesPerson {
@@ -82,8 +84,8 @@ interface SalesPerson {
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Dealer name must be at least 2 characters.' }),
-  contactPerson: z.string().nullable().optional(), // Made optional
-  email: z.string().email({ message: 'Please enter a valid email address.' }).nullable().optional(), // Made optional
+  contactPerson: z.string().nullable().optional(),
+  email: z.string().email({ message: 'Please enter a valid email address.' }).nullable().optional(),
   phone: z.string().min(10, { message: 'Phone number must be at least 10 digits.' }).max(15, { message: 'Phone number cannot exceed 15 digits.' }),
   address: z.string().min(5, { message: 'Address must be at least 5 characters.' }),
   city: z.string().min(2, { message: 'City must be at least 2 characters.' }),
@@ -101,8 +103,13 @@ const formSchema = z.object({
     (val) => Number(val),
     z.number().min(0, { message: 'Opening balance cannot be negative.' })
   ),
+  gstNumber: z.string().refine(
+    (val) => !val || /^[A-Z0-9]{15}$/.test(val),
+    { message: 'GST number must be exactly 15 alphanumeric characters' }
+  ).nullable().optional(),
+  gstRegistrationType: z.string().nullable().optional(),
   assignedSalesPersonIds: z.array(z.string().uuid()).min(1, { message: 'At least one sales person must be assigned.' }),
-  lastBillingDate: z.string().nullable().optional(), // New: Optional last billing date
+  lastBillingDate: z.string().nullable().optional(),
 });
 
 const ManageDealers = () => {
@@ -141,8 +148,8 @@ const ManageDealers = () => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
-      contactPerson: '', // Default to empty string
-      email: '', // Default to empty string
+      contactPerson: '',
+      email: '',
       phone: '',
       address: '',
       city: '',
@@ -151,8 +158,10 @@ const ManageDealers = () => {
       creditLimit: 0,
       allottedCreditDays: 0,
       openingBalance: 0,
+      gstNumber: '',
+      gstRegistrationType: '',
       assignedSalesPersonIds: [],
-      lastBillingDate: '', // Default to empty string
+      lastBillingDate: '',
     },
   });
 
@@ -167,8 +176,8 @@ const ManageDealers = () => {
       console.log('DEBUG: selectedDealer changed. Resetting form with:', selectedDealer);
       form.reset({
         name: selectedDealer.name,
-        contactPerson: selectedDealer.contact_person || '', // Handle null/undefined
-        email: selectedDealer.email || '', // Handle null/undefined
+        contactPerson: selectedDealer.contact_person || '',
+        email: selectedDealer.email || '',
         phone: selectedDealer.phone,
         address: selectedDealer.address,
         city: selectedDealer.city,
@@ -177,8 +186,10 @@ const ManageDealers = () => {
         creditLimit: selectedDealer.credit_limit,
         allottedCreditDays: selectedDealer.allotted_credit_days,
         openingBalance: selectedDealer.opening_balance || 0,
+        gstNumber: selectedDealer.gst_number || '',
+        gstRegistrationType: selectedDealer.gst_registration_type || '',
         assignedSalesPersonIds: selectedDealer.assigned_sales_persons.map(sp => sp.id),
-        lastBillingDate: selectedDealer.last_billing_date ? selectedDealer.last_billing_date.split('T')[0] : '', // New: Set lastBillingDate
+        lastBillingDate: selectedDealer.last_billing_date ? selectedDealer.last_billing_date.split('T')[0] : '',
       });
       console.log('DEBUG: Form reset with openingBalance:', selectedDealer.opening_balance || 0);
     }
@@ -215,7 +226,7 @@ const ManageDealers = () => {
         query = supabase
           .from('dealers')
           .select(`
-            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id, last_billing_date,
+            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id, last_billing_date, gst_number, gst_registration_type,
             dealer_sales_persons!inner(sales_person_id, profiles(id, first_name, last_name)),
             dealer_balances(opening_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
@@ -227,7 +238,7 @@ const ManageDealers = () => {
         query = supabase
           .from('dealers')
           .select(`
-            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id, last_billing_date,
+            id, name, contact_person, email, phone, address, city, state, country, credit_limit, allotted_credit_days, user_id, last_billing_date, gst_number, gst_registration_type,
             dealer_sales_persons(sales_person_id, profiles(id, first_name, last_name)),
             dealer_balances(opening_balance),
             dealer_monthly_credit_limits(dealer_id, credit_limit, month_year),
@@ -369,7 +380,9 @@ const ManageDealers = () => {
     if (!selectedDealer || !user) return;
     
     try {
-      // Update dealer information
+      // Automatically determine registration type based on GST number
+      const cleanGst = (values.gstNumber || '').toUpperCase();
+      const registrationType = cleanGst ? 'registered' : 'unregistered';
       const updateData: any = {
         name: values.name,
         contact_person: values.contactPerson || null,
@@ -382,6 +395,8 @@ const ManageDealers = () => {
         credit_limit: values.creditLimit,
         allotted_credit_days: values.allottedCreditDays,
         last_billing_date: values.lastBillingDate || null,
+        gst_number: cleanGst || null,
+        gst_registration_type: registrationType,
       };
       
       const { error: dealerUpdateError } = await supabase
@@ -1137,6 +1152,66 @@ const ManageDealers = () => {
                       </FormLabel>
                       <FormControl className="col-span-3">
                         <Input type="date" {...field} value={field.value ?? ''} />
+                      </FormControl>
+                      <FormMessage className="col-span-4 text-right" />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="gstNumber"
+                  render={({ field }) => (
+                    <FormItem className="grid grid-cols-4 items-center gap-4">
+                      <FormLabel htmlFor="gstNumber" className="text-right">
+                        GST Number (15 digits)
+                      </FormLabel>
+                      <div className="col-span-3">
+                        <FormControl>
+                          <div>
+                            <Input
+                              id="gstNumber"
+                              placeholder="e.g., 27AAFCU5055K1ZO"
+                              maxLength={15}
+                              {...field}
+                              value={field.value ?? ''}
+                              onChange={(e) => {
+                                field.onChange(e.target.value);
+                              }}
+                            />
+                            {field.value && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {field.value.length}/15 characters
+                                {field.value.length === 15 && ' ✓'}
+                              </p>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </div>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="gstRegistrationType"
+                  render={({ field }) => (
+                    <FormItem className="grid grid-cols-4 items-center gap-4">
+                      <FormLabel htmlFor="gstRegistrationType" className="text-right">
+                        GST Registration Type (Optional)
+                      </FormLabel>
+                      <FormControl className="col-span-3">
+                        <select
+                          id="gstRegistrationType"
+                          {...field}
+                          value={field.value ?? ''}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <option value="">Select type...</option>
+                          <option value="registered">Registered</option>
+                          <option value="unregistered">Unregistered</option>
+                          <option value="composition">Composition</option>
+                          <option value="exempt">Exempt</option>
+                        </select>
                       </FormControl>
                       <FormMessage className="col-span-4 text-right" />
                     </FormItem>

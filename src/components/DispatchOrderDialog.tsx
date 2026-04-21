@@ -24,6 +24,7 @@ interface DispatchOrderDialogProps {
 interface FetchedOrderInfo {
   order_number: number;
   dealers: { name: string } | null;
+  bill_no: string | null;
 }
 
 const formSchema = z.object({
@@ -35,6 +36,7 @@ const DispatchOrderDialog: React.FC<DispatchOrderDialogProps> = ({ orderId, isOp
   const [loading, setLoading] = useState(false);
   const [orderNumber, setOrderNumber] = useState<number | null>(null);
   const [dealerName, setDealerName] = useState<string | null>(null);
+  const [billNo, setBillNo] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -50,7 +52,7 @@ const DispatchOrderDialog: React.FC<DispatchOrderDialogProps> = ({ orderId, isOp
         setLoading(true);
         const { data, error } = await supabase
           .from('orders')
-          .select('order_number, dealers(name)')
+          .select('order_number, dealers(name), bill_no')
           .eq('id', orderId)
           .single() as { data: FetchedOrderInfo | null; error: any }; // Explicitly type data
 
@@ -59,14 +61,22 @@ const DispatchOrderDialog: React.FC<DispatchOrderDialogProps> = ({ orderId, isOp
           showError('Failed to load order information.');
           setOrderNumber(null);
           setDealerName(null);
+          setBillNo(null);
         } else if (data) {
           setOrderNumber(data.order_number);
           setDealerName(data.dealers?.name || 'N/A');
+          setBillNo(data.bill_no || null);
+          // Pre-populate the form with fetched bill_no
+          form.reset({
+            billNo: data.bill_no || '',
+            dispatchDate: new Date().toISOString().split('T')[0],
+          });
         }
         setLoading(false);
       } else {
         setOrderNumber(null);
         setDealerName(null);
+        setBillNo(null);
         form.reset({
           billNo: '',
           dispatchDate: new Date().toISOString().split('T')[0],
@@ -132,6 +142,11 @@ const DispatchOrderDialog: React.FC<DispatchOrderDialogProps> = ({ orderId, isOp
           <DialogDescription>
             Enter the bill number and dispatch date for Order #{orderNumber} (Dealer: {dealerName}).
           </DialogDescription>
+          {billNo && (
+            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-sm">
+              <strong>Bill No:</strong> <span className="text-blue-600 font-semibold">#{billNo}</span>
+            </div>
+          )}
         </DialogHeader>
         {loading && !orderNumber ? (
           <div className="flex items-center justify-center py-8">

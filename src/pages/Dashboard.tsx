@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, Search, Eye, FileText, Lock, Edit, PlusCircle, Trash2, Printer, ShoppingCart } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, Search, Eye, FileText, Lock, Edit, PlusCircle, Trash2, Printer, ShoppingCart, MoreVertical } from 'lucide-react';
 import MultiItemOrderForm from '@/components/MultiItemOrderForm';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
@@ -21,6 +21,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import SalesPersonSalesReport from '@/components/reports/SalesPersonSalesReport';
 import SalesPersonDealerReport from '@/components/reports/SalesPersonDealerReport';
 import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsReport';
+import BillSalesReport from '@/components/reports/BillSalesReport';
+import BillWarehouseReport from '@/components/reports/BillWarehouseReport';
 import DailyVisitProgressCard from '@/components/DailyVisitProgressCard';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import SalesPersonDisapprovedOrdersCard from '@/components/SalesPersonDisapprovedOrdersCard';
@@ -111,6 +113,9 @@ const Dashboard = () => {
   const [isSalesPersonSalesReportOpen, setIsSalesPersonSalesReportOpen] = useState(false);
   const [isSalesPersonDealerReportOpen, setIsSalesPersonDealerReportOpen] = useState(false);
   const [isSalesPersonPaymentsReportOpen, setIsSalesPersonPaymentsReportOpen] = useState(false);
+  
+  const [isBillSalesReportOpen, setIsBillSalesReportOpen] = useState(false);
+  const [isBillWarehouseReportOpen, setIsBillWarehouseReportOpen] = useState(false);
   
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -264,6 +269,8 @@ const Dashboard = () => {
         navigate('/admin-dashboard');
       } else if (userType === 'accounts') {
         navigate('/accounts-dashboard');
+      } else if (userType === 'billing') {
+        navigate('/billing-dashboard');
       } else {
         fetchInitialData();
       }
@@ -502,6 +509,27 @@ const Dashboard = () => {
               <DropdownMenuItem onClick={() => navigate('/change-password')}><Lock className="h-4 w-4 mr-2" /> Change Password</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="flex items-center justify-center">
+                <MoreVertical className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Bill Reports</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setIsBillSalesReportOpen(true)} className="cursor-pointer">
+                <FileText className="h-4 w-4 mr-2" />
+                <span>Sales Report (Bills)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsBillWarehouseReportOpen(true)} className="cursor-pointer">
+                <Boxes className="h-4 w-4 mr-2" />
+                <span>Warehouse Report (Bills)</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button onClick={handleLogout} variant="ghost" size="icon" className="text-black hover:text-black p-2">
             <LogOut className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
@@ -650,6 +678,8 @@ const Dashboard = () => {
       <SalesPersonSalesReport isOpen={isSalesPersonSalesReportOpen} onOpenChange={setIsSalesPersonSalesReportOpen} />
       <SalesPersonDealerReport isOpen={isSalesPersonDealerReportOpen} onOpenChange={setIsSalesPersonDealerReportOpen} />
       <SalesPersonPaymentsReport isOpen={isSalesPersonPaymentsReportOpen} onOpenChange={setIsSalesPersonPaymentsReportOpen} />
+      <BillSalesReport isOpen={isBillSalesReportOpen} onOpenChange={setIsBillSalesReportOpen} />
+      <BillWarehouseReport isOpen={isBillWarehouseReportOpen} onOpenChange={setIsBillWarehouseReportOpen} />
     </div>
   );
 };

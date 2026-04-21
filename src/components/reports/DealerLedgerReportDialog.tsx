@@ -23,6 +23,7 @@ interface LedgerEntry {
   details: string;
   debit: number | null;
   credit: number | null;
+  bill_amount: number | null;
   transaction_id: string | null;
   transaction_type: string | null;
 }
@@ -127,7 +128,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
       // Merge ledger entries with payment_received entries
       let allEntries: FormattedLedgerEntry[] = [];
 
-      // Add existing ledger entries
+      // Add existing ledger entries (orders and opening balance)
       let currentBalance = 0;
       const ledgerEntries = (data || []).map((entry: LedgerEntry) => {
         const debit = entry.debit || 0;
@@ -135,20 +136,21 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         if (entry.details === 'Opening Balance') {
           currentBalance = debit - credit;
         } else {
-          if (!entry.details.includes('Pending Approval')) {
-            currentBalance = currentBalance + debit - credit;
-          }
+          // Add all orders to balance (no pending entries in this function)
+          currentBalance = currentBalance + debit - credit;
         }
         const days_elapsed = (debit > 0) ? calculateDaysDifference(entry.transaction_date) : null;
         return { ...entry, balance: currentBalance, days_elapsed };
       });
 
       // Add payment_received entries (only non-rejected payments)
+      // IMPORTANT: Only approved payments (status = 'completed') affect the balance calculation
       const paymentEntries: FormattedLedgerEntry[] = (paymentsData || [])
         .filter((payment: any) => payment.status !== 'rejected') // Filter out rejected payments
         .map((payment: any) => {
           const isCompleted = payment.status === 'completed';
-          // Only deduct if payment is completed
+          // ONLY deduct from balance if payment is completed (status = 'completed')
+          // Pending approval payments show in ledger but don't affect balance
           if (isCompleted) {
             currentBalance = currentBalance - payment.amount;
           }
@@ -160,22 +162,41 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
             credit: payment.amount, // Show as credit (payment received)
             transaction_id: payment.id,
             transaction_type: 'payment',
-            balance: currentBalance,
+            balance: currentBalance, // Only updated if status = 'completed'
             days_elapsed: null,
             payment_status: payment.status,
           };
         });
 
-      // Combine and sort by date
-      allEntries = [...ledgerEntries, ...paymentEntries].sort((a, b) => 
-        new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime()
-      );
+      // Combine and sort by date (ascending - oldest first)
+      allEntries = [...ledgerEntries, ...paymentEntries].sort((a, b) => {
+        // Opening balance always first
+        if (a.transaction_type === 'opening_balance') return -1;
+        if (b.transaction_type === 'opening_balance') return 1;
+        // Then sort by date ascending (oldest first)
+        return new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime();
+      });
 
-      // Recalculate balances after sorting
-      currentBalance = (ledgerEntries[ledgerEntries.length - 1]?.balance || 0);
-      allEntries = allEntries.map((entry, idx) => {
-        if (idx === 0) return entry; // Keep first balance as is
-        return entry;
+      // Recalculate running balance after sorting
+      // IMPORTANT: Only approved payments (payment entries with status = 'completed') affect balance
+      let runningBalance = 0;
+      allEntries = allEntries.map((entry) => {
+        if (entry.transaction_type === 'opening_balance') {
+          // Opening balance sets the initial balance
+          runningBalance = entry.debit - entry.credit;
+          return { ...entry, balance: runningBalance };
+        }
+        if (entry.transaction_type === 'payment') {
+          // Only add to balance if payment is completed (status = 'completed')
+          if (entry.payment_status === 'completed') {
+            runningBalance -= (entry.credit || 0);
+          }
+          // Pending approval payments show but don't affect balance
+          return { ...entry, balance: runningBalance };
+        }
+        // For orders and returns, add debit and subtract credit
+        runningBalance += (entry.debit || 0) - (entry.credit || 0);
+        return { ...entry, balance: runningBalance };
       });
 
       setTransactions(allEntries);

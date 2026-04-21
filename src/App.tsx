@@ -61,6 +61,15 @@ import UploadToNewSupabase from "./pages/UploadToNewSupabase";
 import AutoMigration from "./pages/AutoMigration";
 import MigrationPage from "./pages/migration";
 import AccountsDashboard from "./pages/AccountsDashboard";
+import BillingDashboard from "./pages/BillingDashboard";
+import BillVerificationDashboard from "./pages/BillVerificationDashboard";
+import InvoiceReports from "./pages/InvoiceReports";
+import OrderApprovalDashboard from "./pages/OrderApprovalDashboard";
+import ManageCompanies from "./pages/ManageCompanies";
+import ManageFinancialYears from "./pages/ManageFinancialYears";
+import ManageBillSeries from "./pages/ManageBillSeries";
+import BillDesignManager from "./pages/BillDesignManager";
+import BillDesignCanvasBuilder from "./pages/BillDesignCanvasBuilder";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -75,7 +84,16 @@ const AppContent = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/admin-dashboard" element={<AdminDashboard />} />
+      <Route path="/manage-companies" element={<ManageCompanies />} />
+      <Route path="/manage-financial-years" element={<ManageFinancialYears />} />
+      <Route path="/manage-bill-series" element={<ManageBillSeries />} />
+      <Route path="/bill-design-manager" element={<BillDesignManager />} />
+      <Route path="/bill-design-canvas" element={<BillDesignCanvasBuilder />} />
       <Route path="/accounts-dashboard" element={<AccountsDashboard />} />
+      <Route path="/billing-dashboard" element={<BillingDashboard />} />
+      <Route path="/bill-verification-dashboard" element={<BillVerificationDashboard />} />
+      <Route path="/invoice-reports" element={<InvoiceReports />} />
+      <Route path="/order-approval" element={<OrderApprovalDashboard />} />
       <Route path="/product-dashboard" element={<ProductDashboard />} />
       <Route path="/super-admin-dashboard" element={<SuperAdminDashboard />} />
       <Route path="/manager-dashboard" element={<ManagerDashboard />} />

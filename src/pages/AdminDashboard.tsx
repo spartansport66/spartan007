@@ -45,6 +45,7 @@ import DailyReportDialog from '@/components/reports/DailyReportDialog';
 import SalesPersonDailySalesReportDialog from '@/components/reports/SalesPersonDailySalesReportDialog'; // New Import
 import SalesPersonOrderWiseReportDialog from '@/components/reports/SalesPersonOrderWiseReportDialog';
 import ItemWiseDealerSalesReportDialog from '@/components/reports/ItemWiseDealerSalesReportDialog';
+import DealerLedgerReportNewDialog from '@/components/reports/DealerLedgerReportNewDialog';
 
 
 const AdminDashboard = () => {
@@ -75,6 +76,7 @@ const AdminDashboard = () => {
   const [isSalesPersonDailySalesReportOpen, setIsSalesPersonDailySalesReportOpen] = useState(false); // New State
   const [isSalesPersonOrderWiseReportOpen, setIsSalesPersonOrderWiseReportOpen] = useState(false);
   const [isItemWiseDealerSalesReportOpen, setIsItemWiseDealerSalesReportOpen] = useState(false);
+  const [isDealerLedgerReportNewOpen, setIsDealerLedgerReportNewOpen] = useState(false);
 
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -284,6 +286,7 @@ const AdminDashboard = () => {
                 setIsSalesPersonDailySalesReportOpen={setIsSalesPersonDailySalesReportOpen}
                 setIsItemWiseDealerSalesReportOpen={setIsItemWiseDealerSalesReportOpen}
                 setIsSalesPersonOrderWiseReportOpen={setIsSalesPersonOrderWiseReportOpen}
+                setIsDealerLedgerReportNewOpen={setIsDealerLedgerReportNewOpen}
 
               />
             </SheetContent>
@@ -353,6 +356,7 @@ const AdminDashboard = () => {
       <SalesPersonDailySalesReportDialog isOpen={isSalesPersonDailySalesReportOpen} onOpenChange={setIsSalesPersonDailySalesReportOpen} />
       <SalesPersonOrderWiseReportDialog isOpen={isSalesPersonOrderWiseReportOpen} onOpenChange={setIsSalesPersonOrderWiseReportOpen} />
       <ItemWiseDealerSalesReportDialog isOpen={isItemWiseDealerSalesReportOpen} onOpenChange={setIsItemWiseDealerSalesReportOpen} />
+      <DealerLedgerReportNewDialog isOpen={isDealerLedgerReportNewOpen} onOpenChange={setIsDealerLedgerReportNewOpen} />
       
       <Dialog open={isEmailManagerOpen} onOpenChange={setIsEmailManagerOpen}>
         <DialogContent className="sm:max-w-[700px]">

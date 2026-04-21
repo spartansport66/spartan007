@@ -1,0 +1,30 @@
+-- DEALER LEDGER REPORT FIX - PAYMENT_RECEIVED TABLE ONLY
+-- 
+-- Changes Made:
+-- 1. Updated get_dealer_ledger() function to return ONLY orders and opening balance
+--    - Removed ALL payment entries (completed and pending_approval)
+--    - Payments are now queried separately from payment_received table
+--
+-- 2. Updated DealerLedgerReportDialog.tsx balance calculation:
+--    - Show all payments (approved and pending) in the ledger table
+--    - ONLY approved payments (status = 'completed') affect the running balance
+--    - Pending approval payments show but DON'T affect balance calculation
+--    - Eliminated duplicate entries (payments only from one source now)
+--
+-- Expected Behavior:
+-- ✅ Opening Balance shown at top
+-- ✅ Orders shown with running balance
+-- ✅ Payments shown with status (Approved / Pending Approval)
+-- ✅ Balance calculation: Only approved payments reduce the balance
+-- ✅ Pending payments display but don't change the balance calculation
+-- ✅ No duplicate entries in ledger
+-- ✅ Uses only payment_received table for payments
+
+-- STEPS:
+-- 1. Run UPDATE_DEALER_LEDGER_USE_PAYMENT_RECEIVED.sql in Supabase
+-- 2. Reload the Admin Dashboard
+-- 3. Go to Reports > Dealer Ledger Report
+-- 4. Select a dealer to verify:
+--    - Payments appear with correct status labels
+--    - Only approved payments change the balance
+--    - Pending payments show but don't affect balance

@@ -125,7 +125,7 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
           total_amount,
           user_id,
           dealer_id,
-          profiles!left(first_name, last_name),
+          profiles!fk_user_profile(first_name, last_name),
           dealers!left(name)
         `
         )

@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Truck, Search, ChevronLeft, ChevronRight, Edit, Printer, FileText } from 'lucide-react';
+import { Loader2, Eye, Truck, Search, ChevronLeft, ChevronRight, Edit, Printer, FileText, Flame } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
@@ -24,6 +24,7 @@ interface OrderToDispatch {
   total_amount: number;
   dealer_name: string;
   dealer_id: string;
+  is_urgent?: boolean;
 }
 
 interface DealerOption {
@@ -97,7 +98,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
       let query = supabase
         .from('orders')
         .select(`
-          id, order_number, order_date, total_amount,
+          'id, order_number, order_date, total_amount, is_urgent,'
           dealers (id, name)
         `)
         .eq('dispatched', false)
@@ -129,6 +130,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
           total_amount: order.total_amount,
           dealer_name: order.dealers?.name || 'N/A',
           dealer_id: order.dealers?.id || '',
+          is_urgent: order.is_urgent || false,
         }));
         setOrders(formattedOrders);
         setCurrentPage(1); // Reset to first page on new fetch
@@ -158,6 +160,30 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
     }
     setSelectedOrderIdForDispatch(order.id);
     setIsDispatchDialogOpen(true);
+  };
+
+  const handleToggleUrgent = async (orderId: string, currentUrgent: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          is_urgent: !currentUrgent,
+          urgent_marked_at: new Date().toISOString(),
+          urgent_marked_by: 'current_user', // In production, use actual user ID
+        })
+        .eq('id', orderId);
+
+      if (error) {
+        console.error('Error updating urgent status:', error);
+        showError('Failed to update urgent status');
+      } else {
+        showSuccess(`Order marked as ${!currentUrgent ? 'URGENT' : 'NOT URGENT'}`);
+        fetchOrdersAndDealers();
+      }
+    } catch (err) {
+      console.error('Exception updating urgent status:', err);
+      showError('Failed to update urgent status');
+    }
   };
 
   const handleEditOrder = (orderId: string) => {
@@ -418,6 +444,14 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
                               title="Dispatch Order"
                             >
                               <Truck className="h-4 w-4 text-green-600" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleToggleUrgent(order.id, order.is_urgent || false)}
+                              className={order.is_urgent ? "hover:bg-red-50" : "hover:bg-gray-100"}
+                              title={order.is_urgent ? "Mark as Not Urgent" : "Mark as Urgent"}
+                            >
+                              <Flame className={`h-4 w-4 ${order.is_urgent ? 'text-red-600' : 'text-gray-400'}`} />
                             </Button>
                           </div>
                         </TableCell>

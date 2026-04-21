@@ -90,6 +90,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const [loading, setLoading] = useState(false);
   const [dealerBalance, setDealerBalance] = useState<number | null>(null);
   const [dealerCreditLimit, setDealerCreditLimit] = useState<number>(0);
+  const [openingBalance, setOpeningBalance] = useState<number>(0);
+  const [totalPaymentReceived, setTotalPaymentReceived] = useState<number>(0);
+  const [totalPendingPayment, setTotalPendingPayment] = useState<number>(0);
   const [allottedCreditDays, setAllottedCreditDays] = useState<number>(0);
   const [paymentDueDate, setPaymentDueDate] = useState<string | null>(null);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
@@ -295,7 +298,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         // Fetch latest dealer data to get updated credit_limit (after payment approvals)
         const { data: latestDealerData } = await supabase
           .from('dealers')
-          .select('id, name, credit_limit, opening_balance, allotted_credit_days')
+          .select('id, name, credit_limit, allotted_credit_days')
           .eq('id', selectedDealer)
           .single();
 
@@ -315,35 +318,90 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         // Use monthly limit if exists, otherwise use dealer's current credit_limit (which is updated after payment approvals)
         setDealerCreditLimit(monthlyLimitData?.credit_limit || dealerData?.credit_limit || 0);
 
-        const openingBalance = dealerData?.opening_balance || 0;
+        // Fetch ledger data (orders and opening balance only)
+        const { data: ledgerData, error: ledgerError } = await supabase.rpc('get_dealer_ledger', {
+          dealer_id_param: selectedDealer,
+          p_show_pending_only: false
+        });
 
-        const { data: orders } = await supabase
-          .from('orders')
-          .select('id, total_amount')
-          .eq('dealer_id', selectedDealer);
-        
-        const totalOrderValue = (orders || []).reduce((sum, o) => sum + o.total_amount, 0);
-        
-        // Fetch both old payments (for backward compatibility) AND new payment_received approvals
-        const { data: paymentsData } = await supabase
-          .from('payments')
-          .select('amount')
-          .eq('dealer_id', selectedDealer)
-          .eq('status', 'completed');
-        
-        const { data: paymentReceivedData } = await supabase
+        console.log('Ledger Data:', ledgerData);
+        console.log('Ledger Error:', ledgerError);
+
+        if (ledgerError) {
+          console.error('Error fetching dealer ledger:', ledgerError);
+          setDealerBalance(0);
+          setTotalPaymentReceived(0);
+          setTotalPendingPayment(0);
+          return;
+        }
+
+        // Fetch payments separately from payment_received table
+        const { data: paymentsData, error: paymentsError } = await supabase
           .from('payment_received')
-          .select('amount')
+          .select('id, dealer_id, amount, payment_date, status')
           .eq('dealer_id', selectedDealer)
-          .eq('status', 'completed');
+          .neq('status', 'rejected');  // Exclude rejected payments
+
+        console.log('Payments Data:', paymentsData);
+        console.log('Payments Error:', paymentsError);
+
+        // Calculate consumed limit and payments breakdown
+        // Formula: Consumed Limit = (Opening Balance + Total Orders) - Total Approved Payments (status = 'completed')
+        // Pending Limit = Credit Limit - Consumed Limit
+        let openingBalanceAmount = 0;   // Opening balance debit
+        let totalOrders = 0;            // Sum of all order debits
+        let totalApprovedPayments = 0;  // Sum of payments with status = 'completed'
+        let totalPendingPayments = 0;   // Sum of payments with status = 'pending_approval' or NULL
         
-        const totalPaymentsValue = (paymentsData || []).reduce((sum, p) => sum + p.amount, 0);
-        const totalPaymentReceivedValue = (paymentReceivedData || []).reduce((sum, p) => sum + p.amount, 0);
-        const totalPaymentsCombined = totalPaymentsValue + totalPaymentReceivedValue;
+        // Process ledger entries (orders and opening balance)
+        if (ledgerData && ledgerData.length > 0) {
+          console.log('Processing ledger entries:', ledgerData.length);
+          
+          for (const entry of ledgerData) {
+            const debit = entry.debit || 0;
+            
+            console.log(`Entry: ${entry.details} | Type: ${entry.transaction_type} | Debit: ${debit}`);
+            
+            // Get opening balance
+            if (entry.transaction_type === 'opening_balance') {
+              openingBalanceAmount = debit;
+            }
+            
+            // Sum all order debits
+            if (entry.transaction_type === 'order') {
+              totalOrders += debit;
+            }
+          }
+        }
         
-        // Consumed Limit = Total Billed - Total Received (without opening balance)
-        // This represents how much of the credit has been used
-        setDealerBalance(totalOrderValue - totalPaymentsCombined);
+        // Process payment entries separately from payment_received table
+        if (paymentsData && paymentsData.length > 0) {
+          console.log('Processing payment entries:', paymentsData.length);
+          
+          for (const payment of paymentsData) {
+            console.log(`Payment: Amount=${payment.amount} | Status=${payment.status}`);
+            
+            if (payment.status === 'completed') {
+              totalApprovedPayments += payment.amount;
+              console.log('Added to Approved Payments:', payment.amount);
+            } else if (payment.status === 'pending_approval' || payment.status === null) {
+              totalPendingPayments += payment.amount;
+              console.log('Added to Pending Approval Payments:', payment.amount);
+            }
+          }
+        }
+        
+        console.log('Opening Balance:', openingBalanceAmount, '| Total Orders:', totalOrders, '| Approved Payments:', totalApprovedPayments, '| Pending Payments:', totalPendingPayments);
+        
+        // Consumed Limit = (Opening Balance + Total Orders) - Approved Payments
+        const consumedLimit = (openingBalanceAmount + totalOrders) - totalApprovedPayments;
+        
+        console.log('Calculated Consumed Limit:', consumedLimit);
+        
+        setDealerBalance(consumedLimit);
+        setTotalPaymentReceived(totalApprovedPayments);  // Approved payments
+        setTotalPendingPayment(totalPendingPayments);    // Pending for approval payments
+
       } catch (error: any) {
         console.error('calculateBalance Error:', error);
       }
@@ -491,8 +549,10 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
     }
 
     // Validate credit limit - check if dealer has enough available credit
-    const availableCredit = dealerCreditLimit - (dealerBalance || 0);
+    // Formula: Pending Limit = Credit Limit - Consumed Limit
+    // Where Consumed Limit = Total Orders - Approved Payments (already calculated in dealerBalance)
     const pendingLimit = dealerCreditLimit - (dealerBalance || 0);
+    const availableCredit = pendingLimit;
     const newBalance = (dealerBalance || 0) + finalOrderValue;
     
     // Check if pending limit is 0 or less - cannot create order
@@ -647,7 +707,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   }, [newItemProductId, products, combos]);
 
   const selectedDealerData = useMemo(() => dealers.find(d => d.id === selectedDealer), [dealers, selectedDealer]);
-  const openingBalance = selectedDealerData?.opening_balance || 0;
+  const openingBalanceDisplay = openingBalance || 0;
   const pendingLimit = dealerCreditLimit - (dealerBalance || 0);
 
   const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid || pendingLimit <= 0;
@@ -701,10 +761,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
               <Card className="mt-4 bg-muted/50">
                 <CardContent className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
-                    <p className="text-muted-foreground">Opening Balance</p>
-                    <p className="font-semibold">{formatCurrency(openingBalance)}</p>
-                  </div>
-                  <div>
                     <p className="text-muted-foreground">Credit Limit</p>
                     <p className="font-semibold">{formatCurrency(dealerCreditLimit)}</p>
                   </div>
@@ -718,6 +774,12 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                       {formatCurrency(pendingLimit)}
                     </p>
                   </div>
+                  {totalPendingPayment > 0 && (
+                    <div>
+                      <p className="text-muted-foreground">Pending for Approval</p>
+                      <p className="font-semibold text-blue-600">{formatCurrency(totalPendingPayment)}</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
               {pendingLimit <= 0 && (

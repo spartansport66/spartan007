@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SheetClose } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from 'react-router-dom';
-import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale, MapPin, Clock, ListChecks, ShoppingCart, Lock, Package, PlusCircle, Globe, Users, FileSearch, Monitor, Tag, Database, Truck } from 'lucide-react';
+import { Gift, Boxes, Building, UserCog, FileText, Info, LogOut, Home, DollarSign, AlertTriangle, Scale, MapPin, Clock, ListChecks, ShoppingCart, Lock, Package, PlusCircle, Globe, Users, FileSearch, Monitor, Tag, Database, Truck, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AdminSidebarProps {
@@ -31,6 +31,7 @@ interface AdminSidebarProps {
   setIsSalesPersonDailySalesReportOpen: (isOpen: boolean) => void; // New Prop
   setIsSalesPersonOrderWiseReportOpen: (isOpen: boolean) => void;
   setIsItemWiseDealerSalesReportOpen: (isOpen: boolean) => void;
+  setIsDealerLedgerReportNewOpen?: (isOpen: boolean) => void;
 
 }
 
@@ -57,6 +58,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsSalesPersonDailySalesReportOpen, // New Prop
   setIsSalesPersonOrderWiseReportOpen,
   setIsItemWiseDealerSalesReportOpen,
+  setIsDealerLedgerReportNewOpen,
 
 }) => {
   const navigate = useNavigate();
@@ -242,6 +244,61 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
               "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
             )}
           >
+            <DollarSign className="h-4 w-4" />
+            Billing & Accounts
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-56">
+          <DropdownMenuLabel>Billing Configuration</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/manage-companies')}>
+              <Building className="h-4 w-4 mr-2" /> Company Information
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/manage-financial-years')}>
+              <FileText className="h-4 w-4 mr-2" /> Financial Years
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/manage-bill-series')}>
+              <Tag className="h-4 w-4 mr-2" /> Bill Number Series
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/bill-design-manager')}>
+              <Palette className="h-4 w-4 mr-2" /> Bill Design Templates
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/bill-design-canvas')}>
+              <Palette className="h-4 w-4 mr-2" /> Invoice Designer (Canvas)
+            </DropdownMenuItem>
+          </SheetClose>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Billing Operations</DropdownMenuLabel>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/billing-dashboard')}>
+              <DollarSign className="h-4 w-4 mr-2" /> Create Bill
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/invoice-reports')}>
+              <FileSearch className="h-4 w-4 mr-2" /> Invoice Reports
+            </DropdownMenuItem>
+          </SheetClose>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className={cn(
+              "w-full justify-start gap-2",
+              "bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+            )}
+          >
             <FileText className="h-4 w-4" />
             Reports
           </Button>
@@ -326,6 +383,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsDealerLedgerReportOpen(true)}>
               Dealer Ledger Report
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsDealerLedgerReportNewOpen?.(true)}>
+              📊 Dealer Ledger (Accounting)
             </DropdownMenuItem>
           </SheetClose>
           <SheetClose asChild>

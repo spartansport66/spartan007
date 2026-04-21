@@ -21,6 +21,7 @@ interface LedgerEntry {
   details: string;
   debit: number | null;
   credit: number | null;
+  bill_amount: number | null;
 }
 
 interface FormattedLedgerEntry extends LedgerEntry {
@@ -190,6 +191,7 @@ const DealerLedgerReport = () => {
                     <TableHead>Particulars</TableHead>
                     <TableHead className="text-right">Debit (₹)</TableHead>
                     <TableHead className="text-right">Credit (₹)</TableHead>
+                    <TableHead className="text-right">Bill Amount (₹)</TableHead>
                     <TableHead className="text-right">Balance (₹)</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -200,12 +202,57 @@ const DealerLedgerReport = () => {
                       <TableCell>{entry.details}</TableCell>
                       <TableCell className="text-right text-red-600">{entry.debit ? entry.debit.toFixed(2) : '-'}</TableCell>
                       <TableCell className="text-right text-green-600">{entry.credit ? entry.credit.toFixed(2) : '-'}</TableCell>
+                      <TableCell className="text-right">{entry.bill_amount && entry.bill_amount > 0 ? entry.bill_amount.toFixed(2) : '-'}</TableCell>
                       <TableCell className="text-right font-medium">{entry.balance.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
+
+            {/* Summary Section */}
+            {ledgerEntries.length > 0 && (
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <p className="text-sm font-medium text-blue-900">Total Sales</p>
+                  <p className="text-2xl font-bold text-blue-700 mt-1">
+                    ₹{ledgerEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <p className="text-sm font-medium text-green-900">Total Payments</p>
+                  <p className="text-2xl font-bold text-green-700 mt-1">
+                    ₹{ledgerEntries.reduce((sum, entry) => sum + (entry.credit || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+                <div className={`p-4 rounded-lg border-2 ${
+                  ledgerEntries[ledgerEntries.length - 1].balance >= 0
+                    ? 'bg-red-50 border-red-300'
+                    : 'bg-green-50 border-green-300'
+                }`}>
+                  <p className={`text-sm font-medium ${
+                    ledgerEntries[ledgerEntries.length - 1].balance >= 0
+                      ? 'text-red-900'
+                      : 'text-green-900'
+                  }`}>
+                    {ledgerEntries[ledgerEntries.length - 1].balance >= 0 ? 'Outstanding Balance' : 'Credit Balance'}
+                  </p>
+                  <p className={`text-2xl font-bold mt-1 ${
+                    ledgerEntries[ledgerEntries.length - 1].balance >= 0
+                      ? 'text-red-700'
+                      : 'text-green-700'
+                  }`}>
+                    ₹{Math.abs(ledgerEntries[ledgerEntries.length - 1].balance).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <p className="text-sm font-medium text-purple-900">Total Bill Amount</p>
+                  <p className="text-2xl font-bold text-purple-700 mt-1">
+                    ₹{ledgerEntries.reduce((sum, entry) => sum + (entry.bill_amount || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            )}
           )}
         </div>
       </CardContent>

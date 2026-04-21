@@ -23,6 +23,7 @@ interface OrderToDispatch {
   total_amount: number;
   dealer_name: string;
   dealer_id: string;
+  bill_no: string | null;
   sales?: Array<{
     quantity: number;
     total_price: number;
@@ -99,13 +100,13 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
       let query = supabase
         .from('orders')
         .select(`
-          id, order_number, order_date, total_amount, 
+          id, order_number, order_date, total_amount, bill_no,
           dealers (id, name),
           sales (quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code))
         `)
         .eq('dispatched', false)
         .is('dispatch_date', null)
-        .is('bill_no', null)
+        .neq('bill_no', null)
         .eq('hod_status', 'approved') // only show orders approved by HOD
         .order('order_date', { ascending: false });
 
@@ -157,6 +158,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
           order_number: order.order_number,
           order_date: order.order_date,
           total_amount: order.total_amount,
+          bill_no: order.bill_no,
           dealer_name: order.dealers?.name || 'N/A',
           dealer_id: order.dealers?.id || '',
           online_order_details: detailsByOrder.get(order.id) || order.online_order_details?.[0] || null,
@@ -170,6 +172,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
           order_number: order.order_number,
           order_date: order.order_date,
           total_amount: order.total_amount,
+          bill_no: order.bill_no,
           dealer_name: order.dealers?.name || 'N/A',
           dealer_id: order.dealers?.id || '',
           online_order_details: detailsByOrder.get(order.id) || order.online_order_details?.[0] || null,
@@ -526,6 +529,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
                   <TableRow className="bg-muted">
                     <TableHead className="w-10"><Checkbox checked={selectedOrderIds.length === orders.length && orders.length > 0} onCheckedChange={(checked) => handleSelectAll(!!checked)} /></TableHead>
                     <TableHead>Order No.</TableHead>
+                    <TableHead>Bill No.</TableHead>
                     <TableHead>Dealer / Customer</TableHead>
                     <TableHead>Item Details</TableHead>
                     <TableHead>Order Date</TableHead>
@@ -538,6 +542,7 @@ const WarehouseOrdersAwaitingDispatch: React.FC<WarehouseOrdersAwaitingDispatchP
                     <TableRow key={order.id} className={cn("hover:bg-accent/50", viewedOrderIds.has(order.id) && "opacity-50")}>
                       <TableCell><Checkbox checked={selectedOrderIds.includes(order.id)} onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)} /></TableCell>
                       <TableCell className="font-medium">#{order.order_number}</TableCell>
+                      <TableCell className="font-semibold text-blue-600">{order.bill_no ? `#${order.bill_no}` : 'N/A'}</TableCell>
                       <TableCell>
                         {order.dealer_name === 'Online Order' && order.online_order_details ? (
                           <div className="flex flex-col">
