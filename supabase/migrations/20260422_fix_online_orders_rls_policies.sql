@@ -31,14 +31,7 @@ TO authenticated
 USING (public.is_admin())
 WITH CHECK (public.is_admin());
 
--- Policy 4: Users can manage their own online orders
-CREATE POLICY "Users can manage their own online orders" ON public.online_orders
-FOR ALL
-TO authenticated
-USING ((SELECT user_id FROM public.orders WHERE id = order_id) = auth.uid())
-WITH CHECK ((SELECT user_id FROM public.orders WHERE id = order_id) = auth.uid());
-
--- Policy 5: Online orders managers can manage online orders
+-- Policy 4: Online orders managers can manage online orders
 CREATE POLICY "Online orders managers can manage online orders" ON public.online_orders
 FOR ALL
 TO authenticated
@@ -46,4 +39,4 @@ USING (public.is_online_orders_manager())
 WITH CHECK (public.is_online_orders_manager());
 
 -- Add comment documenting the policies
-COMMENT ON TABLE public.online_orders IS 'Tracks online platform orders linked to the orders table. RLS policies allow warehouse_keeper, admin, and order owners to view.';
+COMMENT ON TABLE public.online_orders IS 'Tracks online platform orders linked to the orders table. RLS policies allow warehouse_keeper, admin, and order managers to view.';

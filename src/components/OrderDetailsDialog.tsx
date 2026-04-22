@@ -246,7 +246,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       if (salesError) throw salesError;
 
       const items: OrderItemDetail[] = (salesItems || []).map((item: any) => {
-        const unitPrice = item.unit_price || item.products?.dp || 0;
+        // Use only the stored unit_price from the sales table (snapshot at order creation time)
+        // Never fall back to current product price - preserve original order price
+        const unitPrice = item.unit_price ?? 0;
         const discountPercent = item.discount_percent || 0;
         
         return {

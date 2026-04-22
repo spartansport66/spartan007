@@ -478,7 +478,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       }
 
       const fetchedItems: OrderItem[] = (orderRaw.sales || []).map((sale: any, index: number) => {
-        const unitPrice = sale.unit_price || sale.products?.dp || 0;
+        // Use only the stored unit_price from the sales table (snapshot at order creation time)
+        // Never fall back to current product price - preserve original order price
+        const unitPrice = sale.unit_price ?? 0;
         const discPercent = sale.discount_percent || 0;
         const gstPercent = sale.gst_percent || parseFloat(sale.products?.gst || "0") || 0;
         
