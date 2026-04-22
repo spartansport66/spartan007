@@ -146,7 +146,7 @@ const DispatchedOrdersCard: React.FC = () => {
           order_number: order.order_number,
           order_date: order.order_date,
           total_amount: order.total_amount,
-          dealer_name: order.dealer_name,
+          dealer_name: order.dealers?.name || 'Unknown',
           gate_pass_dispatch_time: order.gate_pass_dispatch_time,
           dispatch_number: order.dispatch_number,
           bill_no: order.bill_no,
