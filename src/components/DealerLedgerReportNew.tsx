@@ -109,6 +109,15 @@ const DealerLedgerReportNew = () => {
         .eq('dealer_id', selectedDealerId)
         .order('payment_date');
 
+      // Get approved credit notes for this dealer
+      const { data: creditNotes } = await supabase
+        .from('credit_notes')
+        .select('id, credit_note_number, credit_note_date, credit_amount, status, approval_status')
+        .eq('dealer_id', selectedDealerId)
+        .eq('approval_status', 'approved')
+        .neq('status', 'cancelled')
+        .order('credit_note_date');
+
       // Build ledger rows
       const rows: LedgerRow[] = [];
       let runningBalance = openingBalance;
@@ -128,7 +137,7 @@ const DealerLedgerReportNew = () => {
         return {
           date: inv.bill_date,
           description: `Invoice ${inv.bill_number}`,
-          debit: inv.grand_total,
+          debit: Number(inv.grand_total) || 0,
           credit: 0,
           balance: 0, // Will be recalculated after sorting
           type: 'invoice',
@@ -144,15 +153,24 @@ const DealerLedgerReportNew = () => {
           date: pmt.payment_date,
           description: `Payment Received - ${statusLabel}`,
           debit: 0,
-          credit: pmt.status === 'completed' ? pmt.amount : 0, // Only approved payments show amount and count
+          credit: pmt.status === 'completed' ? Number(pmt.amount) || 0 : 0, // Only approved payments show amount and count
           balance: 0, // Will be recalculated after sorting
           type: 'payment',
           paymentStatus: pmt.status,
         };
       });
 
+      const creditNoteRows: LedgerRow[] = (creditNotes || []).map((note) => ({
+        date: note.credit_note_date,
+        description: `Credit Note ${note.credit_note_number}${note.status ? ` (${note.status.replace(/_/g, ' ')})` : ''}`,
+        debit: 0,
+        credit: Number(note.credit_amount) || 0,
+        balance: 0,
+        type: 'credit_note',
+      }));
+
       // Combine and sort: opening balance first, then others by date ascending (oldest first)
-      const otherRows = [...invoiceRows, ...paymentRows];
+      const otherRows = [...invoiceRows, ...paymentRows, ...creditNoteRows];
       otherRows.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       
       rows.push(openingRow, ...otherRows);
@@ -165,10 +183,10 @@ const DealerLedgerReportNew = () => {
       rows.forEach((row) => {
         if (row.type !== 'opening') {
           // Add to debit/credit totals
-          if (row.type === 'invoice') {
+          if (row.debit > 0) {
             totalDebit += row.debit;
-          } else if (row.type === 'payment' && row.credit > 0) {
-            // Only count approved payments in totals
+          }
+          if (row.credit > 0) {
             totalCredit += row.credit;
           }
           
@@ -432,6 +450,8 @@ const DealerLedgerReportNew = () => {
                         ? 'bg-blue-50 font-semibold'
                         : row.type === 'invoice'
                         ? 'bg-yellow-50'
+                        : row.type === 'credit_note'
+                        ? 'bg-purple-50'
                         : row.paymentStatus === 'completed'
                         ? 'bg-green-50'
                         : 'bg-orange-50'

@@ -143,6 +143,13 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
         return { ...entry, balance: currentBalance, days_elapsed };
       });
 
+      // Prefer the current payment_received and credit_notes sources in the admin ledger UI.
+      // If the backend function still returns legacy payment or credit note rows,
+      // drop them here to avoid duplicates or stale detail text.
+      const ledgerEntriesWithoutPaymentAndCreditNotes = ledgerEntries.filter(
+        (entry) => entry.transaction_type !== 'payment' && entry.transaction_type !== 'credit_note'
+      );
+
       // Add payment_received entries (only non-rejected payments)
       // IMPORTANT: Only approved payments (status = 'completed') affect the balance calculation
       const paymentEntries: FormattedLedgerEntry[] = (paymentsData || [])
@@ -160,6 +167,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
             details: `Payment Received - ${payment.payment_method} (${statusLabel})`,
             debit: null,
             credit: payment.amount, // Show as credit (payment received)
+            bill_amount: 0,
             transaction_id: payment.id,
             transaction_type: 'payment',
             balance: currentBalance, // Only updated if status = 'completed'
@@ -168,8 +176,38 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           };
         });
 
+      const { data: creditNotesData, error: creditNotesError } = await supabase
+        .from('credit_notes')
+        .select('id, credit_note_number, credit_note_date, credit_amount, status, approval_status')
+        .eq('dealer_id', dealerId)
+        .eq('approval_status', 'approved')
+        .neq('status', 'cancelled')
+        .order('credit_note_date', { ascending: true });
+
+      if (creditNotesError) throw creditNotesError;
+
+      const existingCreditNoteIds = new Set(
+        ledgerEntriesWithoutPaymentAndCreditNotes
+          .filter((entry) => entry.transaction_type === 'credit_note' && entry.transaction_id)
+          .map((entry) => entry.transaction_id)
+      );
+
+      const creditNoteEntries: FormattedLedgerEntry[] = (creditNotesData || [])
+        .filter((note: any) => !existingCreditNoteIds.has(note.id))
+        .map((note: any) => ({
+          transaction_date: note.credit_note_date,
+          details: `Credit Note ${note.credit_note_number}${note.status ? ` (${note.status.replace(/_/g, ' ')})` : ''}`,
+          debit: null,
+          credit: note.credit_amount,
+          bill_amount: 0,
+          transaction_id: note.id,
+          transaction_type: 'credit_note',
+          balance: 0,
+          days_elapsed: null,
+        }));
+
       // Combine and sort by date (ascending - oldest first)
-      allEntries = [...ledgerEntries, ...paymentEntries].sort((a, b) => {
+      allEntries = [...ledgerEntriesWithoutPaymentAndCreditNotes, ...paymentEntries, ...creditNoteEntries].sort((a, b) => {
         // Opening balance always first
         if (a.transaction_type === 'opening_balance') return -1;
         if (b.transaction_type === 'opening_balance') return 1;

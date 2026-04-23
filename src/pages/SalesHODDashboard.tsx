@@ -10,6 +10,7 @@ import ApprovedHODOrdersCard from '@/components/ApprovedHODOrdersCard';
 import SalesHODDispatchedCard from '@/components/SalesHODDispatchedCard';
 import DisapprovedHODOrdersCard from '@/components/DisapprovedHODOrdersCard';
 import HODApprovedPromotionalOrdersCard from '@/components/HODApprovedPromotionalOrdersCard';
+import HODOrderItemSummaryCard from '@/components/HODOrderItemSummaryCard';
 
 const SalesHODDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -57,6 +58,7 @@ const SalesHODDashboard: React.FC = () => {
           <DisapprovedHODOrdersCard />
         </div>
         <div className="lg:col-span-2"><SalesHODDispatchedCard /></div>
+        <div className="lg:col-span-2"><HODOrderItemSummaryCard /></div>
         <div className="lg:col-span-2"><HODApprovedPromotionalOrdersCard /></div>
       </div>
     </div>

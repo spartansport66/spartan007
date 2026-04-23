@@ -18,6 +18,8 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import PrintBillDialog from '@/components/PrintBillDialog';
 import DealerLedgerReportNewDialog from '@/components/reports/DealerLedgerReportNewDialog';
+import CreditNoteDialog from '@/components/CreditNoteDialog';
+import CreditNotesReportDialog from '@/components/reports/CreditNotesReportDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -201,6 +203,8 @@ const BillingDashboard = () => {
   const [cancelledBills, setCancelledBills] = useState<Array<{ id: string; bill_number: string; grand_total: number; dealers?: { name: string } }>>([]);
   const [selectedCancelledBillInfo, setSelectedCancelledBillInfo] = useState<any>(null);
   const [isCancelBillDialogOpen, setIsCancelBillDialogOpen] = useState(false);
+  const [isCreditNoteDialogOpen, setIsCreditNoteDialogOpen] = useState(false);
+  const [isCreditNotesReportOpen, setIsCreditNotesReportOpen] = useState(false);
   const [selectedBillForCancel, setSelectedBillForCancel] = useState<any>(null);
   const [cancelBillReason, setCancelBillReason] = useState<string>('');
   const [billVerificationStatus, setBillVerificationStatus] = useState<Map<string, 'pending' | 'verified' | 'rejected'>>(new Map());
@@ -1413,6 +1417,21 @@ const BillingDashboard = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem
+                  onClick={() => setIsCreditNoteDialogOpen(true)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Create Credit Note</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setIsCreditNotesReportOpen(true)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Credit Notes Report</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
                   onClick={() => setIsDealerLedgerReportOpen(true)}
                   className="flex items-center gap-2 cursor-pointer"
                 >
@@ -2608,6 +2627,22 @@ const BillingDashboard = () => {
       <DealerLedgerReportNewDialog
         isOpen={isDealerLedgerReportOpen}
         onOpenChange={setIsDealerLedgerReportOpen}
+      />
+
+      {/* Credit Note Dialog */}
+      <CreditNoteDialog
+        isOpen={isCreditNoteDialogOpen}
+        onOpenChange={setIsCreditNoteDialogOpen}
+        onSuccess={() => {
+          setIsCreditNoteDialogOpen(false);
+          showSuccess('Credit note created successfully');
+        }}
+      />
+
+      {/* Credit Notes Report Dialog */}
+      <CreditNotesReportDialog
+        isOpen={isCreditNotesReportOpen}
+        onOpenChange={setIsCreditNotesReportOpen}
       />
 
       <MadeWithDyad />

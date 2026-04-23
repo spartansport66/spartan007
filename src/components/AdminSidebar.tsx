@@ -31,6 +31,8 @@ interface AdminSidebarProps {
   setIsSalesPersonDailySalesReportOpen: (isOpen: boolean) => void; // New Prop
   setIsSalesPersonOrderWiseReportOpen: (isOpen: boolean) => void;
   setIsItemWiseDealerSalesReportOpen: (isOpen: boolean) => void;
+  setIsCreditNoteDialogOpen: (isOpen: boolean) => void;
+  setIsCreditNotesReportOpen: (isOpen: boolean) => void;
   setIsDealerLedgerReportNewOpen?: (isOpen: boolean) => void;
 
 }
@@ -58,6 +60,8 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsSalesPersonDailySalesReportOpen, // New Prop
   setIsSalesPersonOrderWiseReportOpen,
   setIsItemWiseDealerSalesReportOpen,
+  setIsCreditNoteDialogOpen,
+  setIsCreditNotesReportOpen,
   setIsDealerLedgerReportNewOpen,
 
 }) => {
@@ -288,8 +292,30 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
               <FileSearch className="h-4 w-4 mr-2" /> Invoice Reports
             </DropdownMenuItem>
           </SheetClose>
+          <DropdownMenuSeparator />
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsCreditNoteDialogOpen(true)}>
+              <PlusCircle className="h-4 w-4 mr-2" /> Create Credit Note
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
+            <DropdownMenuItem onClick={() => setIsCreditNotesReportOpen(true)}>
+              <FileText className="h-4 w-4 mr-2" /> Credit Notes Report
+            </DropdownMenuItem>
+          </SheetClose>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <NavButton
+        icon={<PlusCircle className="h-4 w-4" />}
+        label="Create Credit Note"
+        onClick={() => setIsCreditNoteDialogOpen(true)}
+      />
+      <NavButton
+        icon={<FileText className="h-4 w-4" />}
+        label="Credit Notes Report"
+        onClick={() => setIsCreditNotesReportOpen(true)}
+      />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

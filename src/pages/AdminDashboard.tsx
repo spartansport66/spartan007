@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail, ShoppingCart, Wrench } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail, ShoppingCart, Wrench, PlusCircle as PlusCircleIcon } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
@@ -46,6 +46,8 @@ import SalesPersonDailySalesReportDialog from '@/components/reports/SalesPersonD
 import SalesPersonOrderWiseReportDialog from '@/components/reports/SalesPersonOrderWiseReportDialog';
 import ItemWiseDealerSalesReportDialog from '@/components/reports/ItemWiseDealerSalesReportDialog';
 import DealerLedgerReportNewDialog from '@/components/reports/DealerLedgerReportNewDialog';
+import CreditNoteDialog from '@/components/CreditNoteDialog';
+import CreditNotesReportDialog from '@/components/reports/CreditNotesReportDialog';
 
 
 const AdminDashboard = () => {
@@ -77,6 +79,8 @@ const AdminDashboard = () => {
   const [isSalesPersonOrderWiseReportOpen, setIsSalesPersonOrderWiseReportOpen] = useState(false);
   const [isItemWiseDealerSalesReportOpen, setIsItemWiseDealerSalesReportOpen] = useState(false);
   const [isDealerLedgerReportNewOpen, setIsDealerLedgerReportNewOpen] = useState(false);
+  const [isCreditNoteDialogOpen, setIsCreditNoteDialogOpen] = useState(false);
+  const [isCreditNotesReportOpen, setIsCreditNotesReportOpen] = useState(false);
 
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -243,6 +247,16 @@ const AdminDashboard = () => {
             <ShoppingCart className="h-4 w-4 mr-2" />
             Place Order
           </Button>
+          <Button 
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsCreditNoteDialogOpen(true)}
+            title="Create Credit Note"
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            <PlusCircleIcon className="h-4 w-4 mr-2" />
+            Credit Note
+          </Button>
           <Button variant="outline" size="icon" onClick={() => setIsEmailManagerOpen(true)} title="Notification Settings">
             <Mail className="h-5 w-5" />
           </Button>
@@ -278,6 +292,8 @@ const AdminDashboard = () => {
                 setIsSalesPersonVisitReportOpen={setIsSalesPersonVisitReportOpen}
                 setIsSalesPersonTodayFollowupsReportOpen={setIsSalesPersonTodayFollowupsReportOpen}
                 setIsLoginLogReportOpen={setIsLoginLogReportOpen}
+                setIsCreditNoteDialogOpen={setIsCreditNoteDialogOpen}
+                setIsCreditNotesReportOpen={setIsCreditNotesReportOpen}
                 setIsSalesPersonAccountStatementReportOpen={setIsSalesPersonAccountStatementReportOpen}
                 setIsOrderSummaryReportOpen={setIsOrderSummaryReportOpen}
                 setIsSalesPersonLedgerReportOpen={setIsSalesPersonLedgerReportOpen}
@@ -346,6 +362,11 @@ const AdminDashboard = () => {
       <OpeningBalanceReportDialog isOpen={isOpeningBalanceReportOpen} onOpenChange={setIsOpeningBalanceReportOpen} />
       <DealerOverdueBalanceReportDialog isOpen={isDealerOverdueBalanceReportOpen} onOpenChange={setIsDealerOverdueBalanceReportOpen} />
       <DealerClosingBalanceReportDialog isOpen={isDealerClosingBalanceReportOpen} onOpenChange={setIsDealerClosingBalanceReportOpen} />
+      <CreditNoteDialog isOpen={isCreditNoteDialogOpen} onOpenChange={setIsCreditNoteDialogOpen} onSuccess={() => {
+        setIsCreditNoteDialogOpen(false);
+        showSuccess('Credit note created successfully');
+      }} />
+      <CreditNotesReportDialog isOpen={isCreditNotesReportOpen} onOpenChange={setIsCreditNotesReportOpen} />
       <SalesPersonVisitReportDialog isOpen={isSalesPersonVisitReportOpen} onOpenChange={setIsSalesPersonVisitReportOpen} />
       <SalesPersonTodayFollowupsReportDialog isOpen={isSalesPersonTodayFollowupsReportOpen} onOpenChange={setIsSalesPersonTodayFollowupsReportOpen} />
       <LoginLogReportDialog isOpen={isLoginLogReportOpen} onOpenChange={setIsLoginLogReportOpen} />
