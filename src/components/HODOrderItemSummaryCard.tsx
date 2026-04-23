@@ -24,8 +24,10 @@ const HODOrderItemSummaryCard: React.FC = () => {
   const [items, setItems] = useState<ItemSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('totalQty');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({
+    key: 'totalQty',
+    direction: 'desc',
+  });
   const printRef = useRef<HTMLDivElement>(null);
 
   const fetchItemSummary = useCallback(async () => {
@@ -169,22 +171,21 @@ const HODOrderItemSummaryCard: React.FC = () => {
   const sortedItems = useMemo(() => {
     const sorted = [...filteredItems];
     sorted.sort((a, b) => {
-      const aVal = Number(a[sortKey] ?? 0);
-      const bVal = Number(b[sortKey] ?? 0);
+      const aVal = Number(a[sortConfig.key] ?? 0);
+      const bVal = Number(b[sortConfig.key] ?? 0);
       if (aVal === bVal) {
         return a.productName.localeCompare(b.productName);
       }
-      return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
     });
     return sorted;
-  }, [filteredItems, sortKey, sortDirection]);
+  }, [filteredItems, sortConfig]);
 
   const totalApprovedQty = useMemo(() => filteredItems.reduce((sum, item) => sum + item.approvedQty, 0), [filteredItems]);
   const totalPendingQty = useMemo(() => filteredItems.reduce((sum, item) => sum + item.pendingQty, 0), [filteredItems]);
 
   const applySort = (key: SortKey, direction: 'asc' | 'desc') => {
-    setSortKey(key);
-    setSortDirection(direction);
+    setSortConfig({ key, direction });
   };
 
   return (
@@ -194,7 +195,7 @@ const HODOrderItemSummaryCard: React.FC = () => {
           <div>
             <CardTitle className="text-xl font-semibold">HOD Item-wise Approval Summary</CardTitle>
             <CardDescription className="text-sky-100">
-              Shows item quantities for HOD-approved and HOD-pending orders that are not billed yet.
+              Shows item quantities for HOD-approved and HOD-pending orders that are not billed yet. Stock is current available stock before billing, since stock is deducted only after bill_no is assigned.
             </CardDescription>
           </div>
           <Button variant="secondary" size="sm" onClick={handlePrint} className="flex items-center gap-2">
@@ -213,11 +214,11 @@ const HODOrderItemSummaryCard: React.FC = () => {
           </div>
           <div className="grid grid-cols-2 gap-3 w-full sm:w-auto">
             <div className="rounded-lg bg-slate-50 p-3 text-slate-900">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Pending Order Qty</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Pending Orders Qty</p>
               <p className="mt-1 text-2xl font-semibold">{totalPendingQty}</p>
             </div>
             <div className="rounded-lg bg-slate-50 p-3 text-slate-900">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Approved Order Qty</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Approved Orders Qty</p>
               <p className="mt-1 text-2xl font-semibold">{totalApprovedQty}</p>
             </div>
           </div>
@@ -236,18 +237,18 @@ const HODOrderItemSummaryCard: React.FC = () => {
                     <TableHead>Item</TableHead>
                     <TableHead className="text-right">
                       <div className="flex flex-col items-end gap-1">
-                        <span>Pending Qty</span>
+                        <span>Pending Orders Qty</span>
                         <div className="inline-flex items-center gap-1">
                           <button
                             type="button"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                            className={`rounded p-1 ${sortConfig.key === 'pendingQty' && sortConfig.direction === 'asc' ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}
                             onClick={() => applySort('pendingQty', 'asc')}
                           >
                             <ArrowUp className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                            className={`rounded p-1 ${sortConfig.key === 'pendingQty' && sortConfig.direction === 'desc' ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}
                             onClick={() => applySort('pendingQty', 'desc')}
                           >
                             <ArrowDown className="h-3 w-3" />
@@ -257,18 +258,18 @@ const HODOrderItemSummaryCard: React.FC = () => {
                     </TableHead>
                     <TableHead className="text-right">
                       <div className="flex flex-col items-end gap-1">
-                        <span>Approved Qty</span>
+                        <span>Approved Orders Qty</span>
                         <div className="inline-flex items-center gap-1">
                           <button
                             type="button"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                            className={`rounded p-1 ${sortConfig.key === 'approvedQty' && sortConfig.direction === 'asc' ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}
                             onClick={() => applySort('approvedQty', 'asc')}
                           >
                             <ArrowUp className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                            className={`rounded p-1 ${sortConfig.key === 'approvedQty' && sortConfig.direction === 'desc' ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}
                             onClick={() => applySort('approvedQty', 'desc')}
                           >
                             <ArrowDown className="h-3 w-3" />
@@ -282,14 +283,14 @@ const HODOrderItemSummaryCard: React.FC = () => {
                         <div className="inline-flex items-center gap-1">
                           <button
                             type="button"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                            className={`rounded p-1 ${sortConfig.key === 'closingStock' && sortConfig.direction === 'asc' ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}
                             onClick={() => applySort('closingStock', 'asc')}
                           >
                             <ArrowUp className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                            className={`rounded p-1 ${sortConfig.key === 'closingStock' && sortConfig.direction === 'desc' ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}
                             onClick={() => applySort('closingStock', 'desc')}
                           >
                             <ArrowDown className="h-3 w-3" />
@@ -303,14 +304,14 @@ const HODOrderItemSummaryCard: React.FC = () => {
                         <div className="inline-flex items-center gap-1">
                           <button
                             type="button"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                            className={`rounded p-1 ${sortConfig.key === 'netShortStock' && sortConfig.direction === 'asc' ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}
                             onClick={() => applySort('netShortStock', 'asc')}
                           >
                             <ArrowUp className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                            className={`rounded p-1 ${sortConfig.key === 'netShortStock' && sortConfig.direction === 'desc' ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}
                             onClick={() => applySort('netShortStock', 'desc')}
                           >
                             <ArrowDown className="h-3 w-3" />
@@ -324,14 +325,14 @@ const HODOrderItemSummaryCard: React.FC = () => {
                         <div className="inline-flex items-center gap-1">
                           <button
                             type="button"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                            className={`rounded p-1 ${sortConfig.key === 'totalQty' && sortConfig.direction === 'asc' ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}
                             onClick={() => applySort('totalQty', 'asc')}
                           >
                             <ArrowUp className="h-3 w-3" />
                           </button>
                           <button
                             type="button"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                            className={`rounded p-1 ${sortConfig.key === 'totalQty' && sortConfig.direction === 'desc' ? 'bg-slate-200 text-slate-900' : 'text-slate-600 hover:bg-slate-100'}`}
                             onClick={() => applySort('totalQty', 'desc')}
                           >
                             <ArrowDown className="h-3 w-3" />
