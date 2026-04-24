@@ -80,7 +80,6 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
           user_id,
           dealer_id,
           hod_status,
-          profiles!left(first_name, last_name),
           dealers!left(name),
           payments!left(id,payment_method)
         `
@@ -115,11 +114,38 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
 
       console.log('Fetched orders with HOD approval:', data?.length || 0, 'orders');
 
+      const userIds = Array.from(new Set((data || [])
+        .map((order: any) => order.user_id)
+        .filter((id: string | null | undefined): id is string => Boolean(id))
+      ));
+
+      const profilesById: Record<string, { first_name?: string; last_name?: string }> = {};
+      if (userIds.length > 0) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', userIds);
+
+        if (profileError) {
+          console.error('Supabase profile fetch error:', profileError);
+        } else if (profileData) {
+          profileData.forEach((profile: any) => {
+            profilesById[profile.id] = profile;
+          });
+        }
+      }
+
       // Step 3: Filter out online orders AND cash orders AND apply HOD status filter for 'approved-pending'
       const filteredData = (data || []).filter(order => {
-        // Exclude orders with dealer_name = "Cash" or "Online Order"
+        // Exclude orders with dealer_name = "Cash", "Online Order" or demo data
         const dealerName = order.dealers?.name || '';
-        if (dealerName.toLowerCase() === 'cash' || dealerName.toLowerCase() === 'online order') {
+        const normalizedDealerName = dealerName.trim().toLowerCase();
+        if (
+          normalizedDealerName === 'cash' ||
+          normalizedDealerName === 'online order' ||
+          normalizedDealerName === 'demo' ||
+          normalizedDealerName === 'demo dealer'
+        ) {
           console.log(`Excluding order #${order.order_number} - dealer: ${dealerName}`);
           return false;
         }
@@ -158,6 +184,7 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
         const today = new Date();
         const timeDiff = today.getTime() - orderDate.getTime();
         const daysPending = Math.floor(timeDiff / (1000 * 3600 * 24));
+        const profile = order.user_id ? profilesById[order.user_id] : undefined;
 
         return {
           order_id: order.id,
@@ -166,7 +193,7 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
           dealer_id: order.dealer_id,
           order_date: order.order_date,
           total_amount: Number(order.total_amount) || 0,
-          sales_person_name: `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim() || 'Unknown',
+          sales_person_name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Unknown',
           sales_person_id: order.user_id,
           days_pending: daysPending,
           hod_status: order.hod_status || null,

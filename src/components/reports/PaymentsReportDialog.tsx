@@ -19,7 +19,7 @@ import { getStartOfUTCDayISO, getEndOfUTCDayISO } from '@/utils/date';
 import { approveRejectPayment } from '@/utils/supabase-actions';
 
 interface PaymentReportData {
-  id: string; // Order ID (or Dealer ID for general payment)
+  id: string; // Order ID or payment_received ID for general payment records
   order_number: number;
   dealer_name: string;
   dealer_phone: string;
@@ -32,6 +32,7 @@ interface PaymentReportData {
   payment_method: string | null;
   cheque_dd_date: string | null;
   payment_date: string | null;
+  source?: 'payments' | 'payment_received';
 }
 
 interface DealerOption {
@@ -106,10 +107,11 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
       const endOfUTCTodayISO = getEndOfUTCDayISO();
 
       if (filterStatus === 'pending_approval' || filterStatus === 'paid') {
-        let query = supabase.from('payments').select(`id, order_id, dealer_id, amount, payment_method, payment_date, approved_at, status, cheque_dd_date, orders (id, order_number, order_date, total_amount, payment_status, payment_due_date, dealer_id, dealers (name, phone)), dealers (name, phone)`).eq('status', filterStatus === 'paid' ? 'completed' : 'pending_approval').order('payment_date', { ascending: true });
+        const paymentReceivedStatus = filterStatus === 'paid' ? 'completed' : 'pending_approval';
+        let query = supabase.from('payment_received').select(`id, dealer_id, amount, payment_method, payment_date, status, transaction_reference, sales_person_name, dealers (name, phone)`).eq('status', paymentReceivedStatus).order('payment_date', { ascending: true });
         if (filterDealerId) query = query.eq('dealer_id', filterDealerId);
-        if (filterFromDate) query = query.gte(filterStatus === 'paid' ? 'approved_at' : 'payment_date', `${filterFromDate}T00:00:00.000Z`);
-        if (filterToDate) query = query.lte(filterStatus === 'paid' ? 'approved_at' : 'payment_date', `${filterToDate}T23:59:59.999Z`);
+        if (filterFromDate) query = query.gte('payment_date', `${filterFromDate}T00:00:00.000Z`);
+        if (filterToDate) query = query.lte('payment_date', `${filterToDate}T23:59:59.999Z`);
         const { data, error } = await query;
         fetchedData = data;
         fetchError = error;
@@ -134,19 +136,19 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
         const formattedPayments: PaymentReportData[] = (fetchedData || []).map((item: any) => {
           let currentPaymentStatus: string, currentOrderId: string, currentOrderNumber: number, currentDealerName: string, currentDealerPhone: string, currentTotalAmount: number, currentPaymentDueDate: string | null, currentOrderDate: string, currentPaymentId: string | null, currentDealerId: string, currentPaymentMethod: string | null, currentChequeDdDate: string | null, currentPaymentDate: string | null;
           if (filterStatus === 'pending_approval' || filterStatus === 'paid') {
-            const isGeneralPayment = !item.order_id;
+            const isPaymentReceived = !item.order_id;
             currentPaymentStatus = item.status === 'completed' ? 'paid' : item.status;
-            currentOrderId = isGeneralPayment ? item.dealer_id : item.orders.id;
-            currentOrderNumber = isGeneralPayment ? 0 : item.orders.order_number;
-            currentDealerName = isGeneralPayment ? item.dealers?.name || 'N/A' : item.orders.dealers?.name || 'N/A';
-            currentDealerPhone = isGeneralPayment ? item.dealers?.phone || '' : item.orders.dealers?.phone || '';
+            currentOrderId = isPaymentReceived ? item.id : item.orders.id;
+            currentOrderNumber = isPaymentReceived ? 0 : item.orders.order_number;
+            currentDealerName = isPaymentReceived ? item.dealers?.name || 'N/A' : item.orders.dealers?.name || 'N/A';
+            currentDealerPhone = isPaymentReceived ? item.dealers?.phone || '' : item.orders.dealers?.phone || '';
             currentTotalAmount = item.amount;
-            currentPaymentDueDate = isGeneralPayment ? null : item.orders.payment_due_date;
-            currentOrderDate = isGeneralPayment ? item.payment_date : item.orders.order_date;
+            currentPaymentDueDate = isPaymentReceived ? null : item.orders.payment_due_date;
+            currentOrderDate = isPaymentReceived ? item.payment_date : item.orders.order_date;
             currentPaymentId = item.id;
             currentDealerId = item.dealer_id;
             currentPaymentMethod = item.payment_method;
-            currentChequeDdDate = item.cheque_dd_date;
+            currentChequeDdDate = isPaymentReceived ? null : item.cheque_dd_date;
             currentPaymentDate = item.payment_date;
           } else {
             currentPaymentStatus = item.payment_status;
@@ -163,7 +165,7 @@ const PaymentsReportDialog: React.FC<PaymentsReportDialogProps> = ({
             currentChequeDdDate = item.payments?.[0]?.cheque_dd_date || null;
             currentPaymentDate = item.payments?.[0]?.payment_date || null;
           }
-          return { id: currentOrderId, order_number: currentOrderNumber, dealer_name: currentDealerName, dealer_phone: currentDealerPhone, total_amount: currentTotalAmount, payment_status: currentPaymentStatus, payment_due_date: currentPaymentDueDate, order_date: currentOrderDate, payment_id: currentPaymentId, dealer_id: currentDealerId, payment_method: currentPaymentMethod, cheque_dd_date: currentChequeDdDate, payment_date: currentPaymentDate };
+          return { id: currentOrderId, order_number: currentOrderNumber, dealer_name: currentDealerName, dealer_phone: currentDealerPhone, total_amount: currentTotalAmount, payment_status: currentPaymentStatus, payment_due_date: currentPaymentDueDate, order_date: currentOrderDate, payment_id: currentPaymentId, dealer_id: currentDealerId, payment_method: currentPaymentMethod, cheque_dd_date: currentChequeDdDate, payment_date: currentPaymentDate, source: filterStatus === 'pending_approval' || filterStatus === 'paid' ? 'payment_received' : 'payments' };
         });
         setPayments(formattedPayments);
       }

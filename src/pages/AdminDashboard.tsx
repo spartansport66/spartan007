@@ -2,6 +2,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
@@ -29,6 +31,18 @@ import ProductionAlertsCard from '@/components/ProductionAlertsCard';
 import AllPendingPaymentsCard from '@/components/AllPendingPaymentsCard';
 import PaymentOverviewCard from '@/components/PaymentOverviewCard';
 import DealerLedgerReportDialog from '@/components/reports/DealerLedgerReportDialog';
+
+interface PaymentDetail {
+  id: string;
+  dealer_id: string;
+  dealer_name: string;
+  amount: number;
+  payment_method: string | null;
+  payment_date: string | null;
+  status: string;
+  created_at: string | null;
+  transaction_reference: string | null;
+}
 import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog';
 import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog';
 import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog';
@@ -95,6 +109,11 @@ const AdminDashboard = () => {
   const [totalOrders, setTotalOrders] = useState<number>(0);
   const [activeDealersCount, setActiveDealersCount] = useState<number>(0);
   const [productsCount, setProductsCount] = useState<number>(0);
+  const [payments, setPayments] = useState<PaymentDetail[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState<boolean>(true);
+  const [pendingDealerFilter, setPendingDealerFilter] = useState<string>('');
+  const [approvedDealerFilter, setApprovedDealerFilter] = useState<string>('');
+  const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
   
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -131,6 +150,48 @@ const AdminDashboard = () => {
     }
   }, []);
 
+  const fetchPaymentDetails = useCallback(async () => {
+    setPaymentsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('payment_received')
+        .select(`
+          id,
+          dealer_id,
+          amount,
+          payment_method,
+          payment_date,
+          status,
+          created_at,
+          transaction_reference,
+          dealers(name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      const formatted = (data || []).map((item: any) => ({
+        id: item.id,
+        dealer_id: item.dealer_id,
+        dealer_name: item.dealers?.name || 'Unknown Dealer',
+        amount: Number(item.amount) || 0,
+        payment_method: item.payment_method || 'N/A',
+        payment_date: item.payment_date || null,
+        status: item.status || 'unknown',
+        created_at: item.created_at || null,
+        transaction_reference: item.transaction_reference || null,
+      }));
+
+      setPayments(formatted);
+    } catch (error: any) {
+      console.error('Error fetching payment details:', error.message || error);
+    } finally {
+      setPaymentsLoading(false);
+    }
+  }, []);
+
   const fetchDashboardData = useCallback(async () => {
     if (!user) return;
     try {
@@ -155,13 +216,14 @@ const AdminDashboard = () => {
         setTotalSalesValue(netSalesValue);
       }
       
+      await fetchPaymentDetails();
       fetchLastActiveTime(user.id);
     } catch (error: any) {
       console.error('AdminDashboard: Error fetching dashboard data:', error);
     } finally {
       setLoadingData(false);
     }
-  }, [user, fetchLastActiveTime]);
+  }, [user, fetchLastActiveTime, fetchPaymentDetails]);
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -203,6 +265,101 @@ const AdminDashboard = () => {
     setRefreshKey(prev => prev + 1);
     fetchDashboardData();
   };
+
+  const pendingPayments = payments.filter(
+    (payment) =>
+      payment.status === 'pending_approval' &&
+      payment.dealer_name.toLowerCase().includes(pendingDealerFilter.trim().toLowerCase())
+  );
+  const approvedPayments = payments.filter(
+    (payment) =>
+      payment.status === 'completed' &&
+      payment.dealer_name.toLowerCase().includes(approvedDealerFilter.trim().toLowerCase())
+  );
+
+  const togglePaymentSelection = (paymentId: string) => {
+    setSelectedPaymentIds((prev) =>
+      prev.includes(paymentId) ? prev.filter((id) => id !== paymentId) : [...prev, paymentId]
+    );
+  };
+
+  const handleSelectAllVisible = (visiblePayments: PaymentDetail[]) => {
+    const visibleIds = visiblePayments.map((payment) => payment.id);
+    const allSelected = visibleIds.every((id) => selectedPaymentIds.includes(id));
+    setSelectedPaymentIds((prev) => {
+      if (allSelected) {
+        return prev.filter((id) => !visibleIds.includes(id));
+      }
+      const next = [...prev];
+      visibleIds.forEach((id) => {
+        if (!next.includes(id)) next.push(id);
+      });
+      return next;
+    });
+  };
+
+  const handlePrintSelectedPayments = () => {
+    const selectedPayments = payments.filter((payment) => selectedPaymentIds.includes(payment.id));
+    if (selectedPayments.length === 0) {
+      showError('Select at least one payment to print.');
+      return;
+    }
+
+    const rowsHtml = selectedPayments
+      .map(
+        (payment) => `
+          <tr>
+            <td style="padding:8px;border:1px solid #ccc">${payment.dealer_name}</td>
+            <td style="padding:8px;border:1px solid #ccc">₹${payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="padding:8px;border:1px solid #ccc">${payment.payment_method || 'N/A'}</td>
+            <td style="padding:8px;border:1px solid #ccc">${payment.payment_date ? new Date(payment.payment_date).toLocaleDateString('en-IN') : 'N/A'}</td>
+            <td style="padding:8px;border:1px solid #ccc">${payment.status === 'completed' ? 'Approved' : 'Pending Approval'}</td>
+            <td style="padding:8px;border:1px solid #ccc">${payment.transaction_reference || '—'}</td>
+          </tr>
+        `
+      )
+      .join('');
+
+    const newWindow = window.open('', '_blank');
+    if (!newWindow) {
+      showError('Unable to open print window.');
+      return;
+    }
+
+    newWindow.document.write(`
+      <html>
+        <head>
+          <title>Selected Payments</title>
+          <style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background:#f4f4f4;}</style>
+        </head>
+        <body>
+          <h1>Selected Payments</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Dealer</th>
+                <th>Amount</th>
+                <th>Method</th>
+                <th>Payment Date</th>
+                <th>Status</th>
+                <th>Reference</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    newWindow.document.close();
+    newWindow.focus();
+    newWindow.print();
+  };
+
+  const selectedPaymentsCount = selectedPaymentIds.length;
+  const pendingAllSelected = pendingPayments.length > 0 && pendingPayments.every((payment) => selectedPaymentIds.includes(payment.id));
+  const approvedAllSelected = approvedPayments.length > 0 && approvedPayments.every((payment) => selectedPaymentIds.includes(payment.id));
 
   const handleViewPaymentsReport = () => {
     setPaymentsReportInitialStatus('all');
@@ -348,7 +505,149 @@ const AdminDashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} /><DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} /></div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><PaymentOverviewCard key={`payment-overview-${refreshKey}`} onViewReport={handleViewPaymentsReport} /><AllPendingPaymentsCard onPaymentAction={handlePaymentAction} key={`all-pending-payments-${refreshKey}`} /></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <Card className="bg-card text-card-foreground shadow-lg overflow-hidden">
+          <CardHeader className="bg-yellow-500 dark:bg-yellow-700 text-white rounded-t-lg p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-xl font-semibold">Pending Payments Details</CardTitle>
+                <CardDescription className="text-yellow-100">Dealer, amount, method, date and approval status</CardDescription>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  id="pending-dealer-filter"
+                  value={pendingDealerFilter}
+                  onChange={(event) => setPendingDealerFilter(event.target.value)}
+                  placeholder="Filter dealer"
+                  className="min-w-[180px] sm:min-w-[220px] text-black"
+                />
+                <Button onClick={handlePrintSelectedPayments} disabled={selectedPaymentsCount === 0}>
+                  Print Selected ({selectedPaymentsCount})
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <div className="min-w-full max-h-[440px] overflow-y-auto">
+                <div className="grid grid-cols-12 gap-2 bg-yellow-50 p-3 text-xs font-semibold text-gray-700 border-b sticky top-0 z-10">
+                  <div className="col-span-1 flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
+                      checked={pendingAllSelected}
+                      onChange={() => handleSelectAllVisible(pendingPayments)}
+                      aria-label="Select all pending payments"
+                    />
+                  </div>
+                  <div className="col-span-3">Dealer</div>
+                  <div className="col-span-2">Amount</div>
+                  <div className="col-span-2">Method</div>
+                  <div className="col-span-2">Payment Date</div>
+                  <div className="col-span-1">Status</div>
+                  <div className="col-span-1">Ref</div>
+                </div>
+                {paymentsLoading ? (
+                  <div className="p-4 text-center text-gray-500">Loading payment details...</div>
+                ) : pendingPayments.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500">No pending payment entries</div>
+                ) : (
+                  pendingPayments.map((payment) => (
+                    <div key={payment.id} className="grid grid-cols-12 gap-2 p-3 items-center text-sm border-b last:border-b-0 hover:bg-yellow-50 transition-colors">
+                      <div className="col-span-1 flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
+                          checked={selectedPaymentIds.includes(payment.id)}
+                          onChange={() => togglePaymentSelection(payment.id)}
+                          aria-label={`Select payment for ${payment.dealer_name}`}
+                        />
+                      </div>
+                      <div className="col-span-3 font-medium text-yellow-700">{payment.dealer_name}</div>
+                      <div className="col-span-2 text-green-700">₹{payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      <div className="col-span-2 capitalize">{payment.payment_method || 'N/A'}</div>
+                      <div className="col-span-2 text-gray-600">{payment.payment_date ? new Date(payment.payment_date).toLocaleDateString('en-IN') : 'N/A'}</div>
+                      <div className="col-span-1"><span className="inline-flex rounded-full bg-yellow-100 px-2 py-1 text-xs font-semibold text-yellow-800">Pending Approval</span></div>
+                      <div className="col-span-1 text-xs text-gray-500 truncate" title={payment.transaction_reference || ''}>{payment.transaction_reference || '—'}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card text-card-foreground shadow-lg overflow-hidden">
+          <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-xl font-semibold">Approved Payments Details</CardTitle>
+                <CardDescription className="text-green-100">Dealer, amount, method, date and approval status</CardDescription>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  id="approved-dealer-filter"
+                  value={approvedDealerFilter}
+                  onChange={(event) => setApprovedDealerFilter(event.target.value)}
+                  placeholder="Filter dealer"
+                  className="min-w-[180px] sm:min-w-[220px] text-black"
+                />
+                <Button onClick={handlePrintSelectedPayments} disabled={selectedPaymentsCount === 0}>
+                  Print Selected ({selectedPaymentsCount})
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <div className="min-w-full max-h-[440px] overflow-y-auto">
+                <div className="grid grid-cols-12 gap-2 bg-green-50 p-3 text-xs font-semibold text-gray-700 border-b sticky top-0 z-10">
+                  <div className="col-span-1 flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      checked={approvedAllSelected}
+                      onChange={() => handleSelectAllVisible(approvedPayments)}
+                      aria-label="Select all approved payments"
+                    />
+                  </div>
+                  <div className="col-span-3">Dealer</div>
+                  <div className="col-span-2">Amount</div>
+                  <div className="col-span-2">Method</div>
+                  <div className="col-span-2">Payment Date</div>
+                  <div className="col-span-1">Status</div>
+                  <div className="col-span-1">Ref</div>
+                </div>
+                {paymentsLoading ? (
+                  <div className="p-4 text-center text-gray-500">Loading payment details...</div>
+                ) : approvedPayments.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500">No approved payment entries</div>
+                ) : (
+                  approvedPayments.map((payment) => (
+                    <div key={payment.id} className="grid grid-cols-12 gap-2 p-3 items-center text-sm border-b last:border-b-0 hover:bg-green-50 transition-colors">
+                      <div className="col-span-1 flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                          checked={selectedPaymentIds.includes(payment.id)}
+                          onChange={() => togglePaymentSelection(payment.id)}
+                          aria-label={`Select payment for ${payment.dealer_name}`}
+                        />
+                      </div>
+                      <div className="col-span-3 font-medium text-green-700">{payment.dealer_name}</div>
+                      <div className="col-span-2 text-green-700">₹{payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      <div className="col-span-2 capitalize">{payment.payment_method || 'N/A'}</div>
+                      <div className="col-span-2 text-gray-600">{payment.payment_date ? new Date(payment.payment_date).toLocaleDateString('en-IN') : 'N/A'}</div>
+                      <div className="col-span-1"><span className="inline-flex rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800">Approved</span></div>
+                      <div className="col-span-1 text-xs text-gray-500 truncate" title={payment.transaction_reference || ''}>{payment.transaction_reference || '—'}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
       <MadeWithDyad />
       <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} />
       <OrdersAwaitingDispatchReportDialog isOpen={isOrdersAwaitingDispatchReportOpen} onOpenChange={setIsOrdersAwaitingDispatchReportOpen} />

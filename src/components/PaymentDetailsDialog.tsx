@@ -51,7 +51,10 @@ const PaymentDetailsDialog: React.FC<PaymentDetailsDialogProps> = ({ paymentId, 
 
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        let paymentData: any = null;
+        let error: any = null;
+
+        const paymentsResult = await supabase
           .from('payments')
           .select(`
             id,
@@ -76,27 +79,66 @@ const PaymentDetailsDialog: React.FC<PaymentDetailsDialogProps> = ({ paymentId, 
           .eq('id', paymentId)
           .single();
 
-        if (error) throw error;
+        if (paymentsResult.error || !paymentsResult.data) {
+          const paymentReceivedResult = await supabase
+            .from('payment_received')
+            .select(`
+              id,
+              amount,
+              payment_method,
+              payment_date,
+              status,
+              transaction_reference,
+              transaction_notes,
+              sales_person_name,
+              dealers (name)
+            `)
+            .eq('id', paymentId)
+            .single();
+
+          if (paymentReceivedResult.error || !paymentReceivedResult.data) {
+            throw paymentReceivedResult.error || new Error('Payment not found');
+          }
+
+          paymentData = {
+            ...paymentReceivedResult.data,
+            order_id: null,
+            order_number: 0,
+            cheque_dd_date: null,
+            cheque_dd_no: null,
+            card_number: null,
+            card_holder_name: null,
+            expiry_date: null,
+            cvv: null,
+            bank_name: null,
+            account_number: null,
+            ifsc_code: null,
+            upi_id: null,
+            transaction_id: paymentReceivedResult.data.transaction_reference || null,
+          };
+        } else {
+          paymentData = paymentsResult.data;
+        }
 
         setPaymentDetails({
-          id: data.id,
-          order_id: data.order_id,
-          order_number: (data.orders as any)?.order_number || 0,
-          amount: data.amount,
-          payment_method: data.payment_method,
-          payment_date: data.payment_date,
-          status: data.status,
-          cheque_dd_date: data.cheque_dd_date,
-          cheque_dd_no: data.cheque_dd_no,
-          card_number: data.card_number,
-          card_holder_name: data.card_holder_name,
-          expiry_date: data.expiry_date,
-          cvv: data.cvv,
-          bank_name: data.bank_name,
-          account_number: data.account_number,
-          ifsc_code: data.ifsc_code,
-          upi_id: data.upi_id,
-          transaction_id: data.transaction_id,
+          id: paymentData.id,
+          order_id: paymentData.order_id,
+          order_number: (paymentData.orders as any)?.order_number || 0,
+          amount: paymentData.amount,
+          payment_method: paymentData.payment_method,
+          payment_date: paymentData.payment_date,
+          status: paymentData.status,
+          cheque_dd_date: paymentData.cheque_dd_date,
+          cheque_dd_no: paymentData.cheque_dd_no,
+          card_number: paymentData.card_number,
+          card_holder_name: paymentData.card_holder_name,
+          expiry_date: paymentData.expiry_date,
+          cvv: paymentData.cvv,
+          bank_name: paymentData.bank_name,
+          account_number: paymentData.account_number,
+          ifsc_code: paymentData.ifsc_code,
+          upi_id: paymentData.upi_id,
+          transaction_id: paymentData.transaction_id,
         });
       } catch (error: any) {
         console.error('Error fetching payment details:', error.message);
