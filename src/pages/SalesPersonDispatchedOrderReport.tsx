@@ -36,9 +36,13 @@ interface FilteredData {
 const SalesPersonDispatchedOrderReport: React.FC = () => {
   const [salesPersons, setSalesPersons] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedSalesPerson, setSelectedSalesPerson] = useState<string>('');
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+  const [selectedFromDate, setSelectedFromDate] = useState<string>(() => {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [selectedToDate, setSelectedToDate] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
 
   const [orders, setOrders] = useState<DispatchedOrder[]>([]);
@@ -87,27 +91,22 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
   }, []);
 
   // Fetch dispatched orders based on filters
-  const fetchDispatchedOrders = async (spId?: string, month?: string) => {
+  const fetchDispatchedOrders = async (spId?: string, fromDate?: string, toDate?: string) => {
     setLoading(true);
     try {
       const sp = spId || selectedSalesPerson;
-      const m = month || selectedMonth;
+      const from = fromDate || selectedFromDate;
+      const to = toDate || selectedToDate;
 
-      if (!m) {
+      if (!from || !to) {
         setOrders([]);
         setSummary([]);
         setLoading(false);
         return;
       }
 
-      // Parse month to get start and end dates
-      const [year, monthNum] = m.split('-');
-      const startDate = new Date(`${year}-${monthNum}-01T00:00:00Z`);
-      const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 1);
-      endDate.setDate(0);
-      endDate.setHours(23, 59, 59, 999);
-
+      const startDate = new Date(`${from}T00:00:00Z`);
+      const endDate = new Date(`${to}T23:59:59Z`);
       const startDateISO = startDate.toISOString();
       const endDateISO = endDate.toISOString();
 
@@ -152,7 +151,7 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
       }
 
       console.log('Fetched orders:', data?.length || 0, 'orders');
-      console.log('Query params:', { sp, m, startDateISO, endDateISO });
+      console.log('Query params:', { sp, startDateISO, endDateISO });
 
       // Map and transform data
       const mappedOrders: DispatchedOrder[] = (data || []).map((order: any) => ({
@@ -196,9 +195,8 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
         }
 
         // Fetch monthly sales targets from sales_targets table
-        // Convert month (2026-04) to date (2026-04-01)
-        const [year, monthNum] = m.split('-');
-        const targetMonthDate = `${year}-${monthNum}-01`;
+        // Derive target month from the selected from-date
+        const targetMonthDate = `${from.slice(0, 7)}-01`;
 
         console.log('🔍 DEBUG: Fetching targets for:', { targetMonthDate, uniqueSalesPersonIds });
 
@@ -252,12 +250,7 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
               count: allOrdersData.length,
               amount: allOrdersData.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0),
             };
-            console.log(`🔍 Sales person ${spId}: ${allOrdersData.length} orders in ${m}, amount: ${totalOrdersMap[spId].amount}`);
-          }
-
-          if (allOrdersError) {
-            console.warn(`❌ Error fetching orders for ${spId}:`, allOrdersError);
-            totalOrdersMap[spId] = { count: 0, amount: 0 };
+              console.log(`🔍 Sales person ${spId}: ${allOrdersData.length} orders from ${from} to ${to}, amount: ${totalOrdersMap[spId].amount}`);
           }
         }
 
@@ -373,8 +366,7 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
       ? salesPersons.find(sp => sp.id === selectedSalesPerson)?.name || 'Unknown'
       : 'All Sales Persons';
 
-    const monthDate = new Date(`${selectedMonth}-01`);
-    const monthName = monthDate.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' });
+    const rangeLabel = `${formatDate(selectedFromDate)} to ${formatDate(selectedToDate)}`;
 
     let htmlContent = `
       <html>
@@ -398,7 +390,7 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
         <body>
           <h1>Sales Person Dispatched Order Report</h1>
           <div class="filters">
-            <p><strong>Month:</strong> ${monthName} | <strong>Sales Person:</strong> ${selectedPersonName}</p>
+            <p><strong>Date Range:</strong> ${rangeLabel} | <strong>Sales Person:</strong> ${selectedPersonName}</p>
           </div>
     `;
 
@@ -571,9 +563,9 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
     }).format(amount);
   };
 
-  const monthName = selectedMonth
-    ? new Date(`${selectedMonth}-01`).toLocaleDateString('en-IN', { year: 'numeric', month: 'long' })
-    : 'Select Month';
+  const rangeLabel = selectedFromDate && selectedToDate
+    ? `${formatDate(selectedFromDate)} to ${formatDate(selectedToDate)}`
+    : 'Select date range';
 
   return (
     <div style={{ padding: '24px', backgroundColor: '#f8f9fa', minHeight: '100vh' }}>
@@ -584,7 +576,7 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
             Sales Person-wise Dispatched Orders Report
           </h1>
           <p style={{ fontSize: '14px', color: '#666' }}>
-            View all dispatched orders by sales person for the selected month
+            View all dispatched orders by sales person for the selected date range
           </p>
         </div>
 
@@ -601,17 +593,39 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
             boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
           }}
         >
-          {/* Month Filter */}
+          {/* Date Range Filter */}
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '6px', color: '#333' }}>
-              Month
+              From Date
             </label>
             <input
-              type="month"
-              value={selectedMonth}
+              type="date"
+              value={selectedFromDate}
               onChange={(e) => {
-                setSelectedMonth(e.target.value);
-                fetchDispatchedOrders(selectedSalesPerson, e.target.value);
+                setSelectedFromDate(e.target.value);
+                fetchDispatchedOrders(selectedSalesPerson, e.target.value, selectedToDate);
+              }}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '6px', color: '#333' }}>
+              To Date
+            </label>
+            <input
+              type="date"
+              value={selectedToDate}
+              onChange={(e) => {
+                setSelectedToDate(e.target.value);
+                fetchDispatchedOrders(selectedSalesPerson, selectedFromDate, e.target.value);
               }}
               style={{
                 width: '100%',
@@ -633,7 +647,7 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
               value={selectedSalesPerson}
               onChange={(e) => {
                 setSelectedSalesPerson(e.target.value);
-                fetchDispatchedOrders(e.target.value, selectedMonth);
+                fetchDispatchedOrders(e.target.value, selectedFromDate, selectedToDate);
               }}
               style={{
                 width: '100%',
@@ -704,7 +718,7 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
             fontSize: '12px',
             color: '#333'
           }}>
-            <strong>Debug Info:</strong> Month: {selectedMonth || 'Not set'} | 
+            <strong>Debug Info:</strong> Date Range: {selectedFromDate} to {selectedToDate} | 
             Sales Person: {selectedSalesPerson ? 'Selected' : 'All'} | 
             <span style={{marginLeft: '16px', color: 'red'}}>⚠️ No data found. Try selecting different filters.</span>
           </div>
@@ -758,7 +772,7 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
                 {formatCurrency(totalPendingSalesSum)}
               </p>
               <p style={{ fontSize: '12px', color: '#999', marginTop: '8px' }}>
-                To achieve target for {monthName}
+                To achieve target for {rangeLabel}
               </p>
             </div>
 
@@ -886,7 +900,7 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
         >
           <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb' }}>
             <h2 style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937', margin: 0 }}>
-              Dispatched Orders {selectedMonth ? `- ${monthName}` : ''}
+              Dispatched Orders - {rangeLabel}
             </h2>
           </div>
 
@@ -1084,8 +1098,8 @@ const SalesPersonDispatchedOrderReport: React.FC = () => {
           <ul style={{ fontSize: '12px', color: '#1e40af', marginLeft: '20px', marginTop: '8px', margin: 0 }}>
             <li>Shows only orders with dispatch number, dispatch date, and gate pass dispatch date</li>
             <li>Monthly targets are fetched from the <code>sales_targets</code> table by sales person and month</li>
-            <li>Pending sales = Monthly Target - Total Sales for the month</li>
-            <li>Dispatched orders shown are from: {selectedMonth ? monthName : 'all months'}</li>
+            <li>Pending sales = Monthly Target - Total Sales for the selected range</li>
+            <li>Dispatched orders shown are from: {rangeLabel}</li>
           </ul>
         </div>
       </div>

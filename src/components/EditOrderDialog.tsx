@@ -207,27 +207,94 @@ const getInvoiceTableName = (companyId: string): string => {
 };
 
 // Helper function to validate no missing bill numbers in company sequence
-const validateBillNumberSequence = async (companyId: string, newBillNumber: string): Promise<{ valid: boolean; message?: string }> => {
+const validateBillNumberSequence = async (
+  companyId: string,
+  billSeriesId: string | null,
+  newBillNumber: string,
+  originalBillNumber?: string
+): Promise<{ valid: boolean; message?: string }> => {
   try {
     console.log('🔍 Validating bill number sequence for company:', companyId);
     console.log('   New bill number:', newBillNumber);
-    
+
+    if (originalBillNumber && newBillNumber === originalBillNumber) {
+      console.log('   Bill number is unchanged from original, skipping gap validation.');
+      return { valid: true };
+    }
+
     // Extract the sequence number from bill number (e.g., "M/26-27/1010" -> "1010")
     const billNumberParts = newBillNumber.split('/');
     const sequenceStr = billNumberParts[billNumberParts.length - 1];
     const newSequence = parseInt(sequenceStr, 10);
-    
+
     if (isNaN(newSequence)) {
       console.warn('⚠️ Could not parse sequence from bill number:', newBillNumber);
       return { valid: true }; // Allow if can't parse
     }
 
-    // Get the previous bill number sequence for this company
+    if (billSeriesId) {
+      const { data: seriesData, error: seriesError } = await supabase
+        .from('bill_series')
+        .select('series_prefix, series_separator, current_sequence_number')
+        .eq('id', billSeriesId)
+        .maybeSingle();
+
+      if (seriesError) {
+        console.warn('⚠️ Could not fetch bill series for validation:', seriesError);
+      } else if (seriesData) {
+        const prefix = seriesData.series_prefix || '';
+        const separator = seriesData.series_separator || '';
+        const expectedBillNumber = `${prefix}${separator}${seriesData.current_sequence_number}`;
+        const expectedSequence = seriesData.current_sequence_number;
+
+        console.log('   Expected bill number from series:', expectedBillNumber);
+        console.log('   Expected sequence from series:', expectedSequence);
+
+        if (newBillNumber === expectedBillNumber) {
+          console.log('✅ Bill number matches expected next series number.');
+          return { valid: true };
+        }
+
+        if (newSequence < expectedSequence) {
+          console.warn('⚠️ Bill number is older than expected series sequence:', newSequence, '<', expectedSequence);
+          return {
+            valid: true,
+            message: `⚠️ Warning: Bill number ${newBillNumber} is older than the expected next series number ${expectedBillNumber}. Only proceed if this is intentional.`,
+          };
+        }
+
+        if (newSequence > expectedSequence) {
+          const gapCount = newSequence - expectedSequence;
+          console.warn(`⚠️ Gap detected from expected series: ${gapCount} missing number(s) between ${expectedBillNumber} and ${newBillNumber}`);
+          return {
+            valid: true,
+            message: `⚠️ Warning: There are ${gapCount} missing bill number(s) in the selected series. Only proceed if this is intentional.`,
+          };
+        }
+
+        // If sequence number equals expected sequence but full bill number doesn't match prefix/separator,
+        // warn about series mismatch.
+        if (newSequence === expectedSequence && newBillNumber !== expectedBillNumber) {
+          return {
+            valid: true,
+            message: `⚠️ Warning: Bill number ${newBillNumber} does not match the selected bill series format ${expectedBillNumber}.`,
+          };
+        }
+      }
+    }
+
+    // Fallback: Validate against existing invoices in the company table and same bill series when possible
     const tableName = getInvoiceTableName(companyId);
-    const { data: previousBills, error } = await supabase
+    let query = supabase
       .from(tableName)
       .select('bill_number')
-      .not('bill_number', 'is', null)
+      .not('bill_number', 'is', null);
+
+    if (billSeriesId) {
+      query = query.eq('bill_series_id', billSeriesId);
+    }
+
+    const { data: previousBills, error } = await query
       .order('created_at', { ascending: false })
       .limit(1);
 
@@ -257,33 +324,25 @@ const validateBillNumberSequence = async (companyId: string, newBillNumber: stri
     console.log('   New sequence:', newSequence);
     console.log('   Gap:', newSequence - lastSequence - 1);
 
-    // Check if there's a gap (should be exactly 1 number apart or for company change, can be more)
     const gap = newSequence - lastSequence;
     
     if (gap <= 0) {
-      // New number is less than or equal to last - this could be valid if changing company
       console.log('⚠️ New bill number is not greater than last bill number');
       console.log('   This is OK if changing to a different company series');
-      return { valid: true }; // Allow because company change means different series
+      return { valid: true };
     }
 
     if (gap === 1) {
-      // Perfect sequence - no gap
       console.log('✅ Bill number sequence is continuous (no gaps)');
       return { valid: true };
     }
 
-    if (gap > 1) {
-      // There's a gap - warn but allow if intentional
-      const gapCount = gap - 1;
-      console.warn(`⚠️ Gap detected in bill number sequence: ${gapCount} missing number(s) between ${lastSequence} and ${newSequence}`);
-      return { 
-        valid: true,
-        message: `⚠️ Warning: There are ${gapCount} missing bill number(s) between ${lastSequence} and ${newSequence}. Only proceed if this is intentional.`
-      };
-    }
-
-    return { valid: true };
+    const gapCount = gap - 1;
+    console.warn(`⚠️ Gap detected in bill number sequence: ${gapCount} missing number(s) between ${lastSequence} and ${newSequence}`);
+    return {
+      valid: true,
+      message: `⚠️ Warning: There are ${gapCount} missing bill number(s) between ${lastSequence} and ${newSequence}. Only proceed if this is intentional.`,
+    };
   } catch (err: any) {
     console.error('❌ Error in bill number validation:', err);
     return { valid: true, message: 'Could not validate bill number sequence' };
@@ -996,7 +1055,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       // Validate bill number sequence BEFORE updating
       if (billNumberToSave && values.billingCompanyId) {
         console.log('🔍 VALIDATING BILL NUMBER SEQUENCE...');
-        const validation = await validateBillNumberSequence(values.billingCompanyId, billNumberToSave);
+        const validation = await validateBillNumberSequence(
+          values.billingCompanyId,
+          billSeriesId || null,
+          billNumberToSave,
+          effectiveOriginalBillNumber
+        );
         
         if (validation.message) {
           console.warn('⚠️ Bill sequence validation warning:', validation.message);

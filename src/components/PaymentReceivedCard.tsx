@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, CreditCard, Edit, Trash2 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Loader2, Plus, CreditCard, Edit, Trash2, Check, ChevronsUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { showError, showSuccess } from '@/utils/toast';
@@ -54,6 +56,8 @@ const PaymentReceivedCard = () => {
     return `${year}-${month}-${day}`;
   });
   const [transactionReference, setTransactionReference] = useState<string>('');
+  const [dealerSearch, setDealerSearch] = useState<string>('');
+  const [isDealerPopoverOpen, setIsDealerPopoverOpen] = useState<boolean>(false);
 
   // Fetch associated dealers
   const fetchDealers = useCallback(async () => {
@@ -278,6 +282,14 @@ const PaymentReceivedCard = () => {
     }
   };
 
+  const filteredDealers = React.useMemo(() => {
+    if (!dealerSearch) return dealers;
+    const query = dealerSearch.toLowerCase();
+    return dealers.filter((dealer) => dealer.name.toLowerCase().includes(query));
+  }, [dealers, dealerSearch]);
+
+  const selectedDealerName = dealers.find((dealer) => dealer.id === selectedDealerId)?.name || '';
+
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'pending_approval':
@@ -319,18 +331,47 @@ const PaymentReceivedCard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <Label htmlFor="dealer">Select Dealer *</Label>
-              <Select value={selectedDealerId} onValueChange={setSelectedDealerId}>
-                <SelectTrigger id="dealer">
-                  <SelectValue placeholder="Select a dealer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {dealers.map((dealer) => (
-                    <SelectItem key={dealer.id} value={dealer.id}>
-                      {dealer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={isDealerPopoverOpen} onOpenChange={setIsDealerPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" aria-expanded={isDealerPopoverOpen} className="w-full justify-between" id="dealer">
+                    {selectedDealerName || 'Select a dealer'}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                  <div className="p-2 border-b">
+                    <Input
+                      placeholder="Search dealer..."
+                      value={dealerSearch}
+                      onChange={(e) => setDealerSearch(e.target.value)}
+                      className="h-8"
+                    />
+                  </div>
+                  <ScrollArea className="h-[220px]">
+                    <div className="p-1">
+                      {filteredDealers.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">No dealers found.</div>
+                      ) : (
+                        filteredDealers.map((dealer) => (
+                          <Button
+                            key={dealer.id}
+                            variant="ghost"
+                            className="w-full justify-start font-normal"
+                            onClick={() => {
+                              setSelectedDealerId(dealer.id);
+                              setIsDealerPopoverOpen(false);
+                              setDealerSearch('');
+                            }}
+                          >
+                            <Check className={`mr-2 h-4 w-4 ${selectedDealerId === dealer.id ? 'opacity-100' : 'opacity-0'}`} />
+                            {dealer.name}
+                          </Button>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div>

@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { showError, showSuccess } from '@/utils/toast';
-import { getNextBillNumber } from '@/utils/billNumberGenerator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -900,41 +899,19 @@ const BillingDashboard = () => {
         return;
       }
 
-      // Get next bill number based on company's highest bill number
-      console.log(`🔔 Generating bill number for company ${selectedCompanyId} using table ${tableName}`);
-      const nextBillNum = await getNextBillNumber(selectedCompanyId, tableName);
-      
-      console.log('📄 Next Bill Number Generated:', nextBillNum);
-
-      // Update orders table with bill number and bill date
-      const billDate = new Date().toISOString().split('T')[0];
-      console.log('💾 Updating order:', {
-        orderId: selectedOrderForBill.id,
-        billNo: nextBillNum,
-        billDate: billDate,
-      });
-
-      const { data: updateData, error: updateError } = await supabase
-        .from('orders')
-        .update({ 
-          bill_no: nextBillNum,
-          bill_date: billDate
-        })
-        .eq('id', selectedOrderForBill.id)
-        .select();
-
-      console.log('📡 Update Response:', { updateData, updateError });
-
-      if (updateError) throw updateError;
-
-      if (!updateData || updateData.length === 0) {
-        console.warn('⚠️ Update returned no data');
-      } else {
-        console.log('✅ Order updated:', updateData[0]);
+      if (!billSeriesId) {
+        showError('Please select a valid bill series for the chosen company and financial year');
+        setIsGeneratingBill(false);
+        return;
       }
 
-      // Insert into the correct company-specific invoice table
-      const { error: invoiceError } = await supabase
+      const billDate = new Date().toISOString().split('T')[0];
+      console.log('🔔 Generating bill for company:', selectedCompanyId);
+      console.log('   Table:', tableName);
+      console.log('   Bill series ID:', billSeriesId);
+      console.log('   Preview bill number:', nextBillNumber);
+
+      const { data: invoiceResult, error: invoiceError } = await supabase
         .from(tableName)
         .insert([
           {
@@ -942,7 +919,6 @@ const BillingDashboard = () => {
             company_id: selectedCompanyId,
             financial_year_id: selectedFinancialYearId,
             bill_series_id: billSeriesId,
-            bill_number: nextBillNum,
             bill_date: billDate,
             dealer_id: selectedOrderForBill.dealer_id,
             gst_number: selectedOrderForBill.dealer_gst,
@@ -955,15 +931,39 @@ const BillingDashboard = () => {
             grand_total: selectedOrderForBill.total_amount - selectedOrderForBill.discount_amount + selectedOrderForBill.round_off + selectedOrderForBill.freight_charges,
             created_by: user?.id,
           },
-        ]);
+        ])
+        .select();
 
       if (invoiceError) {
         console.warn('⚠️ Invoice insert error:', invoiceError);
-      } else {
-        console.log('✅ Invoice created successfully');
+        throw invoiceError;
       }
 
-      showSuccess(`Bill ${data} generated successfully`);
+      const generatedBillNumber = invoiceResult?.[0]?.bill_number || nextBillNumber;
+      console.log('📄 Generated invoice result:', invoiceResult);
+      console.log('   Bill number used for order:', generatedBillNumber);
+
+      const { data: updateData, error: updateError } = await supabase
+        .from('orders')
+        .update({ 
+          bill_no: generatedBillNumber,
+          bill_date: billDate
+        })
+        .eq('id', selectedOrderForBill.id)
+        .select();
+
+      console.log('📡 Order update response:', { updateData, updateError });
+
+      if (updateError) throw updateError;
+
+      if (!updateData || updateData.length === 0) {
+        console.warn('⚠️ Order update returned no data');
+      } else {
+        console.log('✅ Order updated:', updateData[0]);
+      }
+
+      console.log('✅ Invoice created successfully');
+      showSuccess(`Bill ${generatedBillNumber} generated successfully`);
       setIsBillGenerateDialogOpen(false);
       setSelectedCompanyId('');
       setSelectedFinancialYearId('');

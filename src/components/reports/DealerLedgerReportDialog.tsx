@@ -9,8 +9,6 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Search, Printer, MessageCircle, Check, ChevronsUpDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
-import { jsPDF } from "jspdf";
-import autoTable from 'jspdf-autotable';
 import { useSession } from '@/contexts/SessionContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -318,6 +316,89 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
     return map;
   }, [itemLedgerEntries, showItemWise]);
 
+  const handlePrint = () => {
+    if (!selectedDealerName || transactions.length === 0) {
+      showError('No ledger data is available to print.');
+      return;
+    }
+
+    const printWindow = window.open('', '', 'width=1000,height=700');
+    if (!printWindow) {
+      showError('Unable to open print window. Please allow popups for this site.');
+      return;
+    }
+
+    const rowsHtml = transactions.map((entry) => {
+      const date = entry.transaction_date ? new Date(entry.transaction_date).toLocaleDateString('en-IN') : '-';
+      return `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;">${date}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${entry.details}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${entry.debit !== null ? entry.debit.toFixed(2) : ''}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${entry.credit !== null ? entry.credit.toFixed(2) : ''}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${entry.balance.toFixed(2)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Dealer Ledger Report - ${selectedDealerName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #1f2937; margin: 24px; }
+          h1, h2, h3, p { margin: 0; }
+          .header { margin-bottom: 24px; }
+          .header h1 { font-size: 24px; margin-bottom: 8px; }
+          .header p { font-size: 14px; color: #4b5563; margin-bottom: 4px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+          th, td { border: 1px solid #d1d5db; padding: 10px; }
+          th { background: #f3f4f6; text-align: left; }
+          .text-right { text-align: right; }
+          .totals td { font-weight: 700; background: #f9fafb; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Dealer Ledger Report</h1>
+          <p><strong>Dealer:</strong> ${selectedDealerName}</p>
+          <p><strong>Company:</strong> ${companyName || 'N/A'}</p>
+          <p><strong>Generated:</strong> ${new Date().toLocaleDateString('en-IN')}</p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Particulars</th>
+              <th class="text-right">Debit (₹)</th>
+              <th class="text-right">Credit (₹)</th>
+              <th class="text-right">Balance (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr class="totals">
+              <td colspan="2">Totals</td>
+              <td class="text-right">${totalDebit.toFixed(2)}</td>
+              <td class="text-right">${totalCredit.toFixed(2)}</td>
+              <td class="text-right">${finalBalance.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
@@ -409,7 +490,7 @@ const DealerLedgerReportDialog: React.FC<DealerLedgerReportDialogProps> = ({ isO
           <Button variant="outline" onClick={() => { /* handleSendWhatsApp(finalBalance) */ }} disabled={!filterDealerId || finalBalance <= 0 || isSendingWhatsApp} className="flex items-center gap-2">
             {isSendingWhatsApp ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />} Send Balance Reminder
           </Button>
-          <Button variant="outline" onClick={() => { /* handlePrint() */ }} disabled={transactions.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Print Report</Button>
+          <Button variant="outline" onClick={handlePrint} disabled={transactions.length === 0} className="border border-input hover:bg-accent hover:text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Print Report</Button>
           <Button onClick={() => onOpenChange(false)} className="bg-primary hover:bg-primary/90">Close</Button>
         </DialogFooter>
       </DialogContent>

@@ -19,6 +19,7 @@ const SalesPersonPerformanceCard = () => {
   const fetchPerformanceData = useCallback(async () => {
     if (!user) {
       console.warn('⚠️ No user session found');
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -98,8 +99,12 @@ const SalesPersonPerformanceCard = () => {
   }, [user]);
 
   useEffect(() => {
-    fetchPerformanceData();
-  }, [fetchPerformanceData]);
+    if (user) {
+      fetchPerformanceData();
+    } else {
+      setLoading(false);
+    }
+  }, [fetchPerformanceData, user]);
 
   const progressPercentage = salesTarget > 0 ? (totalBilledOrders / salesTarget) * 100 : 0;
   const pendingTarget = Math.max(0, salesTarget - totalBilledOrders);
