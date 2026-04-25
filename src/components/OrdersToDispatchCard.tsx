@@ -123,10 +123,9 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
       let query = supabase
         .from('orders')
         .select(`
-          id, order_number, order_date, total_amount, is_urgent, user_id,
+          id, order_number, order_date, total_amount, is_urgent, user_id, bill_no,
           dealers (id, name)
         `)
-        .is('bill_no', null)
         .eq('dispatched', false)
         .neq('hod_status', 'disapproved')
         .neq('dealers.name', 'Online Order')
@@ -157,7 +156,12 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         showError('Failed to load orders to dispatch.');
         setOrders([]);
       } else {
-        const orderUserIds = Array.from(new Set((ordersData || [])
+        const blankBillOrdersData = (ordersData || []).filter((order: any) => {
+          const billNo = order.bill_no == null ? '' : String(order.bill_no).trim();
+          return billNo === '';
+        });
+
+        const orderUserIds = Array.from(new Set(blankBillOrdersData
           .map((order: any) => order.user_id)
           .filter((id: string | null | undefined): id is string => Boolean(id))
         ));
@@ -178,7 +182,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
           }
         }
 
-        const filteredOrdersData = (ordersData || []).filter((order: any) => {
+        const filteredOrdersData = blankBillOrdersData.filter((order: any) => {
           const profile = order.user_id ? profilesMap[order.user_id] : undefined;
           const profileName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim().toLowerCase();
           if (profile?.user_type === 'admin') return false;

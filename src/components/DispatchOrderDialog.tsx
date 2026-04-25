@@ -28,7 +28,7 @@ interface FetchedOrderInfo {
 }
 
 const formSchema = z.object({
-  billNo: z.string().min(1, { message: 'Bill number is required.' }),
+  billNo: z.string().optional(),
   dispatchDate: z.string().min(1, { message: 'Dispatch date is required.' }),
 });
 
@@ -108,9 +108,10 @@ const DispatchOrderDialog: React.FC<DispatchOrderDialogProps> = ({ orderId, isOp
       }
 
       const updatePayload: any = {
-        bill_no: values.billNo,
+        bill_no: values.billNo?.trim() ? values.billNo.trim() : null,
         dispatch_date: values.dispatchDate,
         dispatched: true,
+        status: 'completed',
       };
       if (nextDispatchNumber !== null) updatePayload.dispatch_number = nextDispatchNumber;
 

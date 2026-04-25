@@ -128,6 +128,7 @@ const formSchema = z.object({
   dealerId: z.string().uuid({ message: 'Please select a dealer.' }),
   salesPersonId: z.string().uuid({ message: 'Please select a sales person.' }),
   billingCompanyId: z.string().default(''),
+  billNo: z.string().optional().default(''),
   discountAmount: z.preprocess((val) => Number(val), z.number().min(0)),
   dispatchDate: z.string().default(''),
   roundOff: z.preprocess((val) => Number(val), z.number().default(0)),
@@ -597,6 +598,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         dealerId: orderRaw.dealer_id,
         salesPersonId: orderRaw.user_id,
         billingCompanyId: companyId || '',
+        billNo: orderRaw.bill_no || '',
         discountAmount: orderRaw.discount_amount || 0,
         dispatchDate: orderRaw.dispatch_date ? orderRaw.dispatch_date.split('T')[0] : '',
         roundOff: orderRaw.round_off || 0,
@@ -984,8 +986,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       // IMPORTANT: When company changes, we MUST use the NEW company's bill number (nextBillNumber)
       const companyChanged = linkedInvoiceId && effectiveOriginalCompanyId && values.billingCompanyId !== effectiveOriginalCompanyId;
       
-      let billNumberToSave = '';
-      
+      let billNumberToSave: string | null | undefined = undefined;
+      const originalOrderBillNo = orderData.bill_no?.toString().trim() || null;
+      const incomingBillNo = values.billNo?.trim() || null;
+
       if (companyChanged) {
         // Company CHANGED - must use nextBillNumber from NEW company
         console.log('🔄 Company CHANGED - Using NEW company bill number');
@@ -998,26 +1002,26 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         }
         billNumberToSave = nextBillNumber;
         console.log('   Using nextBillNumber (new company):', billNumberToSave);
-      } else if (linkedInvoiceId && values.billingCompanyId === effectiveOriginalCompanyId) {
-        // Same company - keep original
-        console.log('🔒 Company SAME - Keeping original bill number');
-        billNumberToSave = effectiveOriginalBillNumber || '';
-        console.log('   Using originalBillNumber (same company):', billNumberToSave);
-      } else if (nextBillNumber) {
-        // New order or normal case - use nextBillNumber
-        console.log('✨ New order or editing - Using nextBillNumber');
-        billNumberToSave = nextBillNumber;
-        console.log('   Using nextBillNumber:', billNumberToSave);
+      } else if (incomingBillNo) {
+        // User entered a bill number explicitly
+        console.log('✨ User entered bill number');
+        billNumberToSave = incomingBillNo;
+        console.log('   Using form billNo:', billNumberToSave);
+      } else if (!originalOrderBillNo) {
+        // Original order had no bill number; write NULL
+        console.log('✨ No original bill number and no bill entered - setting NULL');
+        billNumberToSave = null;
       } else {
-        // Fallback
-        billNumberToSave = originalBillNumber || '';
-        console.log('⚠️ Fallback - Using originalBillNumber:', billNumberToSave);
+        // Original order had a bill number and user left the field blank; keep it unchanged
+        console.log('✨ Blank form billNo, preserving existing bill_no');
+        billNumberToSave = undefined;
       }
-      
+
       console.log('   📝 Bill Number Logic:');
       console.log('      companyChanged:', companyChanged);
       console.log('      nextBillNumber:', nextBillNumber);
-      console.log('      originalBillNumber:', originalBillNumber);
+      console.log('      originalOrderBillNo:', originalOrderBillNo);
+      console.log('      incomingBillNo:', incomingBillNo);
       console.log('      billNumberToSave:', billNumberToSave);
       console.log('      linkedInvoiceId:', linkedInvoiceId);
       console.log('      cancelledInvoiceId:', cancelledInvoiceId);
@@ -1031,15 +1035,17 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         discount_amount: finalDiscountAmount,
         round_off: values.roundOff,
         freight_charges: values.freightCharges,
-        bill_no: billNumberToSave,
         dispatch_date: values.dispatchDate && values.dispatchDate.trim() ? values.dispatchDate : null,
         delivery_location: values.deliveryLocation && values.deliveryLocation.trim() ? values.deliveryLocation : null,
         transport_name: values.transportName && values.transportName.trim() ? values.transportName : null,
         booking_destination: values.bookingDestination && values.bookingDestination.trim() ? values.bookingDestination : null,
         date_of_dispatch: values.dateOfDispatch && values.dateOfDispatch.trim() ? values.dateOfDispatch : null,
       };
+      if (billNumberToSave !== undefined) {
+        updatePayload.bill_no = billNumberToSave;
+      }
 
-      // Add bill_date if company is selected and bill_no is being set
+      // Add bill_date only when a real bill number is being set on this update
       if (billNumberToSave && values.billingCompanyId) {
         updatePayload.bill_date = new Date().toISOString().split('T')[0];
         console.log('   ✅ Adding bill_date to payload:', updatePayload.bill_date);
@@ -1665,6 +1671,16 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                             </p>
                           )}
                         </div>
+                      )}
+                    </div>
+                    {/* Bill Number */}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Bill Number (Optional - leave blank to keep current bill_no)</Label>
+                      <FormField control={form.control} name="billNo" render={({ field }) => (<FormItem><FormControl><Input placeholder="Enter a bill number only if you want to set/change it" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
+                      {nextBillNumber && !form.getValues('billNo') && (
+                        <p className="text-xs text-amber-600">
+                          💡 <span className="font-semibold">Suggested:</span> {nextBillNumber}
+                        </p>
                       )}
                     </div>
                   </div>
