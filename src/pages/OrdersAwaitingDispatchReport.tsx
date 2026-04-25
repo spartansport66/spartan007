@@ -34,6 +34,8 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
   const [sortColumn, setSortColumn] = useState<keyof AwaitingDispatchOrder>('order_date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [hodStatusFilter, setHodStatusFilter] = useState<'approved' | 'disapproved' | 'all' | 'approved-pending'>('approved');
+  const [salesPersons, setSalesPersons] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedSalesPerson, setSelectedSalesPerson] = useState<string>('');
 
   // Fetch orders awaiting dispatch based on filters
   const fetchAwaitingDispatchOrders = async (from?: string, to?: string) => {
@@ -81,6 +83,7 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
           dealer_id,
           hod_status,
           dealers!left(name),
+          profiles!left(first_name,last_name),
           payments!left(id,payment_method)
         `
         )
@@ -103,6 +106,10 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
         .gte('order_date', `${from_date}T00:00:00.000Z`)
         .lte('order_date', `${to_date}T23:59:59.999Z`);
 
+      if (selectedSalesPerson) {
+        query = query.eq('user_id', selectedSalesPerson);
+      }
+
       query = query.order('order_date', { ascending: false });
 
       const { data, error } = await query;
@@ -123,9 +130,7 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
       if (userIds.length > 0) {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name')
-          .in('id', userIds);
-
+        .select('id, first_name, last_name, user_type')
         if (profileError) {
           console.error('Supabase profile fetch error:', profileError);
         } else if (profileData) {
@@ -167,6 +172,22 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
           }
         }
 
+        // Exclude Pawan or admin sales person orders
+        const profile = order.user_id ? profilesById[order.user_id] : undefined;
+        const salesPersonName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim().toLowerCase();
+        if (profile?.user_type === 'admin') {
+          console.log(`Excluding admin sales person order #${order.order_number}`);
+          return false;
+        }
+        if (salesPersonName.includes('pawan')) {
+          console.log(`Excluding Pawan sales person order #${order.order_number}`);
+          return false;
+        }
+        if (salesPersonName.includes('admin')) {
+          console.log(`Excluding Admin sales person order #${order.order_number}`);
+          return false;
+        }
+
         // Filter for 'approved-pending': only include approved and pending (null), exclude disapproved
         if (hodStatusFilter === 'approved-pending') {
           if (order.hod_status === 'disapproved') {
@@ -186,14 +207,15 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
         const daysPending = Math.floor(timeDiff / (1000 * 3600 * 24));
         const profile = order.user_id ? profilesById[order.user_id] : undefined;
 
+        const profileName = `${order.profiles?.first_name || profile?.first_name || ''} ${order.profiles?.last_name || profile?.last_name || ''}`.trim();
         return {
           order_id: order.id,
           order_number: order.order_number,
-          dealer_name: order.dealers?.name || 'Unknown',
+          dealer_name: order.dealers?.name || order.dealer_id || 'Unknown',
           dealer_id: order.dealer_id,
           order_date: order.order_date,
           total_amount: Number(order.total_amount) || 0,
-          sales_person_name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Unknown',
+          sales_person_name: profileName || 'Unknown',
           sales_person_id: order.user_id,
           days_pending: daysPending,
           hod_status: order.hod_status || null,
@@ -218,8 +240,33 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
     }
   };
 
+  const fetchSalesPersons = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('user_type', 'sales_person')
+        .order('first_name', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching sales persons:', error);
+        return;
+      }
+
+      setSalesPersons(
+        (data || []).map((profile: any) => ({
+          id: profile.id,
+          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.id,
+        }))
+      );
+    } catch (error) {
+      console.error('Error fetching sales persons:', error);
+    }
+  };
+
   // Fetch data on component mount
   useEffect(() => {
+    fetchSalesPersons();
     fetchAwaitingDispatchOrders();
   }, []);
 
@@ -242,6 +289,7 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
 
     setFromDate(defaultFromDate.toISOString().split('T')[0]);
     setToDate(defaultToDate.toISOString().split('T')[0]);
+    setSelectedSalesPerson('');
     fetchAwaitingDispatchOrders(defaultFromDate.toISOString().split('T')[0], defaultToDate.toISOString().split('T')[0]);
   };
 
@@ -430,7 +478,7 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
         <body>
           <h1>Orders Awaiting Dispatch Report</h1>
           <div class="filters">
-            <p><strong>Period:</strong> ${fromDateFormatted} to ${toDateFormatted} | <strong>HOD Status:</strong> ${hodStatusFilter === 'all' ? 'All (Approved & Disapproved & Pending)' : hodStatusFilter === 'approved' ? 'Approved Only' : hodStatusFilter === 'disapproved' ? 'Disapproved Only' : 'Approved & Pending'}</p>
+            <p><strong>Period:</strong> ${fromDateFormatted} to ${toDateFormatted} | <strong>Sales Person:</strong> ${selectedSalesPerson ? (salesPersons.find(sp => sp.id === selectedSalesPerson)?.name || selectedSalesPerson) : 'All'} | <strong>HOD Status:</strong> ${hodStatusFilter === 'all' ? 'All (Approved & Disapproved & Pending)' : hodStatusFilter === 'approved' ? 'Approved Only' : hodStatusFilter === 'disapproved' ? 'Disapproved Only' : 'Approved & Pending'}</p>
           </div>
     `;
 
@@ -622,6 +670,33 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
                 fontFamily: 'inherit',
               }}
             />
+          </div>
+
+          {/* Sales Person Filter */}
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '6px', color: '#333' }}>
+              Sales Person
+            </label>
+            <select
+              value={selectedSalesPerson}
+              onChange={(e) => setSelectedSalesPerson(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '14px',
+                fontFamily: 'inherit',
+                backgroundColor: 'white',
+              }}
+            >
+              <option value="">All Sales Persons</option>
+              {salesPersons.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* HOD Status Filter */}

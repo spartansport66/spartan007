@@ -24,10 +24,16 @@ interface OrderToDispatch {
   total_amount: number;
   dealer_name: string;
   dealer_id: string;
+  sales_person_name: string;
   is_urgent?: boolean;
 }
 
 interface DealerOption {
+  value: string;
+  label: string;
+}
+
+interface SalesPersonOption {
   value: string;
   label: string;
 }
@@ -42,6 +48,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
   const [orders, setOrders] = useState<OrderToDispatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
+  const [salesPersons, setSalesPersons] = useState<SalesPersonOption[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isBulkPrinting, setIsBulkPrinting] = useState(false);
@@ -50,7 +57,9 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
   // Filter states
   const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
-  const [filterDate, setFilterDate] = useState<string>('');
+  const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
+  const [filterFromDate, setFilterFromDate] = useState<string>('');
+  const [filterToDate, setFilterToDate] = useState<string>('');
   
   // Dialog states
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
@@ -94,14 +103,33 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         setAllDealers(dealersData.map(d => ({ value: d.id, label: d.name })));
       }
 
+      // Fetch all sales persons for the filter dropdown
+      const { data: salesPersonData, error: salesPersonError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('user_type', 'sales_person')
+        .order('first_name', { ascending: true });
+      if (salesPersonError) {
+        console.error('Error fetching sales persons for filter:', salesPersonError.message);
+        setSalesPersons([]);
+      } else {
+        setSalesPersons((salesPersonData || []).map((p: any) => ({
+          value: p.id,
+          label: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.id,
+        })));
+      }
+
       // Build the query for orders awaiting dispatch
       let query = supabase
         .from('orders')
         .select(`
-          'id, order_number, order_date, total_amount, is_urgent,'
+          id, order_number, order_date, total_amount, is_urgent, user_id,
           dealers (id, name)
         `)
+        .is('bill_no', null)
         .eq('dispatched', false)
+        .neq('hod_status', 'disapproved')
+        .neq('dealers.name', 'Online Order')
         .order('order_date', { ascending: true });
 
       // Apply filters
@@ -111,10 +139,16 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
       if (filterDealerId) {
         query = query.eq('dealer_id', filterDealerId);
       }
-      if (filterDate) {
-        const startOfDay = `${filterDate}T00:00:00.000Z`;
-        const endOfDay = `${filterDate}T23:59:59.999Z`;
-        query = query.gte('order_date', startOfDay).lte('order_date', endOfDay);
+      if (filterSalesPersonId) {
+        query = query.eq('user_id', filterSalesPersonId);
+      }
+      if (filterFromDate) {
+        const startOfDay = `${filterFromDate}T00:00:00.000Z`;
+        query = query.gte('order_date', startOfDay);
+      }
+      if (filterToDate) {
+        const endOfDay = `${filterToDate}T23:59:59.999Z`;
+        query = query.lte('order_date', endOfDay);
       }
 
       const { data: ordersData, error: ordersError } = await query;
@@ -123,15 +157,50 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         showError('Failed to load orders to dispatch.');
         setOrders([]);
       } else {
-        const formattedOrders: OrderToDispatch[] = (ordersData || []).map((order: any) => ({
-          id: order.id,
-          order_number: order.order_number,
-          order_date: order.order_date,
-          total_amount: order.total_amount,
-          dealer_name: order.dealers?.name || 'N/A',
-          dealer_id: order.dealers?.id || '',
-          is_urgent: order.is_urgent || false,
-        }));
+        const orderUserIds = Array.from(new Set((ordersData || [])
+          .map((order: any) => order.user_id)
+          .filter((id: string | null | undefined): id is string => Boolean(id))
+        ));
+
+        let profilesMap: Record<string, { first_name?: string; last_name?: string; user_type?: string }> = {};
+        if (orderUserIds.length > 0) {
+          const { data: profileRows, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, user_type')
+            .in('id', orderUserIds);
+
+          if (profileError) {
+            console.error('Error fetching profiles for orders:', profileError.message);
+          } else if (profileRows) {
+            profileRows.forEach((profile: any) => {
+              profilesMap[profile.id] = profile;
+            });
+          }
+        }
+
+        const filteredOrdersData = (ordersData || []).filter((order: any) => {
+          const profile = order.user_id ? profilesMap[order.user_id] : undefined;
+          const profileName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim().toLowerCase();
+          if (profile?.user_type === 'admin') return false;
+          if (profileName.includes('pawan')) return false;
+          if (profileName.includes('admin')) return false;
+          return true;
+        });
+
+        const formattedOrders: OrderToDispatch[] = filteredOrdersData.map((order: any) => {
+          const profile = order.user_id ? profilesMap[order.user_id] : undefined;
+          return {
+            id: order.id,
+            order_number: order.order_number,
+            order_date: order.order_date,
+            total_amount: order.total_amount,
+            dealer_name: order.dealers?.name || 'N/A',
+            dealer_id: order.dealers?.id || '',
+            sales_person_name: `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim() || 'Unknown',
+            is_urgent: order.is_urgent || false,
+          };
+        });
+
         setOrders(formattedOrders);
         setCurrentPage(1); // Reset to first page on new fetch
       }
@@ -141,7 +210,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
     } finally {
       setLoading(false);
     }
-  }, [filterOrderNumber, filterDealerId, filterDate]);
+  }, [filterOrderNumber, filterDealerId, filterSalesPersonId, filterFromDate, filterToDate]);
 
   useEffect(() => {
     fetchOrdersAndDealers();
@@ -198,7 +267,10 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
   const handleClearFilters = () => {
     setFilterOrderNumber('');
     setFilterDealerId('');
-    setFilterDate('');
+    setFilterSalesPersonId('');
+    setFilterFromDate('');
+    setFilterToDate('');
+    fetchOrdersAndDealers();
   };
 
   const handleSelectOrder = (orderId: string, checked: boolean) => {
@@ -213,51 +285,86 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
     if (selectedOrderIds.length === 0) return;
     setIsBulkPrinting(true);
     try {
+      const { data: orderRows, error: fetchError } = await supabase
+        .from('orders')
+        .select(`
+          id, order_number, order_date, total_amount, discount_amount,
+          dealers (name, address, phone, city, state),
+          sales (quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code))
+        `)
+        .in('id', selectedOrderIds);
+
+      if (fetchError) {
+        throw new Error(fetchError.message || 'Unable to fetch selected order details.');
+      }
+
+      if (!orderRows || orderRows.length === 0) {
+        showError('No selected order details were returned.');
+        return;
+      }
+
+      const { data: onlineDetailsRows, error: onlineDetailsError } = await supabase
+        .from('online_order_details')
+        .select(`
+          order_id, client_name, city, state, contact_no,
+          online_platforms (name), platform_order_number
+        `)
+        .in('order_id', selectedOrderIds);
+
+      if (onlineDetailsError) {
+        console.error('Failed to fetch online order details:', onlineDetailsError);
+      }
+
+      const orderById = (orderRows as any[]).reduce<Record<string, any>>((acc, order) => {
+        if (order?.id) acc[order.id] = order;
+        return acc;
+      }, {});
+
+      const onlineDetailsByOrderId = (onlineDetailsRows || []).reduce<Record<string, any>>((acc, detail) => {
+        if (detail?.order_id) acc[detail.order_id] = detail;
+        return acc;
+      }, {});
+
       const doc = new jsPDF();
       const darkBlue: [number, number, number] = [30, 58, 138];
       const margin = 15;
-      const pageWidth = doc.internal.pageSize.width;
+      const pageWidth = doc.internal.pageSize.getWidth();
+      let printedCount = 0;
 
-      for (let i = 0; i < selectedOrderIds.length; i++) {
-        const { data: orderData } = await supabase
-          .from('orders')
-          .select(`
-            order_number, order_date, total_amount, discount_amount, 
-            dealers (name, address, phone, city, state), 
-            online_order_details (client_name, city, state, contact_no, online_platforms (name), platform_order_number),
-            sales (quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code))
-          `)
-          .eq('id', selectedOrderIds[i])
-          .single();
-          
+      for (const orderId of selectedOrderIds) {
+        const orderData = orderById[orderId];
         if (!orderData) continue;
-        if (i > 0) doc.addPage();
+
+        const onlineDetails = onlineDetailsByOrderId[orderId];
+        const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
+
+        if (printedCount > 0) doc.addPage();
+        printedCount += 1;
 
         doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 10, pageWidth, 15, 'F');
-        doc.setFontSize(18); doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold");
-        doc.text(companyName?.toUpperCase() || "ORDER INVOICE", pageWidth / 2, 20, { align: 'center' });
+        doc.setFontSize(18); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+        doc.text(companyName?.toUpperCase() || 'ORDER INVOICE', pageWidth / 2, 20, { align: 'center' });
 
         doc.setTextColor(0); doc.setFontSize(10); let y = 35;
-        
-        const onlineDetails = orderData.online_order_details?.[0];
-        const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
-        
-        const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name;
-        const partyAddress = isOnline 
-          ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
-          : `${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`;
-        const partyPhone = isOnline ? onlineDetails.contact_no : (orderData.dealers as any).phone;
 
-        doc.setFont("helvetica", "bold"); doc.text("PARTY DETAILS:", margin, y);
-        doc.setFont("helvetica", "normal"); y += 5; doc.text(partyName, margin, y);
-        y += 5; const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
+        const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name || 'N/A';
+        const partyAddress = isOnline
+          ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
+          : `${(orderData.dealers as any).address || 'N/A'}, ${(orderData.dealers as any).city || 'N/A'}, ${(orderData.dealers as any).state || 'N/A'}`;
+        const partyPhone = isOnline ? onlineDetails.contact_no : (orderData.dealers as any).phone || 'N/A';
+
+        doc.setFont('helvetica', 'bold'); doc.text('PARTY DETAILS:', margin, y);
+        doc.setFont('helvetica', 'normal'); y += 5; doc.text(partyName, margin, y);
+        y += 5;
+        const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
         doc.text(addressLines, margin, y);
-        
-        let rightY = 35; const rightColX = pageWidth / 2 + 10;
-        doc.setFont("helvetica", "bold"); doc.text("ORDER SUMMARY:", rightColX, rightY);
-        doc.setFont("helvetica", "normal"); rightY += 5; doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
+
+        let rightY = 35;
+        const rightColX = pageWidth / 2 + 10;
+        doc.setFont('helvetica', 'bold'); doc.text('ORDER SUMMARY:', rightColX, rightY);
+        doc.setFont('helvetica', 'normal'); rightY += 5; doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
         rightY += 5; doc.text(`Date: ${formatDate(orderData.order_date)}`, rightColX, rightY);
-        rightY += 5; doc.text(`Phone: ${partyPhone || 'N/A'}`, rightColX, rightY);
+        rightY += 5; doc.text(`Phone: ${partyPhone}`, rightColX, rightY);
 
         if (isOnline) {
           rightY += 5; doc.text(`Platform: ${(onlineDetails.online_platforms as any)?.name || 'N/A'}`, rightColX, rightY);
@@ -266,20 +373,20 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
 
         y = Math.max(y + (addressLines.length * 5), rightY + 10);
         const tableRows = (orderData.sales || []).map((sale: any) => [
-          sale.products?.code || 'N/A', 
-          sale.products?.name || 'N/A', 
-          sale.quantity.toString(), 
-          `Rs.${(sale.unit_price || 0).toFixed(2)}`, 
-          `${(sale.discount_percent || 0)}%`, 
-          `${(sale.gst_percent || 0)}%`, 
+          sale.products?.code || 'N/A',
+          sale.products?.name || 'N/A',
+          (sale.quantity ?? 0).toString(),
+          `Rs.${(sale.unit_price || 0).toFixed(2)}`,
+          `${(sale.discount_percent || 0)}%`,
+          `${(sale.gst_percent || 0)}%`,
           `Rs.${(sale.total_price || 0).toFixed(2)}`
         ]);
 
-        autoTable(doc, { 
-          head: [["Code", "Product", "Qty", "Unit Price", "Disc %", "GST %", "Total"]], 
-          body: tableRows, 
-          startY: y, 
-          headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 }, 
+        autoTable(doc, {
+          head: [['Code', 'Product', 'Qty', 'Unit Price', 'Disc %', 'GST %', 'Total']],
+          body: tableRows,
+          startY: y,
+          headStyles: { fillColor: darkBlue, halign: 'center', fontSize: 8 },
           columnStyles: {
             0: { cellWidth: 20, halign: 'center' },
             1: { cellWidth: 'auto' },
@@ -289,30 +396,41 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
             5: { cellWidth: 15, halign: 'center' },
             6: { cellWidth: 25, halign: 'right' }
           },
-          styles: { fontSize: 8, cellPadding: 2 } 
+          styles: { fontSize: 8, cellPadding: 2 }
         });
-        
+
         const finalY = (doc as any).lastAutoTable.finalY + 10;
-        const subtotal = (orderData.sales || []).reduce((sum: number, s: any) => sum + s.total_price, 0);
-        
-        doc.setFont("helvetica", "normal");
+        const subtotal = (orderData.sales || []).reduce((sum: number, s: any) => sum + (s.total_price || 0), 0);
+
+        doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.text(`Subtotal: Rs.${subtotal.toFixed(2)}`, pageWidth / 2, finalY, { align: 'center' });
-        
+
         let currentY = finalY;
-        if (orderData.discount_amount > 0) {
+        if ((orderData.discount_amount || 0) > 0) {
           currentY += 5;
-          doc.text(`Global Discount: -Rs.${orderData.discount_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
+          doc.text(`Global Discount: -Rs.${(orderData.discount_amount || 0).toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
         }
-        
+
         currentY += 7;
-        doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
         doc.text(`FINAL TOTAL: Rs.${orderData.total_amount.toFixed(2)}`, pageWidth / 2, currentY, { align: 'center' });
       }
+
+      if (printedCount === 0) {
+        showError('Selected orders could not be loaded for printing.');
+        return;
+      }
+
       doc.save(`Bulk_Order_Details_${new Date().getTime()}.pdf`);
-      showSuccess(`Generated ${selectedOrderIds.length} Order Detail PDFs.`);
+      showSuccess(`Generated ${printedCount} Order Detail PDF${printedCount > 1 ? 's' : ''}.`);
       setSelectedOrderIds([]);
-    } catch (error: any) { showError(`Failed: ${error.message}`); } finally { setIsBulkPrinting(false); }
+    } catch (error: any) {
+      console.error('Bulk print error:', error);
+      showError(`Failed: ${error.message}`);
+    } finally {
+      setIsBulkPrinting(false);
+    }
   };
 
   // Pagination logic
@@ -369,12 +487,39 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
             </Select>
           </div>
           <div className="flex-1 min-w-[150px]">
-            <Label htmlFor="filterDate">Date</Label>
+            <Label htmlFor="filterSalesPerson">Sales Person</Label>
+            <Select
+              value={filterSalesPersonId || "all"}
+              onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}
+            >
+              <SelectTrigger id="filterSalesPerson" className="w-full">
+                <SelectValue placeholder="Filter by sales person" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sales Persons</SelectItem>
+                {salesPersons.map(person => (
+                  <SelectItem key={person.value} value={person.value}>{person.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterFromDate">From Date</Label>
             <Input
-              id="filterDate"
+              id="filterFromDate"
               type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
+              value={filterFromDate}
+              onChange={(e) => setFilterFromDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterToDate">To Date</Label>
+            <Input
+              id="filterToDate"
+              type="date"
+              value={filterToDate}
+              onChange={(e) => setFilterToDate(e.target.value)}
               className="w-full"
             />
           </div>
@@ -404,6 +549,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
                       </TableHead>
                       <TableHead className="text-muted-foreground">Order No.</TableHead>
                       <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                      <TableHead className="text-muted-foreground">Sales Person</TableHead>
                       <TableHead className="text-muted-foreground">Order Date</TableHead>
                       <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
                       <TableHead className="text-muted-foreground text-center">Actions</TableHead>
@@ -417,6 +563,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
                         </TableCell>
                         <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
                         <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.sales_person_name}</TableCell>
                         <TableCell className="text-muted-foreground">{formatDate(order.order_date)}</TableCell>
                         <TableCell className="text-muted-foreground text-right">{formatCurrency(order.total_amount)}</TableCell>
                         <TableCell className="text-center">

@@ -239,63 +239,109 @@ const DispatchedOrdersCard: React.FC = () => {
     if (selectedOrderIds.length === 0) return;
     setIsBulkPrinting(true);
     try {
+      const { data: orderRows, error: fetchError } = await supabase
+        .from('orders')
+        .select(`
+          id, order_number, order_date, total_amount, dispatch_number, bill_no,
+          dealers (name, address, city, state),
+          sales (quantity, products (name, code))
+        `)
+        .in('id', selectedOrderIds);
+
+      if (fetchError) {
+        throw new Error(fetchError.message || 'Unable to fetch selected gate passes.');
+      }
+
+      if (!orderRows || orderRows.length === 0) {
+        showError('No selected orders were returned for gate pass printing.');
+        return;
+      }
+
+      const { data: onlineDetailsRows, error: onlineDetailsError } = await supabase
+        .from('online_order_details')
+        .select('order_id, client_name, city, state')
+        .in('order_id', selectedOrderIds);
+
+      if (onlineDetailsError) {
+        console.error('Failed to fetch online order details:', onlineDetailsError);
+      }
+
+      const orderById = (orderRows as any[]).reduce<Record<string, any>>((acc, order) => {
+        if (order?.id) acc[order.id] = order;
+        return acc;
+      }, {});
+
+      const onlineDetailsByOrderId = (onlineDetailsRows || []).reduce<Record<string, any>>((acc, detail) => {
+        if (detail?.order_id) acc[detail.order_id] = detail;
+        return acc;
+      }, {});
+
       const doc = new jsPDF();
       const darkBlue: [number, number, number] = [30, 58, 138];
       const margin = 15;
-      const pageWidth = doc.internal.pageSize.width;
+      const pageWidth = doc.internal.pageSize.getWidth();
+      let printedCount = 0;
 
-      for (let i = 0; i < selectedOrderIds.length; i++) {
-        const { data: orderData } = await supabase
-          .from('orders')
-          .select(`
-            order_number, order_date, total_amount, dispatch_number, bill_no, 
-            dealers (name, address, city, state), 
-            online_order_details (client_name, city, state),
-            sales (quantity, products (name, code))
-          `)
-          .eq('id', selectedOrderIds[i])
-          .single();
-          
+      for (const orderId of selectedOrderIds) {
+        const orderData = orderById[orderId];
         if (!orderData) continue;
-        if (i > 0) doc.addPage();
 
-        doc.setFontSize(20); doc.setFont("helvetica", "bold");
+        const onlineDetails = onlineDetailsByOrderId[orderId];
+        const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
+
+        if (printedCount > 0) doc.addPage();
+        printedCount += 1;
+
+        doc.setFontSize(20); doc.setFont('helvetica', 'bold');
         doc.text(`Gate Pass: ${orderData.dispatch_number || 'N/A'}`, pageWidth / 2, 15, { align: 'center' });
         doc.setFillColor(darkBlue[0], darkBlue[1], darkBlue[2]); doc.rect(0, 22, pageWidth, 12, 'F');
         doc.setFontSize(16); doc.setTextColor(255, 255, 255);
-        doc.text(companyName?.toUpperCase() || "DISPATCH SLIP", pageWidth / 2, 30, { align: 'center' });
-        
-        doc.setTextColor(0); doc.setFontSize(10); let y = 45;
-        
-        const onlineDetails = orderData.online_order_details?.[0];
-        const isOnline = (orderData.dealers as any)?.name === 'Online Order' && onlineDetails;
-        
-        const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name;
-        const partyAddress = isOnline 
-          ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
-          : `${(orderData.dealers as any).address}, ${(orderData.dealers as any).city}, ${(orderData.dealers as any).state}`;
+        doc.text(companyName?.toUpperCase() || 'DISPATCH SLIP', pageWidth / 2, 30, { align: 'center' });
 
-        doc.setFont("helvetica", "bold"); doc.text("PARTY DETAILS:", margin, y);
-        doc.setFont("helvetica", "normal"); y += 5; doc.text(partyName, margin, y);
+        doc.setTextColor(0); doc.setFontSize(10); let y = 45;
+
+        const partyName = isOnline ? onlineDetails.client_name : (orderData.dealers as any).name || 'N/A';
+        const partyAddress = isOnline
+          ? `${onlineDetails.city || ''}, ${onlineDetails.state || ''}`.trim() || 'N/A'
+          : `${(orderData.dealers as any).address || 'N/A'}, ${(orderData.dealers as any).city || 'N/A'}, ${(orderData.dealers as any).state || 'N/A'}`;
+
+        doc.setFont('helvetica', 'bold'); doc.text('PARTY DETAILS:', margin, y);
+        doc.setFont('helvetica', 'normal'); y += 5; doc.text(partyName, margin, y);
         y += 5; const addressLines = doc.splitTextToSize(partyAddress, pageWidth / 2 - margin);
         doc.text(addressLines, margin, y);
-        
+
         let rightY = 45; const rightColX = pageWidth / 2 + 10;
-        doc.setFont("helvetica", "bold"); doc.text("ORDER DETAILS:", rightColX, rightY);
-        doc.setFont("helvetica", "normal"); rightY += 5; doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
+        doc.setFont('helvetica', 'bold'); doc.text('ORDER DETAILS:', rightColX, rightY);
+        doc.setFont('helvetica', 'normal'); rightY += 5; doc.text(`Order No: #${orderData.order_number}`, rightColX, rightY);
         rightY += 5; doc.text(`Bill No: ${orderData.bill_no || 'N/A'}`, rightColX, rightY);
         rightY += 5; doc.text(`Date: ${formatDate(orderData.order_date)}`, rightColX, rightY);
 
         y = Math.max(y + (addressLines.length * 5), rightY + 10);
-        const tableRows = (orderData.sales || []).map((sale: any) => [sale.products?.code || 'N/A', sale.products?.name || 'N/A', sale.quantity.toString()]);
-        autoTable(doc, { head: [["Code", "Product Name", "Quantity"]], body: tableRows, startY: y, headStyles: { fillColor: darkBlue, halign: 'center' }, styles: { fontSize: 9, cellPadding: 3 } });
-        doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+        const tableRows = (orderData.sales || []).map((sale: any) => [
+          sale.products?.code || 'N/A',
+          sale.products?.name || 'N/A',
+          (sale.quantity ?? 0).toString()
+        ]);
+
+        autoTable(doc, { head: [['Code', 'Product Name', 'Quantity']], body: tableRows, startY: y, headStyles: { fillColor: darkBlue, halign: 'center' }, styles: { fontSize: 9, cellPadding: 3 } });
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
         doc.text(`TOTAL BILL AMOUNT: Rs. ${orderData.total_amount.toFixed(2)}`, pageWidth / 2, (doc as any).lastAutoTable.finalY + 15, { align: 'center' });
       }
+
+      if (printedCount === 0) {
+        showError('Selected orders could not be loaded for printing.');
+        return;
+      }
+
       doc.save(`Bulk_Gate_Passes_${new Date().getTime()}.pdf`);
-      showSuccess(`Generated ${selectedOrderIds.length} Gate Passes.`);
+      showSuccess(`Generated ${printedCount} Gate Pass${printedCount > 1 ? 'es' : ''}.`);
       setSelectedOrderIds([]);
-    } catch (error: any) { showError(`Failed: ${error.message}`); } finally { setIsBulkPrinting(false); }
+    } catch (error: any) {
+      console.error('Bulk gate pass print error:', error);
+      showError(`Failed: ${error.message}`);
+    } finally {
+      setIsBulkPrinting(false);
+    }
   };
 
   // Pagination logic

@@ -19,9 +19,15 @@ interface OrderToDispatch {
   order_date: string;
   total_amount: number;
   dealer_name: string;
+  sales_person_name: string;
 }
 
 interface DealerOption {
+  value: string;
+  label: string;
+}
+
+interface SalesPersonOption {
   value: string;
   label: string;
 }
@@ -35,9 +41,11 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
   const [orders, setOrders] = useState<OrderToDispatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [allDealers, setAllDealers] = useState<DealerOption[]>([]);
+  const [salesPersons, setSalesPersons] = useState<SalesPersonOption[]>([]);
   // Filter states
   const [filterOrderNumber, setFilterOrderNumber] = useState<string>('');
   const [filterDealerId, setFilterDealerId] = useState<string>('');
+  const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
   const [filterFromOrderDate, setFilterFromOrderDate] = useState<string>('');
   const [filterToOrderDate, setFilterToOrderDate] = useState<string>('');
 
@@ -53,17 +61,37 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
         showError('Failed to load dealers for filter.');
         setAllDealers([]);
       } else {
-        setAllDealers(dealersData.map(d => ({ value: d.id, label: d.name })));
+        setAllDealers((dealersData || []).map(d => ({ value: d.id, label: d.name })));
+      }
+
+      // Fetch all sales persons for the filter dropdown
+      const { data: salesPersonData, error: salesPersonError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('user_type', 'sales_person')
+        .order('first_name', { ascending: true });
+      if (salesPersonError) {
+        console.error('Error fetching sales persons for filter:', salesPersonError.message);
+        setSalesPersons([]);
+      } else {
+        setSalesPersons((salesPersonData || []).map((p: any) => ({
+          value: p.id,
+          label: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.id,
+        })));
       }
 
       // Build the query for orders awaiting dispatch
       let query = supabase
         .from('orders')
         .select(`
-          id, order_number, order_date, total_amount,
-          dealers (id, name)
+          id, order_number, order_date, total_amount, user_id,
+          dealers (id, name),
+          profiles!left(first_name, last_name, user_type)
         `)
+        .is('bill_no', null)
         .eq('dispatched', false)
+        .neq('hod_status', 'disapproved')
+        .neq('dealers.name', 'Online Order')
         .order('order_date', { ascending: true });
 
       // Apply filters
@@ -72,6 +100,9 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
       }
       if (filterDealerId) {
         query = query.eq('dealer_id', filterDealerId);
+      }
+      if (filterSalesPersonId) {
+        query = query.eq('user_id', filterSalesPersonId);
       }
       if (filterFromOrderDate) {
         const startOfDay = `${filterFromOrderDate}T00:00:00.000Z`;
@@ -88,12 +119,21 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
         showError('Failed to load orders to dispatch.');
         setOrders([]);
       } else {
-        const formattedOrders: OrderToDispatch[] = (ordersData || []).map((order: any) => ({
+        const filteredOrders = (ordersData || []).filter((order: any) => {
+          const profileName = `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim().toLowerCase();
+          if (order.profiles?.user_type === 'admin') return false;
+          if (profileName.includes('pawan')) return false;
+          if (profileName.includes('admin')) return false;
+          return true;
+        });
+
+        const formattedOrders: OrderToDispatch[] = filteredOrders.map((order: any) => ({
           id: order.id,
           order_number: order.order_number,
           order_date: order.order_date,
           total_amount: order.total_amount,
           dealer_name: order.dealers?.name || 'N/A',
+          sales_person_name: `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim() || 'Unknown',
         }));
         setOrders(formattedOrders);
       }
@@ -103,7 +143,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
     } finally {
       setLoading(false);
     }
-  }, [filterOrderNumber, filterDealerId, filterFromOrderDate, filterToOrderDate]);
+  }, [filterOrderNumber, filterDealerId, filterSalesPersonId, filterFromOrderDate, filterToOrderDate]);
 
   useEffect(() => {
     if (isOpen) {
@@ -114,8 +154,10 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
   const handleClearFilters = () => {
     setFilterOrderNumber('');
     setFilterDealerId('');
+    setFilterSalesPersonId('');
     setFilterFromOrderDate('');
     setFilterToOrderDate('');
+    fetchOrdersAndDealers();
   };
 
   const totalAmount = orders.reduce((sum, order) => sum + order.total_amount, 0);
@@ -127,10 +169,11 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
     doc.setFontSize(11);
     doc.setTextColor(100);
 
-    const tableColumn = ["Order No.", "Dealer Name", "Order Date", "Total Amount"];
+    const tableColumn = ["Order No.", "Dealer Name", "Sales Person", "Order Date", "Total Amount"];
     const tableRows = orders.map(order => [
       order.order_number,
       order.dealer_name,
+      order.sales_person_name,
       new Date(order.order_date).toLocaleDateString(),
       `₹${order.total_amount.toFixed(2)}`,
     ]);
@@ -196,6 +239,20 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
             </Select>
           </div>
           <div className="flex-1 min-w-[150px]">
+            <Label htmlFor="filterSalesPerson">Sales Person</Label>
+            <Select value={filterSalesPersonId || "all"} onValueChange={(value) => setFilterSalesPersonId(value === "all" ? "" : value)}>
+              <SelectTrigger id="filterSalesPerson" className="w-full">
+                <SelectValue placeholder="Filter by sales person" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sales Persons</SelectItem>
+                {salesPersons.map(person => (
+                  <SelectItem key={person.value} value={person.value}>{person.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1 min-w-[150px]">
             <Label htmlFor="filterFromOrderDate">From Order Date</Label>
             <Input
               id="filterFromOrderDate"
@@ -239,6 +296,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead className="text-muted-foreground">Order No.</TableHead>
                       <TableHead className="text-muted-foreground">Dealer Name</TableHead>
+                      <TableHead className="text-muted-foreground">Sales Person</TableHead>
                       <TableHead className="text-muted-foreground">Order Date</TableHead>
                       <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
                     </TableRow>
@@ -248,6 +306,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
                       <TableRow key={order.id} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
                         <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
+                        <TableCell className="text-muted-foreground">{order.sales_person_name}</TableCell>
                         <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
                         <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       </TableRow>
