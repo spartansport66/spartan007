@@ -141,6 +141,17 @@ const formSchema = z.object({
   dateOfDispatch: z.string().default(''),
 });
 
+const normalizeGstPercentValue = (value: string | number | null | undefined): number => {
+  const parsed = typeof value === 'string' ? parseFloat(value) : typeof value === 'number' ? value : NaN;
+  if (isNaN(parsed) || parsed === 0) return 0;
+  if (parsed > 0 && parsed < 1) return parsed * 100;
+  return parsed;
+};
+
+const formatGstPercentValue = (value: string | number | null | undefined): string => {
+  return normalizeGstPercentValue(value).toFixed(2);
+};
+
 // Helper function to fetch all products with pagination
 const fetchAllProducts = async (): Promise<Product[]> => {
   let allProducts: Product[] = [];
@@ -410,8 +421,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [newItemUnitPrice, setNewItemUnitPrice] = useState<number>(0);
   const [newItemDiscountPercent, setNewItemDiscountPercent] = useState<string>('0');
   const [newItemGstPercent, setNewItemGstPercent] = useState<string>('0');
+  const [newComboQuantity, setNewComboQuantity] = useState<number>(1);
+  const [newComboUnitPrice, setNewComboUnitPrice] = useState<number>(0);
   const [newComboDiscountPercent, setNewComboDiscountPercent] = useState<string>('0');
-  const [newComboGstPercent, setNewComboGstPercent] = useState<string>('0');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -556,7 +568,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         // Never fall back to current product price - preserve original order price
         const unitPrice = sale.unit_price ?? 0;
         const discPercent = sale.discount_percent || 0;
-        const gstPercent = sale.gst_percent || parseFloat(sale.products?.gst || "0") || 0;
+        const gstPercent = normalizeGstPercentValue(sale.gst_percent ?? sale.products?.gst ?? "0");
         
         const taxableUnitPrice = unitPrice * (1 - discPercent / 100);
         const taxableValue = taxableUnitPrice * sale.quantity;
@@ -654,6 +666,23 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
     if (isOpen) {
       fetchCompanies();
+    }
+  }, [isOpen]);
+
+  // Clear product/combo search state when dialog closes
+  useEffect(() => {
+    if (!isOpen) {
+      setProductSearch('');
+      setIsProductPopoverOpen(false);
+      setNewItemProductId('');
+      setNewItemComboId('');
+      setNewComboQuantity(1);
+      setNewComboUnitPrice(0);
+      setNewItemQuantity(1);
+      setNewItemUnitPrice(0);
+      setNewItemDiscountPercent('0');
+      setNewItemGstPercent('0');
+      setNewComboDiscountPercent('0');
     }
   }, [isOpen]);
 
@@ -819,7 +848,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   const newItemCalculations = useMemo(() => {
     const discPercent = parseFloat(newItemDiscountPercent as any) || 0;
-    const gstPercent = parseFloat(newItemGstPercent as any) || 0;
+    const gstPercent = normalizeGstPercentValue(newItemGstPercent);
     const taxableUnitPrice = newItemUnitPrice * (1 - discPercent / 100);
     const taxableValue = taxableUnitPrice * newItemQuantity;
     const gstAmount = (taxableValue * gstPercent) / 100;
@@ -846,7 +875,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         product_code: product.code,
         unit_dp: newItemUnitPrice,
         discount_percent: parseFloat(newItemDiscountPercent as any) || 0,
-        gst_percent: parseFloat(newItemGstPercent as any) || 0,
+        gst_percent: normalizeGstPercentValue(newItemGstPercent),
         taxable_value: newItemCalculations.taxableValue,
         gst_amount: newItemCalculations.gstAmount,
         total_price: newItemCalculations.totalPrice,
@@ -870,11 +899,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       }
 
       const comboItems = selectedCombo.items.map((item, index) => {
-        const itemQuantity = item.quantity * newItemQuantity;
-        const unitPrice = item.unit_price || 0;
-        // Use combo discount/GST if specified, otherwise use item defaults
+        const itemQuantity = item.quantity * newComboQuantity;
+        const comboBase = selectedCombo.combo_dp || selectedCombo.items.reduce((sum, current) => sum + (current.unit_price || 0) * current.quantity, 0);
+        const ratio = comboBase > 0 ? newComboUnitPrice / comboBase : 1;
+        const unitPrice = (item.unit_price || 0) * ratio;
         const discPercent = parseFloat(newComboDiscountPercent as any) || item.discount_percent || 0;
-        const gstPercent = parseFloat(newComboGstPercent as any) || item.gst_percent || 0;
+        const gstPercent = normalizeGstPercentValue(item.gst_percent);
         
         const taxableUnitPrice = unitPrice * (1 - discPercent / 100);
         const taxableValue = taxableUnitPrice * itemQuantity;
@@ -898,9 +928,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
       setOrderItems(prevItems => [...prevItems, ...comboItems]);
       setNewItemComboId('');
-      setNewItemQuantity(1);
+      setNewComboQuantity(1);
+      setNewComboUnitPrice(0);
       setNewComboDiscountPercent('0');
-      setNewComboGstPercent('0');
       showSuccess(`Added ${selectedCombo.combo_name} to order`);
     }
   };
@@ -908,7 +938,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const updateOrderItem = (id: string, field: keyof OrderItem, value: number) => {
     setOrderItems(prev => prev.map(item => {
       if (item.id === id) {
-        const updatedItem = { ...item, [field]: value };
+        const normalizedValue = field === 'gst_percent' ? normalizeGstPercentValue(value) : value;
+        const updatedItem = { ...item, [field]: normalizedValue };
         const discount = (updatedItem.unit_dp * updatedItem.discount_percent) / 100;
         const discountedUnitPrice = Math.max(0, updatedItem.unit_dp - discount);
         updatedItem.taxable_value = discountedUnitPrice * updatedItem.quantity;
@@ -1662,25 +1693,26 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                     
                     {/* Products Tab */}
                     <TabsContent value="products" className="space-y-2 mt-2">
-                      <div className="flex gap-2">
-                        <div className="flex-1">
+                      <div className="grid grid-cols-12 gap-2 items-end">
+                        <div className="col-span-4">
                           <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                             <PopoverTrigger asChild>
-                              <Button variant="outline" role="combobox" className="w-full justify-between h-8 text-xs">{productSearch || 'Select product'}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
+                              <Button variant="outline" role="combobox" className="w-full justify-between h-8 text-xs">{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-[32rem] p-0" align="start">
                               <div className="p-2">
-                                <Input placeholder="Search..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 text-xs mb-2" />
+                                <Input placeholder="Search by name or code..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 text-xs mb-2" />
                                 <ScrollArea className="h-64">
-                                  {products.filter(product => {
-                                    const searchText = productSearch.trim().toLowerCase();
-                                    if (!searchText) return true;
-                                    return (
-                                      product.name.toLowerCase().includes(searchText) ||
-                                      product.code?.toLowerCase().includes(searchText)
-                                    );
-                                  }).map(product => (
-                                    <button key={product.id} onClick={() => { setNewItemProductId(product.id); setProductSearch(''); setIsProductPopoverOpen(false); }} className="w-full justify-start font-normal h-auto py-2 px-2 text-xs hover:bg-gray-100">
+                                  {filteredProducts.map(product => (
+                                    <button key={product.id} onClick={() => {
+                                      setNewItemProductId(product.id);
+                                      setProductSearch('');
+                                      setIsProductPopoverOpen(false);
+                                      setNewItemQuantity(1);
+                                      setNewItemUnitPrice(product.dp || 0);
+                                      setNewItemDiscountPercent('0');
+                                      setNewItemGstPercent(formatGstPercentValue(product.gst || '0'));
+                                    }} className="w-full justify-start font-normal h-auto py-2 px-2 text-xs hover:bg-gray-100">
                                       <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
                                       <div className="flex flex-col items-start w-full">
                                         <div className="flex items-center justify-between w-full gap-2">
@@ -1696,36 +1728,95 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                             </PopoverContent>
                           </Popover>
                         </div>
-                        <Button type="button" onClick={addOrderItem} disabled={!newItemProductId || isSubmitting} className="h-8 text-xs px-2 bg-green-600 hover:bg-green-700">
-                          <Plus className="h-3 w-3 mr-1" /> Add
-                        </Button>
+
+                        <div className="col-span-2">
+                          <Label className="text-xs font-semibold">Qty</Label>
+                          <Input type="number" min={1} value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} disabled={isSubmitting} className="h-8 text-xs" />
+                        </div>
+
+                        <div className="col-span-2">
+                          <Label className="text-xs font-semibold">Price (DP)</Label>
+                          <Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} disabled={isSubmitting} className="h-8 text-xs" />
+                        </div>
+
+                        <div className="col-span-2">
+                          <Label className="text-xs font-semibold">Disc %</Label>
+                          <Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(e.target.value)} disabled={isSubmitting} className="h-8 text-xs" />
+                        </div>
+
+                        <div className="col-span-2">
+                          <Label className="text-xs font-semibold">GST %</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newItemGstPercent}
+                            onChange={(e) => setNewItemGstPercent(e.target.value)}
+                            onBlur={() => setNewItemGstPercent(formatGstPercentValue(newItemGstPercent))}
+                            disabled={isSubmitting}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+
+                        <div className="col-span-12 sm:col-span-12 md:col-span-12 lg:col-span-12 xl:col-span-12">
+                          <Button type="button" onClick={addOrderItem} disabled={!newItemProductId || isSubmitting} className="h-8 w-full text-xs px-2 bg-green-600 hover:bg-green-700">
+                            <Plus className="h-3 w-3 mr-1" /> Add
+                          </Button>
+                        </div>
                       </div>
                     </TabsContent>
 
                     {/* Combos Tab */}
                     <TabsContent value="combos" className="space-y-2 mt-2">
-                      <div className="flex gap-2">
-                        <Select value={newItemComboId} onValueChange={setNewItemComboId} disabled={isSubmitting}>
-                          <SelectTrigger className="h-8 text-xs flex-1">
-                            <SelectValue placeholder="Select combo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {combos.map(combo => {
-                              const avgDiscount = combo.items && combo.items.length > 0 ? combo.items.reduce((sum, item) => sum + (item.discount_percent || 0), 0) / combo.items.length : 0;
-                              return (
-                                <SelectItem key={combo.combo_id} value={combo.combo_id}>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{combo.combo_name}</span>
-                                    <span className="text-xs text-muted-foreground">{combo.item_count} items • ₹{combo.combo_dp.toFixed(2)}</span>
-                                  </div>
-                                </SelectItem>
-                              );
-                            })}
-                          </SelectContent>
-                        </Select>
-                        <Button type="button" onClick={addOrderItem} disabled={!newItemComboId || isSubmitting} className="h-8 text-xs px-2 bg-green-600 hover:bg-green-700">
-                          <Plus className="h-3 w-3 mr-1" /> Add
-                        </Button>
+                      <div className="grid grid-cols-12 gap-2 items-end">
+                        <div className="col-span-4">
+                          <Select value={newItemComboId} onValueChange={(value) => {
+                            setNewItemComboId(value);
+                            const selectedCombo = combos.find(c => c.combo_id === value);
+                            if (selectedCombo) {
+                              setNewComboQuantity(1);
+                              setNewComboUnitPrice(selectedCombo.combo_dp || 0);
+                              setNewComboDiscountPercent('0');
+                            }
+                          }} disabled={isSubmitting}>
+                            <SelectTrigger className="h-8 text-xs flex-1">
+                              <SelectValue placeholder="Select combo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {combos.map(combo => {
+                                const avgDiscount = combo.items && combo.items.length > 0 ? combo.items.reduce((sum, item) => sum + (item.discount_percent || 0), 0) / combo.items.length : 0;
+                                return (
+                                  <SelectItem key={combo.combo_id} value={combo.combo_id}>
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">{combo.combo_name}</span>
+                                      <span className="text-xs text-muted-foreground">{combo.item_count} items • ₹{combo.combo_dp.toFixed(2)}</span>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="col-span-2">
+                          <Label className="text-xs font-semibold">Qty</Label>
+                          <Input type="number" min={1} value={newComboQuantity} onChange={(e) => setNewComboQuantity(parseInt(e.target.value) || 1)} disabled={isSubmitting} className="h-8 text-xs" />
+                        </div>
+
+                        <div className="col-span-2">
+                          <Label className="text-xs font-semibold">Price</Label>
+                          <Input type="number" step="0.01" value={newComboUnitPrice} onChange={(e) => setNewComboUnitPrice(parseFloat(e.target.value) || 0)} disabled={isSubmitting} className="h-8 text-xs" />
+                        </div>
+
+                        <div className="col-span-2">
+                          <Label className="text-xs font-semibold">Disc %</Label>
+                          <Input type="number" step="0.1" value={newComboDiscountPercent} onChange={(e) => setNewComboDiscountPercent(e.target.value)} disabled={isSubmitting} className="h-8 text-xs" />
+                        </div>
+
+                        <div className="col-span-2">
+                          <Button type="button" onClick={addOrderItem} disabled={!newItemComboId || isSubmitting} className="h-8 w-full text-xs px-2 bg-green-600 hover:bg-green-700">
+                            <Plus className="h-3 w-3 mr-1" /> Add
+                          </Button>
+                        </div>
                       </div>
                     </TabsContent>
                   </Tabs>
