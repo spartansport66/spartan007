@@ -58,6 +58,16 @@ interface DealerBalance {
 }
 
 interface CompanyInfo {
+  id?: string;
+  name?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  gst_number?: string | null;
+  contact_number?: string | null;
+  email?: string | null;
+  website?: string | null;
   logo_url: string | null;
 }
 
@@ -180,6 +190,19 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
               country,
               gst_number,
               credit_limit
+            ),
+            companies(
+              id,
+              name,
+              address,
+              city,
+              state,
+              country,
+              gst_number,
+              contact_number,
+              email,
+              website,
+              logo_url
             )
           `)
           .eq('id', id)
@@ -279,11 +302,23 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
               profiles: userProfile
             };
 
-            const companyDataResult = await supabase
-              .from('companies')
-              .select('logo_url')
-              .eq('name', 'Spartan Sports Corporation')
-              .maybeSingle();
+            const billCompany = billData.data?.companies;
+            let companyDataResult;
+            if (billCompany?.id) {
+              companyDataResult = await supabase
+                .from('companies')
+                .select('id, name, address, city, state, country, gst_number, contact_number, email, website, logo_url')
+                .eq('id', billCompany.id)
+                .limit(1)
+                .maybeSingle();
+            } else {
+              companyDataResult = await supabase
+                .from('companies')
+                .select('id, name, address, city, state, country, gst_number, contact_number, email, website, logo_url')
+                .eq('name', 'Spartan Sports Corporation')
+                .limit(1)
+                .maybeSingle();
+            }
 
             if (companyDataResult.error) {
               throw companyDataResult.error;
@@ -292,6 +327,8 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
             setOrder(orderDataWithProfile as any);
             if (companyDataResult.data) {
               setCompanyInfo(companyDataResult.data as any);
+            } else if (billCompany) {
+              setCompanyInfo(billCompany as any);
             }
             setDealerBalance(dealerBalanceInfo);
             return; // Successfully found and processed the bill
@@ -338,6 +375,19 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
             gst_number,
             credit_limit
           ),
+          companies(
+            id,
+            name,
+            address,
+            city,
+            state,
+            country,
+            gst_number,
+            contact_number,
+            email,
+            website,
+            logo_url
+          ),
           sales(
             id,
             quantity,
@@ -378,6 +428,19 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
               country,
               gst_number,
               credit_limit
+            ),
+            companies(
+              id,
+              name,
+              address,
+              city,
+              state,
+              country,
+              gst_number,
+              contact_number,
+              email,
+              website,
+              logo_url
             )
           `)
           .eq('id', orderId)
@@ -407,6 +470,19 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
                 country,
                 gst_number,
                 credit_limit
+              ),
+              companies(
+                id,
+                name,
+                address,
+                city,
+                state,
+                country,
+                gst_number,
+                contact_number,
+                email,
+                website,
+                logo_url
               )
             `)
             .eq('id', id)
@@ -533,12 +609,22 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
       };
 
       // Fetch company info
-      const companyDataResult = await supabase
-        .from('companies')
-        .select('logo_url')
-        .eq('name', 'Spartan Sports Corporation')
-        .limit(1)
-        .maybeSingle();
+      let companyDataResult;
+      if (orderDataResult.data?.companies?.id) {
+        companyDataResult = await supabase
+          .from('companies')
+          .select('id, name, address, city, state, country, gst_number, contact_number, email, website, logo_url')
+          .eq('id', orderDataResult.data.companies.id)
+          .limit(1)
+          .maybeSingle();
+      } else {
+        companyDataResult = await supabase
+          .from('companies')
+          .select('id, name, address, city, state, country, gst_number, contact_number, email, website, logo_url')
+          .eq('name', 'Spartan Sports Corporation')
+          .limit(1)
+          .maybeSingle();
+      }
 
       if (companyDataResult.error) {
         throw companyDataResult.error;
@@ -547,6 +633,8 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
       setOrder(orderDataWithProfile as any);
       if (companyDataResult.data) {
         setCompanyInfo(companyDataResult.data as any);
+      } else if (orderDataResult.data?.companies) {
+        setCompanyInfo(orderDataResult.data.companies as any);
       }
       setDealerBalance(dealerBalanceInfo);
     } catch (err) {
@@ -584,13 +672,13 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
       <!-- Header -->
       <div class="header">
         <div class="company-info">
-          <p style="margin: 0 0 3px 0; font-size: 10px;"><strong>GSTIN: 27AAJCS4629E1ZL</strong></p>
-          <p style="margin: 0 0 5px 0; font-size: 10px;"><strong>PAN: AAJCS4629E</strong></p>
-          <h1>SPARTAN SPORTS CORPORATION</h1>
-          <p>403-404, LEATHER COMPLEX, KAPURTHALA</p>
-          <p>JALANDHAR-144021 (PUNJAB)</p>
-          <p>Ph: +91-181-6676555</p>
-          <p>Email: corporate@spartan.com</p>
+          <p style="margin: 0 0 3px 0; font-size: 10px;"><strong>GSTIN: ${companyInfo?.gst_number || 'N/A'}</strong></p>
+          <p style="margin: 0 0 5px 0; font-size: 10px;"><strong>Web: ${companyInfo?.website || 'N/A'}</strong></p>
+          <h1>${companyInfo?.name || 'SPARTAN SPORTS CORPORATION'}</h1>
+          <p>${companyInfo?.address || '403-404, LEATHER COMPLEX, KAPURTHALA'}</p>
+          <p>${companyInfo?.city || 'JALANDHAR'}${companyInfo?.state ? ', ' + companyInfo.state : ''}${companyInfo?.country ? ' (' + companyInfo.country + ')' : ' (PUNJAB)'}</p>
+          <p>Ph: ${companyInfo?.contact_number || '+91-181-6676555'}</p>
+          <p>Email: ${companyInfo?.email || 'corporate@spartan.com'}</p>
         </div>
         <div class="qr-code">
           ${companyInfo?.logo_url ? `<img src="${companyInfo.logo_url}" alt="Company Logo" style="max-width: 100%; max-height: 100%; object-fit: contain;">` : `<div>QR Code</div>`}
@@ -812,7 +900,7 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
           Page ${pageNum} of ${totalPages}
         </div>
         
-        ${copyType === 'Original Copy' && isLastPage ? `
+        ${copyType === 'Original Copy' && isLastPage && order.dealers?.name?.trim().endsWith('*') ? `
         <!-- NET LEDGER BALANCE - ORIGINAL COPY ONLY - BOLD RED -->
         <div style="margin: 15px 0; padding: 12px 10px; border: 2px solid #cc0000; background: #ffeeee; font-size: 11px; font-weight: bold; color: #cc0000; text-align: center;">
           Net Ledger Balance: ₹${(dealerBalance?.net_ledger_balance || 0).toFixed(2)}
@@ -834,7 +922,7 @@ const PrintBillDialog: React.FC<PrintBillDialogProps> = ({
           <!-- Customer Signature - Right -->
           <div style="display: flex; flex-direction: column; justify-content: flex-end; padding: 8px;">
             <div style="text-align: right; margin-bottom: 40px;">
-              <strong>For SPARTAN SPORTS CORPORATION</strong>
+              <strong>For ${companyInfo?.name || 'SPARTAN SPORTS CORPORATION'}</strong>
             </div>
             <div style="text-align: right;">
               <div style="border-top: 1px solid #000; padding-top: 3px; margin-bottom: 30px;">Authorized Signatory</div>
