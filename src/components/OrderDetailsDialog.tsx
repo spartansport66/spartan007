@@ -71,6 +71,7 @@ interface OrderDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
   onPrint?: (orderId: string) => void;
   showGatePassButton?: boolean;
+  autoPrintGatepass?: boolean;
 }
 
 const formatDate = (dateString: string | null) => {
@@ -88,6 +89,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   onOpenChange,
   onPrint,
   showGatePassButton = true,
+  autoPrintGatepass = false,
 }) => {
   const { userType } = useSession();
   const isGateKeeper = userType === 'gate_keeper';
@@ -98,6 +100,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   const [transportName, setTransportName] = useState<string | null>(null);
   const [bookingDestination, setBookingDestination] = useState<string | null>(null);
   const [dateOfDispatch, setDateOfDispatch] = useState<string | null>(null);
+  const [hasAutoPrintedGatepass, setHasAutoPrintedGatepass] = useState(false);
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -219,11 +222,55 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
       if (orderError) throw orderError;
       
-      if (!orderDataArray || orderDataArray.length === 0) {
-        throw new Error('Order not found in both online and regular orders');
+      let orderData: any = null;
+      if (orderDataArray && orderDataArray.length > 0) {
+        orderData = orderDataArray[0];
+      } else {
+        // If the passed ID is actually a bill ID from spartan/fightor, resolve it to the linked order
+        const spartanBill = await supabase
+          .from('spartan')
+          .select('order_id')
+          .eq('id', id)
+          .maybeSingle();
+
+        let billData = spartanBill;
+        if (!billData.data) {
+          billData = await supabase
+            .from('fightor')
+            .select('order_id')
+            .eq('id', id)
+            .maybeSingle();
+        }
+
+        if (!billData.data) {
+          throw new Error('Order not found in both online, regular orders, or invoice tables');
+        }
+
+        if (!billData.data.order_id) {
+          throw new Error('Bill found but no linked order exists to display full order details');
+        }
+
+        const { data: linkedOrderArray, error: linkedOrderError } = await supabase
+          .from('orders')
+          .select(`
+            id, order_number, order_date, total_amount, discount_amount, status, payment_status, user_id, bill_no, dispatch_date, dispatch_number, dispatched,
+            delivery_location, transport_name, booking_destination, date_of_dispatch,
+            dealers (id, name, address, phone, city, state, country)
+          `)
+          .eq('id', billData.data.order_id)
+          .limit(1);
+
+        if (linkedOrderError) throw linkedOrderError;
+        if (!linkedOrderArray || linkedOrderArray.length === 0) {
+          throw new Error('Linked order not found for this bill');
+        }
+
+        orderData = linkedOrderArray[0];
       }
 
-      const orderData = orderDataArray[0];
+      if (!orderData) {
+        throw new Error('Order not found in both online and regular orders');
+      }
 
       let salesPersonName = 'N/A';
       if (orderData.user_id) {
@@ -367,6 +414,18 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       fetchCompanyInfo();
     }
   }, [isOpen, orderId, fetchOrderDetails, fetchCompanyInfo]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setHasAutoPrintedGatepass(false);
+      return;
+    }
+
+    if (isOpen && autoPrintGatepass && orderDetails && !hasAutoPrintedGatepass) {
+      handlePrintGatePass();
+      setHasAutoPrintedGatepass(true);
+    }
+  }, [isOpen, autoPrintGatepass, orderDetails, hasAutoPrintedGatepass]);
 
   const hasActualItems = orderDetails ? orderDetails.items.some(i => {
     if (i.product_name && i.product_name !== 'Pending Mapping' && i.product_name !== 'N/A') return true;

@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail, ShoppingCart, Wrench, PlusCircle as PlusCircleIcon } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail, ShoppingCart, Wrench, PlusCircle as PlusCircleIcon, Eye, Truck, Printer } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
@@ -43,6 +43,18 @@ interface PaymentDetail {
   created_at: string | null;
   transaction_reference: string | null;
 }
+
+interface ApprovedBill {
+  id: string;
+  bill_number: string;
+  bill_date: string;
+  grand_total: number;
+  dealers?: { name?: string };
+  companies?: { name?: string };
+  source_table?: string;
+  order_id?: string;
+}
+
 import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog';
 import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdueBalanceReportDialog';
 import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog';
@@ -70,6 +82,8 @@ const AdminDashboard = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
+  const [autoPrintGatepass, setAutoPrintGatepass] = useState(false);
+  const [gatepassLoadingId, setGatepassLoadingId] = useState<string | null>(null);
   const [isOrdersAwaitingDispatchReportOpen, setIsOrdersAwaitingDispatchReportOpen] = useState(false);
   const [isDispatchedOrdersReportOpen, setIsDispatchedOrdersReportOpen] = useState(false);
   const [isDealerReportOpen, setIsDealerReportOpen] = useState(false);
@@ -114,6 +128,9 @@ const AdminDashboard = () => {
   const [pendingDealerFilter, setPendingDealerFilter] = useState<string>('');
   const [approvedDealerFilter, setApprovedDealerFilter] = useState<string>('');
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
+  const [approvedBills, setApprovedBills] = useState<ApprovedBill[]>([]);
+  const [searchApprovedBill, setSearchApprovedBill] = useState<string>('');
+  const [approvedBillsLoading, setApprovedBillsLoading] = useState<boolean>(true);
   
   const fetchCompanyInfo = useCallback(async () => {
     try {
@@ -192,6 +209,102 @@ const AdminDashboard = () => {
     }
   }, []);
 
+  const fetchApprovedBills = useCallback(async () => {
+    setApprovedBillsLoading(true);
+    try {
+      const { data: spartanData, error: spartanError } = await supabase
+        .from('spartan')
+        .select(`
+          id,
+          order_id,
+          bill_number,
+          bill_date,
+          grand_total,
+          dealers(name),
+          companies(name)
+        `)
+        .eq('status', 'approve')
+        .order('bill_date', { ascending: false });
+
+      const { data: fightorData, error: fightorError } = await supabase
+        .from('fightor')
+        .select(`
+          id,
+          order_id,
+          bill_number,
+          bill_date,
+          grand_total,
+          dealers(name),
+          companies(name)
+        `)
+        .eq('status', 'approve')
+        .order('bill_date', { ascending: false });
+
+      if (spartanError && fightorError) {
+        throw spartanError || fightorError;
+      }
+
+      const spartanWithSource = (spartanData || []).map((inv: any) => ({ ...inv, source_table: 'spartan' }));
+      const fightorWithSource = (fightorData || []).map((inv: any) => ({ ...inv, source_table: 'fightor' }));
+      const combined = [...spartanWithSource, ...fightorWithSource];
+      combined.sort((a, b) => new Date(b.bill_date).getTime() - new Date(a.bill_date).getTime());
+      setApprovedBills(combined);
+    } catch (error: any) {
+      console.error('Error fetching approved bills:', error.message || error);
+      setApprovedBills([]);
+    } finally {
+      setApprovedBillsLoading(false);
+    }
+  }, []);
+
+  const handleViewApprovedBill = (invoice: ApprovedBill) => {
+    const orderIdToView = invoice.order_id || invoice.id;
+    if (!orderIdToView) {
+      showError('Unable to load full order details: missing linked order ID.');
+      return;
+    }
+    setSelectedOrderIdForDetails(orderIdToView);
+    setAutoPrintGatepass(false);
+    setIsOrderDetailsDialogOpen(true);
+  };
+
+  const handlePrintGatepassApprovedBill = (invoice: ApprovedBill) => {
+    const orderIdToView = invoice.order_id || invoice.id;
+    if (!orderIdToView) {
+      showError('Unable to print gatepass: missing linked order ID.');
+      return;
+    }
+    setSelectedOrderIdForDetails(orderIdToView);
+    setAutoPrintGatepass(true);
+    setIsOrderDetailsDialogOpen(true);
+  };
+
+  const handleGatepassApprovedBill = async (invoice: ApprovedBill) => {
+    if (!invoice.order_id) {
+      showError('Cannot update gatepass: missing linked order ID.');
+      return;
+    }
+
+    setGatepassLoadingId(invoice.id);
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ dispatched: true, dispatch_date: new Date().toISOString() })
+        .eq('id', invoice.order_id);
+
+      if (error) {
+        throw error;
+      }
+
+      showSuccess('Gatepass dispatched and order updated successfully.');
+    } catch (error: any) {
+      console.error('Error updating gatepass for approved bill:', error.message || error);
+      showError(error.message || 'Failed to update gatepass dispatch.');
+    } finally {
+      setGatepassLoadingId(null);
+    }
+  };
+
   const fetchDashboardData = useCallback(async () => {
     if (!user) return;
     try {
@@ -217,13 +330,14 @@ const AdminDashboard = () => {
       }
       
       await fetchPaymentDetails();
+      await fetchApprovedBills();
       fetchLastActiveTime(user.id);
     } catch (error: any) {
       console.error('AdminDashboard: Error fetching dashboard data:', error);
     } finally {
       setLoadingData(false);
     }
-  }, [user, fetchLastActiveTime, fetchPaymentDetails]);
+  }, [user, fetchLastActiveTime, fetchPaymentDetails, fetchApprovedBills]);
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -648,8 +762,129 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      <div className="grid grid-cols-1 gap-4 mb-6">
+        <Card className="bg-card text-card-foreground shadow-lg overflow-hidden">
+          <CardHeader className="bg-emerald-600 dark:bg-emerald-700 text-white rounded-t-lg p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-xl font-semibold">Approved Bills</CardTitle>
+                <CardDescription className="text-emerald-100">Approved billing dashboard invoices</CardDescription>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  id="search-approved-bill"
+                  value={searchApprovedBill}
+                  onChange={(event) => setSearchApprovedBill(event.target.value)}
+                  placeholder="Search Bill #, Dealer or Company"
+                  className="min-w-[200px] sm:min-w-[280px] text-black"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <div className="min-w-full max-h-[520px] overflow-y-auto">
+                <div className="grid grid-cols-12 gap-2 bg-emerald-50 p-3 text-xs font-semibold text-gray-700 border-b sticky top-0 z-10">
+                  <div className="col-span-2">Bill #</div>
+                  <div className="col-span-2">Company</div>
+                  <div className="col-span-3">Dealer</div>
+                  <div className="col-span-2 text-center">Date</div>
+                  <div className="col-span-1 text-right">Amount</div>
+                  <div className="col-span-2 text-right">Actions</div>
+                </div>
+                {approvedBillsLoading ? (
+                  <div className="p-4 text-center text-gray-500">Loading approved bills...</div>
+                ) : approvedBills.filter((invoice) => {
+                  if (!searchApprovedBill.trim()) return true;
+                  const search = searchApprovedBill.toLowerCase();
+                  return (
+                    invoice.bill_number?.toLowerCase().includes(search) ||
+                    invoice.dealers?.name?.toLowerCase().includes(search) ||
+                    invoice.companies?.name?.toLowerCase().includes(search)
+                  );
+                }).length === 0 ? (
+                  <div className="p-4 text-center text-gray-500">No approved bills found</div>
+                ) : (
+                  approvedBills
+                    .filter((invoice) => {
+                      if (!searchApprovedBill.trim()) return true;
+                      const search = searchApprovedBill.toLowerCase();
+                      return (
+                        invoice.bill_number?.toLowerCase().includes(search) ||
+                        invoice.dealers?.name?.toLowerCase().includes(search) ||
+                        invoice.companies?.name?.toLowerCase().includes(search)
+                      );
+                    })
+                    .map((invoice) => (
+                      <div key={`${invoice.source_table}-${invoice.id}`} className="grid grid-cols-12 gap-2 p-3 items-center text-sm border-b last:border-b-0 hover:bg-emerald-50 transition-colors">
+                        <div className="col-span-2 font-mono text-emerald-700 truncate">{invoice.bill_number || '—'}</div>
+                        <div className="col-span-2 truncate text-gray-700">{invoice.companies?.name || 'N/A'}</div>
+                        <div className="col-span-3 truncate text-gray-600">{invoice.dealers?.name || 'N/A'}</div>
+                        <div className="col-span-2 text-center text-gray-600">{invoice.bill_date ? new Date(invoice.bill_date).toLocaleDateString('en-IN') : 'N/A'}</div>
+                        <div className="col-span-1 text-right font-semibold text-emerald-700">₹{(invoice.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        <div className="col-span-2 flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            title="View Bill"
+                            aria-label="View full order details"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              handleViewApprovedBill(invoice);
+                            }}
+                          >
+                            <Eye className="h-4 w-4 text-emerald-700" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            title="Gatepass"
+                            aria-label="Mark order dispatched with gate pass"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              handleGatepassApprovedBill(invoice);
+                            }}
+                            disabled={!invoice.order_id || gatepassLoadingId === invoice.id}
+                          >
+                            <Truck className="h-4 w-4 text-emerald-700" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            title="Print Gatepass"
+                            aria-label="Print gatepass for this order"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              handlePrintGatepassApprovedBill(invoice);
+                            }}
+                            disabled={gatepassLoadingId === invoice.id}
+                          >
+                            <Printer className="h-4 w-4 text-emerald-700" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
       <MadeWithDyad />
-      <OrderDetailsDialog orderId={selectedOrderIdForDetails} isOpen={isOrderDetailsDialogOpen} onOpenChange={setIsOrderDetailsDialogOpen} />
+      <OrderDetailsDialog
+        orderId={selectedOrderIdForDetails}
+        isOpen={isOrderDetailsDialogOpen}
+        onOpenChange={(open) => {
+          setIsOrderDetailsDialogOpen(open);
+          if (!open) setAutoPrintGatepass(false);
+        }}
+        showGatePassButton={false}
+        autoPrintGatepass={autoPrintGatepass}
+      />
       <OrdersAwaitingDispatchReportDialog isOpen={isOrdersAwaitingDispatchReportOpen} onOpenChange={setIsOrdersAwaitingDispatchReportOpen} />
       <DispatchedOrdersReportDialog isOpen={isDispatchedOrdersReportOpen} onOpenChange={setIsDispatchedOrdersReportOpen} />
       <DealerReportDialog isOpen={isDealerReportOpen} onOpenChange={setIsDealerReportOpen} />

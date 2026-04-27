@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Percent, Search } from 'lucide-react';
+import { Loader2, Plus, Trash2, Check, ChevronsUpDown, Percent, Search, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -120,6 +120,8 @@ interface EditOrderDialogProps {
   originalCompanyId?: string;
   originalBillNumber?: string;
   cancelledInvoiceId?: string;
+  isBillingDashboard?: boolean;
+  fullScreen?: boolean;
 }
 
 const formSchema = z.object({
@@ -375,7 +377,7 @@ const fetchAllCombos = async (): Promise<Combo[]> => {
   }
 };
 
-const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated, billStatus, showBillRestrictionWarning, cancelledBillInfo, originalCompanyId, originalBillNumber, cancelledInvoiceId }) => {
+const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOpenChange, onOrderUpdated, billStatus, showBillRestrictionWarning, cancelledBillInfo, originalCompanyId, originalBillNumber, cancelledInvoiceId, isBillingDashboard = false, fullScreen = false }) => {
   const { user, session } = useSession();
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -990,9 +992,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       const originalOrderBillNo = orderData.bill_no?.toString().trim() || null;
       const incomingBillNo = values.billNo?.trim() || null;
 
-      if (companyChanged) {
-        // Company CHANGED - must use nextBillNumber from NEW company
-        console.log('🔄 Company CHANGED - Using NEW company bill number');
+      if (companyChanged && isBillingDashboard) {
+        // Company CHANGED in Billing Dashboard - use suggested next bill number for the new company
+        console.log('🔄 Billing Dashboard: Company CHANGED - Using NEW company bill number');
         console.log('   Original company:', effectiveOriginalCompanyId);
         console.log('   New company:', values.billingCompanyId);
         if (!nextBillNumber) {
@@ -1002,6 +1004,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         }
         billNumberToSave = nextBillNumber;
         console.log('   Using nextBillNumber (new company):', billNumberToSave);
+      } else if (companyChanged) {
+        console.log('🔄 Non-billing dashboard: Company changed, preserving existing invoice bill generation behavior');
+        billNumberToSave = undefined;
       } else if (incomingBillNo) {
         // User entered a bill number explicitly
         console.log('✨ User entered bill number');
@@ -1312,13 +1317,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         console.log('🆕 STEP 4C: Creating NEW INVOICE (trigger will auto-generate bill)');
         
         try {
-          // Create invoice WITHOUT bill_number - trigger will set it atomically
           const invoiceCreatePayload: any = {
             order_id: orderData.id,
             company_id: values.billingCompanyId,
             financial_year_id: selectedFinancialYearId || null,
             bill_series_id: billSeriesId || null,
-            // bill_number is NULL - trigger will generate it
+            ...(isBillingDashboard ? { bill_number: nextBillNumber || null } : {}),
             bill_date: new Date().toISOString().split('T')[0],
             dealer_id: values.dealerId,
             gst_number: dealers.find(d => d.id === values.dealerId)?.gst_number || null,
@@ -1395,513 +1399,419 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] md:max-w-[800px] lg:max-w-5xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Order #{orderData?.order_number}</DialogTitle>
-          <DialogDescription>
-            Modify items, discounts, billing info, and order details.
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* Cancelled Bill Info - Show when editing cancelled bills */}
-        {cancelledBillInfo && (
-          <div className="p-4 bg-amber-50 border border-amber-300 rounded-md space-y-3">
-            <div className="font-semibold text-amber-900">📋 Bill Details (Cancelled/Rejected)</div>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="font-semibold text-gray-700">Bill Number:</span>
-                <p className="text-amber-700 font-mono font-bold">{cancelledBillInfo.bill_number}</p>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-700">Bill Date:</span>
-                <p className="text-gray-600">{cancelledBillInfo.bill_date ? new Date(cancelledBillInfo.bill_date).toLocaleDateString() : 'N/A'}</p>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-700">Amount:</span>
-                <p className="text-amber-700 font-bold">₹{cancelledBillInfo.grand_total?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-700">Status:</span>
-                <p className={`font-semibold ${cancelledBillInfo.status === 'cancelled' ? 'text-red-600' : 'text-orange-600'}`}>
-                  {cancelledBillInfo.status === 'cancelled' ? 'CANCELLED' : 'REJECTED'}
-                </p>
-              </div>
-            </div>
-            {(cancelledBillInfo.cancellation_reason || cancelledBillInfo.rejection_reason) && (
-              <div className="bg-white p-2 rounded border border-amber-200">
-                <span className="font-semibold text-gray-700 text-sm">Reason:</span>
-                <p className="text-gray-600 text-sm mt-1">{cancelledBillInfo.cancellation_reason || cancelledBillInfo.rejection_reason}</p>
-              </div>
-            )}
-            {cancelledBillInfo.companies && (
-              <div className="bg-white p-2 rounded border border-amber-200">
-                <span className="font-semibold text-gray-700 text-sm">Company (Can be changed if needed):</span>
-                <p className="text-gray-600 text-sm mt-1">
-                  <strong>{cancelledBillInfo.companies.name}</strong><br/>
-                  {cancelledBillInfo.companies.address}, {cancelledBillInfo.companies.city}, {cancelledBillInfo.companies.state}<br/>
-                  GST: {cancelledBillInfo.companies.gst_number || 'N/A'} | {cancelledBillInfo.companies.contact_number}
-                </p>
-              </div>
-            )}
-            <div className="text-xs text-amber-700 font-semibold">
-              ℹ️ Note: Once you save this order, the bill status will be reset to pending and ready for approval.
-            </div>
-          </div>
+      <DialogContent
+        className={cn(
+          fullScreen
+            ? 'left-0 top-0 w-full h-screen max-w-none max-h-none translate-x-0 translate-y-0 rounded-none sm:rounded-none p-0 flex flex-col'
+            : 'sm:max-w-[500px] md:max-w-[800px] lg:max-w-6xl max-h-[95vh] flex flex-col',
         )}
-
-        {/* Bill Restriction Warning - Only show in Billing Dashboard */}
-        {showBillRestrictionWarning && billStatus && !billStatus.allowed && (
-          <div className="p-3 bg-red-50 border border-red-300 rounded-md">
-            <p className="text-sm font-semibold text-red-800">
-              ⚠️ Bill Generation Blocked
-            </p>
-            <p className="text-sm text-red-700 mt-1">
-              {billStatus.message || 'This order cannot generate a bill at this time.'}
-            </p>
+      >
+        {/* Header */}
+        <div className="border-b bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-3 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-blue-900">Edit Order #{orderData?.order_number}</h2>
+              <p className="text-xs text-blue-700 mt-0.5">Modify items, dealer info, and billing details</p>
+            </div>
+            <button onClick={() => onOpenChange(false)} className="text-gray-500 hover:text-gray-700">
+              <X className="h-5 w-5" />
+            </button>
           </div>
-        )}
-        
+        </div>
+
+        {/* Main Content Area */}
         {loading ? (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center flex-1">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSave)} className="space-y-6 py-4">
-              {/* First Row - Main Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField control={form.control} name="orderNumber" render={({ field }) => (<FormItem><FormLabel>Order Number</FormLabel><FormControl><Input type="number" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={form.control} name="orderDate" render={({ field }) => (<FormItem><FormLabel>Order Date</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-              </div>
+            <form onSubmit={form.handleSubmit(handleSave)} className="flex flex-col flex-1 overflow-hidden">
+              
+              {/* Top Section - Order & Dealer Info (Compact) */}
+              <div className="flex-shrink-0 border-b bg-white px-6 py-3 space-y-3">
+                
+                {/* Row 1: Order Date, Dealer, Sales Person */}
+                <div className="grid grid-cols-5 gap-3">
+                  <FormField control={form.control} name="orderDate" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold">Order Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} disabled={isSubmitting} className="h-8 text-xs" />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  
+                  <FormField control={form.control} name="dealerId" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold">Dealer</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {dealers.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                  
+                  <FormField control={form.control} name="salesPersonId" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold">Sales Person</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {userListToRender.map(op => <SelectItem key={op.id} value={op.id}>{op.first_name} {op.last_name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
 
-              {/* Second Row - Dealer and Sales Person */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField control={form.control} name="dealerId" render={({ field }) => (<FormItem><FormLabel>Dealer</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select Dealer" /></SelectTrigger></FormControl><SelectContent>{dealers.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
-                <FormField control={form.control} name="salesPersonId" render={({ field }) => (<FormItem><FormLabel>Sales Person *</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select Sales Person" /></SelectTrigger></FormControl><SelectContent>{userListToRender.map(op => <SelectItem key={op.id} value={op.id}>{op.first_name} {op.last_name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
-              </div>
+                  <FormField control={form.control} name="discountAmount" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold">Discount (₹)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" {...field} disabled={isSubmitting} className="h-8 text-xs" />
+                      </FormControl>
+                    </FormItem>
+                  )} />
 
-              {/* Dealer Info with GST Details */}
-              {form.watch('dealerId') && (() => {
-                const selectedDealer = dealers.find(d => d.id === form.watch('dealerId'));
-                return selectedDealer ? (
-                  <div className="border rounded-md p-3 space-y-2 bg-amber-50">
-                    <h3 className="font-semibold text-sm text-amber-900">Dealer Information</h3>
-                    
-                    {/* Basic Info */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-xs">Dealer Name</Label>
-                        <p className="text-xs font-semibold">{selectedDealer.name}</p>
-                      </div>
-                      <div>
-                        <Label className="text-xs">Contact Person</Label>
-                        <p className="text-xs font-semibold">{selectedDealer.contact_person || 'N/A'}</p>
-                      </div>
-                    </div>
-                    
-                    {/* Contact Details */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-xs">Phone/Mobile</Label>
-                        <p className="text-xs font-semibold">{selectedDealer.phone || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <Label className="text-xs">Email</Label>
-                        <p className="text-xs font-semibold">{selectedDealer.email || 'N/A'}</p>
-                      </div>
-                    </div>
-                    
-                    {/* Address Details */}
-                    <div className="grid grid-cols-1 gap-2">
-                      <div>
-                        <Label className="text-xs">Address</Label>
-                        <p className="text-xs font-semibold">{selectedDealer.address || 'N/A'}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div>
-                        <Label className="text-xs">City</Label>
-                        <p className="text-xs font-semibold">{selectedDealer.city || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <Label className="text-xs">State</Label>
-                        <p className="text-xs font-semibold">{selectedDealer.state || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <Label className="text-xs">Country</Label>
-                        <p className="text-xs font-semibold">{selectedDealer.country || 'N/A'}</p>
-                      </div>
-                    </div>
-                    
-                    {/* GST Details - Editable */}
-                    <Separator className="my-2" />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-xs">GST Number</Label>
+                  <FormField control={form.control} name="freightCharges" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-semibold">Freight (₹)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" {...field} disabled={isSubmitting} className="h-8 text-xs" />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                </div>
+
+                {/* Dealer Info - Inline Compact Display with Colors */}
+                {form.watch('dealerId') && (() => {
+                  const selectedDealer = dealers.find(d => d.id === form.watch('dealerId'));
+                  return selectedDealer ? (
+                    <div className="grid grid-cols-5 gap-3 p-3 bg-gradient-to-r from-amber-50 via-orange-50 to-red-50 rounded-lg border-2 border-amber-300">
+                      <div className="bg-white rounded border-l-4 border-amber-500 pl-2 py-1"><span className="font-bold text-amber-700">👤 Name:</span> <span className="text-amber-900">{selectedDealer.name}</span></div>
+                      <div className="bg-white rounded border-l-4 border-orange-500 pl-2 py-1"><span className="font-bold text-orange-700">📞 Contact:</span> <span className="text-orange-900">{selectedDealer.contact_person || 'N/A'}</span></div>
+                      <div className="bg-white rounded border-l-4 border-red-500 pl-2 py-1"><span className="font-bold text-red-700">☎️ Phone:</span> <span className="text-red-900">{selectedDealer.phone || 'N/A'}</span></div>
+                      <div className="bg-white rounded border-l-4 border-yellow-500 pl-2 py-1"><span className="font-bold text-yellow-700">📍 Address:</span> <span className="text-yellow-900">{selectedDealer.address || 'N/A'}</span></div>
+                      <div className="bg-white rounded border-l-4 border-green-500 pl-2 py-1">
+                        <span className="font-bold text-green-700">🏢 GST:</span>
                         {editingGstNumber === selectedDealer.id ? (
-                          <div className="flex flex-col gap-1 mt-1">
-                            <div className="flex gap-1">
-              <Input
-                                value={gstNumberInput}
-                                onChange={(e) => {
-                                  // Allow digits and letters, convert to uppercase
-                                  const value = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '');
-                                  setGstNumberInput(value);
-                                }}
-                                placeholder="e.g., 27AAFCU5055K1ZO (15 chars)"
-                                maxLength={15}
-                                disabled={isSubmitting}
-                                className="text-xs"
-                              />
-                              <Button
-                                size="sm"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  handleSaveGstNumber(selectedDealer.id);
-                                }}
-                                disabled={isSubmitting || !gstNumberInput.trim() || !/^[A-Z0-9]{15}$/.test(gstNumberInput.toUpperCase().trim())}
-                                className="text-xs h-8 whitespace-nowrap"
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  setEditingGstNumber(null);
-                                }}
-                                className="text-xs h-8 whitespace-nowrap"
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                            <p className="text-xs text-gray-500">
-                              {gstNumberInput.length}/15 characters
-                              {gstNumberInput.length > 0 && gstNumberInput.length !== 15 && ' (incomplete)'}
-                              {gstNumberInput.length === 15 && ' ✓'}
-                            </p>
+                          <div className="flex gap-1 mt-1">
+                            <Input 
+                              type="text" 
+                              value={gstNumberInput} 
+                              onChange={(e) => setGstNumberInput(e.target.value.toUpperCase())} 
+                              placeholder="Enter GST" 
+                              className="h-6 text-xs border-green-400 focus:border-green-500"
+                              disabled={isSubmitting}
+                            />
+                            <Button 
+                              type="button" 
+                              size="sm" 
+                              className="h-6 px-2 bg-green-600 hover:bg-green-700 text-white text-xs" 
+                              onClick={() => handleSaveGstNumber(selectedDealer.id)}
+                              disabled={isSubmitting}
+                            >
+                              ✓
+                            </Button>
+                            <Button 
+                              type="button" 
+                              size="sm" 
+                              className="h-6 px-2 bg-red-500 hover:bg-red-600 text-white text-xs" 
+                              onClick={() => {
+                                setEditingGstNumber(null);
+                                setGstNumberInput('');
+                              }}
+                              disabled={isSubmitting}
+                            >
+                              ✕
+                            </Button>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-between mt-1">
-                            <p className="text-xs font-semibold">{selectedDealer.gst_number || 'Not provided'}</p>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={(e) => {
-                                e.preventDefault();
+                          <div className="flex justify-between items-center gap-1">
+                            <span className="text-green-900 text-sm">{selectedDealer.gst_number || 'Unregistered'}</span>
+                            <Button 
+                              type="button" 
+                              size="sm" 
+                              className="h-5 px-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs" 
+                              onClick={() => {
                                 setEditingGstNumber(selectedDealer.id);
                                 setGstNumberInput(selectedDealer.gst_number || '');
                               }}
-                              className="text-xs h-7"
+                              disabled={isSubmitting}
                             >
-                              Edit
+                              ✎
                             </Button>
                           </div>
                         )}
                       </div>
-                      <div>
-                        <Label className="text-xs">GST Registration Type</Label>
-                        <p className="text-xs font-semibold">
-                          {selectedDealer.gst_number 
-                            ? <span className="text-green-600">Registered</span>
-                            : <span className="text-gray-500">Unregistered</span>
-                          }
-                        </p>
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* Billing Info Row */}
+                {form.getValues('billingCompanyId') && (
+                  <div className="grid grid-cols-3 gap-3 p-3 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-lg border-2 border-blue-300">
+                    <div className="bg-white rounded border-l-4 border-blue-500 pl-2 py-1">
+                      <span className="font-bold text-blue-700">🏪 Company:</span> <span className="text-blue-900">{companies.find(c => c.id === form.getValues('billingCompanyId'))?.name || 'N/A'}</span>
+                    </div>
+                    {selectedFinancialYearId && (
+                      <div className="bg-white rounded border-l-4 border-indigo-500 pl-2 py-1">
+                        <span className="font-bold text-indigo-700">📊 FY:</span> <span className="text-indigo-900">{financialYears.find(fy => fy.id === selectedFinancialYearId)?.year_name}</span>
                       </div>
-                    </div>
+                    )}
+                    {nextBillNumber && (
+                      <div className="bg-white rounded border-l-4 border-purple-500 pl-2 py-1">
+                        <span className="font-bold text-purple-700">📄 Bill #:</span> <span className="font-mono font-bold text-purple-700 text-lg">{nextBillNumber}</span>
+                      </div>
+                    )}
                   </div>
-                ) : null;
-              })()}
+                )}
 
-              {/* Billing Company & Bill Number Section */}
-              <div className="space-y-4">
-                <div className="border rounded-md p-4 bg-blue-50">
-                  <h3 className="font-semibold text-base text-blue-900 mb-4">Billing & Invoice Details</h3>
-                  
-                  <div className="space-y-3">
-                    {/* Billing Company Selection */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Billing Company</Label>
-                      <Select 
-                        value={form.getValues('billingCompanyId') || ''} 
-                        onValueChange={(newValue) => {
-                          console.log('🔀 Billing Company changed:', newValue);
-                          form.setValue('billingCompanyId', newValue, { shouldDirty: true });
-                          // Immediately clear bill number while fetching new one
-                          setNextBillNumber('');
-                          setBillSeriesId('');
-                          setCurrentBillSeries(null);
-                          // Also update the bill generation company
-                          setSelectedCompanyId(newValue);
-                        }} 
-                        disabled={isSubmitting}
-                      >
-                        <SelectTrigger className="border-2 border-blue-300">
-                          <SelectValue placeholder="Select Billing Company" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {companies.map(c => (
-                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {form.getValues('billingCompanyId') && (
-                        <div className={`p-3 border rounded space-y-2 ${selectedFinancialYearId && nextBillNumber ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
-                          <p className={`text-xs ${selectedFinancialYearId && nextBillNumber ? 'text-green-700' : 'text-yellow-700'}`}>
-                            <span className="font-semibold">✓ Company:</span> {companies.find(c => c.id === form.getValues('billingCompanyId'))?.name}
-                          </p>
-                          {selectedFinancialYearId ? (
-                            <p className="text-xs text-green-700">
-                              <span className="font-semibold">✓ Financial Year:</span> {financialYears.find(fy => fy.id === selectedFinancialYearId)?.year_name}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-yellow-700">
-                              <span className="font-semibold">⏳ Financial Year:</span> Loading...
-                            </p>
-                          )}
-                          {nextBillNumber ? (
-                            <p className="text-xs text-green-700">
-                              <span className="font-semibold">✓ Bill Number (Auto):</span> <span className="font-mono font-bold text-green-800">{nextBillNumber}</span>
-                            </p>
-                          ) : (
-                            <p className="text-xs text-yellow-700">
-                              <span className="font-semibold">⏳ Bill Number:</span> Generating...
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    {/* Bill Number */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Bill Number (Optional - leave blank to keep current bill_no)</Label>
-                      <FormField control={form.control} name="billNo" render={({ field }) => (<FormItem><FormControl><Input placeholder="Enter a bill number only if you want to set/change it" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                      {nextBillNumber && !form.getValues('billNo') && (
-                        <p className="text-xs text-amber-600">
-                          💡 <span className="font-semibold">Suggested:</span> {nextBillNumber}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                {/* Delivery & Transport Info - Editable Single Line */}
+                <div className="mt-3 grid grid-cols-4 gap-2 p-3 bg-gradient-to-r from-green-50 via-blue-50 to-purple-50 rounded-lg border-2 border-green-200">
+                  <FormField control={form.control} name="deliveryLocation" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold bg-gradient-to-r from-green-600 to-green-700 text-white px-2 py-1 rounded">📍 Delivery Location</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="e.g., Warehouse A" 
+                          {...field} 
+                          disabled={isSubmitting} 
+                          className="h-7 text-xs border-2 border-green-300 focus:border-green-500 focus:ring-green-400" 
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="transportName" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold bg-gradient-to-r from-blue-600 to-blue-700 text-white px-2 py-1 rounded">🚚 Transport</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="e.g., XYZ Logistics" 
+                          {...field} 
+                          disabled={isSubmitting} 
+                          className="h-7 text-xs border-2 border-blue-300 focus:border-blue-500 focus:ring-blue-400" 
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="bookingDestination" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold bg-gradient-to-r from-purple-600 to-purple-700 text-white px-2 py-1 rounded">📦 Destination</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="e.g., Delhi" 
+                          {...field} 
+                          disabled={isSubmitting} 
+                          className="h-7 text-xs border-2 border-purple-300 focus:border-purple-500 focus:ring-purple-400" 
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+
+                  <FormField control={form.control} name="dateOfDispatch" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold bg-gradient-to-r from-amber-600 to-amber-700 text-white px-2 py-1 rounded">📅 Dispatch Date</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="date" 
+                          {...field} 
+                          disabled={isSubmitting} 
+                          className="h-7 text-xs border-2 border-amber-300 focus:border-amber-500 focus:ring-amber-400" 
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
                 </div>
               </div>
 
-              <Separator />
-
-              <div className="border rounded-md p-4 space-y-4 bg-blue-50">
-                <h3 className="font-semibold text-lg text-blue-900">Delivery & Transport Details</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField control={form.control} name="deliveryLocation" render={({ field }) => (<FormItem><FormLabel>Delivery Location</FormLabel><FormControl><Input placeholder="e.g., Warehouse A" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="transportName" render={({ field }) => (<FormItem><FormLabel>Transport Name</FormLabel><FormControl><Input placeholder="e.g., XYZ Logistics" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="bookingDestination" render={({ field }) => (<FormItem><FormLabel>Booking Destination</FormLabel><FormControl><Input placeholder="e.g., Delhi" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="dateOfDispatch" render={({ field }) => (<FormItem><FormLabel>Date of Dispatch</FormLabel><FormControl><Input type="date" {...field} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} />
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <Label className="text-lg font-semibold">Add/Modify Items</Label>
-                <Tabs value={selectionTab} onValueChange={(val) => setSelectionTab(val as 'products' | 'combos')} className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="products">Products</TabsTrigger>
-                    <TabsTrigger value="combos">Combo Kits ({combos.length})</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="products">
-                    <div className="flex flex-col gap-3 p-3 border rounded-md bg-muted/50">
-                      <div className="w-full">
-                        <Label>Product</Label>
-                        <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" role="combobox" className="w-full justify-between" disabled={isSubmitting}>{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[400px] p-0" align="start">
-                            <div className="p-2 border-b flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input placeholder="Search product..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 border-none focus-visible:ring-0" /></div>
-                            <ScrollArea className="h-[250px]"><div className="p-1">
-                              {filteredProducts.map((product) => (
-                                <Button
-                                  key={product.id}
-                                  variant="ghost"
-                                  className="w-full justify-start font-normal h-auto py-2"
-                                  onClick={() => {
-                                    const rawGst = parseFloat(product.gst) || 0;
-                                    const gstNormalized = rawGst > 0 && rawGst <= 1 ? rawGst * 100 : rawGst;
-                                    setNewItemProductId(product.id);
-                                    setNewItemUnitPrice(product.dp);
-                                    setNewItemGstPercent(String(gstNormalized));
-                                    setIsProductPopoverOpen(false);
-                                    setProductSearch('');
-                                  }}
-                                >
-                                  <div className="flex flex-col items-start w-full">
-                                    <div className="flex items-center justify-between w-full gap-2">
-                                      <div className="flex items-center min-w-0">
-                                        <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
-                                        <span className="font-medium truncate">{product.name}</span>
+              {/* Items Section - 80% Height with Scrolling */}
+              <div className="flex-1 flex flex-col overflow-hidden px-6 py-3">
+                
+                {/* Items Tabs */}
+                <div className="mb-2 flex-shrink-0">
+                  <Tabs value={selectionTab} onValueChange={(val) => setSelectionTab(val as 'products' | 'combos')} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 h-8">
+                      <TabsTrigger value="products" className="text-xs">Add Products ({products.length})</TabsTrigger>
+                      <TabsTrigger value="combos" className="text-xs">Add Combos ({combos.length})</TabsTrigger>
+                    </TabsList>
+                    
+                    {/* Products Tab */}
+                    <TabsContent value="products" className="space-y-2 mt-2">
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" role="combobox" className="w-full justify-between h-8 text-xs">{productSearch || 'Select product'}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 p-0" align="start">
+                              <div className="p-2">
+                                <Input placeholder="Search..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 text-xs mb-2" />
+                                <ScrollArea className="h-64">
+                                  {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).map(product => (
+                                    <button key={product.id} onClick={() => { setNewItemProductId(product.id); setProductSearch(''); setIsProductPopoverOpen(false); }} className="w-full justify-start font-normal h-auto py-2 px-2 text-xs hover:bg-gray-100">
+                                      <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
+                                      <div className="flex flex-col items-start w-full">
+                                        <div className="flex items-center justify-between w-full gap-2">
+                                          <span>{product.name}</span>
+                                          <span className="text-gray-500">₹{product.dp}</span>
+                                        </div>
+                                        <span className="text-gray-400 text-xs">{product.code}</span>
                                       </div>
-                                    </div>
-                                    <div className="text-[10px] text-muted-foreground ml-6 flex flex-wrap gap-x-3 gap-y-1">
-                                      <span className="bg-muted px-1 rounded font-mono">Code: {product.code}</span>
-                                      <span className="font-semibold text-primary">DP: ₹{product.dp.toFixed(2)}</span>
-                                      <span>Stock: {product.closing_stock}</span>
-                                    </div>
-                                  </div>
-                                </Button>
-                              ))}
-                            </div></ScrollArea>
-                          </PopoverContent>
-                        </Popover>
+                                    </button>
+                                  ))}
+                                </ScrollArea>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        <Button type="button" onClick={addOrderItem} disabled={!newItemProductId || isSubmitting} className="h-8 text-xs px-2 bg-green-600 hover:bg-green-700">
+                          <Plus className="h-3 w-3 mr-1" /> Add
+                        </Button>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 items-end">
-                        <div><Label>Quantity</Label><Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" /></div>
-                        <div><Label>Unit Price (DP)</Label><Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} min="0" /></div>
-                        <div><Label>Discount (%)</Label><div className="relative"><Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(e.target.value)} min="0" max="100" className="pr-8" /><Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /></div></div>
-                        <div><Label>GST (%)</Label><Input type="number" step="0.1" value={newItemGstPercent} onChange={(e) => setNewItemGstPercent(e.target.value)} min="0" /></div>
-                        <div className="flex flex-col gap-1"><Label className="text-xs text-muted-foreground">Item Total</Label><div className="h-10 flex items-center px-3 border rounded-md bg-background font-bold text-green-600">₹{newItemCalculations.totalPrice.toFixed(2)}</div></div>
-                      </div>
-                      <Button type="button" onClick={addOrderItem} disabled={isSubmitting} className="w-full"><Plus className="h-4 w-4 mr-2" /> Add to Order</Button>
-                    </div>
-                  </TabsContent>
+                    </TabsContent>
 
-                  <TabsContent value="combos">
-                    <div className="flex flex-col gap-3 p-3 border rounded-md bg-muted/50">
-                      <div className="w-full">
-                        <Label>Combo Kit</Label>
+                    {/* Combos Tab */}
+                    <TabsContent value="combos" className="space-y-2 mt-2">
+                      <div className="flex gap-2">
                         <Select value={newItemComboId} onValueChange={setNewItemComboId} disabled={isSubmitting}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select a combo kit..." />
+                          <SelectTrigger className="h-8 text-xs flex-1">
+                            <SelectValue placeholder="Select combo" />
                           </SelectTrigger>
                           <SelectContent>
-                            {combos.length === 0 ? (
-                              <div className="p-2 text-center text-sm text-muted-foreground">No combo kits available</div>
-                            ) : (
-                              combos.map(combo => {
-                                const avgDiscount = combo.items && combo.items.length > 0
-                                  ? combo.items.reduce((sum, item) => sum + (item.discount_percent || 0), 0) / combo.items.length
-                                  : 0;
-                                return (
-                                  <SelectItem key={combo.combo_id} value={combo.combo_id}>
-                                    <div className="flex flex-col">
-                                      <span className="font-medium">{combo.combo_name} {combo.combo_code ? `(${combo.combo_code})` : ''}</span>
-                                      <span className="text-xs text-muted-foreground">
-                                        {combo.item_count} items • ₹{combo.combo_dp.toFixed(2)} • {avgDiscount > 0 ? `${avgDiscount.toFixed(1)}% off` : 'No discount'}
-                                      </span>
-                                    </div>
-                                  </SelectItem>
-                                );
-                              })
-                            )}
+                            {combos.map(combo => {
+                              const avgDiscount = combo.items && combo.items.length > 0 ? combo.items.reduce((sum, item) => sum + (item.discount_percent || 0), 0) / combo.items.length : 0;
+                              return (
+                                <SelectItem key={combo.combo_id} value={combo.combo_id}>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{combo.combo_name}</span>
+                                    <span className="text-xs text-muted-foreground">{combo.item_count} items • ₹{combo.combo_dp.toFixed(2)}</span>
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
+                        <Button type="button" onClick={addOrderItem} disabled={!newItemComboId || isSubmitting} className="h-8 text-xs px-2 bg-green-600 hover:bg-green-700">
+                          <Plus className="h-3 w-3 mr-1" /> Add
+                        </Button>
                       </div>
-                      {newItemComboId && combos.find(c => c.combo_id === newItemComboId) && (() => {
-                        const selectedCombo = combos.find(c => c.combo_id === newItemComboId);
-                        const avgDiscount = selectedCombo?.items && selectedCombo.items.length > 0
-                          ? selectedCombo.items.reduce((sum, item) => sum + (item.discount_percent || 0), 0) / selectedCombo.items.length
-                          : 0;
-                        return (
-                          <div className="p-2 bg-blue-50 rounded border text-sm">
-                            <div className="font-semibold">
-                              {selectedCombo?.combo_name}
-                              {selectedCombo?.combo_code && (
-                                <span className="text-xs font-mono ml-2 bg-white px-2 py-0.5 rounded text-gray-700">
-                                  {selectedCombo.combo_code}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {selectedCombo?.combo_description}
-                            </div>
-                            <div className="mt-2 flex gap-2">
-                              <span className="text-xs font-mono bg-white px-2 py-1 rounded">
-                                {selectedCombo?.item_count} items
-                              </span>
-                              {avgDiscount > 0 && (
-                                <span className="text-xs font-mono bg-green-100 px-2 py-1 rounded text-green-700 font-semibold">
-                                  Discount: {avgDiscount.toFixed(1)}%
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      <div>
-                        <Label>Quantity (Combo Multiplier)</Label>
-                        <Input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} min="1" placeholder="How many times to add this combo" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Discount (%)</Label>
-                          <div className="relative">
-                            <Input type="number" step="0.1" value={newComboDiscountPercent} onChange={(e) => setNewComboDiscountPercent(e.target.value)} min="0" max="100" className="pr-8" placeholder="0" />
-                            <Percent className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                        <div>
-                          <Label>GST (%)</Label>
-                          <Input type="number" step="0.1" value={newComboGstPercent} onChange={(e) => setNewComboGstPercent(e.target.value)} min="0" placeholder="0" />
-                        </div>
-                      </div>
-                      <Button type="button" onClick={addOrderItem} disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700"><Plus className="h-4 w-4 mr-2" /> Add Combo to Order</Button>
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                    </TabsContent>
+                  </Tabs>
+                </div>
 
-                {orderItems.length > 0 && (
-                  <div className="max-h-[350px] overflow-y-auto border rounded-md">
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Product</TableHead><TableHead className="w-24">Qty</TableHead><TableHead className="w-32">DP (₹)</TableHead><TableHead className="w-24">Disc %</TableHead><TableHead className="w-24">GST %</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
+                {/* Items Table - Scrollable with Alternating Colors */}
+                {orderItems.length > 0 ? (
+                  <div className="flex-1 overflow-y-auto border-2 border-pink-300 rounded-lg bg-white">
+                    <Table className="text-xs">
+                      <TableHeader className="sticky top-0 bg-gradient-to-r from-pink-300 via-pink-400 to-pink-300 z-10">
+                        <TableRow>
+                          <TableHead className="w-40 font-bold text-white">📦 Product</TableHead>
+                          <TableHead className="w-16 text-center font-bold text-white">📊 Qty</TableHead>
+                          <TableHead className="w-20 text-right font-bold text-white">💵 Price</TableHead>
+                          <TableHead className="w-16 text-center font-bold text-white">🏷️ Disc%</TableHead>
+                          <TableHead className="w-16 text-center font-bold text-white">🎯 GST%</TableHead>
+                          <TableHead className="w-20 text-right font-bold text-white">💰 Total</TableHead>
+                          <TableHead className="w-8 font-bold text-white">🗑️</TableHead>
+                        </TableRow>
+                      </TableHeader>
                       <TableBody>
-                        {orderItems.map(item => (
-                          <TableRow key={item.id}>
-                            <TableCell className="font-medium">{item.product_name} ({item.product_code})</TableCell>
-                            <TableCell><Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
-                            <TableCell><Input type="number" step="0.01" value={item.unit_dp} onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
-                            <TableCell><Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
-                            <TableCell><Input type="number" step="0.1" value={item.gst_percent} onChange={(e) => updateOrderItem(item.id, 'gst_percent', parseFloat(e.target.value) || 0)} className="h-8" disabled={isSubmitting} /></TableCell>
-                            <TableCell className="text-right font-bold text-green-600">₹{item.total_price.toFixed(2)}</TableCell>
-                            <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
-                          </TableRow>
-                        ))}
+                        {orderItems.map((item, index) => {
+                          const isEvenRow = index % 2 === 0;
+                          const bgColor = isEvenRow ? 'bg-pink-50 hover:bg-pink-100' : 'bg-rose-300 hover:bg-rose-400';
+                          const borderColor = isEvenRow ? 'border-b border-pink-200' : 'border-b border-rose-400';
+                          
+                          return (
+                            <TableRow key={item.id} className={`${bgColor} ${borderColor}`}>
+                              <TableCell className="font-medium text-xs text-gray-800">{item.product_name} ({item.product_code})</TableCell>
+                              <TableCell className="text-center">
+                                <Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Input type="number" step="0.01" value={item.unit_dp} onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} className={`h-7 text-xs text-right border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Input type="number" step="0.1" value={item.gst_percent} onChange={(e) => updateOrderItem(item.id, 'gst_percent', parseFloat(e.target.value) || 0)} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                              </TableCell>
+                              <TableCell className={`text-right font-bold text-lg ${isEvenRow ? 'text-green-700' : 'text-white'}`}>₹{item.total_price.toFixed(2)}</TableCell>
+                              <TableCell>
+                                <Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting} className={`h-6 w-6 ${isEvenRow ? 'hover:bg-pink-200' : 'hover:bg-rose-500'}`}>
+                                  <Trash2 className={`h-3 w-3 ${isEvenRow ? 'text-red-500' : 'text-white'}`} />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center border-2 border-pink-300 rounded-lg bg-gradient-to-br from-pink-50 to-rose-50">
+                    <p className="text-pink-500 text-sm font-semibold">No items added. Use tabs above to add products or combos.</p>
                   </div>
                 )}
               </div>
 
-              <div className="p-4 bg-muted rounded-md space-y-2">
-                <div className="flex justify-between text-sm"><span>Taxable Value (Excl. GST):</span><span>₹{totalTaxableValue.toFixed(2)}</span></div>
-                <div className="flex justify-between text-sm"><span>Total GST:</span><span>₹{totalGstAmount.toFixed(2)}</span></div>
-                <Separator className="my-1" />
-                <div className="flex justify-between text-base font-medium"><span>Subtotal (Incl. GST):</span><span>₹{preGlobalDiscountTotal.toFixed(2)}</span></div>
-                <FormField control={form.control} name="discountAmount" render={({ field }) => (<FormItem className="flex justify-between items-center"><FormLabel className="text-base font-medium">Additional Global Discount (₹)</FormLabel><FormControl><Input type="number" step="0.01" {...field} className="w-32 text-right" min="0" max={preGlobalDiscountTotal} disabled={isSubmitting} /></FormControl></FormItem>)} />
-                <FormField control={form.control} name="roundOff" render={({ field }) => (<FormItem className="flex justify-between items-center"><FormLabel className="text-base font-medium">Round Off (+/-)</FormLabel><FormControl><Input type="number" step="0.01" {...field} className="w-32 text-right" disabled={isSubmitting} /></FormControl></FormItem>)} />
-                <FormField control={form.control} name="freightCharges" render={({ field }) => (<FormItem className="flex justify-between items-center"><FormLabel className="text-base font-medium">Freight/Transportation (₹)</FormLabel><FormControl><Input type="number" step="0.01" {...field} className="w-32 text-right" min="0" disabled={isSubmitting} /></FormControl></FormItem>)} />
-                <Separator className="my-2" />
-                <div className="flex justify-between text-lg font-bold"><span>Total Order Value:</span><span>₹{finalOrderValue.toFixed(2)}</span></div>
-              </div>
-              <DialogFooter className="flex gap-2 justify-end flex-wrap">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting || isGeneratingBill}>Cancel</Button>
-                <Button type="submit" disabled={isSubmitting || isGeneratingBill}>
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Order'}
-                </Button>
-                {form.getValues('billingCompanyId') && selectedFinancialYearId && nextBillNumber && billSeriesId && !linkedInvoiceId && !cancelledInvoiceId && (
-                  <Button 
-                    type="button"
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                    onClick={async () => {
+              {/* Bottom Section - Totals and Actions (Fixed) */}
+              <div className="flex-shrink-0 border-t bg-gradient-to-r from-gray-50 via-blue-50 to-purple-50 px-6 py-3 space-y-2">
+                <div className="grid grid-cols-5 gap-4 text-sm">
+                  <div className="p-3 bg-gradient-to-br from-green-100 to-green-50 rounded-lg border-2 border-green-400 shadow-md">
+                    <p className="text-xs font-bold text-green-700">💰 Taxable Value</p>
+                    <p className="font-bold text-green-900 text-lg">₹{totalTaxableValue.toFixed(2)}</p>
+                  </div>
+                  <div className="p-3 bg-gradient-to-br from-orange-100 to-orange-50 rounded-lg border-2 border-orange-400 shadow-md">
+                    <p className="text-xs font-bold text-orange-700">📊 Total GST</p>
+                    <p className="font-bold text-orange-900 text-lg">₹{totalGstAmount.toFixed(2)}</p>
+                  </div>
+                  <div className="p-3 bg-gradient-to-br from-blue-100 to-blue-50 rounded-lg border-2 border-blue-400 shadow-md">
+                    <p className="text-xs font-bold text-blue-700">🧮 Subtotal</p>
+                    <p className="font-bold text-blue-900 text-lg">₹{preGlobalDiscountTotal.toFixed(2)}</p>
+                  </div>
+                  <FormField control={form.control} name="roundOff" render={({ field }) => (
+                    <FormItem className="p-3 bg-gradient-to-br from-amber-100 to-amber-50 rounded-lg border-2 border-amber-400 shadow-md">
+                      <FormLabel className="text-xs font-bold text-amber-700 block">🔄 Round Off</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" {...field} className="h-8 text-xs font-bold text-right bg-white border-amber-300" disabled={isSubmitting} />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  <div className="p-3 bg-gradient-to-br from-red-200 via-purple-200 to-blue-200 rounded-lg border-2 border-purple-500 shadow-lg">
+                    <p className="text-xs font-bold text-purple-900">💎 TOTAL AMOUNT</p>
+                    <p className="font-bold text-purple-900 text-xl">₹{finalOrderValue.toFixed(2)}</p>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting || isGeneratingBill} className="text-xs h-8 bg-red-50 hover:bg-red-100 border-red-300 text-red-700 font-bold">✕ Cancel</Button>
+                  <Button type="submit" disabled={isSubmitting || isGeneratingBill} className="text-xs h-8 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold shadow-md">
+                    {isSubmitting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : '💾 Save Order'}
+                  </Button>
+                  {form.getValues('billingCompanyId') && selectedFinancialYearId && nextBillNumber && billSeriesId && !linkedInvoiceId && !cancelledInvoiceId && (
+                    <Button type="button" className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white text-xs h-8 font-bold shadow-md" onClick={async () => {
                       setIsGeneratingBill(true);
                       try {
-                        // Save the order first
                         const isFormValid = await form.trigger();
                         if (!isFormValid) {
                           showError('Please fix form errors before generating bill');
                           setIsGeneratingBill(false);
                           return;
                         }
-
                         const values = form.getValues();
                         await handleSave(values);
                       } catch (err) {
@@ -1909,13 +1819,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                       } finally {
                         setIsGeneratingBill(false);
                       }
-                    }}
-                    disabled={isSubmitting || isGeneratingBill}
-                  >
-                    {isGeneratingBill ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : '📄 Generate Bill'}
-                  </Button>
-                )}
-              </DialogFooter>
+                    }} disabled={isSubmitting || isGeneratingBill}>
+                      {isGeneratingBill ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : '📄 Generate Bill'}
+                    </Button>
+                  )}
+                </div>
+              </div>
             </form>
           </Form>
         )}
@@ -1925,3 +1834,4 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 };
 
 export default EditOrderDialog;
+

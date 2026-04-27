@@ -58,9 +58,9 @@ AS $$
 
   UNION ALL
 
-  -- Dispatched Orders (with bill_no from orders table only)
+  -- Dispatched billed orders with gate pass timestamp
   SELECT
-    o.dispatch_date::date as transaction_date,
+    COALESCE(o.gate_pass_dispatch_time, o.dispatch_date, o.order_date)::date as transaction_date,
     'Order #' || o.order_number || ' / Bill #' || COALESCE(o.bill_no, 'N/A') || ' / Gatepass #' || COALESCE(o.dispatch_number::text, 'N/A') as details,
     o.total_amount as debit,
     0 as credit,
@@ -69,9 +69,9 @@ AS $$
     'order' as transaction_type
   FROM public.orders o
   WHERE o.dealer_id = dealer_id_param
-  AND o.dispatched = true
-  AND o.dispatch_date IS NOT NULL
   AND o.bill_no IS NOT NULL
+  AND o.dispatched = true
+  AND o.gate_pass_dispatch_time IS NOT NULL
   AND (
     p_show_pending_only = false OR
     (

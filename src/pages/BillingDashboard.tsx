@@ -12,13 +12,14 @@ import { showError, showSuccess } from '@/utils/toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Loader2, Plus, FileText, Edit, DollarSign, ArrowLeft, LogOut, TrendingUp, Eye, Printer, Filter, Trash2, AlertCircle, Check, X, MoreVertical } from 'lucide-react';
+import { Loader2, Plus, FileText, Edit, DollarSign, ArrowLeft, LogOut, TrendingUp, Eye, Printer, Filter, Trash2, AlertCircle, Check, X, MoreVertical, Download } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import PrintBillDialog from '@/components/PrintBillDialog';
 import DealerLedgerReportNewDialog from '@/components/reports/DealerLedgerReportNewDialog';
 import CreditNoteDialog from '@/components/CreditNoteDialog';
 import CreditNotesReportDialog from '@/components/reports/CreditNotesReportDialog';
+import ImportBillsDialog from '@/components/ImportBillsDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -204,6 +205,7 @@ const BillingDashboard = () => {
   const [isCancelBillDialogOpen, setIsCancelBillDialogOpen] = useState(false);
   const [isCreditNoteDialogOpen, setIsCreditNoteDialogOpen] = useState(false);
   const [isCreditNotesReportOpen, setIsCreditNotesReportOpen] = useState(false);
+  const [isImportBillsDialogOpen, setIsImportBillsDialogOpen] = useState(false);
   const [selectedBillForCancel, setSelectedBillForCancel] = useState<any>(null);
   const [cancelBillReason, setCancelBillReason] = useState<string>('');
   const [billVerificationStatus, setBillVerificationStatus] = useState<Map<string, 'pending' | 'verified' | 'rejected'>>(new Map());
@@ -919,6 +921,7 @@ const BillingDashboard = () => {
             company_id: selectedCompanyId,
             financial_year_id: selectedFinancialYearId,
             bill_series_id: billSeriesId,
+            bill_number: nextBillNumber,
             bill_date: billDate,
             dealer_id: selectedOrderForBill.dealer_id,
             gst_number: selectedOrderForBill.dealer_gst,
@@ -1437,6 +1440,14 @@ const BillingDashboard = () => {
                 >
                   <FileText className="h-4 w-4" />
                   <span>Dealer Ledger Report</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setIsImportBillsDialogOpen(true)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Import Bills</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -2165,6 +2176,8 @@ const BillingDashboard = () => {
         return (
           <EditOrderDialog
             isOpen={isEditDialogOpen}
+            isBillingDashboard={true}
+            fullScreen={!isEditingFromHeldOrders && !isEditingFromCancelledBills}
             onOpenChange={(open) => {
               setIsEditDialogOpen(open);
               if (!open) {
@@ -2643,6 +2656,17 @@ const BillingDashboard = () => {
       <CreditNotesReportDialog
         isOpen={isCreditNotesReportOpen}
         onOpenChange={setIsCreditNotesReportOpen}
+      />
+
+      {/* Import Bills Dialog */}
+      <ImportBillsDialog
+        isOpen={isImportBillsDialogOpen}
+        onClose={() => setIsImportBillsDialogOpen(false)}
+        onImportComplete={() => {
+          setIsImportBillsDialogOpen(false);
+          // Optionally refresh the dashboard
+          // fetchOrders();
+        }}
       />
 
       <MadeWithDyad />

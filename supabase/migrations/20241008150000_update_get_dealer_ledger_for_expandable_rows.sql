@@ -39,9 +39,9 @@ AS $function$
 
     UNION ALL
 
-    -- Dispatched Orders (Invoices)
+    -- Billed Orders (include billed orders even if dispatch is pending)
     SELECT
-        o.dispatch_date::date as transaction_date,
+        COALESCE(o.dispatch_date, o.order_date)::date as transaction_date,
         'Order #' || o.order_number || ' / Bill #' || COALESCE(o.bill_no, 'N/A') || ' / Gatepass #' || COALESCE(o.dispatch_number::text, 'N/A') as details,
         o.total_amount as debit,
         0 as credit,
@@ -49,8 +49,7 @@ AS $function$
         'order' as transaction_type
     FROM public.orders o
     WHERE o.dealer_id = dealer_id_param
-    AND o.dispatched = true
-    AND o.dispatch_date IS NOT NULL
+    AND o.bill_no IS NOT NULL
     AND (
         p_show_pending_only = false OR
         (
