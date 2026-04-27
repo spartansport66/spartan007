@@ -461,13 +461,25 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         .from('orders')
         .select(`
           id, order_number, order_date, dealer_id, user_id, freight_charges, total_amount, discount_amount, round_off, bill_no, dispatch_date, delivery_location, transport_name, booking_destination, date_of_dispatch,
-          dealers (name),
-          sales (product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst))
+          dealers (name)
         `)
         .eq('id', id)
         .single();
 
       if (orderError) throw orderError;
+
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select('product_id, quantity, total_price, unit_price, discount_percent, gst_percent, products (name, code, dp, gst)')
+        .eq('order_id', id)
+        .order('id');
+
+      if (salesError) throw salesError;
+
+      const orderWithSales = {
+        ...orderRaw,
+        sales: salesData || []
+      };
 
       // Fetch company and invoice ID from BOTH company tables
       // Important: Get the ACTIVE invoice (not rejected ones)
@@ -539,7 +551,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         console.log('⚠️ No invoice found for order:', id);
       }
 
-      const fetchedItems: OrderItem[] = (orderRaw.sales || []).map((sale: any, index: number) => {
+      const fetchedItems: OrderItem[] = (orderWithSales.sales || []).map((sale: any, index: number) => {
         // Use only the stored unit_price from the sales table (snapshot at order creation time)
         // Never fall back to current product price - preserve original order price
         const unitPrice = sale.unit_price ?? 0;
@@ -566,7 +578,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       });
 
       const orderToSet: OrderToEdit = {
-        ...orderRaw,
+        ...orderWithSales,
         company_id: companyId || undefined,
         items: fetchedItems,
       };
@@ -1656,11 +1668,18 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                             <PopoverTrigger asChild>
                               <Button variant="outline" role="combobox" className="w-full justify-between h-8 text-xs">{productSearch || 'Select product'}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-64 p-0" align="start">
+                            <PopoverContent className="w-[32rem] p-0" align="start">
                               <div className="p-2">
                                 <Input placeholder="Search..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="h-8 text-xs mb-2" />
                                 <ScrollArea className="h-64">
-                                  {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).map(product => (
+                                  {products.filter(product => {
+                                    const searchText = productSearch.trim().toLowerCase();
+                                    if (!searchText) return true;
+                                    return (
+                                      product.name.toLowerCase().includes(searchText) ||
+                                      product.code?.toLowerCase().includes(searchText)
+                                    );
+                                  }).map(product => (
                                     <button key={product.id} onClick={() => { setNewItemProductId(product.id); setProductSearch(''); setIsProductPopoverOpen(false); }} className="w-full justify-start font-normal h-auto py-2 px-2 text-xs hover:bg-gray-100">
                                       <Check className={cn("mr-2 h-4 w-4 flex-shrink-0", newItemProductId === product.id ? "opacity-100" : "opacity-0")} />
                                       <div className="flex flex-col items-start w-full">
