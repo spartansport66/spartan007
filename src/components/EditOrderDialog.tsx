@@ -83,6 +83,8 @@ interface OrderItem {
   product_code: string;
   unit_dp: number;
   discount_percent: number;
+  discount_amount?: number;
+  discount_mode?: 'price' | 'item';
   gst_percent: number;
   taxable_value: number;
   gst_amount: number;
@@ -150,6 +152,24 @@ const normalizeGstPercentValue = (value: string | number | null | undefined): nu
 
 const formatGstPercentValue = (value: string | number | null | undefined): string => {
   return normalizeGstPercentValue(value).toFixed(2);
+};
+
+const calculateItemTotals = (
+  unitPrice: number,
+  quantity: number,
+  discountPercent: number,
+  gstPercent: number,
+  discountMode: 'price' | 'item'
+) => {
+  const normalizedDiscount = Math.max(0, discountPercent);
+  const discountAmount = (unitPrice * quantity * normalizedDiscount) / 100;
+  const taxableValue = discountMode === 'price'
+    ? unitPrice * (1 - normalizedDiscount / 100) * quantity
+    : Math.max(0, unitPrice * quantity - discountAmount);
+  const gstAmount = (taxableValue * gstPercent) / 100;
+  const totalPrice = taxableValue + gstAmount;
+
+  return { discountAmount, taxableValue, gstAmount, totalPrice };
 };
 
 // Helper function to fetch all products with pagination
@@ -424,6 +444,22 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [newComboQuantity, setNewComboQuantity] = useState<number>(1);
   const [newComboUnitPrice, setNewComboUnitPrice] = useState<number>(0);
   const [newComboDiscountPercent, setNewComboDiscountPercent] = useState<string>('0');
+  const [discountMode, setDiscountMode] = useState<'price' | 'item'>('item');
+
+  useEffect(() => {
+    setOrderItems(prev => prev.map(item => {
+      const mode = discountMode;
+      const totals = calculateItemTotals(item.unit_dp, item.quantity, item.discount_percent, item.gst_percent, mode);
+      return {
+        ...item,
+        discount_mode: mode,
+        discount_amount: totals.discountAmount,
+        taxable_value: totals.taxableValue,
+        gst_amount: totals.gstAmount,
+        total_price: totals.totalPrice,
+      };
+    }));
+  }, [discountMode]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -569,10 +605,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         const unitPrice = sale.unit_price ?? 0;
         const discPercent = sale.discount_percent || 0;
         const gstPercent = normalizeGstPercentValue(sale.gst_percent ?? sale.products?.gst ?? "0");
-        
-        const taxableUnitPrice = unitPrice * (1 - discPercent / 100);
-        const taxableValue = taxableUnitPrice * sale.quantity;
-        const gstAmount = (taxableValue * gstPercent) / 100;
+        const totals = calculateItemTotals(unitPrice, sale.quantity, discPercent, gstPercent, 'item');
 
         return {
           id: `${sale.product_id}-${index}`,
@@ -582,9 +615,11 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           product_code: sale.products?.code || 'N/A',
           unit_dp: unitPrice,
           discount_percent: discPercent,
+          discount_amount: totals.discountAmount,
+          discount_mode: 'item',
           gst_percent: gstPercent,
-          taxable_value: taxableValue,
-          gst_amount: gstAmount,
+          taxable_value: totals.taxableValue,
+          gst_amount: totals.gstAmount,
           total_price: sale.total_price,
         };
       });
@@ -849,13 +884,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const newItemCalculations = useMemo(() => {
     const discPercent = parseFloat(newItemDiscountPercent as any) || 0;
     const gstPercent = normalizeGstPercentValue(newItemGstPercent);
-    const taxableUnitPrice = newItemUnitPrice * (1 - discPercent / 100);
-    const taxableValue = taxableUnitPrice * newItemQuantity;
-    const gstAmount = (taxableValue * gstPercent) / 100;
-    const totalPrice = taxableValue + gstAmount;
-
-    return { taxableValue, gstAmount, totalPrice };
-  }, [newItemUnitPrice, newItemDiscountPercent, newItemQuantity, newItemGstPercent]);
+    return calculateItemTotals(newItemUnitPrice, newItemQuantity, discPercent, gstPercent, discountMode);
+  }, [newItemUnitPrice, newItemDiscountPercent, newItemQuantity, newItemGstPercent, discountMode]);
 
   const addOrderItem = () => {
     if (selectionTab === 'products') {
@@ -875,6 +905,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         product_code: product.code,
         unit_dp: newItemUnitPrice,
         discount_percent: parseFloat(newItemDiscountPercent as any) || 0,
+        discount_amount: newItemCalculations.discountAmount,
+        discount_mode: discountMode,
         gst_percent: normalizeGstPercentValue(newItemGstPercent),
         taxable_value: newItemCalculations.taxableValue,
         gst_amount: newItemCalculations.gstAmount,
@@ -905,11 +937,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         const unitPrice = (item.unit_price || 0) * ratio;
         const discPercent = parseFloat(newComboDiscountPercent as any) || item.discount_percent || 0;
         const gstPercent = normalizeGstPercentValue(item.gst_percent);
-        
-        const taxableUnitPrice = unitPrice * (1 - discPercent / 100);
-        const taxableValue = taxableUnitPrice * itemQuantity;
-        const gstAmount = (taxableValue * gstPercent) / 100;
-        const totalPrice = taxableValue + gstAmount;
+        const totals = calculateItemTotals(unitPrice, itemQuantity, discPercent, gstPercent, discountMode);
 
         return {
           id: `${selectedCombo.combo_id}-${item.product_id}-${Date.now()}-${index}`,
@@ -919,10 +947,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           product_code: item.product_code,
           unit_dp: unitPrice,
           discount_percent: discPercent,
+          discount_amount: totals.discountAmount,
+          discount_mode: discountMode,
           gst_percent: gstPercent,
-          taxable_value: taxableValue,
-          gst_amount: gstAmount,
-          total_price: totalPrice,
+          taxable_value: totals.taxableValue,
+          gst_amount: totals.gstAmount,
+          total_price: totals.totalPrice,
         };
       });
 
@@ -940,11 +970,19 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       if (item.id === id) {
         const normalizedValue = field === 'gst_percent' ? normalizeGstPercentValue(value) : value;
         const updatedItem = { ...item, [field]: normalizedValue };
-        const discount = (updatedItem.unit_dp * updatedItem.discount_percent) / 100;
-        const discountedUnitPrice = Math.max(0, updatedItem.unit_dp - discount);
-        updatedItem.taxable_value = discountedUnitPrice * updatedItem.quantity;
-        updatedItem.gst_amount = (updatedItem.taxable_value * updatedItem.gst_percent) / 100;
-        updatedItem.total_price = updatedItem.taxable_value + updatedItem.gst_amount;
+        const mode = updatedItem.discount_mode || discountMode;
+        const totals = calculateItemTotals(
+          updatedItem.unit_dp,
+          updatedItem.quantity,
+          updatedItem.discount_percent,
+          updatedItem.gst_percent,
+          mode
+        );
+        updatedItem.discount_amount = totals.discountAmount;
+        updatedItem.taxable_value = totals.taxableValue;
+        updatedItem.gst_amount = totals.gstAmount;
+        updatedItem.total_price = totals.totalPrice;
+        updatedItem.discount_mode = mode;
         return updatedItem;
       }
       return item;
@@ -1694,7 +1732,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                     {/* Products Tab */}
                     <TabsContent value="products" className="space-y-2 mt-2">
                       <div className="grid grid-cols-12 gap-2 items-end">
-                        <div className="col-span-4">
+                        <div className="col-span-5">
                           <Popover open={isProductPopoverOpen} onOpenChange={setIsProductPopoverOpen}>
                             <PopoverTrigger asChild>
                               <Button variant="outline" role="combobox" className="w-full justify-between h-8 text-xs">{currentProductDisplay}<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button>
@@ -1729,22 +1767,35 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                           </Popover>
                         </div>
 
-                        <div className="col-span-2">
+                        <div className="col-span-1">
                           <Label className="text-xs font-semibold">Qty</Label>
                           <Input type="number" min={1} value={newItemQuantity} onChange={(e) => setNewItemQuantity(parseInt(e.target.value) || 1)} disabled={isSubmitting} className="h-8 text-xs" />
                         </div>
 
-                        <div className="col-span-2">
+                        <div className="col-span-1">
                           <Label className="text-xs font-semibold">Price (DP)</Label>
                           <Input type="number" step="0.01" value={newItemUnitPrice} onChange={(e) => setNewItemUnitPrice(parseFloat(e.target.value) || 0)} disabled={isSubmitting} className="h-8 text-xs" />
                         </div>
 
-                        <div className="col-span-2">
+                        <div className="col-span-1">
                           <Label className="text-xs font-semibold">Disc %</Label>
                           <Input type="number" step="0.1" value={newItemDiscountPercent} onChange={(e) => setNewItemDiscountPercent(e.target.value)} disabled={isSubmitting} className="h-8 text-xs" />
                         </div>
 
                         <div className="col-span-2">
+                          <Label className="text-xs font-semibold">Apply Discount</Label>
+                          <Select value={discountMode} onValueChange={(val) => setDiscountMode(val as 'price' | 'item')} className="w-full text-xs">
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Apply discount" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="price">Price</SelectItem>
+                              <SelectItem value="item">Discount Column</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="col-span-1">
                           <Label className="text-xs font-semibold">GST %</Label>
                           <Input
                             type="number"
@@ -1757,7 +1808,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                           />
                         </div>
 
-                        <div className="col-span-12 sm:col-span-12 md:col-span-12 lg:col-span-12 xl:col-span-12">
+                        <div className="col-span-1 flex justify-end">
                           <Button type="button" onClick={addOrderItem} disabled={!newItemProductId || isSubmitting} className="h-8 w-full text-xs px-2 bg-green-600 hover:bg-green-700">
                             <Plus className="h-3 w-3 mr-1" /> Add
                           </Button>
@@ -1768,7 +1819,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                     {/* Combos Tab */}
                     <TabsContent value="combos" className="space-y-2 mt-2">
                       <div className="grid grid-cols-12 gap-2 items-end">
-                        <div className="col-span-4">
+                        <div className="col-span-5">
                           <Select value={newItemComboId} onValueChange={(value) => {
                             setNewItemComboId(value);
                             const selectedCombo = combos.find(c => c.combo_id === value);
@@ -1797,7 +1848,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                           </Select>
                         </div>
 
-                        <div className="col-span-2">
+                        <div className="col-span-1">
                           <Label className="text-xs font-semibold">Qty</Label>
                           <Input type="number" min={1} value={newComboQuantity} onChange={(e) => setNewComboQuantity(parseInt(e.target.value) || 1)} disabled={isSubmitting} className="h-8 text-xs" />
                         </div>
@@ -1807,12 +1858,25 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                           <Input type="number" step="0.01" value={newComboUnitPrice} onChange={(e) => setNewComboUnitPrice(parseFloat(e.target.value) || 0)} disabled={isSubmitting} className="h-8 text-xs" />
                         </div>
 
-                        <div className="col-span-2">
+                        <div className="col-span-1">
                           <Label className="text-xs font-semibold">Disc %</Label>
                           <Input type="number" step="0.1" value={newComboDiscountPercent} onChange={(e) => setNewComboDiscountPercent(e.target.value)} disabled={isSubmitting} className="h-8 text-xs" />
                         </div>
 
                         <div className="col-span-2">
+                          <Label className="text-xs font-semibold">Apply Discount</Label>
+                          <Select value={discountMode} onValueChange={(val) => setDiscountMode(val as 'price' | 'item')} className="w-full text-xs">
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Apply discount" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="price">Price</SelectItem>
+                              <SelectItem value="item">Discount Column</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="col-span-1">
                           <Button type="button" onClick={addOrderItem} disabled={!newItemComboId || isSubmitting} className="h-8 w-full text-xs px-2 bg-green-600 hover:bg-green-700">
                             <Plus className="h-3 w-3 mr-1" /> Add
                           </Button>
@@ -1831,7 +1895,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                           <TableHead className="w-40 font-bold text-white">📦 Product</TableHead>
                           <TableHead className="w-16 text-center font-bold text-white">📊 Qty</TableHead>
                           <TableHead className="w-20 text-right font-bold text-white">💵 Price</TableHead>
-                          <TableHead className="w-16 text-center font-bold text-white">🏷️ Disc%</TableHead>
+                          {discountMode === 'item' && <TableHead className="w-16 text-center font-bold text-white">🏷️ Disc%</TableHead>}
                           <TableHead className="w-16 text-center font-bold text-white">🎯 GST%</TableHead>
                           <TableHead className="w-20 text-right font-bold text-white">💰 Total</TableHead>
                           <TableHead className="w-8 font-bold text-white">🗑️</TableHead>
@@ -1850,11 +1914,30 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                 <Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
                               </TableCell>
                               <TableCell className="text-right">
-                                <Input type="number" step="0.01" value={item.unit_dp} onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} className={`h-7 text-xs text-right border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={(
+                                    item.discount_mode === 'price'
+                                      ? item.unit_dp * (1 - (item.discount_percent || 0) / 100)
+                                      : item.unit_dp
+                                  ).toFixed(2)}
+                                  onChange={(e) => {
+                                    const enteredValue = parseFloat(e.target.value) || 0;
+                                    const baseUnitPrice = item.discount_mode === 'price' && item.discount_percent
+                                      ? enteredValue / (1 - item.discount_percent / 100)
+                                      : enteredValue;
+                                    updateOrderItem(item.id, 'unit_dp', baseUnitPrice);
+                                  }}
+                                  className={`h-7 text-xs text-right border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`}
+                                  disabled={isSubmitting}
+                                />
                               </TableCell>
-                              <TableCell className="text-center">
-                                <Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
-                              </TableCell>
+                              {discountMode === 'item' && (
+                                <TableCell className="text-center">
+                                  <Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                                </TableCell>
+                              )}
                               <TableCell className="text-center">
                                 <Input type="number" step="0.1" value={item.gst_percent} onChange={(e) => updateOrderItem(item.id, 'gst_percent', parseFloat(e.target.value) || 0)} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
                               </TableCell>
