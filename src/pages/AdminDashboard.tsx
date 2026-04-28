@@ -47,12 +47,19 @@ interface PaymentDetail {
 interface ApprovedBill {
   id: string;
   bill_number: string;
+  order_number?: number | null;
+  company_id?: string | null;
+  billing_company_id?: string | null;
   bill_date: string;
   grand_total: number;
   dealers?: { name?: string };
   companies?: { name?: string };
+  sales_person?: { first_name?: string; last_name?: string };
   source_table?: string;
-  order_id?: string;
+  bill_approved?: boolean | null;
+  dispatched?: boolean | null;
+  dispatch_date?: string | null;
+  dispatch_number?: number | null;
 }
 
 import OpeningBalanceReportDialog from '@/components/reports/OpeningBalanceReportDialog';
@@ -212,43 +219,35 @@ const AdminDashboard = () => {
   const fetchApprovedBills = useCallback(async () => {
     setApprovedBillsLoading(true);
     try {
-      const { data: spartanData, error: spartanError } = await supabase
-        .from('spartan')
+      const { data, error } = await supabase
+        .from('orders')
         .select(`
           id,
-          order_id,
-          bill_number,
+          order_number,
+          bill_number:bill_no,
           bill_date,
-          grand_total,
+          grand_total:total_amount,
           dealers(name),
-          companies(name)
+          sales_person:profiles!user_id(first_name,last_name),
+          bill_approved,
+          dispatched,
+          dispatch_date,
+          dispatch_number
         `)
-        .eq('status', 'approve')
+        .eq('bill_approved', true)
+        .eq('dispatched', false)
         .order('bill_date', { ascending: false });
 
-      const { data: fightorData, error: fightorError } = await supabase
-        .from('fightor')
-        .select(`
-          id,
-          order_id,
-          bill_number,
-          bill_date,
-          grand_total,
-          dealers(name),
-          companies(name)
-        `)
-        .eq('status', 'approve')
-        .order('bill_date', { ascending: false });
-
-      if (spartanError && fightorError) {
-        throw spartanError || fightorError;
+      if (error) {
+        throw error;
       }
 
-      const spartanWithSource = (spartanData || []).map((inv: any) => ({ ...inv, source_table: 'spartan' }));
-      const fightorWithSource = (fightorData || []).map((inv: any) => ({ ...inv, source_table: 'fightor' }));
-      const combined = [...spartanWithSource, ...fightorWithSource];
-      combined.sort((a, b) => new Date(b.bill_date).getTime() - new Date(a.bill_date).getTime());
-      setApprovedBills(combined);
+      const formatted = (data || []).map((inv: any) => ({
+        ...inv,
+        source_table: 'orders',
+        companies: { name: 'N/A' },
+      }));
+      setApprovedBills(formatted);
     } catch (error: any) {
       console.error('Error fetching approved bills:', error.message || error);
       setApprovedBills([]);
@@ -280,23 +279,46 @@ const AdminDashboard = () => {
   };
 
   const handleGatepassApprovedBill = async (invoice: ApprovedBill) => {
-    if (!invoice.order_id) {
+    const orderIdToUpdate = invoice.order_id || invoice.id;
+    if (!orderIdToUpdate) {
       showError('Cannot update gatepass: missing linked order ID.');
       return;
     }
 
     setGatepassLoadingId(invoice.id);
     try {
+      let nextDispatchNumber: number | null = null;
+      try {
+        const { data: seqData, error: seqError } = await supabase.rpc('get_next_dispatch_number').single();
+        if (!seqError && seqData != null) {
+          nextDispatchNumber = seqData as unknown as number;
+        }
+      } catch (rpcErr) {
+        console.warn('get_next_dispatch_number RPC failed, continuing without explicit dispatch number:', rpcErr);
+      }
+
+      const updatePayload: any = {
+        dispatched: true,
+        dispatch_date: new Date().toISOString(),
+        status: 'completed',
+      };
+      if (nextDispatchNumber !== null) {
+        updatePayload.dispatch_number = nextDispatchNumber;
+      }
+
       const { error } = await supabase
         .from('orders')
-        .update({ dispatched: true, dispatch_date: new Date().toISOString() })
-        .eq('id', invoice.order_id);
+        .update(updatePayload)
+        .eq('id', orderIdToUpdate);
 
       if (error) {
         throw error;
       }
 
-      showSuccess('Gatepass dispatched and order updated successfully.');
+      setSelectedOrderIdForDetails(orderIdToUpdate);
+      setAutoPrintGatepass(true);
+      setIsOrderDetailsDialogOpen(true);
+      showSuccess('Gatepass created successfully. Printing now...');
     } catch (error: any) {
       console.error('Error updating gatepass for approved bill:', error.message || error);
       showError(error.message || 'Failed to update gatepass dispatch.');
@@ -617,6 +639,128 @@ const AdminDashboard = () => {
         <AdminTotalPendingOrdersCard key={`admin-pending-orders-${refreshKey}`} onViewReport={() => navigate('/orders-awaiting-dispatch')} />
       </div>
 
+      <div className="grid grid-cols-1 gap-4 mb-6">
+        <Card className="bg-card text-card-foreground shadow-lg overflow-hidden">
+          <CardHeader className="bg-emerald-600 dark:bg-emerald-700 text-white rounded-t-lg p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-xl font-semibold">Approved bills pending for gatepass</CardTitle>
+                <CardDescription className="text-emerald-100">Approved billing dashboard invoices</CardDescription>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  id="search-approved-bill"
+                  value={searchApprovedBill}
+                  onChange={(event) => setSearchApprovedBill(event.target.value)}
+                  placeholder="Search Order #, Bill #, Dealer, Company or Salesperson"
+                  className="min-w-[200px] sm:min-w-[280px] text-black"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <div className="min-w-full max-h-[520px] overflow-y-auto">
+                <div className="grid grid-cols-12 gap-2 bg-emerald-50 p-3 text-xs font-semibold text-gray-700 border-b sticky top-0 z-10">
+                  <div className="col-span-2">Order / Bill #</div>
+                  <div className="col-span-2">Company</div>
+                  <div className="col-span-2">Dealer</div>
+                  <div className="col-span-2">Sales Person</div>
+                  <div className="col-span-2 text-center">Date</div>
+                  <div className="col-span-1 text-right">Amount</div>
+                  <div className="col-span-1 text-right">Actions</div>
+                </div>
+                {approvedBillsLoading ? (
+                  <div className="p-4 text-center text-gray-500">Loading approved bills...</div>
+                ) : approvedBills.filter((invoice) => {
+                  if (!searchApprovedBill.trim()) return true;
+                  const search = searchApprovedBill.toLowerCase();
+                  return (
+                    invoice.order_number?.toString().includes(search) ||
+                    invoice.bill_number?.toLowerCase().includes(search) ||
+                    invoice.dealers?.name?.toLowerCase().includes(search) ||
+                    invoice.companies?.name?.toLowerCase().includes(search) ||
+                    `${invoice.sales_person?.first_name || ''} ${invoice.sales_person?.last_name || ''}`.toLowerCase().includes(search)
+                  );
+                }).length === 0 ? (
+                  <div className="p-4 text-center text-gray-500">No approved bills found</div>
+                ) : (
+                  approvedBills
+                    .filter((invoice) => {
+                      if (!searchApprovedBill.trim()) return true;
+                      const search = searchApprovedBill.toLowerCase();
+                      return (
+                        invoice.bill_number?.toLowerCase().includes(search) ||
+                        invoice.order_number?.toString().includes(search) ||
+                        invoice.dealers?.name?.toLowerCase().includes(search) ||
+                        invoice.companies?.name?.toLowerCase().includes(search) ||
+                        `${invoice.sales_person?.first_name || ''} ${invoice.sales_person?.last_name || ''}`.toLowerCase().includes(search)
+                      );
+                    })
+                    .map((invoice) => (
+                      <div key={`${invoice.source_table}-${invoice.id}`} className="grid grid-cols-12 gap-2 p-3 items-center text-sm border-b last:border-b-0 hover:bg-emerald-50 transition-colors">
+                        <div className="col-span-2 font-mono text-emerald-700 truncate">
+                        {invoice.order_number ? `Order ${invoice.order_number}` : ''}
+                        {invoice.order_number && invoice.bill_number ? ' / ' : ''}
+                        {invoice.bill_number || '—'}
+                      </div>
+                        <div className="col-span-2 truncate text-gray-700">{invoice.companies?.name || 'N/A'}</div>
+                        <div className="col-span-2 truncate text-gray-600">{invoice.dealers?.name || 'N/A'}</div>
+                        <div className="col-span-2 truncate text-gray-600">{`${invoice.sales_person?.first_name || ''} ${invoice.sales_person?.last_name || ''}`.trim() || 'N/A'}</div>
+                        <div className="col-span-2 text-center text-gray-600">{invoice.bill_date ? new Date(invoice.bill_date).toLocaleDateString('en-IN') : 'N/A'}</div>
+                        <div className="col-span-1 text-right font-semibold text-emerald-700">₹{(invoice.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        <div className="col-span-1 flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            title="View Bill"
+                            aria-label="View full order details"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              handleViewApprovedBill(invoice);
+                            }}
+                          >
+                            <Eye className="h-4 w-4 text-emerald-700" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            title="Gatepass"
+                            aria-label="Mark order dispatched with gate pass"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              handleGatepassApprovedBill(invoice);
+                            }}
+                            disabled={gatepassLoadingId === invoice.id}
+                          >
+                            <Truck className="h-4 w-4 text-emerald-700" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            title="Print Gatepass"
+                            aria-label="Print gatepass for this order"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              handlePrintGatepassApprovedBill(invoice);
+                            }}
+                            disabled={gatepassLoadingId === invoice.id}
+                          >
+                            <Printer className="h-4 w-4 text-emerald-700" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6"><OrdersToDispatchCard key={`orders-to-dispatch-${refreshKey}`} onDispatchSuccess={handleDispatchSuccess} /><DispatchedOrdersCard key={`dispatched-orders-${refreshKey}`} /></div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
@@ -763,117 +907,6 @@ const AdminDashboard = () => {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 mb-6">
-        <Card className="bg-card text-card-foreground shadow-lg overflow-hidden">
-          <CardHeader className="bg-emerald-600 dark:bg-emerald-700 text-white rounded-t-lg p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="text-xl font-semibold">Approved Bills</CardTitle>
-                <CardDescription className="text-emerald-100">Approved billing dashboard invoices</CardDescription>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <Input
-                  id="search-approved-bill"
-                  value={searchApprovedBill}
-                  onChange={(event) => setSearchApprovedBill(event.target.value)}
-                  placeholder="Search Bill #, Dealer or Company"
-                  className="min-w-[200px] sm:min-w-[280px] text-black"
-                />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <div className="min-w-full max-h-[520px] overflow-y-auto">
-                <div className="grid grid-cols-12 gap-2 bg-emerald-50 p-3 text-xs font-semibold text-gray-700 border-b sticky top-0 z-10">
-                  <div className="col-span-2">Bill #</div>
-                  <div className="col-span-2">Company</div>
-                  <div className="col-span-3">Dealer</div>
-                  <div className="col-span-2 text-center">Date</div>
-                  <div className="col-span-1 text-right">Amount</div>
-                  <div className="col-span-2 text-right">Actions</div>
-                </div>
-                {approvedBillsLoading ? (
-                  <div className="p-4 text-center text-gray-500">Loading approved bills...</div>
-                ) : approvedBills.filter((invoice) => {
-                  if (!searchApprovedBill.trim()) return true;
-                  const search = searchApprovedBill.toLowerCase();
-                  return (
-                    invoice.bill_number?.toLowerCase().includes(search) ||
-                    invoice.dealers?.name?.toLowerCase().includes(search) ||
-                    invoice.companies?.name?.toLowerCase().includes(search)
-                  );
-                }).length === 0 ? (
-                  <div className="p-4 text-center text-gray-500">No approved bills found</div>
-                ) : (
-                  approvedBills
-                    .filter((invoice) => {
-                      if (!searchApprovedBill.trim()) return true;
-                      const search = searchApprovedBill.toLowerCase();
-                      return (
-                        invoice.bill_number?.toLowerCase().includes(search) ||
-                        invoice.dealers?.name?.toLowerCase().includes(search) ||
-                        invoice.companies?.name?.toLowerCase().includes(search)
-                      );
-                    })
-                    .map((invoice) => (
-                      <div key={`${invoice.source_table}-${invoice.id}`} className="grid grid-cols-12 gap-2 p-3 items-center text-sm border-b last:border-b-0 hover:bg-emerald-50 transition-colors">
-                        <div className="col-span-2 font-mono text-emerald-700 truncate">{invoice.bill_number || '—'}</div>
-                        <div className="col-span-2 truncate text-gray-700">{invoice.companies?.name || 'N/A'}</div>
-                        <div className="col-span-3 truncate text-gray-600">{invoice.dealers?.name || 'N/A'}</div>
-                        <div className="col-span-2 text-center text-gray-600">{invoice.bill_date ? new Date(invoice.bill_date).toLocaleDateString('en-IN') : 'N/A'}</div>
-                        <div className="col-span-1 text-right font-semibold text-emerald-700">₹{(invoice.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                        <div className="col-span-2 flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            title="View Bill"
-                            aria-label="View full order details"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              handleViewApprovedBill(invoice);
-                            }}
-                          >
-                            <Eye className="h-4 w-4 text-emerald-700" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            title="Gatepass"
-                            aria-label="Mark order dispatched with gate pass"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              handleGatepassApprovedBill(invoice);
-                            }}
-                            disabled={!invoice.order_id || gatepassLoadingId === invoice.id}
-                          >
-                            <Truck className="h-4 w-4 text-emerald-700" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            title="Print Gatepass"
-                            aria-label="Print gatepass for this order"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              handlePrintGatepassApprovedBill(invoice);
-                            }}
-                            disabled={gatepassLoadingId === invoice.id}
-                          >
-                            <Printer className="h-4 w-4 text-emerald-700" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
       <MadeWithDyad />
       <OrderDetailsDialog
         orderId={selectedOrderIdForDetails}

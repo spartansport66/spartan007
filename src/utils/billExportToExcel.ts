@@ -75,14 +75,14 @@ export const convertBillsToExcelRows = (bills: BillDataForExport[]): BillExportR
 
     if (bill.items.length === 0) {
       const row: BillExportRow = {
-        'SALE/PUR': 'SALE',
-        'TYPE': bill.status === 'approve' ? 'Invoice' : bill.status === 'reject' ? 'Rejected' : 'Bill',
+        'SALE/PUR': 'S',
+        'TYPE': 'L',
         'DATE': format(new Date(bill.bill_date), 'dd/MM/yyyy'),
         'VOUCHER SERIES': voucherSeries,
         'VOUCHER NO.': voucherNo,
         'PARTY': bill.dealer_name,
         'STATION': bill.dealer_city || bill.dealer_address || '',
-        'P.O.S.': bill.company_name,
+        'P.O.S.': 'PUNJAB',
         'GSTIN': bill.dealer_gst || '',
         'PARTY CODE': bill.dealer_code || '',
         'INVOICE NO.': bill.bill_number,
@@ -116,14 +116,14 @@ export const convertBillsToExcelRows = (bills: BillDataForExport[]): BillExportR
       const igst = 0;
 
       const row: BillExportRow = {
-        'SALE/PUR': 'SALE',
-        'TYPE': bill.status === 'approve' ? 'Invoice' : bill.status === 'reject' ? 'Rejected' : 'Bill',
+        'SALE/PUR': 'S',
+        'TYPE': 'L',
         'DATE': format(new Date(bill.bill_date), 'dd/MM/yyyy'),
         'VOUCHER SERIES': voucherSeries,
         'VOUCHER NO.': voucherNo,
         'PARTY': bill.dealer_name,
         'STATION': bill.dealer_city || bill.dealer_address || '',
-        'P.O.S.': bill.company_name,
+        'P.O.S.': 'PUNJAB',
         'GSTIN': bill.dealer_gst || '',
         'PARTY CODE': bill.dealer_code || '',
         'INVOICE NO.': bill.bill_number,

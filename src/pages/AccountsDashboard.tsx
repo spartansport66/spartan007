@@ -576,6 +576,44 @@ const AccountsDashboard = () => {
       setBillProcessingId(selectedBill.id);
       console.log('Attempting to approve bill:', selectedBill.id, selectedBill.bill_number);
 
+      // Mark the linked order as bill approved first
+      const orderUpdatePayload = { bill_approved: true };
+      if (selectedBill.order_id) {
+        const { data: orderUpdateData, error: orderUpdateError } = await supabase
+          .from('orders')
+          .update(orderUpdatePayload)
+          .eq('id', selectedBill.order_id)
+          .select();
+
+        if (orderUpdateError) {
+          throw orderUpdateError;
+        }
+
+        if (!orderUpdateData || orderUpdateData.length === 0) {
+          console.warn('No orders row updated for selectedBill.order_id', selectedBill.order_id, selectedBill);
+        } else {
+          console.log('Order bill_approved updated for order:', selectedBill.order_id, orderUpdateData);
+        }
+      } else if (selectedBill.bill_number) {
+        const { data: orderUpdateData, error: orderUpdateError } = await supabase
+          .from('orders')
+          .update(orderUpdatePayload)
+          .eq('bill_no', selectedBill.bill_number)
+          .select();
+
+        if (orderUpdateError) {
+          throw orderUpdateError;
+        }
+
+        if (!orderUpdateData || orderUpdateData.length === 0) {
+          console.warn('No orders row updated for selectedBill.bill_number', selectedBill.bill_number, selectedBill);
+        } else {
+          console.log('Order bill_approved updated for order by bill number:', selectedBill.bill_number, orderUpdateData);
+        }
+      } else {
+        console.warn('Skipping order bill_approved update because selectedBill.order_id and bill_number are both missing', selectedBill);
+      }
+
       // Update bill status to 'approve'
       const { data: spartanData, error: spartanError } = await supabase
         .from('spartan')
