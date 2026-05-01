@@ -14,7 +14,7 @@ import { Loader2, Download, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError, showSuccess } from '@/utils/toast';
 import { format } from 'date-fns';
-import { exportBillsToExcel, generateBillExportFilename, BillDataForExport } from '@/utils/billExportToExcel';
+import { exportBillsToExcel, exportBillsToJson, exportBillsToEwayJson, generateBillExportFilename, generateBillJsonExportFilename, generateEwayJsonExportFilename, BillDataForExport } from '@/utils/billExportToExcel';
 
 interface BillRecord {
   id: string;
@@ -269,6 +269,102 @@ const ImportBillsDialog: React.FC<ImportBillsDialogProps> = ({ isOpen, onClose, 
     }
   };
 
+  const buildExportData = async (): Promise<BillDataForExport[]> => {
+    if (bills.length === 0) {
+      return [];
+    }
+
+    const billsToExport = bills.filter(b => selectedBills.has(b.id));
+    if (billsToExport.length === 0) {
+      return [];
+    }
+
+    const exportData: BillDataForExport[] = [];
+
+    for (const bill of billsToExport) {
+      try {
+        const { data: billDetails, error } = await supabase
+          .from(bill.source_table)
+          .select(`
+            id,
+            bill_number,
+            bill_date,
+            grand_total,
+            payment_status,
+            status,
+            freight_charges,
+            round_off,
+            order_id,
+            dealers(name, gst_number, address, city, state),
+            companies(name, gst_number)
+          `)
+          .eq('id', bill.id)
+          .maybeSingle();
+
+        if (error || !billDetails) {
+          console.error(`Error fetching bill details for ${bill.bill_number}:`, error);
+          continue;
+        }
+
+        let items: any[] = [];
+        if (billDetails.order_id) {
+          const { data: salesItems, error: salesError } = await supabase
+            .from('sales')
+            .select(`
+              quantity,
+              unit_price,
+              discount_percent,
+              gst_percent,
+              total_price,
+              products(name, code, size, hsn)
+            `)
+            .eq('order_id', billDetails.order_id);
+
+          if (salesError) {
+            console.error(`Error fetching sales items for order ${billDetails.order_id}:`, salesError);
+          } else {
+            items = salesItems || [];
+          }
+        }
+
+        exportData.push({
+          id: billDetails.id,
+          bill_number: billDetails.bill_number,
+          bill_date: billDetails.bill_date,
+          grand_total: billDetails.grand_total,
+          payment_status: billDetails.payment_status,
+          status: billDetails.status,
+          dealer_name: billDetails.dealers?.name || 'Unknown',
+          dealer_gst: billDetails.dealers?.gst_number || '',
+          dealer_code: '',
+          dealer_address: billDetails.dealers?.address || '',
+          dealer_city: billDetails.dealers?.city || '',
+          dealer_state: billDetails.dealers?.state || '',
+          company_name: billDetails.companies?.name || bill.company_name || '',
+          company_gst: billDetails.companies?.gst_number || '',
+          freight_charges: billDetails.freight_charges || 0,
+          round_off: billDetails.round_off || 0,
+          items: items.map((item: any) => ({
+            product_name: item.products?.name || 'Unknown',
+            product_code: item.products?.code || 'N/A',
+            product_size: item.products?.size || 'N/A',
+            hsn_code: item.products?.hsn || 'N/A',
+            quantity: item.quantity || 0,
+            unit: item.unit || 'Nos',
+            unit_price: item.unit_price || 0,
+            discount_percent: item.discount_percent || 0,
+            gst_percent: item.gst_percent || 0,
+            total_price: item.total_price || 0,
+          })),
+        });
+      } catch (err) {
+        console.error(`Error processing bill ${bill.bill_number}:`, err);
+      }
+    }
+
+    return exportData;
+  };
+
   const handleClose = () => {
     // Reset state
     setImportStats(null);
@@ -279,110 +375,13 @@ const ImportBillsDialog: React.FC<ImportBillsDialogProps> = ({ isOpen, onClose, 
 
   // Export selected bills to Excel
   const handleExportToExcel = async () => {
-    if (bills.length === 0) {
-      showError('No bills to export');
-      return;
-    }
-
     try {
-      // Fetch detailed bill data for export
-      const billsToExport = bills.filter(b => selectedBills.has(b.id));
-      
-      if (billsToExport.length === 0) {
+      const exportData = await buildExportData();
+      if (exportData.length === 0) {
         showError('Please select bills to export');
         return;
       }
 
-      const exportData: BillDataForExport[] = [];
-
-      for (const bill of billsToExport) {
-        try {
-          // Fetch full bill details including items
-          const { data: billDetails, error } = await supabase
-            .from(bill.source_table)
-            .select(`
-              id,
-              bill_number,
-              bill_date,
-              grand_total,
-              payment_status,
-              status,
-              freight_charges,
-              round_off,
-              order_id,
-              dealers(name, gst_number, address, city, state),
-              companies(name, gst_number)
-            `)
-            .eq('id', bill.id)
-            .maybeSingle();
-
-          if (error || !billDetails) {
-            console.error(`Error fetching bill details for ${bill.bill_number}:`, error);
-            continue;
-          }
-
-          let items: any[] = [];
-          if (billDetails.order_id) {
-            const { data: salesItems, error: salesError } = await supabase
-              .from('sales')
-              .select(`
-                quantity,
-                unit_price,
-                discount_percent,
-                gst_percent,
-                total_price,
-                products(name, code, size, hsn)
-              `)
-              .eq('order_id', billDetails.order_id);
-
-            if (salesError) {
-              console.error(`Error fetching sales items for order ${billDetails.order_id}:`, salesError);
-            } else {
-              items = salesItems || [];
-            }
-          }
-
-          exportData.push({
-            id: billDetails.id,
-            bill_number: billDetails.bill_number,
-            bill_date: billDetails.bill_date,
-            grand_total: billDetails.grand_total,
-            payment_status: billDetails.payment_status,
-            status: billDetails.status,
-            dealer_name: billDetails.dealers?.name || 'Unknown',
-            dealer_gst: billDetails.dealers?.gst_number || '',
-            dealer_code: '',
-            dealer_address: billDetails.dealers?.address || '',
-            dealer_city: billDetails.dealers?.city || '',
-            dealer_state: billDetails.dealers?.state || '',
-            company_name: billDetails.companies?.name || bill.company_name || '',
-            company_gst: billDetails.companies?.gst_number || '',
-            freight_charges: billDetails.freight_charges || 0,
-            round_off: billDetails.round_off || 0,
-            items: items.map((item: any) => ({
-              product_name: item.products?.name || 'Unknown',
-              product_code: item.products?.code || 'N/A',
-              product_size: item.products?.size || 'N/A',
-              hsn_code: item.products?.hsn || 'N/A',
-              quantity: item.quantity || 0,
-              unit: item.unit || 'Nos',
-              unit_price: item.unit_price || 0,
-              discount_percent: item.discount_percent || 0,
-              gst_percent: item.gst_percent || 0,
-              total_price: item.total_price || 0,
-            })),
-          });
-        } catch (err) {
-          console.error(`Error processing bill ${bill.bill_number}:`, err);
-        }
-      }
-
-      if (exportData.length === 0) {
-        showError('Could not export any bills');
-        return;
-      }
-
-      // Export to Excel
       const filename = generateBillExportFilename(
         selectedCompanies === 'both' ? 'All' : selectedCompanies
       );
@@ -391,6 +390,44 @@ const ImportBillsDialog: React.FC<ImportBillsDialogProps> = ({ isOpen, onClose, 
     } catch (error) {
       console.error('Error exporting bills:', error);
       showError('Failed to export bills to Excel');
+    }
+  };
+
+  const handleExportToJson = async () => {
+    try {
+      const exportData = await buildExportData();
+      if (exportData.length === 0) {
+        showError('Please select bills to export');
+        return;
+      }
+
+      const filename = generateBillJsonExportFilename(
+        selectedCompanies === 'both' ? 'All' : selectedCompanies
+      );
+      exportBillsToJson(exportData, filename);
+      showSuccess(`Exported ${exportData.length} bill(s) to JSON`);
+    } catch (error) {
+      console.error('Error exporting bills to JSON:', error);
+      showError('Failed to export bills to JSON');
+    }
+  };
+
+  const handleExportToEwayJson = async () => {
+    try {
+      const exportData = await buildExportData();
+      if (exportData.length === 0) {
+        showError('Please select bills to export');
+        return;
+      }
+
+      const filename = generateEwayJsonExportFilename(
+        selectedCompanies === 'both' ? 'All' : selectedCompanies
+      );
+      exportBillsToEwayJson(exportData, filename);
+      showSuccess(`Exported ${exportData.length} bill(s) to E-way JSON`);
+    } catch (error) {
+      console.error('Error exporting bills to E-way JSON:', error);
+      showError('Failed to export bills to E-way JSON');
     }
   };
 
@@ -526,6 +563,26 @@ const ImportBillsDialog: React.FC<ImportBillsDialogProps> = ({ isOpen, onClose, 
                     >
                       <Download className="h-4 w-4 mr-1" />
                       Export Excel
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportToJson}
+                      disabled={selectedBills.size === 0}
+                      className="text-xs bg-slate-50 border-slate-300 hover:bg-slate-100"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Export JSON
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportToEwayJson}
+                      disabled={selectedBills.size === 0}
+                      className="text-xs bg-orange-50 border-orange-300 hover:bg-orange-100"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Export E-way JSON
                     </Button>
                   </div>
                 </div>

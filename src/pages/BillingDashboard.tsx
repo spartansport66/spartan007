@@ -12,7 +12,7 @@ import { showError, showSuccess } from '@/utils/toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Loader2, Plus, FileText, Edit, DollarSign, ArrowLeft, LogOut, TrendingUp, Eye, Printer, Filter, Trash2, AlertCircle, Check, X, MoreVertical, Download } from 'lucide-react';
+import { Loader2, Plus, FileText, Edit, DollarSign, ArrowLeft, LogOut, TrendingUp, Eye, Printer, Filter, Trash2, AlertCircle, Check, X, MoreVertical, Download, Truck } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import PrintBillDialog from '@/components/PrintBillDialog';
@@ -20,6 +20,7 @@ import DealerLedgerReportNewDialog from '@/components/reports/DealerLedgerReport
 import CreditNoteDialog from '@/components/CreditNoteDialog';
 import CreditNotesReportDialog from '@/components/reports/CreditNotesReportDialog';
 import ImportBillsDialog from '@/components/ImportBillsDialog';
+import EwayBillDialog from '@/components/EwayBillDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -206,6 +207,7 @@ const BillingDashboard = () => {
   const [isCreditNoteDialogOpen, setIsCreditNoteDialogOpen] = useState(false);
   const [isCreditNotesReportOpen, setIsCreditNotesReportOpen] = useState(false);
   const [isImportBillsDialogOpen, setIsImportBillsDialogOpen] = useState(false);
+  const [isEwayBillDialogOpen, setIsEwayBillDialogOpen] = useState(false);
   const [selectedBillForCancel, setSelectedBillForCancel] = useState<any>(null);
   const [cancelBillReason, setCancelBillReason] = useState<string>('');
   const [billVerificationStatus, setBillVerificationStatus] = useState<Map<string, 'pending' | 'verified' | 'rejected'>>(new Map());
@@ -1449,6 +1451,13 @@ const BillingDashboard = () => {
                   <Download className="h-4 w-4" />
                   <span>Import Bills</span>
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setIsEwayBillDialogOpen(true)}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Truck className="h-4 w-4" />
+                  <span>E-way Bill Manager</span>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleLogout}
@@ -1521,6 +1530,20 @@ const BillingDashboard = () => {
                           <p className="text-sm font-medium text-gray-600">Total Items</p>
                           <p className="text-3xl font-bold text-orange-600 mt-2">{ordersWithoutBills.reduce((sum, o) => sum + o.items_count, 0)}</p>
                         </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-slate-100 to-slate-50 border-l-4 border-slate-600 col-span-1 md:col-span-4">
+                      <CardContent className="pt-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-gray-600">E-way Bill Manager</p>
+                          <p className="text-lg font-semibold text-slate-800 mt-1">Save API keys and upload GST e-way bills</p>
+                        </div>
+                        <Button
+                          onClick={() => setIsEwayBillDialogOpen(true)}
+                          className="bg-slate-600 hover:bg-slate-700 text-white text-xs"
+                        >
+                          Open E-way Bill Manager
+                        </Button>
                       </CardContent>
                     </Card>
                   </>
@@ -2667,6 +2690,11 @@ const BillingDashboard = () => {
           // Optionally refresh the dashboard
           // fetchOrders();
         }}
+      />
+
+      <EwayBillDialog
+        isOpen={isEwayBillDialogOpen}
+        onOpenChange={setIsEwayBillDialogOpen}
       />
 
       <MadeWithDyad />

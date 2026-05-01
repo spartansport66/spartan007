@@ -29,6 +29,7 @@ interface Company {
   country: string;
   postal_code: string | null;
   gst_number: string | null;
+  eway_api_key: string | null;
   contact_number: string;
   email: string;
   website: string | null;
@@ -51,6 +52,7 @@ const companySchema = z.object({
   contactNumber: z.string().min(10, { message: 'Contact number must be at least 10 digits.' }),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   website: z.string().optional().nullable(),
+  ewayApiKey: z.string().optional().nullable(),
   logoUrl: z.string().optional().nullable(),
   isActive: z.boolean().default(true),
 });
@@ -79,6 +81,7 @@ const ManageCompanies = () => {
       contactNumber: '',
       email: '',
       website: '',
+      ewayApiKey: '',
       logoUrl: null,
       isActive: true,
     },
@@ -137,6 +140,7 @@ const ManageCompanies = () => {
       contactNumber: company.contact_number,
       email: company.email,
       website: company.website,
+      ewayApiKey: company.eway_api_key || '',
       logoUrl: company.logo_url,
       isActive: company.is_active,
     });
@@ -193,6 +197,7 @@ const ManageCompanies = () => {
         country: values.country,
         postal_code: values.postalCode || null,
         gst_number: values.gstNumber ? values.gstNumber.toUpperCase() : null,
+        eway_api_key: values.ewayApiKey || null,
         contact_number: values.contactNumber,
         email: values.email,
         website: values.website || null,
@@ -200,23 +205,25 @@ const ManageCompanies = () => {
         is_active: values.isActive,
       };
 
-      if (selectedCompany) {
-        const { error } = await supabase
-          .from('companies')
-          .update(payload)
-          .eq('id', selectedCompany.id);
-        
-        if (error) throw error;
-        showSuccess('Company updated successfully');
-      } else {
-        const { error } = await supabase
-          .from('companies')
-          .insert([payload]);
-        
-        if (error) throw error;
-        showSuccess('Company added successfully');
+      const savePayload = async (payloadToSave: any) => {
+        if (selectedCompany) {
+          return supabase.from('companies').update(payloadToSave).eq('id', selectedCompany.id);
+        }
+        return supabase.from('companies').insert([payloadToSave]);
+      };
+
+      let result = await savePayload(payload);
+      if (result.error && result.error.message?.includes('eway_api_key')) {
+        const { error: fallbackError } = await savePayload({ ...payload, eway_api_key: undefined });
+        if (fallbackError) throw fallbackError;
+        result = { error: null, data: null } as any;
       }
 
+      if (result.error) {
+        throw result.error;
+      }
+
+      showSuccess(selectedCompany ? 'Company updated successfully' : 'Company added successfully');
       setIsDialogOpen(false);
       fetchCompanies();
     } catch (err: any) {
@@ -298,6 +305,7 @@ const ManageCompanies = () => {
                       <TableHead>Contact</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>GST Number</TableHead>
+                      <TableHead>API Key</TableHead>
                       <TableHead>City</TableHead>
                       <TableHead>Active</TableHead>
                       <TableHead>Actions</TableHead>
@@ -310,6 +318,7 @@ const ManageCompanies = () => {
                         <TableCell>{company.contact_number}</TableCell>
                         <TableCell>{company.email}</TableCell>
                         <TableCell>{company.gst_number || '-'}</TableCell>
+                        <TableCell className="font-mono text-xs">{company.eway_api_key || '-'}</TableCell>
                         <TableCell>{company.city}</TableCell>
                         <TableCell>
                           {company.is_active ? (
@@ -475,6 +484,18 @@ const ManageCompanies = () => {
                       <FormLabel>Website</FormLabel>
                       <FormControl>
                         <Input placeholder="www.example.com" {...field} value={field.value ?? ''} disabled={isSubmitting} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={form.control} name="ewayApiKey" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>E-way API Key</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter E-way API key" {...field} value={field.value ?? ''} disabled={isSubmitting} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

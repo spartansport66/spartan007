@@ -721,6 +721,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                     <Table>
                       <TableHeader className="bg-muted">
                         <TableRow>
+                          <TableHead className="text-xs font-bold text-center">S.No</TableHead>
                           <TableHead className="text-xs font-bold">Code</TableHead>
                           <TableHead className="text-xs font-bold">Product</TableHead>
                           <TableHead className="text-xs font-bold text-right">Qty</TableHead>
@@ -735,6 +736,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                       <TableBody>
                         {orderDetails.items.map((item, idx) => (
                           <TableRow key={idx}>
+                            <TableCell className="text-xs text-center font-bold">{idx + 1}</TableCell>
                             <TableCell className="text-xs">{item.product_code}</TableCell>
                             <TableCell className="text-xs">{item.product_name}</TableCell>
                             <TableCell className="text-xs text-right">{item.quantity}</TableCell>

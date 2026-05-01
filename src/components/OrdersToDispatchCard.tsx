@@ -658,6 +658,7 @@ const OrdersToDispatchCard: React.FC<OrdersToDispatchCardProps> = ({ onDispatchS
         isOpen={isEditOrderDialogOpen}
         onOpenChange={setIsEditOrderDialogOpen}
         onOrderUpdated={handleOrderUpdated}
+        fullScreen={true}
       />
     </Card>
   );

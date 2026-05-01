@@ -221,11 +221,150 @@ export const exportBillsToExcel = (bills: BillDataForExport[], filename = 'Bills
   }
 };
 
+export interface EwayBillItem {
+  product_name: string;
+  product_desc?: string;
+  hsn_code?: string;
+  quantity: number;
+  unit?: string;
+  unit_price: number;
+  discount_percent: number;
+  gst_percent: number;
+  total_price: number;
+  taxable_value: number;
+}
+
+export interface EwayBillPayload {
+  docType: string;
+  docNo: string;
+  docDate: string;
+  fromGstin: string;
+  fromTrdName: string;
+  fromAddr1: string;
+  fromPlace: string;
+  fromStateCode?: string;
+  toGstin: string;
+  toTrdName: string;
+  toAddr1: string;
+  toPlace: string;
+  toStateCode?: string;
+  transactionType: string;
+  subSupplyType: number;
+  docValue: number;
+  cgstValue: number;
+  sgstValue: number;
+  igstValue: number;
+  totalValue: number;
+  transportMode: string;
+  vehicleNo: string;
+  itemList: EwayBillItem[];
+}
+
+export const exportBillsToJson = (bills: BillDataForExport[], filename = 'Bills_Export.json') => {
+  try {
+    const json = JSON.stringify(bills, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+    return true;
+  } catch (error) {
+    console.error('Error exporting bills to JSON:', error);
+    throw error;
+  }
+};
+
+export const buildEwayBillPayload = (bills: BillDataForExport[]): EwayBillPayload[] => {
+  return bills.map((bill) => {
+    const items = bill.items.map((item) => {
+      const taxableValue = item.unit_price * item.quantity * (1 - item.discount_percent / 100);
+      return {
+        product_name: item.product_name,
+        product_desc: item.product_name,
+        hsn_code: item.hsn_code || '',
+        quantity: item.quantity,
+        unit: item.unit || 'NOS',
+        unit_price: item.unit_price,
+        discount_percent: item.discount_percent,
+        gst_percent: item.gst_percent,
+        total_price: item.total_price,
+        taxable_value: parseFloat(taxableValue.toFixed(2)),
+      };
+    });
+
+    const totalTaxableValue = items.reduce((sum, item) => sum + item.taxable_value, 0);
+    const totalGstAmount = items.reduce((sum, item) => sum + ((item.taxable_value * item.gst_percent) / 100), 0);
+    const totalCgst = parseFloat((totalGstAmount / 2).toFixed(2));
+    const totalSgst = parseFloat((totalGstAmount / 2).toFixed(2));
+
+    return {
+      docType: 'INV',
+      docNo: bill.bill_number,
+      docDate: bill.bill_date,
+      fromGstin: bill.company_gst || '',
+      fromTrdName: bill.company_name || '',
+      fromAddr1: bill.dealer_address || '',
+      fromPlace: bill.dealer_city || '',
+      fromStateCode: '',
+      toGstin: bill.dealer_gst || '',
+      toTrdName: bill.dealer_name || '',
+      toAddr1: bill.dealer_address || '',
+      toPlace: bill.dealer_city || '',
+      toStateCode: '',
+      transactionType: 'Outward',
+      subSupplyType: 1,
+      docValue: bill.grand_total,
+      cgstValue: totalCgst,
+      sgstValue: totalSgst,
+      igstValue: 0,
+      totalValue: bill.grand_total,
+      transportMode: 'Road',
+      vehicleNo: '',
+      itemList: items,
+    };
+  });
+};
+
+export const exportBillsToEwayJson = (bills: BillDataForExport[], filename = 'Eway_Bills_Export.json') => {
+  try {
+    const payload = {
+      ewayBill: buildEwayBillPayload(bills),
+    };
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+    return true;
+  } catch (error) {
+    console.error('Error exporting e-way bills to JSON:', error);
+    throw error;
+  }
+};
+
 /**
  * Generates a filename with current date
  */
-export const generateBillExportFilename = (company?: string): string => {
+export const generateBillExportFilename = (company?: string, extension = 'xlsx'): string => {
   const date = format(new Date(), 'yyyy-MM-dd_HHmmss');
   const companyPart = company ? `_${company}` : '';
-  return `Bills_Export${companyPart}_${date}.xlsx`;
+  return `Bills_Export${companyPart}_${date}.${extension}`;
+};
+
+export const generateBillJsonExportFilename = (company?: string): string => {
+  return generateBillExportFilename(company, 'json');
+};
+
+export const generateEwayJsonExportFilename = (company?: string): string => {
+  const date = format(new Date(), 'yyyy-MM-dd_HHmmss');
+  const companyPart = company ? `_${company}` : '';
+  return `Eway_Bills_Export${companyPart}_${date}.json`;
 };

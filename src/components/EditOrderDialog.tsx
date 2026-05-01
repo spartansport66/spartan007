@@ -89,6 +89,7 @@ interface OrderItem {
   taxable_value: number;
   gst_amount: number;
   total_price: number;
+  combo_group_id?: string;
 }
 
 interface OrderToEdit {
@@ -417,6 +418,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<SalesPerson[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
+  const [itemCreationOrder, setItemCreationOrder] = useState<Map<string, number>>(new Map());
   const [orderData, setOrderData] = useState<OrderToEdit | null>(null);
   const [editingGstNumber, setEditingGstNumber] = useState<string | null>(null);
   const [gstNumberInput, setGstNumberInput] = useState<string>('');
@@ -888,6 +891,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   }, [newItemUnitPrice, newItemDiscountPercent, newItemQuantity, newItemGstPercent, discountMode]);
 
   const addOrderItem = () => {
+    const nextOrderNumber = itemCreationOrder.size + 1;
+
     if (selectionTab === 'products') {
       // Add individual product
       if (!newItemProductId || newItemQuantity <= 0) {
@@ -913,6 +918,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         total_price: newItemCalculations.totalPrice,
       };
       setOrderItems(prevItems => [...prevItems, newOrderItem]);
+      setItemCreationOrder(prev => new Map(prev).set(newOrderItem.id, nextOrderNumber));
       setNewItemProductId('');
       setNewItemQuantity(1);
       setNewItemUnitPrice(0);
@@ -930,6 +936,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         return;
       }
 
+      const comboGroupId = `combo-${Date.now()}`;
+      const updatedOrder = new Map(itemCreationOrder);
+
       const comboItems = selectedCombo.items.map((item, index) => {
         const itemQuantity = item.quantity * newComboQuantity;
         const comboBase = selectedCombo.combo_dp || selectedCombo.items.reduce((sum, current) => sum + (current.unit_price || 0) * current.quantity, 0);
@@ -939,8 +948,11 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         const gstPercent = normalizeGstPercentValue(item.gst_percent);
         const totals = calculateItemTotals(unitPrice, itemQuantity, discPercent, gstPercent, discountMode);
 
+        const itemId = `${selectedCombo.combo_id}-${item.product_id}-${Date.now()}-${index}`;
+        updatedOrder.set(itemId, nextOrderNumber);
+
         return {
-          id: `${selectedCombo.combo_id}-${item.product_id}-${Date.now()}-${index}`,
+          id: itemId,
           product_id: item.product_id,
           quantity: itemQuantity,
           product_name: item.product_name,
@@ -953,10 +965,12 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
           taxable_value: totals.taxableValue,
           gst_amount: totals.gstAmount,
           total_price: totals.totalPrice,
+          combo_group_id: comboGroupId,
         };
       });
 
       setOrderItems(prevItems => [...prevItems, ...comboItems]);
+      setItemCreationOrder(updatedOrder);
       setNewItemComboId('');
       setNewComboQuantity(1);
       setNewComboUnitPrice(0);
@@ -991,7 +1005,62 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   const removeOrderItem = (id: string) => {
     setOrderItems(orderItems.filter(item => item.id !== id));
+    setCheckedItems(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(id);
+      return newSet;
+    });
+    setItemCreationOrder(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(id);
+      return newMap;
+    });
   };
+
+  const removeAllItemsByProduct = (productId: string) => {
+    const itemsToRemove = orderItems.filter(item => item.product_id === productId);
+    setOrderItems(orderItems.filter(item => item.product_id !== productId));
+    setCheckedItems(prev => {
+      const newSet = new Set(prev);
+      itemsToRemove.forEach(item => newSet.delete(item.id));
+      return newSet;
+    });
+    setItemCreationOrder(prev => {
+      const newMap = new Map(prev);
+      itemsToRemove.forEach(item => newMap.delete(item.id));
+      return newMap;
+    });
+  };
+
+  const getConsolidatedItems = useMemo(() => {
+    const consolidated: Map<string, { item: OrderItem; quantity: number; totalPrice: number; gstAmount: number; taxableValue: number; allIds: string[] }> = new Map();
+    
+    orderItems.forEach(item => {
+      const key = item.product_id;
+      if (consolidated.has(key)) {
+        const existing = consolidated.get(key)!;
+        existing.quantity += item.quantity;
+        existing.totalPrice += item.total_price;
+        existing.gstAmount += item.gst_amount;
+        existing.taxableValue += item.taxable_value;
+        existing.allIds.push(item.id);
+      } else {
+        consolidated.set(key, {
+          item: item,
+          quantity: item.quantity,
+          totalPrice: item.total_price,
+          gstAmount: item.gst_amount,
+          taxableValue: item.taxable_value,
+          allIds: [item.id],
+        });
+      }
+    });
+    
+    return Array.from(consolidated.entries()).map(([productId, data]) => ({
+      ...data,
+      item: { ...data.item, quantity: data.quantity, total_price: data.totalPrice, gst_amount: data.gstAmount, taxable_value: data.taxableValue },
+    }));
+  }, [orderItems]);
 
   const filteredProducts = useMemo(() => {
     if (!productSearch) return products;
@@ -1892,6 +1961,8 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                     <Table className="text-xs">
                       <TableHeader className="sticky top-0 bg-gradient-to-r from-pink-300 via-pink-400 to-pink-300 z-10">
                         <TableRow>
+                          <TableHead className="w-6 text-center font-bold text-white">#</TableHead>
+                          <TableHead className="w-8 text-center font-bold text-white">✓</TableHead>
                           <TableHead className="w-40 font-bold text-white">📦 Product</TableHead>
                           <TableHead className="w-16 text-center font-bold text-white">📊 Qty</TableHead>
                           <TableHead className="w-20 text-right font-bold text-white">💵 Price</TableHead>
@@ -1902,54 +1973,116 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {orderItems.map((item, index) => {
-                          const isEvenRow = index % 2 === 0;
-                          const bgColor = isEvenRow ? 'bg-pink-50 hover:bg-pink-100' : 'bg-rose-300 hover:bg-rose-400';
-                          const borderColor = isEvenRow ? 'border-b border-pink-200' : 'border-b border-rose-400';
+                        {getConsolidatedItems
+                          .sort((a, b) => {
+                            return b.totalPrice - a.totalPrice;
+                          })
+                          .map((consolidated, index) => {
+                            const item = consolidated.item;
+                            const isChecked = consolidated.allIds.some(id => checkedItems.has(id));
+                            const isEvenRow = index % 2 === 0;
+                            const bgColor = isEvenRow ? 'bg-pink-50 hover:bg-pink-100' : 'bg-rose-300 hover:bg-rose-400';
+                            const borderColor = isEvenRow ? 'border-b border-pink-200' : 'border-b border-rose-400';
                           
-                          return (
-                            <TableRow key={item.id} className={`${bgColor} ${borderColor}`}>
-                              <TableCell className="font-medium text-xs text-gray-800">{item.product_name} ({item.product_code})</TableCell>
-                              <TableCell className="text-center">
-                                <Input type="number" value={item.quantity} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  value={(
-                                    item.discount_mode === 'price'
-                                      ? item.unit_dp * (1 - (item.discount_percent || 0) / 100)
-                                      : item.unit_dp
-                                  ).toFixed(2)}
-                                  onChange={(e) => {
-                                    const enteredValue = parseFloat(e.target.value) || 0;
-                                    const baseUnitPrice = item.discount_mode === 'price' && item.discount_percent
-                                      ? enteredValue / (1 - item.discount_percent / 100)
-                                      : enteredValue;
-                                    updateOrderItem(item.id, 'unit_dp', baseUnitPrice);
-                                  }}
-                                  className={`h-7 text-xs text-right border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`}
-                                  disabled={isSubmitting}
-                                />
-                              </TableCell>
-                              {discountMode === 'item' && (
-                                <TableCell className="text-center">
-                                  <Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
-                                </TableCell>
-                              )}
-                              <TableCell className="text-center">
-                                <Input type="number" step="0.1" value={item.gst_percent} onChange={(e) => updateOrderItem(item.id, 'gst_percent', parseFloat(e.target.value) || 0)} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
-                              </TableCell>
-                              <TableCell className={`text-right font-bold text-lg ${isEvenRow ? 'text-green-700' : 'text-white'}`}>₹{item.total_price.toFixed(2)}</TableCell>
-                              <TableCell>
-                                <Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)} disabled={isSubmitting} className={`h-6 w-6 ${isEvenRow ? 'hover:bg-pink-200' : 'hover:bg-rose-500'}`}>
-                                  <Trash2 className={`h-3 w-3 ${isEvenRow ? 'text-red-500' : 'text-white'}`} />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
+                            return (
+                              <React.Fragment key={item.product_id}>
+                                <TableRow key={item.product_id} className={`${bgColor} ${borderColor}`}>
+                                  <TableCell className="text-center font-bold text-gray-700">{index + 1}</TableCell>
+                                  <TableCell className="text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          consolidated.allIds.forEach(id => setCheckedItems(prev => new Set(prev).add(id)));
+                                        } else {
+                                          setCheckedItems(prev => {
+                                            const newSet = new Set(prev);
+                                            consolidated.allIds.forEach(id => newSet.delete(id));
+                                            return newSet;
+                                          });
+                                        }
+                                      }}
+                                      className="cursor-pointer w-4 h-4"
+                                    />
+                                  </TableCell>
+                                  <TableCell className={`font-medium text-xs text-gray-800 ${isChecked ? 'line-through text-gray-400' : ''}`}>
+                                    {item.product_name} ({item.product_code})
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <Input type="number" value={consolidated.quantity} onChange={(e) => {
+                                      const newQty = parseInt(e.target.value) || 0;
+                                      const qtyDiff = newQty - consolidated.quantity;
+                                      if (consolidated.allIds.length === 1) {
+                                        updateOrderItem(consolidated.allIds[0], 'quantity', newQty);
+                                      } else {
+                                        // For consolidated items, update the first one and adjust accordingly
+                                        const firstItem = orderItems.find(i => i.id === consolidated.allIds[0]);
+                                        if (firstItem) {
+                                          updateOrderItem(consolidated.allIds[0], 'quantity', firstItem.quantity + qtyDiff);
+                                        }
+                                      }
+                                    }} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={(
+                                        item.discount_mode === 'price'
+                                          ? item.unit_dp * (1 - (item.discount_percent || 0) / 100)
+                                          : item.unit_dp
+                                      ).toFixed(2)}
+                                      onChange={(e) => {
+                                        const enteredValue = parseFloat(e.target.value) || 0;
+                                        const baseUnitPrice = item.discount_mode === 'price' && item.discount_percent
+                                          ? enteredValue / (1 - item.discount_percent / 100)
+                                          : enteredValue;
+                                        if (consolidated.allIds.length === 1) {
+                                          updateOrderItem(item.product_id, 'unit_dp', baseUnitPrice);
+                                        } else {
+                                          // Update all instances with the same price
+                                          consolidated.allIds.forEach(id => {
+                                            updateOrderItem(id, 'unit_dp', baseUnitPrice);
+                                          });
+                                        }
+                                      }}
+                                      className={`h-7 text-xs text-right border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`}
+                                      disabled={isSubmitting}
+                                    />
+                                  </TableCell>
+                                  {discountMode === 'item' && (
+                                    <TableCell className="text-center">
+                                      <Input type="number" step="0.1" value={item.discount_percent} onChange={(e) => {
+                                        const newValue = parseFloat(e.target.value) || 0;
+                                        if (consolidated.allIds.length === 1) {
+                                          updateOrderItem(consolidated.allIds[0], 'discount_percent', newValue);
+                                        } else {
+                                          consolidated.allIds.forEach(id => updateOrderItem(id, 'discount_percent', newValue));
+                                        }
+                                      }} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                                    </TableCell>
+                                  )}
+                                  <TableCell className="text-center">
+                                    <Input type="number" step="0.1" value={item.gst_percent} onChange={(e) => {
+                                      const newValue = parseFloat(e.target.value) || 0;
+                                      if (consolidated.allIds.length === 1) {
+                                        updateOrderItem(consolidated.allIds[0], 'gst_percent', newValue);
+                                      } else {
+                                        consolidated.allIds.forEach(id => updateOrderItem(id, 'gst_percent', newValue));
+                                      }
+                                    }} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                                  </TableCell>
+                                  <TableCell className={`text-right font-bold text-lg ${isEvenRow ? 'text-green-700' : 'text-white'}`}>₹{item.total_price.toFixed(2)}</TableCell>
+                                  <TableCell>
+                                    <Button variant="ghost" size="icon" onClick={() => removeAllItemsByProduct(item.product_id)} disabled={isSubmitting} className={`h-6 w-6 ${isEvenRow ? 'hover:bg-pink-200' : 'hover:bg-rose-500'}`}>
+                                      <Trash2 className={`h-3 w-3 ${isEvenRow ? 'text-red-500' : 'text-white'}`} />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              </React.Fragment>
+                            );
+                          })}
                       </TableBody>
                     </Table>
                   </div>

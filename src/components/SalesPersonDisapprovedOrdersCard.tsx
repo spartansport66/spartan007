@@ -63,7 +63,7 @@ const SalesPersonDisapprovedOrdersCard: React.FC = () => {
 
   const handleResend = async (orderId: string) => {
     try {
-      const { error } = await supabase.from('orders').update({ hod_status: null, hod_reason: null, hod_approved_at: null, hod_approved_by: null }).eq('id', orderId);
+      const { error } = await supabase.from('orders').update({ hod_status: 'pending', hod_reason: null, hod_approved_at: null, hod_approved_by: null }).eq('id', orderId);
       if (error) throw error;
       showSuccess('Approval request resent to Sales HOD.');
       emitHodEvent({ type: 'updated', orderId });
