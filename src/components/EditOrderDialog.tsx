@@ -607,7 +607,9 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
         // Never fall back to current product price - preserve original order price
         const unitPrice = sale.unit_price ?? 0;
         const discPercent = sale.discount_percent || 0;
-        const gstPercent = normalizeGstPercentValue(sale.gst_percent ?? sale.products?.gst ?? "0");
+        // Get GST: from sales record > from product master > default to 0
+        const gstValue = sale.gst_percent ?? sale.products?.gst;
+        const gstPercent = normalizeGstPercentValue(gstValue ?? "0");
         const totals = calculateItemTotals(unitPrice, sale.quantity, discPercent, gstPercent, 'item');
 
         return {
@@ -655,6 +657,11 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       }
       
       setOrderItems(fetchedItems);
+
+      console.log('📦 Setting orderItems from fetched data:');
+      fetchedItems.forEach((item, index) => {
+        console.log(`  Item ${index}: product=${item.product_name}, gst_percent=${item.gst_percent}, gst_amount=${item.gst_amount}`);
+      });
 
       form.reset({
         orderNumber: orderRaw.order_number,
@@ -1056,10 +1063,17 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       }
     });
     
-    return Array.from(consolidated.entries()).map(([productId, data]) => ({
-      ...data,
-      item: { ...data.item, quantity: data.quantity, total_price: data.totalPrice, gst_amount: data.gstAmount, taxable_value: data.taxableValue },
-    }));
+    const result = Array.from(consolidated.entries()).map(([productId, data]) => {
+      const consolidatedItem = {
+        ...data,
+        item: { ...data.item, quantity: data.quantity, total_price: data.totalPrice, gst_amount: data.gstAmount, taxable_value: data.taxableValue, gst_percent: data.item.gst_percent || 0 },
+      };
+      // Debug log
+      console.log(`📊 Consolidated item ${data.item.product_name}: gst_percent=${consolidatedItem.item.gst_percent}`);
+      return consolidatedItem;
+    });
+    
+    return result;
   }, [orderItems]);
 
   const filteredProducts = useMemo(() => {
@@ -1975,7 +1989,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                       <TableBody>
                         {getConsolidatedItems
                           .sort((a, b) => {
-                            return b.totalPrice - a.totalPrice;
+                            return b.item.unit_dp - a.item.unit_dp;
                           })
                           .map((consolidated, index) => {
                             const item = consolidated.item;
@@ -2064,16 +2078,22 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                     </TableCell>
                                   )}
                                   <TableCell className="text-center">
-                                    <Input type="number" step="0.1" value={item.gst_percent} onChange={(e) => {
-                                      const newValue = parseFloat(e.target.value) || 0;
-                                      if (consolidated.allIds.length === 1) {
-                                        updateOrderItem(consolidated.allIds[0], 'gst_percent', newValue);
-                                      } else {
-                                        consolidated.allIds.forEach(id => updateOrderItem(id, 'gst_percent', newValue));
-                                      }
+                                    <Input 
+                                      type="number" 
+                                      step="0.1" 
+                                      value={item.gst_percent !== undefined && item.gst_percent !== null ? item.gst_percent : 0}
+                                      onChange={(e) => {
+                                        const newValue = parseFloat(e.target.value) || 0;
+                                        if (consolidated.allIds.length === 1) {
+                                          updateOrderItem(consolidated.allIds[0], 'gst_percent', newValue);
+                                        } else {
+                                          consolidated.allIds.forEach(id => updateOrderItem(id, 'gst_percent', newValue));
+                                        }
                                     }} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
                                   </TableCell>
-                                  <TableCell className={`text-right font-bold text-lg ${isEvenRow ? 'text-green-700' : 'text-white'}`}>₹{item.total_price.toFixed(2)}</TableCell>
+                                  <TableCell className={`text-right font-bold text-lg ${isEvenRow ? 'text-green-700' : 'text-white'}`}>
+                                    ₹{item.total_price.toFixed(2)}
+                                  </TableCell>
                                   <TableCell>
                                     <Button variant="ghost" size="icon" onClick={() => removeAllItemsByProduct(item.product_id)} disabled={isSubmitting} className={`h-6 w-6 ${isEvenRow ? 'hover:bg-pink-200' : 'hover:bg-rose-500'}`}>
                                       <Trash2 className={`h-3 w-3 ${isEvenRow ? 'text-red-500' : 'text-white'}`} />
