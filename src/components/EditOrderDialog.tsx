@@ -654,6 +654,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
       if (companyId) {
         console.log('📋 Setting selectedCompanyId from linked invoice:', companyId);
         setSelectedCompanyId(companyId);
+      } else {
+        console.log('⚠️ No invoice found - allowing price edit without company selection');
+        // For orders without invoices (awaiting dispatch), allow price editing without requiring company selection
+        // The company/FY will be selected when user saves the order if needed
       }
       
       setOrderItems(fetchedItems);
@@ -802,9 +806,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
 
   // Fetch bill_series for selected company and financial year
   // Database trigger will auto-generate bill number on INSERT
+  // NOTE: Bill series is only needed for generating new invoices, not for editing prices
   useEffect(() => {
     if (!selectedCompanyId || !selectedFinancialYearId) {
-      console.log('⏭️ Skipping - missing company or FY');
+      console.log('⏭️ Skipping bill series fetch - missing company or FY (This is OK for editing existing items)');
       return;
     }
 
@@ -1125,7 +1130,10 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
   };
 
   const handleSave = async (values: z.infer<typeof formSchema>) => {
-    if (!orderData) return;
+    if (!orderData) {
+      showError('Order data not loaded. Please refresh and try again.');
+      return;
+    }
     if (orderItems.length === 0) {
       showError('Order must have at least one item.');
       return;
@@ -2036,7 +2044,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                           updateOrderItem(consolidated.allIds[0], 'quantity', firstItem.quantity + qtyDiff);
                                         }
                                       }
-                                    }} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                                    }} onWheel={(e) => { (e.target as HTMLInputElement).blur(); }} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <Input
@@ -2053,7 +2061,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                           ? enteredValue / (1 - item.discount_percent / 100)
                                           : enteredValue;
                                         if (consolidated.allIds.length === 1) {
-                                          updateOrderItem(item.product_id, 'unit_dp', baseUnitPrice);
+                                          updateOrderItem(consolidated.allIds[0], 'unit_dp', baseUnitPrice);
                                         } else {
                                           // Update all instances with the same price
                                           consolidated.allIds.forEach(id => {
@@ -2061,6 +2069,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                           });
                                         }
                                       }}
+                                      onWheel={(e) => { (e.target as HTMLInputElement).blur(); }}
                                       className={`h-7 text-xs text-right border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`}
                                       disabled={isSubmitting}
                                     />
@@ -2074,7 +2083,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                         } else {
                                           consolidated.allIds.forEach(id => updateOrderItem(id, 'discount_percent', newValue));
                                         }
-                                      }} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                                      }} onWheel={(e) => { (e.target as HTMLInputElement).blur(); }} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
                                     </TableCell>
                                   )}
                                   <TableCell className="text-center">
@@ -2089,7 +2098,7 @@ const EditOrderDialog: React.FC<EditOrderDialogProps> = ({ orderId, isOpen, onOp
                                         } else {
                                           consolidated.allIds.forEach(id => updateOrderItem(id, 'gst_percent', newValue));
                                         }
-                                    }} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
+                                    }} onWheel={(e) => { (e.target as HTMLInputElement).blur(); }} className={`h-7 text-xs text-center border-2 ${isEvenRow ? 'border-pink-300 focus:border-pink-500 bg-white' : 'border-rose-400 focus:border-rose-600 bg-rose-50'}`} disabled={isSubmitting} />
                                   </TableCell>
                                   <TableCell className={`text-right font-bold text-lg ${isEvenRow ? 'text-green-700' : 'text-white'}`}>
                                     ₹{item.total_price.toFixed(2)}
