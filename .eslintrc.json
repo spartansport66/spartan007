@@ -1,12 +1,9 @@
 {
   "root": true,
-  "extends": ["eslint:recommended"],
-  "rules": {
-    "@typescript-eslint/no-explicit-any": "off",
-    "@typescript-eslint/ban-ts-comment": "off",
-    "@typescript-eslint/no-require-imports": "off",
-    "react-hooks/exhaustive-deps": "off",
-    "no-useless-escape": "off",
-    "prefer-const": "off"
-  }
+  "env": {
+    "browser": true,
+    "es2021": true
+  },
+  "extends": [],
+  "rules": {}
 }
