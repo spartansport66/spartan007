@@ -57,7 +57,7 @@ const CompanyKeyMetricsCard: React.FC = () => {
       const { count: productsCount, error: productsError } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
+        // All products count
 
       if (salesError || paymentsError || pendingPaymentsError || dispatchError || dealersError || productsError) {
         throw new Error('Failed to fetch one or more metrics.');

@@ -19,6 +19,8 @@ import ComboOffersDashboard from "./pages/ComboOffersDashboard";
 import SheetConverterPage from "./pages/SheetConverterPage";
 import ForcePasswordReset from "./pages/ForcePasswordReset";
 import DailyVisitReport from "./pages/DailyVisitReport";
+import DailyExpensesReport from "./pages/DailyExpensesReport";
+import DailyExpensesEntry from "./pages/DailyExpensesEntry";
 import MaterialReturns from "./pages/MaterialReturns";
 import MaterialExchange from "./pages/MaterialExchange";
 import ChangePassword from "./pages/ChangePassword";
@@ -84,6 +86,7 @@ const AppContent = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/admin-dashboard" element={<AdminDashboard />} />
+      <Route path="/daily-expenses-report" element={<DailyExpensesReport />} />
       <Route path="/manage-companies" element={<ManageCompanies />} />
       <Route path="/manage-financial-years" element={<ManageFinancialYears />} />
       <Route path="/manage-bill-series" element={<ManageBillSeries />} />
@@ -109,6 +112,7 @@ const AppContent = () => {
       <Route path="/sheet-converter" element={<SheetConverterPage />} />
       <Route path="/force-password-reset" element={<ForcePasswordReset />} />
       <Route path="/daily-visit-report" element={<DailyVisitReport />} />
+      <Route path="/daily-expenses-entry" element={<DailyExpensesEntry />} />
       <Route path="/material-returns" element={<MaterialReturns />} />
       <Route path="/material-exchange" element={<MaterialExchange />} />
       <Route path="/change-password" element={<ChangePassword />} />

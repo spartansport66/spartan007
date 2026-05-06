@@ -54,8 +54,12 @@ const SalesPersonVisitReportDialog: React.FC<SalesPersonVisitReportDialogProps> 
         .eq('user_type', 'sales_person');
       
       if (profilesError) throw profilesError;
-      setAllSalesPersons((profilesData || []).map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name}` })));
-      const salesPersonMap = new Map(profilesData.map(p => [p.id, `${p.first_name} ${p.last_name}`]));
+      const formatProfileName = (profile: any) => {
+        const parts = [profile?.first_name, profile?.last_name].filter((part) => part && part.toString().trim());
+        return parts.join(' ') || 'Unknown Salesperson';
+      };
+      setAllSalesPersons((profilesData || []).map(p => ({ value: p.id, label: formatProfileName(p) })));
+      const salesPersonMap = new Map(profilesData.map(p => [p.id, formatProfileName(p)]));
 
       // 2. Build the query for visits
       let query = supabase

@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Loader2, CalendarCheck, Clock, ArrowRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
-import { getEndOfUTCDayISO } from '@/utils/date';
 
 interface AdminTodayFollowupsCardProps {
   onViewReport: () => void;
@@ -19,32 +18,33 @@ const AdminTodayFollowupsCard: React.FC<AdminTodayFollowupsCardProps> = ({ onVie
   const fetchFollowupCount = useCallback(async () => {
     setLoading(true);
     try {
-      const endOfTodayISO = getEndOfUTCDayISO();
+      const todayDateString = new Date().toISOString().split('T')[0];
+      const startOfToday = `${todayDateString}T00:00:00.000Z`;
+      const endOfToday = `${todayDateString}T23:59:59.999Z`;
 
-      // Fetch all visits that have a next_visit_date <= today
       const { data: visitsData, error: visitsError } = await supabase
         .from('sales_person_visits')
         .select(`
           dealer_id,
           sales_person_id,
-          next_visit_date,
           visit_time
         `)
-        .not('next_visit_date', 'is', null)
-        .lte('next_visit_date', endOfTodayISO)
+        .gte('visit_time', startOfToday)
+        .lte('visit_time', endOfToday)
         .order('visit_time', { ascending: false });
 
       if (visitsError) throw visitsError;
 
-      // Group by dealer_id and sales_person_id to count unique, latest follow-ups due today or earlier
       const latestFollowups = new Map<string, any>(); // Key: sales_person_id-dealer_id
 
       for (const visit of visitsData || []) {
-        const key = `${visit.sales_person_id}-${visit.dealer_id}`;
-        const currentVisitTime = new Date(visit.visit_time).getTime();
+        const dealerId = visit.dealer_id || 'unknown';
+        const salesPersonId = visit.sales_person_id || 'unknown';
+        const key = `${salesPersonId}-${dealerId}`;
+        const currentVisitTime = new Date(visit.visit_time || '').getTime();
         const existing = latestFollowups.get(key);
 
-        if (!existing || currentVisitTime > new Date(existing.visit_time).getTime()) {
+        if (!existing || currentVisitTime > new Date(existing.visit_time || '').getTime()) {
             latestFollowups.set(key, visit);
         }
       }
@@ -68,10 +68,10 @@ const AdminTodayFollowupsCard: React.FC<AdminTodayFollowupsCardProps> = ({ onVie
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-purple-600 dark:bg-purple-800 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold flex items-center gap-2">
-          <Clock className="h-5 w-5" /> Today's Follow-ups Due
+          <Clock className="h-5 w-5" /> Today's Follow-ups
         </CardTitle>
         <CardDescription className="text-purple-100 dark:text-purple-200">
-          Total dealer follow-ups due today or overdue across all sales persons.
+          Dealers visited today by all sales persons.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
@@ -82,7 +82,7 @@ const AdminTodayFollowupsCard: React.FC<AdminTodayFollowupsCardProps> = ({ onVie
         ) : (
           <div className="flex items-center justify-between">
             <span className="text-4xl font-bold text-purple-600">{count}</span>
-            <span className="text-lg font-medium text-muted-foreground">Dealers</span>
+            <span className="text-lg font-medium text-muted-foreground">Visits</span>
           </div>
         )}
         <Button 

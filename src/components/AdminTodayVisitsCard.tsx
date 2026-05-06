@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Loader2, MapPin, ArrowRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { showError } from '@/utils/toast';
-import { getStartOfUTCDayISO } from '@/utils/date';
 
 interface AdminTodayVisitsCardProps {
   onViewReport: () => void;
@@ -16,19 +15,36 @@ const AdminTodayVisitsCard: React.FC<AdminTodayVisitsCardProps> = ({ onViewRepor
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const fetchTodayVisitsCount = useCallback(async () => {
+  const fetchDueFollowupsCount = useCallback(async () => {
     setLoading(true);
     try {
-      const startOfToday = getStartOfUTCDayISO();
+      const todayDateString = new Date().toISOString().split('T')[0];
 
-      const { count, error } = await supabase
+      const { data: visitsData, error } = await supabase
         .from('sales_person_visits')
-        .select('id', { count: 'exact', head: true })
-        .gte('visit_time', startOfToday);
+        .select(`
+          dealer_id,
+          sales_person_id,
+          next_visit_date,
+          visit_time
+        `)
+        .lte('next_visit_date', todayDateString);
 
       if (error) throw error;
-      
-      setCount(count || 0);
+
+      const dueFollowups = new Map<string, any>();
+      for (const visit of visitsData || []) {
+        const dealerId = visit.dealer_id || 'unknown';
+        const salesPersonId = visit.sales_person_id || 'unknown';
+        const key = `${salesPersonId}-${dealerId}`;
+        const currentVisitTime = new Date(visit.visit_time || '').getTime();
+        const existing = dueFollowups.get(key);
+        if (!existing || currentVisitTime > new Date(existing.visit_time || '').getTime()) {
+          dueFollowups.set(key, visit);
+        }
+      }
+
+      setCount(dueFollowups.size);
     } catch (error: any) {
       console.error('Error fetching today\'s visits count:', error.message);
       showError('Failed to load today\'s visits count.');
@@ -39,17 +55,17 @@ const AdminTodayVisitsCard: React.FC<AdminTodayVisitsCardProps> = ({ onViewRepor
   }, []);
 
   useEffect(() => {
-    fetchTodayVisitsCount();
-  }, [fetchTodayVisitsCount]);
+    fetchDueFollowupsCount();
+  }, [fetchDueFollowupsCount]);
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
       <CardHeader className="bg-green-500 dark:bg-green-700 text-white rounded-t-lg p-4">
         <CardTitle className="text-xl font-semibold flex items-center gap-2">
-          <MapPin className="h-5 w-5" /> Total Visits Today
+          <MapPin className="h-5 w-5" /> Due Followups
         </CardTitle>
         <CardDescription className="text-green-100 dark:text-green-200">
-          Total dealer visits logged by all sales persons today.
+          Total dealer follow-ups due today or earlier.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
@@ -60,7 +76,7 @@ const AdminTodayVisitsCard: React.FC<AdminTodayVisitsCardProps> = ({ onViewRepor
         ) : (
           <div className="flex items-center justify-between">
             <span className="text-4xl font-bold text-green-600">{count}</span>
-            <span className="text-lg font-medium text-muted-foreground">Visits</span>
+            <span className="text-lg font-medium text-muted-foreground">Due</span>
           </div>
         )}
         <Button 

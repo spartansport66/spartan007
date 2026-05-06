@@ -73,11 +73,8 @@ const SalesPersonDisapprovedOrdersCard: React.FC = () => {
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg mb-6">
-      <CardHeader className="bg-amber-600 text-white rounded-t-lg p-4">
-        <div>
-          <CardTitle className="text-xl font-semibold">My Disapproved Orders</CardTitle>
-          <CardDescription className="text-amber-100">Orders disapproved by Sales HOD (your orders)</CardDescription>
-        </div>
+      <CardHeader className="bg-amber-600 text-white rounded-t-lg p-1.5">
+        <CardTitle className="text-xl font-semibold">My Disapproved Orders</CardTitle>
       </CardHeader>
       <CardContent className="p-4">
         <div className="flex gap-2 mb-3">

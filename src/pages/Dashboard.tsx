@@ -24,6 +24,7 @@ import SalesPersonPaymentsReport from '@/components/reports/SalesPersonPaymentsR
 import BillSalesReport from '@/components/reports/BillSalesReport';
 import BillWarehouseReport from '@/components/reports/BillWarehouseReport';
 import DailyVisitProgressCard from '@/components/DailyVisitProgressCard';
+import DailyExpensesCard from '@/components/DailyExpensesCard';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import SalesPersonDisapprovedOrdersCard from '@/components/SalesPersonDisapprovedOrdersCard';
 import PaymentReceivedCard from '@/components/PaymentReceivedCard';
@@ -103,6 +104,9 @@ const Dashboard = () => {
     return `${year}-${month}-${day}`;
   });
   const [allDealers, setAllDealers] = useState<{ id: string; name: string }[]>([]);
+  const [assignedDealerCount, setAssignedDealerCount] = useState<number | null>(null);
+  const [yesterdayVisitCount, setYesterdayVisitCount] = useState<number | null>(null);
+  const [isProfileBlocked, setIsProfileBlocked] = useState(false);
 
   const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
   const [selectedOrderIdForDetails, setSelectedOrderIdForDetails] = useState<string | null>(null);
@@ -121,6 +125,8 @@ const Dashboard = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isBulkPrinting, setIsBulkPrinting] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [isYesterdayDailyVisitsPending, setIsYesterdayDailyVisitsPending] = useState(false);
+  const [isDailyVisitStatusLoading, setIsDailyVisitStatusLoading] = useState(true);
 
   const deliveryLocation = null; // Define or fetch the actual value
   const transportName = null; // Define or fetch the actual value
@@ -131,6 +137,37 @@ const Dashboard = () => {
     setRefreshKey(prev => prev + 1);
   }, []);
 
+  const checkYesterdayDailyVisits = useCallback(async (userId: string) => {
+    setIsDailyVisitStatusLoading(true);
+    try {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const year = yesterday.getFullYear();
+      const month = String(yesterday.getMonth() + 1).padStart(2, '0');
+      const day = String(yesterday.getDate()).padStart(2, '0');
+      const yesterdayDateString = `${year}-${month}-${day}`;
+      const startOfYesterday = `${yesterdayDateString}T00:00:00.000Z`;
+      const endOfYesterday = `${yesterdayDateString}T23:59:59.999Z`;
+
+      const { count, error } = await supabase
+        .from('sales_person_visits')
+        .select('id', { count: 'exact', head: true })
+        .eq('sales_person_id', userId)
+        .gte('visit_time', startOfYesterday)
+        .lte('visit_time', endOfYesterday);
+
+      if (error) throw error;
+      setYesterdayVisitCount(count ?? 0);
+      setIsYesterdayDailyVisitsPending(!(count && count > 0));
+    } catch (error: any) {
+      console.error('Error checking yesterday daily visits:', error.message);
+      setYesterdayVisitCount(null);
+      setIsYesterdayDailyVisitsPending(false);
+    } finally {
+      setIsDailyVisitStatusLoading(false);
+    }
+  }, []);
+
   const fetchInitialData = useCallback(async () => {
     if (!user) {
       setLoadingData(false);
@@ -139,12 +176,13 @@ const Dashboard = () => {
 
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('first_name, last_name')
+      .select('first_name, last_name, is_blocked')
       .eq('id', user.id)
       .single();
 
     if (!profileError && profileData) {
       setSalesPersonName(`${profileData.first_name || ''} ${profileData.last_name || ''}`.trim());
+      setIsProfileBlocked(Boolean(profileData.is_blocked));
     }
 
     const { data: assignedDealersData, error: assignedDealersError } = await supabase
@@ -159,14 +197,20 @@ const Dashboard = () => {
     } else {
       const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
       setAllDealers(formattedDealers);
+      setAssignedDealerCount(formattedDealers.length);
     }
 
     const { data: companyInfo } = await supabase.from('company_info').select('company_name').limit(1).single();
     setCompanyName(companyInfo?.company_name || null);
+
+      if (user && !isAdmin) {
+        await checkYesterdayDailyVisits(user.id);
+      } else {
+        setIsDailyVisitStatusLoading(false);
+      }
     
     setLoadingData(false);
-  }, [user]);
-
+  }, [user, isAdmin, checkYesterdayDailyVisits]);
   const fetchRecentOrders = useCallback(async () => {
     if (!user) {
       setLoadingOrders(false);
@@ -482,169 +526,186 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 w-full">
+    <div className="min-h-screen bg-background text-foreground p-0.5 sm:p-1 md:p-2">
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-0.5 gap-0.5 w-full py-0.5">
         <div className="text-left flex-shrink-0">
-          <h2 className="text-[4vw] sm:text-[2vw] md:text-xl lg:text-2xl font-bold text-black dark:text-black whitespace-nowrap overflow-hidden text-ellipsis max-w-[40vw] sm:max-w-none">
-            Welcome, {salesPersonName || 'Sales Person'}!
+          <h2 className="text-xs sm:text-xs md:text-sm font-bold text-black dark:text-black whitespace-nowrap overflow-hidden text-ellipsis max-w-[100%]">
+            Welcome, {salesPersonName || 'SP'}!
           </h2>
         </div>
-        <div className="flex-shrink-0 flex items-center gap-2">
+        <div className="flex-shrink-0 flex items-center gap-0.5">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" /> My Reports
+              <Button variant="outline" className="flex items-center gap-0.5 text-xs h-5 px-1">
+                <FileText className="h-2 w-2" /> Rep
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>My Reports</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="text-xs w-32">
+              <DropdownMenuLabel className="text-xs">Reports</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsSalesPersonSalesReportOpen(true)}>Sales Detail Report</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsSalesPersonDealerReportOpen(true)}>My Dealer Report</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsSalesPersonPaymentsReportOpen(true)}>My Payments Report</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonSalesReportOpen(true)} className="text-xs">Sales</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonDealerReportOpen(true)} className="text-xs">Dealers</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsSalesPersonPaymentsReportOpen(true)} className="text-xs">Payments</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/add-dealer')}><PlusCircle className="h-4 w-4 mr-2" /> Add New Dealer</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/manage-dealers')}><Building className="h-4 w-4 mr-2" /> Manage Dealers</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/add-dealer')} className="text-xs"><PlusCircle className="h-2 w-2 mr-0.5" /> Add</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/manage-dealers')} className="text-xs"><Building className="h-2 w-2 mr-0.5" /> Manage</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/change-password')}><Lock className="h-4 w-4 mr-2" /> Change Password</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/change-password')} className="text-xs"><Lock className="h-2 w-2 mr-0.5" /> Pwd</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="flex items-center justify-center">
-                <MoreVertical className="h-5 w-5" />
+              <Button variant="outline" size="icon" className="flex items-center justify-center h-5 w-5">
+                <MoreVertical className="h-2 w-2" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Bill Reports</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-28 text-xs">
+              <DropdownMenuLabel className="text-xs">Bills</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsBillSalesReportOpen(true)} className="cursor-pointer">
-                <FileText className="h-4 w-4 mr-2" />
-                <span>Sales Report (Bills)</span>
+              <DropdownMenuItem onClick={() => setIsBillSalesReportOpen(true)} className="cursor-pointer text-xs">
+                <FileText className="h-2 w-2 mr-0.5" />
+                <span>Sales</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsBillWarehouseReportOpen(true)} className="cursor-pointer">
-                <Boxes className="h-4 w-4 mr-2" />
-                <span>Warehouse Report (Bills)</span>
+              <DropdownMenuItem onClick={() => setIsBillWarehouseReportOpen(true)} className="cursor-pointer text-xs">
+                <Boxes className="h-2 w-2 mr-0.5" />
+                <span>Warehouse</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button onClick={handleLogout} variant="ghost" size="icon" className="text-black hover:text-black p-2">
-            <LogOut className="h-5 w-5 sm:h-6 sm:w-6" />
+          <Button onClick={handleLogout} variant="ghost" size="icon" className="text-black hover:text-black p-0.5 h-5 w-5">
+            <LogOut className="h-2 w-2" />
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 mb-1">
         <SalesPersonPerformanceCard key={`performance-${refreshKey}`} />
+        <DailyVisitProgressCard />
+        <DailyExpensesCard />
       </div>
-      {/* DailyVisitProgressCard hidden */}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1 mb-1">
         {/* other cards */}
       </div>
 
-      <div className="mb-6">
-        <MultiItemOrderForm onOrderPlaced={handleRefreshData} />
+      <div className="mb-1">
+        {isProfileBlocked ? (
+          <Card className="border border-red-200 bg-red-50 text-red-900 shadow-lg">
+            <CardHeader className="bg-red-500 text-white rounded-t-lg p-1.5">
+              <CardTitle className="text-xl font-semibold">Order Placement Blocked</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 text-sm">
+              Your account has been blocked by admin. The order form is not available until you are unblocked.
+            </CardContent>
+          </Card>
+        ) : (
+          <MultiItemOrderForm
+            onOrderPlaced={handleRefreshData}
+            isBlocked={
+              assignedDealerCount === 0 ||
+              (yesterdayVisitCount !== null && yesterdayVisitCount < 5)
+            }
+            blockedMessage={
+              assignedDealerCount === 0
+                ? 'You must add at least one dealer before placing orders.'
+                : yesterdayVisitCount !== null && yesterdayVisitCount < 5
+                ? 'Place new orders is blocked because the last day daily visit report was not updated to the required threshold.'
+                : ''
+            }
+          />
+        )}
       </div>
 
-      <div className="mb-6">
+      <div className="mb-1">
         <SalesPersonDisapprovedOrdersCard />
       </div>
 
       {/* PaymentStatusCard hidden per request */}
 
-      <Card className="bg-card text-card-foreground shadow-lg mb-6">
-        <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <CardTitle className="text-xl font-semibold">My Recent Orders</CardTitle>
-              <CardDescription className="text-teal-100 dark:text-teal-200">A list of your recent orders.</CardDescription>
-            </div>
+      <Card className="bg-card text-card-foreground shadow-lg mb-1">
+        <CardHeader className="bg-teal-500 dark:bg-teal-700 text-white rounded-t-lg p-1.5">
+          <div className="flex flex-col gap-0.5">
+            <CardTitle className="text-xs font-semibold">Orders</CardTitle>
             {selectedOrderIds.length > 0 && (
-              <Button onClick={handleBulkPrintOrderDetails} disabled={isBulkPrinting} className="bg-white text-teal-600 hover:bg-teal-50">
-                {isBulkPrinting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Printer className="h-4 w-4 mr-2" />}
-                Bulk Print Invoices ({selectedOrderIds.length})
+              <Button onClick={handleBulkPrintOrderDetails} disabled={isBulkPrinting} className="bg-white text-teal-600 hover:bg-teal-50 w-full sm:w-auto h-5 text-xs px-1">
+                {isBulkPrinting ? <Loader2 className="h-2 w-2 animate-spin mr-0.5" /> : <Printer className="h-2 w-2 mr-0.5" />}
+                Print ({selectedOrderIds.length})
               </Button>
             )}
           </div>
         </CardHeader>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-end gap-4 mb-6 p-4 bg-muted rounded-lg">
-            <div className="flex-1 min-w-[150px]">
-              <Label htmlFor="filterDealer">Dealer Name</Label>
-              <Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}>
-                <SelectTrigger id="filterDealer"><SelectValue placeholder="Filter by dealer" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Dealers</SelectItem>
-                  {allDealers.map(dealer => (<SelectItem key={dealer.id} value={dealer.id}>{dealer.name}</SelectItem>))}
-                </SelectContent>
-              </Select>
+        <CardContent className="p-1">
+          <div className="flex flex-col gap-0.5 mb-1 p-1 bg-muted rounded-lg">
+            <div className="flex flex-col sm:flex-row gap-0.5 flex-wrap">
+              <div className="flex-1 min-w-[100px]">
+                <Label htmlFor="filterDealer" className="text-xs">D</Label>
+                <Select value={filterDealerId || "all"} onValueChange={(value) => setFilterDealerId(value === "all" ? "" : value)}>
+                  <SelectTrigger id="filterDealer" className="text-xs h-5"><SelectValue placeholder="All" /></SelectTrigger>
+                  <SelectContent className="text-xs">
+                    <SelectItem value="all">All</SelectItem>
+                    {allDealers.map(dealer => (<SelectItem key={dealer.id} value={dealer.id} className="text-xs">{dealer.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 min-w-[100px]">
+                <Label htmlFor="filterFromDate" className="text-xs">F</Label>
+                <Input id="filterFromDate" type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} className="w-full text-xs h-5" />
+              </div>
+              <div className="flex-1 min-w-[100px]">
+                <Label htmlFor="filterToDate" className="text-xs">T</Label>
+                <Input id="filterToDate" type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} className="w-full text-xs h-5" />
+              </div>
             </div>
-            <div className="flex-1 min-w-[150px]">
-              <Label htmlFor="filterFromDate">From Date</Label>
-              <Input id="filterFromDate" type="date" value={filterFromDate} onChange={(e) => setFilterFromDate(e.target.value)} className="w-full" />
+            <div className="flex gap-0.5 flex-wrap">
+              <Button onClick={handleApplyOrderFilters} className="flex items-center gap-0.5 text-xs h-5 px-1"><Search className="h-2 w-2" /> Go</Button>
+              <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-0.5 text-xs h-5 px-1">X</Button>
             </div>
-            <div className="flex-1 min-w-[150px]">
-              <Label htmlFor="filterToDate">To Date</Label>
-              <Input id="filterToDate" type="date" value={filterToDate} onChange={(e) => setFilterToDate(e.target.value)} className="w-full" />
-            </div>
-            <Button onClick={handleApplyOrderFilters} className="flex items-center gap-2"><Search className="h-4 w-4" /> Apply Filters</Button>
-            <Button variant="outline" onClick={handleClearFilters} className="flex items-center gap-2">Clear Filters</Button>
           </div>
           <div className="overflow-x-auto">
             {loadingOrders ? (
-              <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-lg text-gray-700 dark:text-gray-300">Loading orders...</p></div>
+              <div className="flex items-center justify-center py-2"><Loader2 className="h-3 w-3 animate-spin text-primary" /><p className="ml-0.5 text-xs text-gray-700 dark:text-gray-300">.</p></div>
             ) : orders.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No orders recorded yet or matching your filters.</p>
+              <p className="text-center text-muted-foreground py-2 text-xs">No orders.</p>
             ) : (
-              <div className="max-h-[400px] overflow-y-auto border rounded-md">
-                <Table>
+              <div className="max-h-[200px] overflow-y-auto border rounded-md">
+                <Table className="text-xs">
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="bg-muted hover:bg-muted/90">
-                      <TableHead className="w-10">
-                        <Checkbox checked={selectedOrderIds.length === orders.length && orders.length > 0} onCheckedChange={(checked) => handleSelectAll(!!checked)} />
-                      </TableHead>
-                      <TableHead className="text-muted-foreground">Order No.</TableHead>
-                      <TableHead className="text-muted-foreground">Dealer / Online Details</TableHead>
-                      <TableHead className="text-muted-foreground">Order Date</TableHead>
-                      <TableHead className="text-muted-foreground text-right">Total Amount</TableHead>
-                      {/* Payment Status column hidden */}
-                      <TableHead className="text-muted-foreground text-center">Actions</TableHead>
+                      <TableHead className="w-4 p-0"><Checkbox checked={selectedOrderIds.length === orders.length && orders.length > 0} onCheckedChange={(checked) => handleSelectAll(!!checked)} /></TableHead>
+                      <TableHead className="text-muted-foreground text-xs p-0">O</TableHead>
+                      <TableHead className="text-muted-foreground text-xs p-0">D</TableHead>
+                      <TableHead className="text-muted-foreground text-xs p-0">Dt</TableHead>
+                      <TableHead className="text-muted-foreground text-xs text-right p-0">$</TableHead>
+                      <TableHead className="text-muted-foreground text-xs text-center p-0">A</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {orders.map(order => (
-                      <TableRow key={order.id} className="align-top">
-                        <TableCell>
-                          <Checkbox checked={selectedOrderIds.includes(order.id)} onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)} />
-                        </TableCell>
-                        <TableCell className="font-medium text-foreground">#{order.order_number}</TableCell>
-                        <TableCell className="text-muted-foreground">
+                      <TableRow key={order.id} className="align-top text-xs h-4">
+                        <TableCell className="p-0"><Checkbox checked={selectedOrderIds.includes(order.id)} onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)} /></TableCell>
+                        <TableCell className="font-medium text-foreground text-xs p-0">#{order.order_number}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs p-0 max-w-[60px] truncate">
                           {order.dealer_name === 'Online Order' && order.online_details ? (
-                            <div className="flex flex-col text-xs">
-                                  <span className="font-bold text-blue-600 dark:text-blue-400">{order.online_details.client_name}</span>
-                                  <span>{order.online_details.platform_name} | Order#: {order.online_details.platform_order_number || 'N/A'}</span>
-                            </div>
+                            <span className="text-blue-600 dark:text-blue-400 truncate">{order.online_details.client_name}</span>
                           ) : (
                             order.dealer_name
                           )}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(order.order_date)}</TableCell>
-                        <TableCell className="text-muted-foreground text-right">{formatCurrency(order.total_amount)}</TableCell>
-                        {/* Payment status hidden in recent orders list */}
-                        <TableCell className="text-center">
-                          <div className="flex justify-center gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => handleViewOrderDetails(order.id)} title="View Order Details"><Eye className="h-4 w-4" /></Button>
+                        <TableCell className="text-muted-foreground text-xs p-0 whitespace-nowrap">{formatDate(order.order_date)}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs text-right p-0 whitespace-nowrap">{formatCurrency(order.total_amount)}</TableCell>
+                        <TableCell className="text-center p-0">
+                          <div className="flex justify-center gap-0">
+                            <Button variant="ghost" size="sm" onClick={() => handleViewOrderDetails(order.id)} title="V" className="h-4 w-4 p-0"><Eye className="h-2 w-2" /></Button>
                             {!order.dispatched && (
                               <>
-                                <Button variant="ghost" size="icon" onClick={() => handleEditOrder(order.id)} title="Edit Order"><Edit className="h-4 w-4 text-orange-600" /></Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleEditOrder(order.id)} title="E" className="h-4 w-4 p-0"><Edit className="h-2 w-2 text-orange-600" /></Button>
                                 <AlertDialog>
-                                  <AlertDialogTrigger asChild><Button variant="ghost" size="icon" title="Delete Order"><Trash2 className="h-4 w-4 text-destructive" /></Button></AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader><AlertDialogTitle>Delete Order?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to delete Order #{order.order_number}? This will restore the product stock levels.</AlertDialogDescription></AlertDialogHeader>
-                                    <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteOrder(order)}>Delete</AlertDialogAction></AlertDialogFooter>
+                                  <AlertDialogTrigger asChild><Button variant="ghost" size="sm" title="D" className="h-4 w-4 p-0"><Trash2 className="h-2 w-2 text-destructive" /></Button></AlertDialogTrigger>
+                                  <AlertDialogContent className="w-[90vw] max-w-xs p-2">
+                                    <AlertDialogHeader><AlertDialogTitle className="text-xs">Delete?</AlertDialogTitle><AlertDialogDescription className="text-xs">Delete #{order.order_number}?</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogFooter className="gap-1"><AlertDialogCancel className="text-xs h-5 px-1">No</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteOrder(order)} className="text-xs h-5 px-1">Yes</AlertDialogAction></AlertDialogFooter>
                                   </AlertDialogContent>
                                 </AlertDialog>
                               </>

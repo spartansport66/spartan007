@@ -42,7 +42,7 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: 'Forbidden: Admin access required' }), { status: 403, headers: corsHeaders });
     }
 
-    const { email, password, first_name, last_name, user_type } = await req.json();
+    const { email, password, first_name, last_name, user_type, ta } = await req.json();
 
     const { data: allUsersData, error: listAllUsersError } = await supabaseAdmin.auth.admin.listUsers();
     if (listAllUsersError) throw new Error(`Failed to check for existing user: ${listAllUsersError.message}`);
@@ -57,7 +57,7 @@ serve(async (req: Request) => {
           email_confirm: true,
           email_confirmed_at: new Date().toISOString(),
           ban_and_unverify: false,
-          user_metadata: { first_name, last_name, user_type, is_admin: user_type === 'admin' },
+          user_metadata: { first_name, last_name, user_type, is_admin: user_type === 'admin', ta },
         }
       );
       if (updateUserError) throw new Error(`Failed to update existing user: ${updateUserError.message}`);
@@ -68,6 +68,7 @@ serve(async (req: Request) => {
         last_name,
         user_type,
         is_admin: user_type === 'admin',
+        ta: ta ?? 0,
         must_reset_password: (user_type === 'sales_person'),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' });
@@ -82,9 +83,21 @@ serve(async (req: Request) => {
         password,
         email_confirm: true,
         email_confirmed_at: new Date().toISOString(),
-        user_metadata: { first_name, last_name, user_type },
+        user_metadata: { first_name, last_name, user_type, ta },
       });
       if (userError) throw userError;
+
+      await supabaseAdmin.from('profiles').insert({
+        id: userResponse.user.id,
+        first_name,
+        last_name,
+        user_type,
+        is_admin: user_type === 'admin',
+        ta: ta ?? 0,
+        must_reset_password: (user_type === 'sales_person'),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
 
       return new Response(JSON.stringify({ message: 'User created successfully', user: userResponse.user }), {
         status: 200,

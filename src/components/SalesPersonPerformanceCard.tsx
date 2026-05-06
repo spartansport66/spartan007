@@ -111,51 +111,48 @@ const SalesPersonPerformanceCard = () => {
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg h-full">
-      <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
-        <CardTitle className="text-xl font-semibold">This Month's Performance</CardTitle>
-        <CardDescription className="text-blue-100 dark:text-blue-200">
-          Your sales progress for the current month.
-        </CardDescription>
+      <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-1.5">
+        <CardTitle className="text-sm font-semibold">This Month's Performance</CardTitle>
       </CardHeader>
-      <CardContent className="p-4">
+      <CardContent className="p-1.5">
         {loading ? (
-          <div className="flex items-center justify-center h-40">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="flex items-center justify-center h-12">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center text-lg">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Target className="h-5 w-5" />
-                <span>Monthly Target:</span>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Target className="h-2.5 w-2.5" />
+                <span>Target:</span>
               </div>
-              <span className="font-bold text-lg text-blue-600 dark:text-blue-400">{formatCurrency(salesTarget)}</span>
+              <span className="font-bold text-xs text-blue-600 dark:text-blue-400">{formatCurrency(salesTarget)}</span>
             </div>
-            <div className="flex justify-between items-center text-lg">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <TrendingUp className="h-5 w-5" />
-                <span>Order Received:</span>
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <TrendingUp className="h-2.5 w-2.5" />
+                <span>Received:</span>
               </div>
-              <span className="font-bold text-lg text-cyan-600 dark:text-cyan-400">{formatCurrency(totalOrdersReceived)}</span>
+              <span className="font-bold text-xs text-cyan-600 dark:text-cyan-400">{formatCurrency(totalOrdersReceived)}</span>
             </div>
-            <div className="flex justify-between items-center text-lg">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Package className="h-5 w-5" />
-                <span>Billed Orders:</span>
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Package className="h-2.5 w-2.5" />
+                <span>Billed:</span>
               </div>
-              <span className="font-bold text-lg text-green-600 dark:text-green-400">{formatCurrency(totalBilledOrders)}</span>
+              <span className="font-bold text-xs text-green-600 dark:text-green-400">{formatCurrency(totalBilledOrders)}</span>
             </div>
-            <div className="flex justify-between items-center text-lg">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Hourglass className="h-5 w-5" />
-                <span>Pending Target:</span>
+            <div className="flex justify-between items-center text-xs">
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Hourglass className="h-2.5 w-2.5" />
+                <span>Pending:</span>
               </div>
-              <span className="font-bold text-lg text-orange-600 dark:text-orange-400">{formatCurrency(pendingTarget)}</span>
+              <span className="font-bold text-xs text-orange-600 dark:text-orange-400">{formatCurrency(pendingTarget)}</span>
             </div>
             <div>
-              <Progress value={progressPercentage} className="w-full h-3" />
-              <p className="text-sm text-right text-muted-foreground mt-1">
-                {progressPercentage.toFixed(2)}% of target achieved
+              <Progress value={progressPercentage} className="w-full h-1" />
+              <p className="text-xs text-right text-muted-foreground mt-0.5">
+                {progressPercentage.toFixed(2)}%
               </p>
             </div>
           </div>

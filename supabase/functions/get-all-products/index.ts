@@ -27,7 +27,7 @@ serve(async (req) => {
     const { data: productsData, error: productsError } = await supabaseAdmin
       .from('products')
       .select('id, code, name, dp, opening_stock, stock_in, stock_out, closing_stock')
-      .eq('is_active', true)
+      // All products (including inactive)
       .order('name', { ascending: true });
     
     if (productsError) {

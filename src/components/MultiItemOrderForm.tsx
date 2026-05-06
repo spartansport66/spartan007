@@ -77,9 +77,11 @@ interface OrderItem {
 
 interface MultiItemOrderFormProps {
   onOrderPlaced: () => void;
+  isBlocked?: boolean;
+  blockedMessage?: string;
 }
 
-const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }) => {
+const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced, isBlocked = false, blockedMessage }) => {
   const { user, session, loading: sessionLoading } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -179,7 +181,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
         const { data: productsData, error: productsError } = await supabase
           .from('products')
           .select('id, code, name, dp, closing_stock, gst')
-          .eq('is_active', true)
           .order('name', { ascending: true })
           .range(page * pageSize, (page + 1) * pageSize - 1);
         
@@ -710,7 +711,7 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
   const openingBalanceDisplay = openingBalance || 0;
   const pendingLimit = dealerCreditLimit - (dealerBalance || 0);
 
-  const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid || pendingLimit <= 0;
+  const isSubmitDisabled = loading || !selectedDealer || orderItems.length === 0 || !isPaymentDetailsValid || pendingLimit <= 0 || isBlocked;
 
   const handleDeliveryLocationChange = (value: string) => {
     setDeliveryLocation(value);
@@ -718,9 +719,8 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
 
   return (
     <Card className="bg-card text-card-foreground shadow-lg">
-      <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-4">
+      <CardHeader className="bg-blue-500 dark:bg-blue-700 text-white rounded-t-lg p-1.5">
         <CardTitle className="text-xl font-semibold text-white">Place New Order</CardTitle>
-        <CardDescription className="text-blue-100 dark:text-blue-200">Create an order with item-wise GST calculation.</CardDescription>
       </CardHeader>
       <CardContent className="p-4">
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -737,9 +737,6 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                     )}</div></ScrollArea>
               </PopoverContent>
             </Popover>
-          </div>
-
-          <div className="flex items-center gap-2">
           </div>
 
           {isOnlineOrder && (
@@ -897,11 +894,11 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
                   <TableBody>
                     {orderItems.map(item => (
                       <TableRow key={item.id}>
-                        <TableCell className="max-w-[150px] truncate font-mono text-sm">(<span className="font-bold text-primary">{item.product_code}</span>) {item.product_name}</TableCell>
+                        <TableCell className="max-w-[150px] text-xs whitespace-normal break-words font-mono">(<span className="font-bold text-primary">{item.product_code}</span>) {item.product_name}</TableCell>
                         <TableCell><Input type="number" value={item.quantity || 0} onChange={(e) => updateOrderItem(item.id, 'quantity', parseInt(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
                         <TableCell><Input type="number" step="0.01" value={item.unit_dp || 0} onChange={(e) => updateOrderItem(item.id, 'unit_dp', parseFloat(e.target.value) || 0)} className="w-24 h-8" /></TableCell>
-                        <TableCell><Input type="number" step="0.1" value={item.discount_percent || 0} onChange={(e) => updateOrderItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
-                        <TableCell><Input type="number" step="0.1" value={item.gst_percent || 0} onChange={(e) => updateOrderItem(item.id, 'gst_percent', parseFloat(e.target.value) || 0)} className="w-16 h-8" /></TableCell>
+                        <TableCell><Input type="number" step="0.1" value={item.discount_percent === 0 ? '' : item.discount_percent} onChange={(e) => updateOrderItem(item.id, 'discount_percent', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="w-16 h-8" /></TableCell>
+                        <TableCell><Input type="number" step="0.1" value={item.gst_percent === 0 ? '' : item.gst_percent} onChange={(e) => updateOrderItem(item.id, 'gst_percent', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="w-16 h-8" /></TableCell>
                         <TableCell className="text-right font-medium">₹{(item.total_price || 0).toFixed(2)}</TableCell>
                         <TableCell><Button variant="ghost" size="icon" onClick={() => removeOrderItem(item.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
                       </TableRow>
@@ -941,10 +938,9 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
           <Card className="mt-4">
             <CardHeader>
               <CardTitle>Additional Order Details</CardTitle>
-              <CardDescription>Provide delivery and transport details.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                 <div>
                   <Label htmlFor="deliveryLocation">Delivery Location <span className="text-red-500">*</span></Label>
                   <Select
@@ -997,13 +993,19 @@ const MultiItemOrderForm: React.FC<MultiItemOrderFormProps> = ({ onOrderPlaced }
             </CardContent>
           </Card>
 
+          {isBlocked && blockedMessage ? (
+            <Card className="mb-4 border border-red-200 bg-red-50 text-red-900">
+              <CardContent className="p-3 text-sm font-semibold">{blockedMessage}</CardContent>
+            </Card>
+          ) : null}
+
           <Button 
             type="submit" 
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90" 
             disabled={isSubmitDisabled}
-            title={pendingLimit <= 0 ? "Cannot create order: No available credit limit" : ""}
+            title={isBlocked ? blockedMessage || "Order creation blocked" : pendingLimit <= 0 ? "Cannot create order: No available credit limit" : ""}
           >
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : pendingLimit <= 0 ? 'No Credit Available - Cannot Place Order' : 'Place Order'}
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : pendingLimit <= 0 ? 'No Credit Available - Cannot Place Order' : isBlocked ? 'Order Blocked' : 'Place Order'}
           </Button>
         </form>
       </CardContent>

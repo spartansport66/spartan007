@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,8 +16,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
+import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 
-const DAILY_VISIT_GOAL = 5;
+const DAILY_VISIT_GOAL = 10;
 
 interface Dealer {
   id: string;
@@ -94,10 +95,17 @@ const DailyVisitReport: React.FC = () => {
   const navigate = useNavigate();
   const { user, loading: sessionLoading, isAdmin } = useSession();
   const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [dealerSearch, setDealerSearch] = useState('');
   const [loadingData, setLoadingData] = useState(true);
   const [visitsToday, setVisitsToday] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null); // New state for file name
+
+  const filteredDealers = useMemo(() => {
+    if (!dealerSearch) return dealers;
+    const cleanedQuery = dealerSearch.trim().toLowerCase();
+    return dealers.filter((dealer) => dealer.name.toLowerCase().includes(cleanedQuery));
+  }, [dealerSearch, dealers]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -123,7 +131,8 @@ const DailyVisitReport: React.FC = () => {
       if (assignedDealersError) throw assignedDealersError;
       
       const formattedDealers: Dealer[] = (assignedDealersData || []).map((item: any) => item.dealers);
-      setDealers(formattedDealers);
+      const sortedDealers = formattedDealers.sort((a, b) => a.name.localeCompare(b.name));
+      setDealers(sortedDealers);
 
       // 2. Fetch today's visits count
       const startOfToday = getStartOfUTCDayISO();
@@ -143,6 +152,36 @@ const DailyVisitReport: React.FC = () => {
       setLoadingData(false);
     }
   }, [user]);
+
+  const handleCameraCapture = async () => {
+    try {
+      const photo = await CapacitorCamera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Camera,
+      });
+
+      if (photo.webPath) {
+        // Fetch the image blob from the web path
+        const response = await fetch(photo.webPath);
+        const blob = await response.blob();
+
+        // Create a File object from the blob
+        const timestamp = Date.now();
+        const fileName = `camera_${timestamp}.jpg`;
+        const file = new File([blob], fileName, { type: 'image/jpeg' });
+
+        // Update form and state
+        form.setValue('photoFile', file as any, { shouldValidate: true });
+        setSelectedFileName(fileName);
+        showSuccess('Photo captured successfully!');
+      }
+    } catch (error: any) {
+      console.error('Camera error:', error);
+      showError('Failed to capture photo. Please try again.');
+    }
+  };
 
   useEffect(() => {
     if (!sessionLoading) {
@@ -237,56 +276,61 @@ const DailyVisitReport: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 flex flex-col items-center">
+    <div className="min-h-screen bg-background text-foreground p-1 sm:p-2 flex flex-col items-center overflow-y-auto">
       <div className="w-full max-w-md sm:max-w-lg">
-        <Button 
-          variant="outline" 
-          onClick={() => navigate('/dashboard')} 
-          className="mb-6 flex items-center gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Dashboard
-        </Button>
         
         <Card className="bg-card text-card-foreground shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-2xl font-semibold text-primary">Log Daily Dealer</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Record your daily activity and capture a photo for verification.
+          <CardHeader className="p-1">
+            <CardDescription className="text-muted-foreground text-xs">
+              Record daily activity
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="mb-6 space-y-3 p-4 border rounded-lg bg-muted/50">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Target className="h-5 w-5 text-green-600" /> Daily Goal Progress
+          <CardContent className="p-1">
+            <div className="mb-2 space-y-1 p-1 border rounded-lg bg-muted/50">
+              <h3 className="text-xs font-semibold flex items-center gap-1">
+                <Target className="h-2.5 w-2.5 text-green-600" /> Goal
               </h3>
-              <div className="flex justify-between items-center">
-                <span className="font-medium">Completed: {visitsToday} / {DAILY_VISIT_GOAL}</span>
-                {isGoalMet && <CheckCircle className="h-6 w-6 text-green-600" />}
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-medium">Done: {visitsToday} / {DAILY_VISIT_GOAL}</span>
+                {isGoalMet && <CheckCircle className="h-3 w-3 text-green-600" />}
               </div>
-              <Progress value={progressPercentage} className="w-full" indicatorColor={isGoalMet ? "bg-green-600" : "bg-yellow-500"} />
+              <Progress value={progressPercentage} className="w-full h-1" indicatorColor={isGoalMet ? "bg-green-600" : "bg-yellow-500"} />
             </div>
 
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-1">
                 <FormField
                   control={form.control}
                   name="dealerId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Select Dealer</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={dealers.length === 0 || isSubmitting}>
+                              <FormLabel className="text-xs">Dealer</FormLabel>
+                      <Select value={field.value} onValueChange={(value) => { field.onChange(value); setDealerSearch(''); }} disabled={dealers.length === 0 || isSubmitting}>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={dealers.length === 0 ? "No dealers assigned" : "Select a dealer"} />
+                          <SelectTrigger className="h-6 text-xs">
+                            <SelectValue placeholder={dealers.length === 0 ? "No dealers" : "Search by name"} />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
-                          {dealers.map((dealer) => (
-                            <SelectItem key={dealer.id} value={dealer.id}>
-                              {dealer.name}
-                            </SelectItem>
-                          ))}
+                        <SelectContent className="text-xs">
+                          <div className="px-2 py-2">
+                            <Input
+                              type="text"
+                              placeholder="Search dealers..."
+                              value={dealerSearch}
+                              onChange={(e) => setDealerSearch(e.target.value)}
+                              className="w-full text-xs"
+                            />
+                          </div>
+                          <div className="border-t border-muted" />
+                          {filteredDealers.length > 0 ? (
+                            filteredDealers.map((dealer, index) => (
+                              <SelectItem key={dealer.id} value={dealer.id} className="text-xs">
+                                {index + 1}. {dealer.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <div className="px-3 py-2 text-xs text-muted-foreground">No dealers found.</div>
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -294,53 +338,55 @@ const DailyVisitReport: React.FC = () => {
                   )}
                 />
                 
-                <FormField
-                  control={form.control}
-                  name="visitStatus"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField
+                    control={form.control}
+                    name="visitStatus"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Status</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                          <FormControl>
+                            <SelectTrigger className="h-6 text-xs">
+                              <SelectValue placeholder="Select" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent className="text-xs">
+                            {VISIT_STATUS_OPTIONS.map((status) => (
+                              <SelectItem key={status} value={status} className="text-xs">
+                                {status}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="nextVisitDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Follow-up Date</FormLabel>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select status" />
-                          </SelectTrigger>
+                          <Input type="date" {...field} disabled={isSubmitting} className="h-6 text-xs" />
                         </FormControl>
-                        <SelectContent>
-                          {VISIT_STATUS_OPTIONS.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {status}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <FormField
                   control={form.control}
                   name="remarks"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Remarks (Required)</FormLabel>
+                      <FormLabel className="text-xs">Notes</FormLabel>
                       <FormControl>
-                        <Textarea placeholder="Any notes about the activity..." {...field} disabled={isSubmitting} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="nextVisitDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Next Follow-up Date (Required)</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} disabled={isSubmitting} />
+                        <Textarea placeholder="Notes..." {...field} disabled={isSubmitting} className="text-xs h-12 resize-none" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -352,54 +398,52 @@ const DailyVisitReport: React.FC = () => {
                   name="photoFile"
                   render={({ field: { value, onChange, ...fieldProps } }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <Camera className="h-4 w-4" /> Dealer Photo (Required)
+                      <FormLabel className="flex items-center gap-1 text-xs">
+                        <Camera className="h-2.5 w-2.5" /> Photo
                       </FormLabel>
-                      <FormControl>
-                        <Input
-                          {...fieldProps}
-                          type="file"
-                          accept="image/*"
-                          // Removed capture="environment"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) {
-                              // Manually set the file object in the form state
-                              form.setValue('photoFile', file, { shouldValidate: true });
-                              setSelectedFileName(file.name);
-                            } else {
-                              form.setValue('photoFile', null as any, { shouldValidate: true });
-                              setSelectedFileName(null);
-                            }
-                          }}
+                      <div className="flex gap-1">
+                        <FormControl className="flex-1">
+                          <Input
+                            {...fieldProps}
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) {
+                                form.setValue('photoFile', file, { shouldValidate: true });
+                                setSelectedFileName(file.name);
+                              } else {
+                                form.setValue('photoFile', null as any, { shouldValidate: true });
+                                setSelectedFileName(null);
+                              }
+                            }}
+                            disabled={isSubmitting}
+                            className="text-xs h-6"
+                          />
+                        </FormControl>
+                        <Button
+                          type="button"
+                          onClick={handleCameraCapture}
                           disabled={isSubmitting}
-                        />
-                      </FormControl>
+                          className="h-6 text-xs px-2 bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Camera className="h-3 w-3" />
+                        </Button>
+                      </div>
                       {selectedFileName && (
-                        <p className="text-sm text-muted-foreground mt-1">Selected: {selectedFileName}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{selectedFileName}</p>
                       )}
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
-                <div className="space-y-2">
-                  <FormLabel>Time</FormLabel>
-                  <Input 
-                    type="text" 
-                    value={new Date().toLocaleString()} 
-                    readOnly 
-                    className="bg-muted" 
-                  />
-                  <p className="text-xs text-muted-foreground">Time is automatically recorded upon submission.</p>
-                </div>
                 
-                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting || !form.formState.isValid}>
+                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-6 text-xs mt-3" disabled={isSubmitting || !form.formState.isValid}>
                   {isSubmitting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-1 h-2.5 w-2.5 animate-spin" />
                   ) : (
                     <>
-                      <Upload className="mr-2 h-4 w-4" /> Log
+                      <Upload className="mr-1 h-2.5 w-2.5" /> Log
                     </>
                   )}
                 </Button>

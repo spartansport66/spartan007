@@ -8,13 +8,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/contexts/SessionContext';
 import { MadeWithDyad } from '@/components/made-with-dyad';
-import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Menu, Scale, Mail, ShoppingCart, Wrench, PlusCircle as PlusCircleIcon, Eye, Truck, Printer } from 'lucide-react';
+import { DollarSign, Package, Users, Activity, LogOut, Boxes, Building, UserCog, Loader2, FileText, Info, Gift, Scale, Mail, ShoppingCart, Wrench, PlusCircle as PlusCircleIcon, Eye, Truck, Printer, Menu } from 'lucide-react';
 import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import OrdersToDispatchCard from '@/components/OrdersToDispatchCard';
 import DispatchedOrdersCard from '@/components/DispatchedOrdersCard';
 import AdminTodayFollowupsCard from '@/components/AdminTodayFollowupsCard';
 import AdminTodayVisitsCard from '@/components/AdminTodayVisitsCard';
+import AdminSalesPersonMissedDailyVisitsCard from '@/components/AdminSalesPersonMissedDailyVisitsCard';
 import AdminTotalPendingOrdersCard from '@/components/AdminTotalPendingOrdersCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { showError, showSuccess } from '@/utils/toast';
@@ -24,7 +25,7 @@ import DispatchedOrdersReportDialog from '@/components/reports/DispatchedOrdersR
 import DealerReportDialog from '@/components/reports/DealerReportDialog';
 import PaymentsReportDialog from '@/components/reports/PaymentsReportDialog';
 import CompanyInfoDialog from '@/components/CompanyInfoDialog';
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import AdminSidebar from '@/components/AdminSidebar';
 import SalesReportsDialog from '@/components/reports/SalesReportsDialog';
 import ProductionAlertsCard from '@/components/ProductionAlertsCard';
@@ -67,6 +68,7 @@ import DealerOverdueBalanceReportDialog from '@/components/reports/DealerOverdue
 import DealerClosingBalanceReportDialog from '@/components/reports/DealerClosingBalanceReportDialog';
 import SalesPersonVisitReportDialog from '@/components/reports/SalesPersonVisitReportDialog';
 import SalesPersonTodayFollowupsReportDialog from '@/components/reports/SalesPersonTodayFollowupsReportDialog';
+import SalesPersonMissedDailyVisitsReportDialog from '@/components/reports/SalesPersonMissedDailyVisitsReportDialog';
 import LoginLogReportDialog from '@/components/reports/LoginLogReportDialog';
 import SalesPersonAccountStatementReportDialog from '@/components/reports/SalesPersonAccountStatementReportDialog';
 import OrderSummaryReportDialog from '@/components/reports/OrderSummaryReportDialog';
@@ -103,6 +105,7 @@ const AdminDashboard = () => {
   const [isDealerClosingBalanceReportOpen, setIsDealerClosingBalanceReportOpen] = useState(false);
   const [isSalesPersonVisitReportOpen, setIsSalesPersonVisitReportOpen] = useState(false);
   const [isSalesPersonTodayFollowupsReportOpen, setIsSalesPersonTodayFollowupsReportOpen] = useState(false);
+  const [isSalesPersonMissedDailyVisitsReportOpen, setIsSalesPersonMissedDailyVisitsReportOpen] = useState(false);
   const [isLoginLogReportOpen, setIsLoginLogReportOpen] = useState(false);
   const [isSalesPersonAccountStatementReportOpen, setIsSalesPersonAccountStatementReportOpen] = useState(false);
   const [isOrderSummaryReportOpen, setIsOrderSummaryReportOpen] = useState(false);
@@ -566,7 +569,7 @@ const AdminDashboard = () => {
 
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400"><Menu className="h-5 w-5" /></Button>
+              <Button variant="outline" size="icon" className="text-gray-600 dark:text-gray-400" title="Admin Navigation"><Menu className="h-5 w-5" /></Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-[250px] sm:w-[300px]">
               <SheetHeader><SheetTitle>Admin Navigation</SheetTitle></SheetHeader>
@@ -596,7 +599,6 @@ const AdminDashboard = () => {
                 setIsItemWiseDealerSalesReportOpen={setIsItemWiseDealerSalesReportOpen}
                 setIsSalesPersonOrderWiseReportOpen={setIsSalesPersonOrderWiseReportOpen}
                 setIsDealerLedgerReportNewOpen={setIsDealerLedgerReportNewOpen}
-
               />
             </SheetContent>
           </Sheet>
@@ -625,17 +627,9 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
         {/* Exchange Material card temporarily hidden */}
-        <Card className="bg-card text-card-foreground shadow-lg h-full flex flex-col justify-between cursor-pointer hover:bg-accent" onClick={() => navigate('/purchase-dashboard')}>
-          <CardHeader className="bg-cyan-500 dark:bg-cyan-700 text-white rounded-t-lg p-4">
-            <CardTitle className="text-xl font-semibold">Purchasing</CardTitle>
-            <CardDescription className="text-cyan-100 dark:text-cyan-200">Manage suppliers & raw materials.</CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 flex-grow flex items-center justify-center">
-            <ShoppingCart className="h-12 w-12 text-cyan-500" />
-          </CardContent>
-        </Card>
         <AdminTodayFollowupsCard key={`admin-followups-${refreshKey}`} onViewReport={() => setIsSalesPersonTodayFollowupsReportOpen(true)} />
         <AdminTodayVisitsCard key={`admin-visits-${refreshKey}`} onViewReport={() => setIsSalesPersonVisitReportOpen(true)} />
+        <AdminSalesPersonMissedDailyVisitsCard key={`admin-missed-visits-${refreshKey}`} onViewReport={() => setIsSalesPersonMissedDailyVisitsReportOpen(true)} />
         <AdminTotalPendingOrdersCard key={`admin-pending-orders-${refreshKey}`} onViewReport={() => navigate('/orders-awaiting-dispatch')} />
       </div>
 
@@ -936,6 +930,7 @@ const AdminDashboard = () => {
       <CreditNotesReportDialog isOpen={isCreditNotesReportOpen} onOpenChange={setIsCreditNotesReportOpen} />
       <SalesPersonVisitReportDialog isOpen={isSalesPersonVisitReportOpen} onOpenChange={setIsSalesPersonVisitReportOpen} />
       <SalesPersonTodayFollowupsReportDialog isOpen={isSalesPersonTodayFollowupsReportOpen} onOpenChange={setIsSalesPersonTodayFollowupsReportOpen} />
+      <SalesPersonMissedDailyVisitsReportDialog isOpen={isSalesPersonMissedDailyVisitsReportOpen} onOpenChange={setIsSalesPersonMissedDailyVisitsReportOpen} />
       <LoginLogReportDialog isOpen={isLoginLogReportOpen} onOpenChange={setIsLoginLogReportOpen} />
       <SalesPersonAccountStatementReportDialog isOpen={isSalesPersonAccountStatementReportOpen} onOpenChange={setIsSalesPersonAccountStatementReportOpen} />
       <SalesPersonLedgerReportDialog isOpen={isSalesPersonLedgerReportOpen} onOpenChange={setIsSalesPersonLedgerReportOpen} />

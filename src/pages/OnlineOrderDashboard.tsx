@@ -113,7 +113,6 @@ const OnlineOrderDashboard = () => {
         const { data, error } = await supabase
           .from('products')
           .select('id, name, code, dp, gst')
-          .eq('is_active', true)
           .order('name')
           .range(page * pageSize, (page + 1) * pageSize - 1);
 

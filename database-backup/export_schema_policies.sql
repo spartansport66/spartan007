@@ -37,7 +37,21 @@ CREATE SEQUENCE IF NOT EXISTS public.dispatch_sequence START WITH 1 INCREMENT BY
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN (SELECT is_admin FROM public.profiles WHERE id = auth.uid());
+  RETURN (SELECT COALESCE(is_admin, FALSE) FROM public.profiles WHERE id = auth.uid());
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.is_manager()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN (SELECT COALESCE(user_type, '') FROM public.profiles WHERE id = auth.uid()) = 'manager';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.is_billing()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN (SELECT COALESCE(user_type, '') FROM public.profiles WHERE id = auth.uid()) = 'billing';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

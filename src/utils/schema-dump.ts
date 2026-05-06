@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   is_admin BOOLEAN DEFAULT FALSE,
   user_type TEXT NOT NULL DEFAULT 'sales_person',
-  must_reset_password BOOLEAN DEFAULT FALSE
+  must_reset_password BOOLEAN DEFAULT FALSE,
+  is_blocked BOOLEAN DEFAULT FALSE
 );
 
 -- Categories

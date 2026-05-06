@@ -49,7 +49,7 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: 'Forbidden: Admin access required' }), { status: 403, headers: corsHeaders });
     }
 
-    const { userId, email, password, first_name, last_name, user_type, ban_and_unverify, assignedDealerIds, must_reset_password } = await req.json();
+    const { userId, email, password, first_name, last_name, user_type, ta, ban_and_unverify, assignedDealerIds, must_reset_password } = await req.json();
 
     if (!userId) {
       return new Response(JSON.stringify({ error: 'User ID is required' }), { status: 400, headers: corsHeaders });
@@ -96,6 +96,7 @@ serve(async (req: Request) => {
       profileUpdateData.user_type = user_type;
       profileUpdateData.is_admin = user_type === 'admin';
     }
+    if (ta !== undefined) profileUpdateData.ta = ta;
     if (must_reset_password !== undefined) profileUpdateData.must_reset_password = must_reset_password;
 
     const { error: profileUpdateError } = await supabaseAdmin

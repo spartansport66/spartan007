@@ -42,6 +42,7 @@ interface UserProfile {
   last_name: string | null;
   user_type: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'warehouse_keeper' | 'online_orders' | 'sales_hod' | 'accounts' | 'billing';
   is_admin: boolean;
+  ta: number;
   raw_app_meta_data: { provider?: string; providers?: string[]; };
   banned_until: string | null;
   targets: SalesTarget[];
@@ -65,6 +66,12 @@ const userFormSchema = z.object({
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional().or(z.literal('')),
   userType: z.enum(['admin', 'sales_person', 'gate_keeper', 'inventory_manager', 'manager', 'warehouse_keeper', 'online_orders', 'sales_hod', 'accounts', 'billing'], { message: 'Please select a user type.' }),
+  ta: z.preprocess((value) => {
+    if (typeof value === 'string') {
+      return value.trim() === '' ? 0 : Number(value);
+    }
+    return value;
+  }, z.number().min(0, { message: 'TA must be 0 or greater.' })),
   assignedDealerIds: z.array(z.string().uuid()).optional(),
 });
 
@@ -92,6 +99,7 @@ const ManageUsers = () => {
       email: '',
       password: '',
       userType: 'sales_person',
+      ta: 0,
       assignedDealerIds: [],
     },
   });
@@ -104,6 +112,7 @@ const ManageUsers = () => {
       email: '',
       password: '',
       userType: 'sales_person',
+      ta: 0,
       assignedDealerIds: [],
     },
   });
@@ -113,7 +122,7 @@ const ManageUsers = () => {
     try {
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select(`id, first_name, last_name, user_type, is_admin`)
+        .select(`id, first_name, last_name, user_type, is_admin, ta`)
         .neq('user_type', 'admin');
       
       if (profilesError) {
@@ -140,6 +149,7 @@ const ManageUsers = () => {
             last_name: profile.last_name,
             user_type: profile.user_type,
             is_admin: profile.is_admin,
+            ta: profile.ta ?? 0,
             banned_until: authUser.banned_until || null,
             raw_app_meta_data: authUser.raw_app_meta_data || {},
             targets: userTargets, 
@@ -191,6 +201,7 @@ const ManageUsers = () => {
               email: selectedUser.email,
               password: '',
               userType: selectedUser.user_type,
+              ta: selectedUser.ta ?? 0,
               assignedDealerIds: data?.map(item => item.dealer_id) || [],
             });
           });
@@ -201,6 +212,7 @@ const ManageUsers = () => {
           email: selectedUser.email,
           password: '',
           userType: selectedUser.user_type,
+          ta: selectedUser.ta ?? 0,
           assignedDealerIds: [],
         });
       }
@@ -223,6 +235,7 @@ const ManageUsers = () => {
           first_name: values.firstName,
           last_name: values.lastName || null,
           user_type: values.userType,
+          ta: Number(values.ta || 0),
         }),
       });
       
@@ -250,6 +263,7 @@ const ManageUsers = () => {
         first_name: values.firstName,
         last_name: values.lastName || null,
         user_type: values.userType,
+        ta: Number(values.ta || 0),
       };
       
       if (values.password) payload.password = values.password;
@@ -376,6 +390,7 @@ const ManageUsers = () => {
                     <TableRow className="bg-muted hover:bg-muted/90">
                       <TableHead className="text-muted-foreground">Name</TableHead>
                       <TableHead className="text-muted-foreground">User Type</TableHead>
+                      <TableHead className="text-muted-foreground">TA</TableHead>
                       <TableHead className="text-muted-foreground">Status</TableHead>
                       <TableHead className="text-muted-foreground">Actions</TableHead>
                     </TableRow>
@@ -385,6 +400,7 @@ const ManageUsers = () => {
                       <TableRow key={userItem.id} className="hover:bg-accent/50">
                         <TableCell className="font-medium text-foreground">{userItem.first_name} {userItem.last_name}</TableCell>
                         <TableCell className="text-muted-foreground capitalize">{userItem.user_type.replace('_', ' ')}</TableCell>
+                        <TableCell className="text-muted-foreground">{userItem.ta ?? 0}</TableCell>
                         <TableCell className="text-muted-foreground">{userItem.banned_until ? <span className="text-red-500">Inactive</span> : <span className="text-green-500">Active</span>}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -466,6 +482,13 @@ const ManageUsers = () => {
                   <FormMessage />
                 </FormItem>
               )} />
+              <FormField control={createForm.control} name="ta" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>TA</FormLabel>
+                  <FormControl><Input type="number" min={0} step={1} {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
               <FormField control={createForm.control} name="userType" render={({ field }) => (
                 <FormItem>
                   <FormLabel>User Type</FormLabel>
@@ -517,6 +540,13 @@ const ManageUsers = () => {
                         </Button>
                       </div>
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={editForm.control} name="ta" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>TA</FormLabel>
+                    <FormControl><Input type="number" min={0} step={1} {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />

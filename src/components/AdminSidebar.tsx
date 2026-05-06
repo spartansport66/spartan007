@@ -381,6 +381,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </DropdownMenuItem>
           </SheetClose>
           <SheetClose asChild>
+            <DropdownMenuItem onClick={() => navigate('/daily-expenses-report')}>
+              Daily Expenses Report
+            </DropdownMenuItem>
+          </SheetClose>
+          <SheetClose asChild>
             <DropdownMenuItem onClick={() => setIsSalesPersonOrderWiseReportOpen(true)}>
               Sales Person Order-wise Report
             </DropdownMenuItem>

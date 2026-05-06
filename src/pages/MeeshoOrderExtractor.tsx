@@ -84,7 +84,6 @@ const MeeshoOrderExtractor = () => {
           const { data, error } = await supabase
             .from('products')
             .select('id, name, code, size, dp, gst')
-            .eq('is_active', true)
             .order('name')
             .range(offset, offset + pageSize - 1);
           
