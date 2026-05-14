@@ -20,11 +20,11 @@
       "node": "24.x"
     },
   "dependencies": {
-    "@capacitor/android": "7.4.4",
-    "@capacitor/camera": "^8.2.0",
-    "@capacitor/cli": "7.4.4",
-    "@capacitor/core": "7.4.4",
-    "@capacitor/ios": "7.4.4",
+    "@capacitor/android": "8.2.0",
+    "@capacitor/camera": "8.2.0",
+    "@capacitor/cli": "8.2.0",
+    "@capacitor/core": "8.2.0",
+    "@capacitor/ios": "8.2.0",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
