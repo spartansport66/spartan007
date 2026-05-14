@@ -15,10 +15,10 @@
     "migrate:setup": "node --loader ts-node/esm api/migration/setup-wizard.ts",
     "migrate:auto": "node --loader ts-node/esm api/migration/cli.ts",
     "migrate:wizard": "npm run migrate:setup"
-  }
- "engines": {
-  "node": "24.x"
- },
+    },
+    "engines": {
+      "node": "24.x"
+    },
   "dependencies": {
     "@capacitor/android": "7.4.4",
     "@capacitor/camera": "^8.2.0",
