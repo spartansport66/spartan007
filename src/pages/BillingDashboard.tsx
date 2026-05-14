@@ -9,18 +9,15 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/contexts/SessionContext';
 import { showError, showSuccess } from '@/utils/toast';
+import { getNextBillNumber } from '@/utils/billNumberGenerator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import { Loader2, Plus, FileText, Edit, DollarSign, ArrowLeft, LogOut, TrendingUp, Eye, Printer, Filter, Trash2, AlertCircle, Check, X, MoreVertical, Download, Truck } from 'lucide-react';
+import { Loader2, Plus, FileText, Edit, DollarSign, ArrowLeft, LogOut, TrendingUp, Eye, Printer, Filter, Trash2, AlertCircle, Check, X, MoreVertical } from 'lucide-react';
 import { MadeWithDyad } from '@/components/made-with-dyad';
 import EditOrderDialog from '@/components/EditOrderDialog';
 import PrintBillDialog from '@/components/PrintBillDialog';
 import DealerLedgerReportNewDialog from '@/components/reports/DealerLedgerReportNewDialog';
-import CreditNoteDialog from '@/components/CreditNoteDialog';
-import CreditNotesReportDialog from '@/components/reports/CreditNotesReportDialog';
-import ImportBillsDialog from '@/components/ImportBillsDialog';
-import EwayBillDialog from '@/components/EwayBillDialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -204,10 +201,6 @@ const BillingDashboard = () => {
   const [cancelledBills, setCancelledBills] = useState<Array<{ id: string; bill_number: string; grand_total: number; dealers?: { name: string } }>>([]);
   const [selectedCancelledBillInfo, setSelectedCancelledBillInfo] = useState<any>(null);
   const [isCancelBillDialogOpen, setIsCancelBillDialogOpen] = useState(false);
-  const [isCreditNoteDialogOpen, setIsCreditNoteDialogOpen] = useState(false);
-  const [isCreditNotesReportOpen, setIsCreditNotesReportOpen] = useState(false);
-  const [isImportBillsDialogOpen, setIsImportBillsDialogOpen] = useState(false);
-  const [isEwayBillDialogOpen, setIsEwayBillDialogOpen] = useState(false);
   const [selectedBillForCancel, setSelectedBillForCancel] = useState<any>(null);
   const [cancelBillReason, setCancelBillReason] = useState<string>('');
   const [billVerificationStatus, setBillVerificationStatus] = useState<Map<string, 'pending' | 'verified' | 'rejected'>>(new Map());
@@ -903,19 +896,41 @@ const BillingDashboard = () => {
         return;
       }
 
-      if (!billSeriesId) {
-        showError('Please select a valid bill series for the chosen company and financial year');
-        setIsGeneratingBill(false);
-        return;
+      // Get next bill number based on company's highest bill number
+      console.log(`🔔 Generating bill number for company ${selectedCompanyId} using table ${tableName}`);
+      const nextBillNum = await getNextBillNumber(selectedCompanyId, tableName);
+      
+      console.log('📄 Next Bill Number Generated:', nextBillNum);
+
+      // Update orders table with bill number and bill date
+      const billDate = new Date().toISOString().split('T')[0];
+      console.log('💾 Updating order:', {
+        orderId: selectedOrderForBill.id,
+        billNo: nextBillNum,
+        billDate: billDate,
+      });
+
+      const { data: updateData, error: updateError } = await supabase
+        .from('orders')
+        .update({ 
+          bill_no: nextBillNum,
+          bill_date: billDate
+        })
+        .eq('id', selectedOrderForBill.id)
+        .select();
+
+      console.log('📡 Update Response:', { updateData, updateError });
+
+      if (updateError) throw updateError;
+
+      if (!updateData || updateData.length === 0) {
+        console.warn('⚠️ Update returned no data');
+      } else {
+        console.log('✅ Order updated:', updateData[0]);
       }
 
-      const billDate = new Date().toISOString().split('T')[0];
-      console.log('🔔 Generating bill for company:', selectedCompanyId);
-      console.log('   Table:', tableName);
-      console.log('   Bill series ID:', billSeriesId);
-      console.log('   Preview bill number:', nextBillNumber);
-
-      const { data: invoiceResult, error: invoiceError } = await supabase
+      // Insert into the correct company-specific invoice table
+      const { error: invoiceError } = await supabase
         .from(tableName)
         .insert([
           {
@@ -923,7 +938,7 @@ const BillingDashboard = () => {
             company_id: selectedCompanyId,
             financial_year_id: selectedFinancialYearId,
             bill_series_id: billSeriesId,
-            bill_number: nextBillNumber,
+            bill_number: nextBillNum,
             bill_date: billDate,
             dealer_id: selectedOrderForBill.dealer_id,
             gst_number: selectedOrderForBill.dealer_gst,
@@ -936,39 +951,15 @@ const BillingDashboard = () => {
             grand_total: selectedOrderForBill.total_amount - selectedOrderForBill.discount_amount + selectedOrderForBill.round_off + selectedOrderForBill.freight_charges,
             created_by: user?.id,
           },
-        ])
-        .select();
+        ]);
 
       if (invoiceError) {
         console.warn('⚠️ Invoice insert error:', invoiceError);
-        throw invoiceError;
-      }
-
-      const generatedBillNumber = invoiceResult?.[0]?.bill_number || nextBillNumber;
-      console.log('📄 Generated invoice result:', invoiceResult);
-      console.log('   Bill number used for order:', generatedBillNumber);
-
-      const { data: updateData, error: updateError } = await supabase
-        .from('orders')
-        .update({ 
-          bill_no: generatedBillNumber,
-          bill_date: billDate
-        })
-        .eq('id', selectedOrderForBill.id)
-        .select();
-
-      console.log('📡 Order update response:', { updateData, updateError });
-
-      if (updateError) throw updateError;
-
-      if (!updateData || updateData.length === 0) {
-        console.warn('⚠️ Order update returned no data');
       } else {
-        console.log('✅ Order updated:', updateData[0]);
+        console.log('✅ Invoice created successfully');
       }
 
-      console.log('✅ Invoice created successfully');
-      showSuccess(`Bill ${generatedBillNumber} generated successfully`);
+      showSuccess(`Bill ${data} generated successfully`);
       setIsBillGenerateDialogOpen(false);
       setSelectedCompanyId('');
       setSelectedFinancialYearId('');
@@ -1422,41 +1413,11 @@ const BillingDashboard = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem
-                  onClick={() => setIsCreditNoteDialogOpen(true)}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Create Credit Note</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setIsCreditNotesReportOpen(true)}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <FileText className="h-4 w-4" />
-                  <span>Credit Notes Report</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
                   onClick={() => setIsDealerLedgerReportOpen(true)}
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <FileText className="h-4 w-4" />
                   <span>Dealer Ledger Report</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setIsImportBillsDialogOpen(true)}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>Import Bills</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setIsEwayBillDialogOpen(true)}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <Truck className="h-4 w-4" />
-                  <span>E-way Bill Manager</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -1530,20 +1491,6 @@ const BillingDashboard = () => {
                           <p className="text-sm font-medium text-gray-600">Total Items</p>
                           <p className="text-3xl font-bold text-orange-600 mt-2">{ordersWithoutBills.reduce((sum, o) => sum + o.items_count, 0)}</p>
                         </div>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-gradient-to-br from-slate-100 to-slate-50 border-l-4 border-slate-600 col-span-1 md:col-span-4">
-                      <CardContent className="pt-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600">E-way Bill Manager</p>
-                          <p className="text-lg font-semibold text-slate-800 mt-1">Save API keys and upload GST e-way bills</p>
-                        </div>
-                        <Button
-                          onClick={() => setIsEwayBillDialogOpen(true)}
-                          className="bg-slate-600 hover:bg-slate-700 text-white text-xs"
-                        >
-                          Open E-way Bill Manager
-                        </Button>
                       </CardContent>
                     </Card>
                   </>
@@ -2199,8 +2146,6 @@ const BillingDashboard = () => {
         return (
           <EditOrderDialog
             isOpen={isEditDialogOpen}
-            isBillingDashboard={true}
-            fullScreen={!isEditingFromHeldOrders && !isEditingFromCancelledBills}
             onOpenChange={(open) => {
               setIsEditDialogOpen(open);
               if (!open) {
@@ -2663,38 +2608,6 @@ const BillingDashboard = () => {
       <DealerLedgerReportNewDialog
         isOpen={isDealerLedgerReportOpen}
         onOpenChange={setIsDealerLedgerReportOpen}
-      />
-
-      {/* Credit Note Dialog */}
-      <CreditNoteDialog
-        isOpen={isCreditNoteDialogOpen}
-        onOpenChange={setIsCreditNoteDialogOpen}
-        onSuccess={() => {
-          setIsCreditNoteDialogOpen(false);
-          showSuccess('Credit note created successfully');
-        }}
-      />
-
-      {/* Credit Notes Report Dialog */}
-      <CreditNotesReportDialog
-        isOpen={isCreditNotesReportOpen}
-        onOpenChange={setIsCreditNotesReportOpen}
-      />
-
-      {/* Import Bills Dialog */}
-      <ImportBillsDialog
-        isOpen={isImportBillsDialogOpen}
-        onClose={() => setIsImportBillsDialogOpen(false)}
-        onImportComplete={() => {
-          setIsImportBillsDialogOpen(false);
-          // Optionally refresh the dashboard
-          // fetchOrders();
-        }}
-      />
-
-      <EwayBillDialog
-        isOpen={isEwayBillDialogOpen}
-        onOpenChange={setIsEwayBillDialogOpen}
       />
 
       <MadeWithDyad />
