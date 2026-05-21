@@ -603,15 +603,10 @@ const Dashboard = () => {
         ) : (
           <MultiItemOrderForm
             onOrderPlaced={handleRefreshData}
-            isBlocked={
-              assignedDealerCount === 0 ||
-              (yesterdayVisitCount !== null && yesterdayVisitCount < 5)
-            }
+            isBlocked={assignedDealerCount === 0}
             blockedMessage={
               assignedDealerCount === 0
                 ? 'You must add at least one dealer before placing orders.'
-                : yesterdayVisitCount !== null && yesterdayVisitCount < 5
-                ? 'Place new orders is blocked because the last day daily visit report was not updated to the required threshold.'
                 : ''
             }
           />

@@ -3,13 +3,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { Loader2, Search, Printer } from 'lucide-react';
+import { Loader2, Search, Printer, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { showError } from '@/utils/toast';
+import { showError, showSuccess } from '@/utils/toast';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
 
@@ -48,6 +49,35 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
   const [filterSalesPersonId, setFilterSalesPersonId] = useState<string>('');
   const [filterFromOrderDate, setFilterFromOrderDate] = useState<string>('');
   const [filterToOrderDate, setFilterToOrderDate] = useState<string>('');
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+
+  const totalAmount = orders.reduce((sum, order) => sum + order.total_amount, 0);
+
+  const formatOrderDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  const daysSinceOrder = (dateString: string) => {
+    if (!dateString) return 0;
+    const orderDate = new Date(dateString);
+    const diffMs = new Date().getTime() - orderDate.getTime();
+    return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  };
+
+  const selectedOrders = orders
+    .filter((order) => selectedOrderIds.includes(order.id))
+    .sort((a, b) => new Date(a.order_date).getTime() - new Date(b.order_date).getTime());
+
+  const allSelected = orders.length > 0 && selectedOrderIds.length === orders.length;
+
+  const handleSelectOrder = (orderId: string, checked: boolean) => {
+    setSelectedOrderIds((prev) => (checked ? [...prev, orderId] : prev.filter((id) => id !== orderId)));
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedOrderIds(checked ? orders.map((order) => order.id) : []);
+  };
 
   const fetchOrdersAndDealers = useCallback(async () => {
     setLoading(true);
@@ -136,6 +166,7 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
           sales_person_name: `${order.profiles?.first_name || ''} ${order.profiles?.last_name || ''}`.trim() || 'Unknown',
         }));
         setOrders(formattedOrders);
+        setSelectedOrderIds([]);
       }
     } catch (error: any) {
       console.error('Error in fetchOrdersAndDealers:', error.message);
@@ -160,16 +191,14 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
     fetchOrdersAndDealers();
   };
 
-  const totalAmount = orders.reduce((sum, order) => sum + order.total_amount, 0);
-
   const handlePrint = () => {
     const doc = new jsPDF();
     doc.setFontSize(18);
-    doc.text("Orders Awaiting Dispatch Report", 14, 22);
+    doc.text('Orders Awaiting Dispatch Report', 14, 22);
     doc.setFontSize(11);
     doc.setTextColor(100);
 
-    const tableColumn = ["Order No.", "Dealer Name", "Sales Person", "Order Date", "Total Amount"];
+    const tableColumn = ['Order No.', 'Dealer Name', 'Sales Person', 'Order Date', 'Total Amount'];
     const tableRows = orders.map(order => [
       order.order_number,
       order.dealer_name,
@@ -200,6 +229,99 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
     doc.text(`Total Order Value: ₹${totalAmount.toFixed(2)}`, 14, finalY + 10);
 
     doc.save('orders_awaiting_dispatch_report.pdf');
+  };
+
+  const handlePrintSelectedJpg = () => {
+    if (selectedOrderIds.length === 0) {
+      showError('Please select one or more orders to print as JPG.');
+      return;
+    }
+
+    try {
+      const selected = selectedOrders;
+      const width = 1200;
+      const rowHeight = 48;
+      const headerHeight = 140;
+      const footerHeight = 80;
+      const contentHeight = selected.length * rowHeight;
+      const height = Math.max(headerHeight + contentHeight + footerHeight, 420);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Unable to create canvas context');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = '#1e3a8a';
+      ctx.fillRect(0, 0, width, 100);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 32px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('ORDERS AWAITING DISPATCH', width / 2, 40);
+      ctx.font = 'bold 20px Arial';
+      ctx.fillText('Selected Orders', width / 2, 72);
+
+      ctx.font = '14px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#000000';
+      ctx.fillText(`Generated: ${new Date().toLocaleString()}`, 40, 120);
+      ctx.fillText(`Total selected orders: ${selected.length}`, 40, 142);
+
+      const tableTop = 170;
+      const colX = [40, 110, 320, 560, 780];
+      ctx.strokeStyle = '#cccccc';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(40, tableTop - 18);
+      ctx.lineTo(width - 40, tableTop - 18);
+      ctx.stroke();
+
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText('S.No', colX[0], tableTop);
+      ctx.fillText('Order No.', colX[1], tableTop);
+      ctx.fillText('Order Date', colX[2], tableTop);
+      ctx.fillText('Days', colX[3], tableTop);
+      ctx.textAlign = 'right';
+      ctx.fillText('Amount', width - 40, tableTop);
+
+      ctx.beginPath();
+      ctx.moveTo(40, tableTop + 8);
+      ctx.lineTo(width - 40, tableTop + 8);
+      ctx.stroke();
+
+      let y = tableTop + 40;
+      ctx.font = '16px Arial';
+      selected.forEach((order, index) => {
+        if (y > height - footerHeight - 20) {
+          return;
+        }
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#000000';
+        ctx.fillText(`${index + 1}`, colX[0], y);
+        ctx.fillText(`#${order.order_number}`, colX[1], y);
+        ctx.fillText(formatOrderDate(order.order_date), colX[2], y);
+        ctx.fillText(`${daysSinceOrder(order.order_date)}d`, colX[3], y);
+        ctx.textAlign = 'right';
+        ctx.fillText(`₹${order.total_amount.toFixed(2)}`, width - 40, y);
+        y += rowHeight;
+      });
+
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(`Total: ₹${selected.reduce((sum, order) => sum + order.total_amount, 0).toFixed(2)}`, width - 40, height - 28);
+
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/jpeg', 0.92);
+      link.download = `selected_orders_awaiting_dispatch_${Date.now()}.jpg`;
+      link.click();
+      setSelectedOrderIds([]);
+      showSuccess('Selected orders exported as JPG.');
+    } catch (error: any) {
+      showError(`Failed to generate JPG: ${error.message}`);
+    }
   };
 
   return (
@@ -294,6 +416,12 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow className="bg-muted hover:bg-muted/90">
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={allSelected}
+                          onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                        />
+                      </TableHead>
                       <TableHead className="text-muted-foreground">Order No.</TableHead>
                       <TableHead className="text-muted-foreground">Dealer Name</TableHead>
                       <TableHead className="text-muted-foreground">Sales Person</TableHead>
@@ -304,10 +432,16 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
                   <TableBody>
                     {orders.map((order) => (
                       <TableRow key={order.id} className="hover:bg-accent/50">
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedOrderIds.includes(order.id)}
+                            onCheckedChange={(checked) => handleSelectOrder(order.id, !!checked)}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium text-foreground">{order.order_number}</TableCell>
                         <TableCell className="text-muted-foreground">{order.dealer_name}</TableCell>
                         <TableCell className="text-muted-foreground">{order.sales_person_name}</TableCell>
-                        <TableCell className="text-muted-foreground">{new Date(order.order_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-muted-foreground">{formatOrderDate(order.order_date)}</TableCell>
                         <TableCell className="text-muted-foreground text-right">₹{order.total_amount.toFixed(2)}</TableCell>
                       </TableRow>
                     ))}
@@ -325,6 +459,9 @@ const OrdersAwaitingDispatchReportDialog: React.FC<OrdersAwaitingDispatchReportD
         </div>
 
         <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
+          <Button variant="secondary" onClick={handlePrintSelectedJpg} disabled={selectedOrderIds.length === 0}>
+            <ImageIcon className="mr-2 h-4 w-4" /> Print Selected JPG
+          </Button>
           <Button variant="outline" onClick={handlePrint} disabled={orders.length === 0}>
             <Printer className="mr-2 h-4 w-4" /> Print Report
           </Button>

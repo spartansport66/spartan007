@@ -1,18 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Printer, RefreshCw } from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Loader2, Printer, RefreshCw, Search, X } from 'lucide-react';
 
 interface Dealer {
   id: string;
@@ -32,10 +27,14 @@ interface LedgerRow {
 const DealerLedgerReportNew = () => {
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [selectedDealerId, setSelectedDealerId] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showDropdown, setShowDropdown] = useState<boolean>(false);
   const [ledgerRows, setLedgerRows] = useState<LedgerRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [totals, setTotals] = useState({ totalDebit: 0, totalCredit: 0, finalBalance: 0 });
   const [selectedDealerName, setSelectedDealerName] = useState<string>('');
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
   const ENTRIES_PER_PAGE = 10;
   const [displayedRows, setDisplayedRows] = useState<LedgerRow[]>([]);
 
@@ -49,6 +48,17 @@ const DealerLedgerReportNew = () => {
       if (data) setDealers(data);
     };
     fetchDealers();
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchInputRef.current && !searchInputRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Fetch ledger when dealer changes
@@ -400,18 +410,95 @@ const DealerLedgerReportNew = () => {
   return (
     <div className="space-y-4 h-full flex flex-col">
       <div className="flex gap-2 items-center">
-        <Select value={selectedDealerId} onValueChange={setSelectedDealerId}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select Dealer" />
-          </SelectTrigger>
-          <SelectContent>
-            {dealers.map((dealer) => (
-              <SelectItem key={dealer.id} value={dealer.id}>
-                {dealer.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Searchable Dealer Input */}
+        <div className="flex-1 relative">
+          <div className="flex items-center relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400 pointer-events-none" />
+            <Input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search dealer by name..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (e.target.value.length > 0) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setDropdownPosition({
+                    top: rect.bottom + 4,
+                    left: rect.left,
+                    width: rect.width,
+                  });
+                  setShowDropdown(true);
+                }
+              }}
+              onFocus={(e) => {
+                if (searchQuery.length > 0) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setDropdownPosition({
+                    top: rect.bottom + 4,
+                    left: rect.left,
+                    width: rect.width,
+                  });
+                  setShowDropdown(true);
+                }
+              }}
+              className="pl-10 pr-8"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setShowDropdown(false);
+                }}
+                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Dropdown List - Rendered in Portal outside dialog */}
+          {showDropdown && searchQuery.length > 0 && createPortal(
+            <div
+              style={{
+                position: 'fixed',
+                top: `${dropdownPosition.top}px`,
+                left: `${dropdownPosition.left}px`,
+                width: `${dropdownPosition.width}px`,
+              }}
+              className="z-[9999] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-64 overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {dealers
+                .filter((dealer) =>
+                  dealer.name.toLowerCase().includes(searchQuery.toLowerCase())
+                )
+                .map((dealer) => (
+                  <div
+                    key={dealer.id}
+                    onClick={() => {
+                      setSelectedDealerId(dealer.id);
+                      setSelectedDealerName(dealer.name);
+                      setSearchQuery(dealer.name);
+                      setShowDropdown(false);
+                    }}
+                    className="px-4 py-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border-b dark:border-gray-700 last:border-b-0"
+                  >
+                    <p className="font-medium text-sm">{dealer.name}</p>
+                  </div>
+                ))}
+              {dealers.filter((dealer) =>
+                dealer.name.toLowerCase().includes(searchQuery.toLowerCase())
+              ).length === 0 && (
+                <div className="px-4 py-3 text-center text-gray-500 text-sm">
+                  No dealers found
+                </div>
+              )}
+            </div>,
+            document.body
+          )}
+        </div>
+
         <Button onClick={fetchLedger} variant="outline" className="gap-2" title="Refresh ledger data">
           <RefreshCw className="h-4 w-4" />
           Refresh

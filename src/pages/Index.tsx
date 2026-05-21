@@ -52,6 +52,9 @@ const Index = () => {
           } else if (userType === 'online_orders') {
             console.log('Redirecting to online order dispatch dashboard');
             navigate('/online-order-dispatch-dashboard');
+          } else if (userType === 'payment') {
+            console.log('Redirecting to payments dashboard');
+            navigate('/payments-dashboard');
           } else if (userType === 'sales_person') {
             console.log('Redirecting to user dashboard');
             navigate('/dashboard');

@@ -36,6 +36,113 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
   const [hodStatusFilter, setHodStatusFilter] = useState<'approved' | 'disapproved' | 'all' | 'approved-pending'>('approved');
   const [salesPersons, setSalesPersons] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedSalesPerson, setSelectedSalesPerson] = useState<string>('');
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+
+  const selectedOrders = orders
+    .filter((order) => selectedOrderIds.includes(order.order_id))
+    .sort((a, b) => new Date(a.order_date).getTime() - new Date(b.order_date).getTime());
+
+  const allSelected = orders.length > 0 && selectedOrderIds.length === orders.length;
+
+  const handleSelectOrder = (orderId: string, checked: boolean) => {
+    setSelectedOrderIds((prev) => (checked ? [...prev, orderId] : prev.filter((id) => id !== orderId)));
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedOrderIds(checked ? orders.map((order) => order.order_id) : []);
+  };
+
+  const handlePrintSelectedJpg = () => {
+    if (selectedOrderIds.length === 0) {
+      alert('Please select one or more orders before printing JPG.');
+      return;
+    }
+
+    const selected = selectedOrders;
+    const width = 1200;
+    const rowHeight = 56;
+    const headerHeight = 140;
+    const footerHeight = 80;
+    const contentHeight = selected.length * rowHeight;
+    const height = Math.max(headerHeight + contentHeight + footerHeight, 420);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      alert('Could not create canvas for JPG generation.');
+      return;
+    }
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = '#1e3a8a';
+    ctx.fillRect(0, 0, width, 100);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Orders Awaiting Dispatch', width / 2, 40);
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText('Selected Orders Report', width / 2, 72);
+
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`Generated: ${new Date().toLocaleString()}`, 40, 120);
+    ctx.fillText(`Selected orders: ${selected.length}`, 40, 142);
+
+    const tableTop = 170;
+    const colX = [40, 100, 270, 510, 680, 900];
+    ctx.strokeStyle = '#cccccc';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(40, tableTop - 18);
+    ctx.lineTo(width - 40, tableTop - 18);
+    ctx.stroke();
+
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('S.No', colX[0], tableTop);
+    ctx.fillText('Order No.', colX[1], tableTop);
+    ctx.fillText('Order Date', colX[2], tableTop);
+    ctx.fillText('Days', colX[3], tableTop);
+    ctx.fillText('Amount', colX[5] - 10, tableTop);
+    ctx.textAlign = 'right';
+    ctx.fillText('', width - 40, tableTop);
+
+    ctx.beginPath();
+    ctx.moveTo(40, tableTop + 8);
+    ctx.lineTo(width - 40, tableTop + 8);
+    ctx.stroke();
+
+    let y = tableTop + 40;
+    ctx.font = '16px Arial';
+    selected.forEach((order, index) => {
+      if (y > height - footerHeight - 20) {
+        return;
+      }
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#000000';
+      ctx.fillText(`${index + 1}`, colX[0], y);
+      ctx.fillText(`#${order.order_number}`, colX[1], y);
+      ctx.fillText(formatDate(order.order_date), colX[2], y);
+      ctx.fillText(`${order.days_pending}d`, colX[3], y);
+      ctx.textAlign = 'right';
+      ctx.fillText(formatCurrency(order.total_amount), width - 40, y);
+      y += rowHeight;
+    });
+
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(`Total: ${formatCurrency(selected.reduce((sum, order) => sum + order.total_amount, 0))}`, width - 40, height - 28);
+
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/jpeg', 0.92);
+    link.download = `selected_orders_awaiting_dispatch_${Date.now()}.jpg`;
+    link.click();
+  };
 
   // Fetch orders awaiting dispatch based on filters
   const fetchAwaitingDispatchOrders = async (from?: string, to?: string) => {
@@ -53,11 +160,11 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
       // Step 1: Fetch all online order IDs to exclude them
       const { data: onlineOrderDetailsData } = await supabase
         .from('online_order_details')
-        .select('order_id', { count: 'exact' });
+        .select('order_id');
 
       const { data: onlineOrdersData } = await supabase
         .from('online_orders')
-        .select('order_id', { count: 'exact' });
+        .select('order_id');
 
       // Create set of online order IDs to exclude
       const onlineOrderIds = new Set<string>();
@@ -83,7 +190,7 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
           dealer_id,
           hod_status,
           dealers!left(name),
-          profiles!left(first_name,last_name),
+          profiles_user_id:user_id!left(first_name,last_name),
           payments!left(id,payment_method)
         `
         )
@@ -223,6 +330,7 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
       });
 
       setOrders(mappedOrders);
+      setSelectedOrderIds([]);
 
       // Calculate totals
       const total = mappedOrders.reduce((sum, order) => sum + order.total_amount, 0);
@@ -829,6 +937,23 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
             >
               🖨️ Print Report
             </Button>
+            <Button
+              onClick={handlePrintSelectedJpg}
+              disabled={selectedOrderIds.length === 0 || loading}
+              style={{
+                flex: 1,
+                backgroundColor: '#2563eb',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: selectedOrderIds.length === 0 || loading ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: '500',
+              }}
+            >
+              🖼️ Print Selected JPG
+            </Button>
           </div>
         </div>
 
@@ -925,6 +1050,15 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
             >
               <thead>
                 <tr style={{ backgroundColor: '#f3f4f6' }}>
+                  <th style={{ padding: '12px', borderBottom: '1px solid #e5e7eb' }}>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      aria-label="Select all orders"
+                      style={{ width: '18px', height: '18px' }}
+                    />
+                  </th>
                   <th 
                     onClick={() => handleSort('order_number')}
                     style={{ 
@@ -1048,7 +1182,16 @@ const OrdersAwaitingDispatchReport: React.FC = () => {
               </thead>
               <tbody>
                 {getSortedOrders().map((order, idx) => (
-                  <tr key={order.order_id} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                  <tr key={order.order_id} style={{ backgroundColor: selectedOrderIds.includes(order.order_id) ? '#ecfdf5' : idx % 2 === 0 ? '#ffffff' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ padding: '12px', fontSize: '13px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedOrderIds.includes(order.order_id)}
+                        onChange={(e) => handleSelectOrder(order.order_id, e.target.checked)}
+                        aria-label={`Select order ${order.order_number}`}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                    </td>
                     <td style={{ padding: '12px', fontSize: '13px' }}>#{order.order_number}</td>
                     <td style={{ padding: '12px', fontSize: '13px' }}>{order.sales_person_name}</td>
                     <td style={{ padding: '12px', fontSize: '13px' }}>{order.dealer_name}</td>

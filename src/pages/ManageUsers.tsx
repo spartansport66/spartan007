@@ -40,7 +40,7 @@ interface UserProfile {
   email: string;
   first_name: string | null;
   last_name: string | null;
-  user_type: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'warehouse_keeper' | 'online_orders' | 'sales_hod' | 'accounts' | 'billing';
+  user_type: 'admin' | 'sales_person' | 'gate_keeper' | 'inventory_manager' | 'manager' | 'warehouse_keeper' | 'online_orders' | 'sales_hod' | 'accounts' | 'billing' | 'payment';
   is_admin: boolean;
   ta: number;
   raw_app_meta_data: { provider?: string; providers?: string[]; };
@@ -65,7 +65,7 @@ const userFormSchema = z.object({
   lastName: z.string().optional(),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional().or(z.literal('')),
-  userType: z.enum(['admin', 'sales_person', 'gate_keeper', 'inventory_manager', 'manager', 'warehouse_keeper', 'online_orders', 'sales_hod', 'accounts', 'billing'], { message: 'Please select a user type.' }),
+  userType: z.enum(['admin', 'sales_person', 'gate_keeper', 'inventory_manager', 'manager', 'warehouse_keeper', 'online_orders', 'sales_hod', 'accounts', 'billing', 'payment'], { message: 'Please select a user type.' }),
   ta: z.preprocess((value) => {
     if (typeof value === 'string') {
       return value.trim() === '' ? 0 : Number(value);
@@ -504,6 +504,7 @@ const ManageUsers = () => {
                       <SelectItem value="accounts">Accounts</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="billing">Billing</SelectItem>
+                      <SelectItem value="payment">Payment</SelectItem>
                       <SelectItem value="gate_keeper">Gate Keeper</SelectItem>
                       <SelectItem value="inventory_manager">Inventory Manager</SelectItem>
                       <SelectItem value="manager">Manager</SelectItem>
@@ -565,6 +566,7 @@ const ManageUsers = () => {
                         <SelectItem value="accounts">Accounts</SelectItem>
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="billing">Billing</SelectItem>
+                        <SelectItem value="payment">Payment</SelectItem>
                         <SelectItem value="gate_keeper">Gate Keeper</SelectItem>
                         <SelectItem value="inventory_manager">Inventory Manager</SelectItem>
                         <SelectItem value="manager">Manager</SelectItem>

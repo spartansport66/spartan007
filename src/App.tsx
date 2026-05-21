@@ -72,6 +72,7 @@ import ManageFinancialYears from "./pages/ManageFinancialYears";
 import ManageBillSeries from "./pages/ManageBillSeries";
 import BillDesignManager from "./pages/BillDesignManager";
 import BillDesignCanvasBuilder from "./pages/BillDesignCanvasBuilder";
+import PaymentsDashboard from "./pages/PaymentsDashboard";
 import { SessionContextProvider } from "./contexts/SessionContext";
 import { useActivityTracker } from "./hooks/useActivityTracker";
 
@@ -97,6 +98,7 @@ const AppContent = () => {
       <Route path="/bill-verification-dashboard" element={<BillVerificationDashboard />} />
       <Route path="/invoice-reports" element={<InvoiceReports />} />
       <Route path="/order-approval" element={<OrderApprovalDashboard />} />
+      <Route path="/payments-dashboard" element={<PaymentsDashboard />} />
       <Route path="/product-dashboard" element={<ProductDashboard />} />
       <Route path="/super-admin-dashboard" element={<SuperAdminDashboard />} />
       <Route path="/manager-dashboard" element={<ManagerDashboard />} />

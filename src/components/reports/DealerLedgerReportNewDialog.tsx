@@ -10,14 +10,16 @@ interface DealerLedgerReportDialogProps {
 const DealerLedgerReportNewDialog: React.FC<DealerLedgerReportDialogProps> = ({ isOpen, onOpenChange }) => {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Dealer Ledger Report</DialogTitle>
           <DialogDescription>
             View detailed ledger entries for dealers with opening balance, invoices, and payments.
           </DialogDescription>
         </DialogHeader>
-        <DealerLedgerReportNew />
+        <div className="overflow-y-auto flex-1">
+          <DealerLedgerReportNew />
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -119,7 +119,7 @@ const ReceivePayment = () => {
         .select('allocated_amount, payments(status)')
         .eq('liability_id', dealerId)
         .eq('allocation_type', 'opening_balance')
-        .eq('payments.status', 'completed');
+        .eq('payments.status', 'approved');
       if (obpError) throw obpError;
       const totalPaidAgainstOpeningBalance = (openingBalancePayments || []).reduce((sum, p) => sum + p.allocated_amount, 0);
       
@@ -148,7 +148,7 @@ const ReceivePayment = () => {
       }
 
       (ordersData || []).forEach(order => {
-        const paidAmount = (order.payments || []).filter(p => p.status === 'completed').reduce((sum, p) => sum + p.amount, 0);
+        const paidAmount = (order.payments || []).filter(p => p.status === 'approved').reduce((sum, p) => sum + p.amount, 0);
         const balance = order.total_amount - paidAmount;
         if (balance > 0) {
           newLiabilities.push({
@@ -217,7 +217,7 @@ const ReceivePayment = () => {
     try {
       const effectivePaymentDate = values.paymentMethod === 'Cheque/DD' ? values.chequeDdDate : values.paymentDate;
       const isPostDated = effectivePaymentDate && new Date(effectivePaymentDate) > new Date();
-      const paymentStatus = isPostDated ? 'pending_approval' : 'completed';
+      const paymentStatus = isPostDated ? 'pending' : 'approved';
       const approvedAt = isPostDated ? null : new Date().toISOString();
 
       const { data: payment, error: paymentError } = await supabase
@@ -240,7 +240,7 @@ const ReceivePayment = () => {
 
       if (paymentError) throw paymentError;
 
-      if (paymentStatus === 'completed') {
+      if (paymentStatus === 'approved') {
         const allocationsToInsert = allocations
           .filter(a => a.amount > 0)
           .map(a => {
